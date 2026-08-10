@@ -29,6 +29,7 @@ workflows:
           keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password $CM_CERTIFICATE_PASSWORD
       - name: Fetch provisioning profiles
         script: |
+          export CERTIFICATE_PRIVATE_KEY=$(echo "$CERTIFICATE_PRIVATE_KEY_B64" | base64 --decode)
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
             --create
