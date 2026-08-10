@@ -47,6 +47,13 @@ createServer(async (req, res) => {
   }
   const ext = extname(filePath);
   const mime = MIME[ext] || "application/octet-stream";
+  // No Cache-Control here meant no explicit signal either way — WKWebView's
+  // NSURLCache was heuristically caching html/js/css across app relaunches,
+  // so a Railway deploy wouldn't actually reach the phone until the OS
+  // evicted the cache on its own schedule, no matter how many times the app
+  // itself was force-quit and reopened.
+  const noCacheExts = [".html", ".js", ".css"];
+  if (noCacheExts.includes(ext)) res.setHeader("Cache-Control", "no-store");
   res.writeHead(200, { "Content-Type": mime });
   res.end(readFileSync(filePath));
 }).listen(PORT, () => console.log(`Server running on port ${PORT}`));
