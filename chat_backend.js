@@ -1754,10 +1754,23 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // ─── Favorited media (coaches/admins only) ─────────────────────────────
+    // Optional ?conversationId= scopes the list to one chat — used by the
+    // "My Favorites" gallery opened from a specific thread's header, which
+    // otherwise showed a coach's ENTIRE favorites list across every student
+    // instead of just the one they had open. Omitted entirely by
+    // loadFavorites() at page init (it just needs a global lookup of which
+    // files are already favorited, to light up the right star icons — that
+    // one isn't conversation-specific, so it stays unscoped on purpose.
+    // Favorites saved before this field existed have no conversationId and
+    // so won't match any scoped request — they still show up in the
+    // unscoped global lookup, just not attributable to a specific thread.
     if (p === "/api/chat/favorites" && req.method === "GET") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       const all = readJson(FAVORITES_FILE, []);
-      const mine = all.filter(f => f.userId === user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const conversationId = url.searchParams.get("conversationId");
+      let mine = all.filter(f => f.userId === user.id);
+      if (conversationId) mine = mine.filter(f => f.conversationId === conversationId);
+      mine.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       return sendJson(res, 200, { favorites: mine });
     }
     if (p === "/api/chat/favorites" && req.method === "POST") {
@@ -1791,6 +1804,7 @@ export async function handleChatRequest(req, res, url) {
         const record = {
           id: randomUUID(),
           userId: user.id, userEmail: user.email, userName: `${user.first} ${user.last}`,
+          conversationId: srcMsg.conversationId,
           name: trimmedName,
           type: srcMsg.type,
           originalFileId: driveFileId,

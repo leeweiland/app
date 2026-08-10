@@ -57,10 +57,18 @@
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #threadWrap { display: none; }
   #threadWrap.show { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .thread-head { padding: 12px 20px; border-bottom: 1px solid var(--pra-border); display: flex; align-items: center; gap: 12px; }
+  /* Two rows instead of one: name/members used to share a row with the
+     icon buttons, squeezed into whatever width was left over and forced to
+     truncate with an ellipsis — a group chat's full name or member list
+     was routinely cut off even though the header had plenty of vertical
+     room to spare. Icons now sit on their own row underneath, so the name
+     row gets the full header width. */
+  .thread-head { padding: 12px 20px; border-bottom: 1px solid var(--pra-border); display: flex; flex-direction: column; gap: 8px; }
+  .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
+  .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .thread-head-name { font-weight: 700; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .thread-head-name { font-weight: 700; font-size: .95rem; overflow-wrap: break-word; }
+  .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: none; }
   .thread-protocol-link:hover { text-decoration: underline; }
   .thread-appt-row { display: none; font-family: var(--font-secondary); font-size: .66rem; color: #39ff14; margin-top: 3px; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -266,17 +274,21 @@
 
       <div id="threadWrap">
         <div class="thread-head">
-          <button class="icon-btn back-btn" id="backBtn" title="Back to chats">←</button>
-          <div class="pra-avatar" id="threadAvatar"></div>
-          <div class="thread-head-meta">
-            <div class="thread-head-name" id="threadName"></div>
-            <div class="thread-group-members" id="threadGroupMembers" style="display:none"></div>
-            <a class="thread-protocol-link" id="threadProtocolLink" style="display:none" href="#">Current Training Protocol</a>
-            <div class="thread-appt-row" id="threadApptInfo"></div>
+          <div class="thread-head-row1">
+            <button class="icon-btn back-btn" id="backBtn" title="Back to chats">←</button>
+            <div class="pra-avatar" id="threadAvatar"></div>
+            <div class="thread-head-meta">
+              <div class="thread-head-name" id="threadName"></div>
+              <div class="thread-group-members" id="threadGroupMembers" style="display:none"></div>
+              <a class="thread-protocol-link" id="threadProtocolLink" style="display:none" href="#">Current Training Protocol</a>
+              <div class="thread-appt-row" id="threadApptInfo"></div>
+            </div>
           </div>
-          <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
-          <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn" id="favoritesBtn" title="My Favorites" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="17.5" cy="6.5" r="1.3" fill="#009bff"/></svg></button>
+          <div class="thread-head-icons">
+            <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
+            <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn" id="favoritesBtn" title="My Favorites" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="17.5" cy="6.5" r="1.3" fill="#009bff"/></svg></button>
+          </div>
         </div>
         <div id="searchBar" style="padding:10px 20px;border-bottom:1px solid var(--pra-border)">
           <div class="search-clear-wrap">
@@ -1529,7 +1541,10 @@ async function openFavoritesGallery() {
   const grid = document.getElementById('favoritesGrid');
   grid.innerHTML = '<div class="empty-hint">Loading…</div>';
   openModal('favoritesModal');
-  const r = await fetch('/api/chat/favorites');
+  // Scoped to the currently open thread — opened from that thread's own
+  // header, so a coach with several students expects "this chat's
+  // favorites," not their entire caseload's favorites all mixed together.
+  const r = await fetch('/api/chat/favorites?conversationId=' + encodeURIComponent(activeConvoId || ''));
   const d = await r.json();
   const favorites = d.favorites || [];
   // Thumbnails load from the ORIGINAL chat file (already access-checked via
@@ -1538,7 +1553,7 @@ async function openFavoritesGallery() {
   // points at. Same bytes either way; avoids opening up the media proxy to
   // a whole new authorization path just for a thumbnail.
   grid.innerHTML = favorites.map(f => mediaGridCellHtml(f.type, `/api/chat/media/${f.originalFileId}`)).join('')
-    || '<div class="empty-hint">No favorites yet — tap the star on any photo or video in a chat.</div>';
+    || '<div class="empty-hint">No favorites in this chat yet — tap the star on any photo or video here.</div>';
 }
 
 // ── Push notifications ──────────────────────────────────────────────────
