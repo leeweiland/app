@@ -210,20 +210,20 @@
   };
 
   const ICONS = [
-    { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat' },
+    { href: '/chat.html', icon: ICON_SVG.chat, title: 'Chat' },
     { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol' },
-    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body & Move Scan' },
-    { href: '/chat-app/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
-    { href: '/chat-app/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
-    { href: '/chat-app/profile.html', icon: ICON_SVG.profile, title: 'My profile' },
+    { href: '/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body & Move Scan' },
+    { href: '/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
+    { href: '/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
+    { href: '/profile.html', icon: ICON_SVG.profile, title: 'My profile' },
   ];
 
   // Second, bottom-anchored bar for the newer content sections — kept
   // separate from the top bar's core app nav.
   const BOTTOM_ICONS = [
-    { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
+    { href: '/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
-    { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
+    { href: '/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
     // Retreats icon (plane) temporarily pulled from the bottom bar — page
     // itself is untouched, just not linked from here for now.
     { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
@@ -238,10 +238,10 @@
 
     const label = document.createElement('a');
     label.className = 'cah-label';
-    label.href = '/chat-app/chat.html';
+    label.href = '/chat.html';
     const logo = document.createElement('img');
     logo.className = 'cah-logo';
-    logo.src = '/chat-app/assets/pra-logo.png';
+    logo.src = '/assets/pra-logo.png';
     logo.alt = 'Pacific Rim Athletics';
     label.appendChild(logo);
     bar.appendChild(label);
@@ -262,9 +262,9 @@
       // who's logged in (shouldn't happen in practice, this bar only ever
       // renders on already-authenticated pages).
       if (item.selfProtocol && !myId) return;
-      const href = item.selfProtocol ? `/chat-app/training-protocol.html?userId=${myId}` : item.href;
+      const href = item.selfProtocol ? `/training-protocol.html?userId=${myId}` : item.href;
       const isActive = item.selfProtocol
-        ? (path === '/chat-app/training-protocol.html' && location.search === `?userId=${myId}`)
+        ? (path === '/training-protocol.html' && location.search === `?userId=${myId}`)
         : path === href;
       const a = document.createElement('a');
       a.className = 'cah-icon' + (isActive ? ' active' : '');

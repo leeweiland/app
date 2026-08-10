@@ -1359,7 +1359,7 @@ export async function handleChatRequest(req, res, url) {
       writeJson(RESETS_FILE, resets);
       const host = req.headers.host || "localhost:3456";
       const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
-      const resetUrl = `${protocol}://${host}/chat-app/reset-password.html?token=${token}`;
+      const resetUrl = `${protocol}://${host}/reset-password.html?token=${token}`;
       sendPasswordResetEmail(user.email, `${user.first} ${user.last}`, resetUrl)
         .catch(e => console.error("[password reset email]", e.message));
     }
