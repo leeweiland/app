@@ -6,9 +6,6 @@ workflows:
     integrations:
       app_store_connect: app
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.pacificrimathleticsapp.app
       node: 20
       xcode: latest
       cocoapods: default
@@ -22,6 +19,15 @@ workflows:
           fi
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Initialize keychain
+        script: keychain initialize
+      - name: Fetch or create signing files
+        script: |
+          app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add certificates to keychain
+        script: keychain add-certificates
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build iOS IPA
