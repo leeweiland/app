@@ -23,6 +23,9 @@ workflows:
       - name: Fetch signing files
         script: |
           openssl genrsa -out /tmp/cert_key.pem 2048
+          echo "=== SAVE THIS TO CERTIFICATE_PRIVATE_KEY ENV VAR ==="
+          cat /tmp/cert_key.pem
+          echo "=== END KEY ==="
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
             --certificate-key @file:/tmp/cert_key.pem \
