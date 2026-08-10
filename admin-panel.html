@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Admin â€” PRA Chat</title>
+<title>Admin — PRA Chat</title>
 <link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
@@ -14,7 +14,7 @@
   th { text-align: left; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); padding: 6px 10px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
   td { padding: 7px 10px; border-bottom: 1px solid var(--pra-border); font-size: .8rem; white-space: nowrap; }
   /* Every other column sizes to its own content (table-layout:auto, no
-     ellipsis) so nothing gets cut off â€” the zoom link is the one exception,
+     ellipsis) so nothing gets cut off — the zoom link is the one exception,
      kept just wide enough for its "Zoom" header since the full URL already
      lives in the input's title tooltip and isn't useful to see inline. */
   td .zoom-link-input { width: 46px; box-sizing: border-box; font-size: .76rem; padding: 5px 7px; }
@@ -52,14 +52,14 @@
     <div class="pra-panel section">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
       <div class="users-toolbar">
-        <input class="pra-input" id="userSearchInput" placeholder="Search name or emailâ€¦"/>
+        <input class="pra-input" id="userSearchInput" placeholder="Search name or email…"/>
         <button class="pra-btn" id="addUserBtn" style="white-space:nowrap">+ Add User</button>
       </div>
-      <div id="usersTableWrap">Loadingâ€¦</div>
+      <div id="usersTableWrap">Loading…</div>
       <div class="pagination" id="usersPagination" style="display:none">
-        <button id="usersPrevBtn">â†</button>
+        <button id="usersPrevBtn">←</button>
         <div class="page-label" id="usersPageLabel"></div>
-        <button id="usersNextBtn">â†’</button>
+        <button id="usersNextBtn">→</button>
       </div>
     </div>
 
@@ -86,7 +86,7 @@
         <input class="pra-input" id="trainingProtocolVideoLibraryFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
-        <label class="pra-label">Powerbatics Videos Drive Folder ID (source footage for the Powerbatics Training Videos catalog â€” reference only; each catalog entry is still added by hand in moves_dictionary.json)</label>
+        <label class="pra-label">Powerbatics Videos Drive Folder ID (source footage for the Powerbatics Training Videos catalog — reference only; each catalog entry is still added by hand in moves_dictionary.json)</label>
         <input class="pra-input" id="powerbaticsVideosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
@@ -94,7 +94,7 @@
         <input class="pra-input" id="favoritesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
-        <label class="pra-label">Giphy API Key (optional â€” enables GIF search in chat)</label>
+        <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
       <button class="pra-btn" id="saveConfigBtn">SAVE CONFIG</button>
@@ -106,9 +106,9 @@
 
       <div class="field">
         <label class="pra-label">Google Calendar Connection</label>
-        <div id="calendarStatusRow" style="font-size:.85rem;padding:8px 0">Checkingâ€¦</div>
+        <div id="calendarStatusRow" style="font-size:.85rem;padding:8px 0">Checking…</div>
         <div class="pra-muted" style="font-size:.76rem;line-height:1.5">
-          One connection (lee@pacificrimathletics.com) is enough â€” within your Workspace, that account can create events directly on any coach's own calendar (uses the email already on file for them, or their "Calendar email" override if it differs). The client is always added as an attendee, so they get Google's own "Add to Calendar" invite too.<br><br>
+          One connection (lee@pacificrimathletics.com) is enough — within your Workspace, that account can create events directly on any coach's own calendar (uses the email already on file for them, or their "Calendar email" override if it differs). The client is always added as an attendee, so they get Google's own "Add to Calendar" invite too.<br><br>
           To (re)connect, run <code>node get_calendar_token.js</code>, sign in with lee@pacificrimathletics.com, add the printed line to <code>.env</code>, and restart the dashboard server.
         </div>
       </div>
@@ -137,7 +137,7 @@
           <input type="checkbox" id="apptSmsEnabled"/> Send confirmation text
         </label>
         <textarea class="pra-input" id="apptSmsTemplate" rows="2" placeholder="SMS text" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Sent via Close CRM from the number in CLOSE_FROM_PHONE â€” only works for clients who already exist as a Close lead under the same email.</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Sent via Close CRM from the number in CLOSE_FROM_PHONE — only works for clients who already exist as a Close lead under the same email.</div>
       </div>
 
       <div class="pra-h2" style="margin:22px 0 14px;font-size:1rem">Reminders</div>
@@ -252,7 +252,7 @@
   </div>
 
   <!-- Name/email/phone are now edited inline, directly in the table
-       (see .inline-edit wiring below) â€” no modal needed. -->
+       (see .inline-edit wiring below) — no modal needed. -->
 </div>
 
 <script>
@@ -346,8 +346,8 @@ function sortHeader(label, key) {
       <span style="display:inline-flex;align-items:center;gap:5px">
         ${label}
         <span class="sort-arrows" data-key="${key}" style="display:inline-flex;flex-direction:column;line-height:.6;cursor:pointer;user-select:none;padding:6px 4px">
-          <span class="sort-arrow" style="font-size:.55rem;color:${upColor}">â–²</span>
-          <span class="sort-arrow" style="font-size:.55rem;color:${downColor}">â–¼</span>
+          <span class="sort-arrow" style="font-size:.55rem;color:${upColor}">▲</span>
+          <span class="sort-arrow" style="font-size:.55rem;color:${downColor}">▼</span>
         </span>
       </span>
     </th>
@@ -384,10 +384,10 @@ function renderUsers() {
       <td>
         ${u.role === 'coach' || u.role === 'admin' ? `
           <input class="pra-input zoom-link-input" data-id="${u.id}" placeholder="https://zoom.us/j/..." value="${u.zoomLink || ''}" title="${u.zoomLink || ''}"/>
-        ` : 'â€”'}
+        ` : '—'}
       </td>
       <td>
-        ${u.role === 'admin' ? 'â€”' : `
+        ${u.role === 'admin' ? '—' : `
           <button class="pra-btn pra-btn-ghost archive-btn" data-id="${u.id}" data-archived="${!!u.archived}" style="padding:5px 12px;font-size:.75rem">
             ${u.archived ? 'Unarchive' : 'Archive'}
           </button>
@@ -405,8 +405,8 @@ function renderUsers() {
   ` : '<div class="pra-muted" style="text-align:center;padding:20px 0">No users match.</div>';
 
   document.querySelectorAll('.sort-arrows').forEach(el => {
-    // Whole up/down icon is one click target â€” no need to land precisely on
-    // the tiny â–² or â–¼ glyph. Clicking a new column sorts it ascending;
+    // Whole up/down icon is one click target — no need to land precisely on
+    // the tiny ▲ or ▼ glyph. Clicking a new column sorts it ascending;
     // clicking the already-active column toggles between asc/desc.
     el.addEventListener('click', () => {
       const key = el.dataset.key;
@@ -453,7 +453,7 @@ function renderUsers() {
     btn.addEventListener('click', async () => {
       const wasArchived = btn.dataset.archived === 'true';
       // Archiving locks the account out of login (kicking any live session
-      // too) and drops their dot off the Users Map â€” their spreadsheet row
+      // too) and drops their dot off the Users Map — their spreadsheet row
       // is never touched, this only flips a flag in chat_users.json.
       if (!wasArchived && !confirm('Archive this user? They will be logged out and unable to sign back in until unarchived. Their spreadsheet data is untouched.')) return;
       await fetch('/api/admin/users/' + btn.dataset.id + '/archived', {
@@ -462,7 +462,7 @@ function renderUsers() {
       loadUsers();
     });
   });
-  // Click into Name/Email/Phone and type â€” saves on blur (or Enter) with no
+  // Click into Name/Email/Phone and type — saves on blur (or Enter) with no
   // separate Edit button/modal. Only fires when the value actually changed,
   // and reverts + alerts on a rejected save (blank required field, or an
   // email collision) so a bad edit never sits there looking saved.
@@ -509,7 +509,7 @@ async function createUser() {
   };
   if (!payload.first || !payload.last || !payload.email || !payload.password) { msg.textContent = 'First, last, email, and password are required.'; return; }
   if (payload.password.length < 8) { msg.textContent = 'Password must be at least 8 characters.'; return; }
-  msg.textContent = 'Creatingâ€¦';
+  msg.textContent = 'Creating…';
   const r = await fetch('/api/admin/users', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
   });
@@ -567,7 +567,7 @@ async function loadConfig() {
 }
 
 // Hides the reminder-specific subject/body fields while "use the same as
-// initial" is checked â€” nothing to fill in since the confirmation template
+// initial" is checked — nothing to fill in since the confirmation template
 // gets reused at send time (see chat_backend.js's reminder job).
 function toggleReminderTemplateFields(checkboxId, fieldsId) {
   document.getElementById(fieldsId).style.display = document.getElementById(checkboxId).checked ? 'none' : '';
@@ -590,7 +590,7 @@ function renderReminderRows(containerId, minutesArray) {
     const { value, unit } = minutesToValueUnit(minutes);
     return `
       <div class="reminder-row" data-idx="${i}">
-        <span class="reminder-label">Reminder ${i + 1} â€”</span>
+        <span class="reminder-label">Reminder ${i + 1} —</span>
         <input type="number" class="pra-input reminder-value" min="1" value="${value}"/>
         <select class="pra-select reminder-unit">
           <option value="1" ${unit === 1 ? 'selected' : ''}>Minutes</option>
@@ -628,10 +628,10 @@ async function loadCalendarStatus() {
     const r = await fetch('/api/admin/appointments-calendar-status');
     const d = await r.json();
     row.innerHTML = d.connected
-      ? `<span style="color:#3fb950">âœ“ Connected</span>${d.email ? ' â€” ' + d.email : ''}`
-      : `<span style="color:#ff3b3b">âœ• Not connected</span>${d.error ? ' â€” ' + d.error : ''}`;
+      ? `<span style="color:#3fb950">✓ Connected</span>${d.email ? ' — ' + d.email : ''}`
+      : `<span style="color:#ff3b3b">✕ Not connected</span>${d.error ? ' — ' + d.error : ''}`;
   } catch (e) {
-    row.innerHTML = `<span style="color:#ff3b3b">âœ• Could not check status</span>`;
+    row.innerHTML = `<span style="color:#ff3b3b">✕ Could not check status</span>`;
   }
 }
 
@@ -690,4 +690,3 @@ init();
 </script>
 </body>
 </html>
-

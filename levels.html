@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Levels â€” PRA</title>
+<title>Levels — PRA</title>
 <link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
@@ -30,13 +30,13 @@
   <script src="/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px">LEVELS</div>
-    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Gym and Online skill progress, combined â€” search by name.</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Gym and Online skill progress, combined — search by name.</div>
     <div class="controls">
       <div style="flex:1;min-width:220px">
         <label class="pra-label" style="display:block;margin-bottom:6px">Search</label>
         <div class="search-clear-wrap">
-          <input class="pra-input" id="searchInput" placeholder="Search a nameâ€¦"/>
-          <button type="button" class="search-clear-btn" data-clears="searchInput">âœ•</button>
+          <input class="pra-input" id="searchInput" placeholder="Search a name…"/>
+          <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
         </div>
       </div>
       <div>
@@ -49,12 +49,12 @@
           <option value="powermoves">Highest Powermoves</option>
           <option value="freerun">Highest Freerun</option>
           <option value="cirque">Highest Cirque</option>
-          <option value="first">Alphabetical â€” First Name</option>
-          <option value="last">Alphabetical â€” Last Name</option>
+          <option value="first">Alphabetical — First Name</option>
+          <option value="last">Alphabetical — Last Name</option>
         </select>
       </div>
     </div>
-    <div class="list" id="list"><div class="pra-muted">Loadingâ€¦</div></div>
+    <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
     <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
   </div>
 </div>
@@ -68,7 +68,7 @@ function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUppe
 function levelIsChecked(v) { return ['x', 'yes'].includes(String(v || '').trim().toLowerCase()); }
 function levelNumColor(n) { return LEVEL_NUM_COLORS[Number(n)] || '#5f727f'; }
 
-// Completing Foundation means they've at least started every skill â€” an
+// Completing Foundation means they've at least started every skill — an
 // unrecorded category reads as Level 1, not 0, once Foundation is done.
 function effectiveLevel(p, cat) {
   const raw = Number(p.levels[cat]) || 0;
@@ -80,13 +80,13 @@ function superLevel(p) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + e
 function renderLevelChips(p) {
   const foundationSet = levelIsChecked(p.levels['FOUNDATION']);
   const inProgress = String(p.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress';
-  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${foundationSet ? 'âœ“' : (inProgress ? 'In Progress' : '0')}</span></div>`];
+  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${foundationSet ? '✓' : (inProgress ? 'In Progress' : '0')}</span></div>`];
   LEVELS_NUMERIC_CATS.forEach(cat => {
     const n = effectiveLevel(p, cat);
     rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
   });
   if (p.program === 'Gym') {
-    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${p.team ? 'âœ“' : '0'}</span></div>`);
+    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${p.team ? '✓' : '0'}</span></div>`);
   }
   return `<div class="levels-col">${rows.join('')}</div>`;
 }
@@ -115,8 +115,8 @@ function render(people) {
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 
 const catSorter = cat => (a, b) => effectiveLevel(b, cat) - effectiveLevel(a, cat) || superLevel(b) - superLevel(a);
-// "Highest Level" â€” whichever single skill someone's best at, not the sum
-// (Super Level) or one specific category â€” so someone who's a 10/10 in just
+// "Highest Level" — whichever single skill someone's best at, not the sum
+// (Super Level) or one specific category — so someone who's a 10/10 in just
 // one thing still sorts above someone spread evenly at 6/10 across all five.
 function highestSingle(p) { return Math.max(...LEVELS_NUMERIC_CATS.map(cat => effectiveLevel(p, cat))); }
 const SORTERS = {
@@ -152,4 +152,3 @@ load();
 </script>
 </body>
 </html>
-

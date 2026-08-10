@@ -1,12 +1,12 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Chat â€” PRA</title>
+<title>Chat — PRA</title>
 <link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
-  /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` â€”
+  /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` —
      that magic number only ever accounted for chat-header.js's own bar and
      silently broke (pushing the composer off-screen, requiring a page
      scroll to reach it) whenever the ads nav bar above it, or the logo/bar
@@ -18,7 +18,7 @@
   .chat-shell { display: flex; flex: 1; min-height: 0; }
   .back-btn { display: none; }
 
-  /* â”€â”€ Sidebar â”€â”€ */
+  /* ── Sidebar ── */
   .sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid var(--pra-border); display: flex; flex-direction: column; }
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
@@ -43,8 +43,8 @@
   .convo-preview-appt { color: #39ff14; }
   .empty-hint { padding: 24px 16px; color: var(--pra-dim); font-size: .82rem; text-align: center; }
 
-  /* â”€â”€ Favorites (a coach's caseload â€” a quick-access shortlist distinct
-     from the full contact/conversation list) â”€â”€ */
+  /* ── Favorites (a coach's caseload — a quick-access shortlist distinct
+     from the full contact/conversation list) ── */
   .convo-fav-toggle { flex-shrink: 0; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; font-weight: 700; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
   .convo-fav-toggle:hover { color: #ffd54a; border-color: #ffd54a; }
   .convo-fav-toggle.on { color: #0a0a0d; background: #ffd54a; border-color: #ffd54a; }
@@ -53,7 +53,7 @@
   .convo-fav-btn.on { opacity: 1; color: #ffd54a; }
   .convo-fav-btn svg { width: 17px; height: 17px; }
 
-  /* â”€â”€ Main panel â”€â”€ */
+  /* ── Main panel ── */
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #threadWrap { display: none; }
   #threadWrap.show { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -67,7 +67,7 @@
   .thread-appt-link { color: #39ff14; text-decoration: underline; white-space: nowrap; }
   .thread-appt-link:hover { opacity: 0.75; }
 
-  /* â”€â”€ Appointment bubble â”€â”€ */
+  /* ── Appointment bubble ── */
   .bubble.appt { position: relative; display: flex; align-items: center; gap: 10px; border: 1px solid var(--pra-blue); background: rgba(0,155,255,0.08); }
   .bubble.appt .appt-icon svg { width: 22px; height: 22px; overflow: visible; }
   .status-icon svg { width: 15px; height: 15px; overflow: visible; vertical-align: -3px; }
@@ -80,7 +80,7 @@
   .bubble.appt a.appt-zoom-link { display: flex; align-items: center; gap: 4px; font-weight: 700; }
   .schedule-status-row { display: flex; align-items: center; gap: 8px; font-size: .8rem; padding: 6px 0; }
   /* Native date/time inputs default to black text + a black calendar/clock
-     icon, invisible against this dark theme â€” color-scheme flips both to
+     icon, invisible against this dark theme — color-scheme flips both to
      the light/white variant the browser ships for dark UIs. */
   #scheduleDate, #scheduleTime { color-scheme: dark; color: #fff; }
   .schedule-status-ok { color: #3fb950; }
@@ -95,7 +95,7 @@
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; }
 
-  /* â”€â”€ Reactions â”€â”€ */
+  /* ── Reactions ── */
   .bubble-wrap { position: relative; display: inline-block; max-width: 100%; }
   .react-trigger {
     position: absolute; bottom: -9px; right: -9px; width: 22px; height: 22px; border-radius: 50%;
@@ -106,7 +106,7 @@
   .react-trigger:hover { border-color: var(--pra-blue); }
   .bubble-row:hover .react-trigger { opacity: 1; }
   .bubble-row.mine .react-trigger { left: -9px; right: auto; }
-  /* â”€â”€ Message edit/delete actions â”€â”€ */
+  /* ── Message edit/delete actions ── */
   .appt-delete-btn { position: absolute; top: 6px; right: 8px; background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: .85rem; line-height: 1; padding: 0 2px; }
   .appt-delete-btn:hover { color: #fff; }
   .msg-actions { display: none; position: absolute; top: -26px; right: 0; gap: 2px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 6px; padding: 2px 4px; z-index: 10; white-space: nowrap; }
@@ -130,7 +130,7 @@
   .composer input[type=text] { flex: 1; }
   #fileInput { display: none; }
 
-  /* â”€â”€ Pickers â”€â”€ */
+  /* ── Pickers ── */
   .picker-panel { position: absolute; bottom: 62px; left: 16px; width: 320px; max-height: 340px; overflow-y: auto; z-index: 20; padding: 12px; display: none; }
   .picker-panel.show { display: block; }
   .emoji-tabs { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--pra-border); }
@@ -143,7 +143,7 @@
   .gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; }
 
-  /* â”€â”€ Modal (contacts / group / search / media) â”€â”€ */
+  /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-backdrop.show { display: flex; }
   .modal-box { width: 100%; max-width: 420px; max-height: 80vh; overflow-y: auto; padding: 22px; }
@@ -152,7 +152,7 @@
   .contact-row input[type=checkbox] { margin-left: auto; }
   .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   /* Cells are clickable wrappers that open the full lightbox instead of
-     relying on native <video controls> at this thumbnail size â€” Chrome (and
+     relying on native <video controls> at this thumbnail size — Chrome (and
      others) progressively drop control icons as the element shrinks, and at
      ~90px tall/one-third-modal-width the play button itself is usually the
      first thing to disappear, leaving just a scrub bar with no way to
@@ -167,9 +167,9 @@
 
   .push-banner { padding: 8px 20px; font-size: .78rem; color: var(--pra-blue); text-align: center; cursor: pointer; border-bottom: 1px solid var(--pra-border); }
 
-  /* â”€â”€ Image lightbox â”€â”€
+  /* ── Image lightbox ──
      92cqw/92cqh (not vw/vh) so this fills whatever box .lightbox-backdrop
-     is actually rendered at â€” the real fullscreen viewport normally, but
+     is actually rendered at — the real fullscreen viewport normally, but
      also the simulated Tablet/Mobile preview frame in chat-header.js's
      admin device strip, which vw/vh can't see (they always measure the
      real window, not a frame .pra-root has been pinned to). inset:0 on a
@@ -195,10 +195,10 @@
   .expand-video-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .bubble.media img { cursor: zoom-in; }
 
-  /* â”€â”€ Favorite star (coach/admin only) â”€â”€
+  /* ── Favorite star (coach/admin only) ──
      Top-left, not top-right, so it never collides with .expand-video-btn on
      video bubbles. Hidden until hover UNLESS already favorited (.favorited
-     stays visible always â€” that's the "star remains on the media" part) â€”
+     stays visible always — that's the "star remains on the media" part) —
      the hover-only state before that is deliberately the plain gray outline
      star, filled blue once actually favorited. */
   .fav-star-btn {
@@ -213,13 +213,13 @@
   .fav-star-btn .star-fill { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
   .fav-star-btn.favorited .star-fill { fill: #009bff; stroke: #009bff; }
 
-  /* â”€â”€ Mobile: one panel at a time, WhatsApp-style, instead of squeezing a
+  /* ── Mobile: one panel at a time, WhatsApp-style, instead of squeezing a
      320px sidebar + thread into a phone screen. @container (not @media) so
-     this reads .pra-root's own rendered width â€” a plain viewport media
+     this reads .pra-root's own rendered width — a plain viewport media
      query can't tell a real narrow phone apart from .pra-root being pinned
      narrow by the admin device-preview frame in chat-header.js, so it only
      matched by coincidence when the real browser window was also narrow.
-     Same reasoning for cqi over vw in the picker-panel width below. â”€â”€ */
+     Same reasoning for cqi over vw in the picker-panel width below. ── */
   @container pra-app (max-width: 768px) {
     .sidebar { width: 100% !important; }
     .sidebar-resizer { display: none; }
@@ -237,24 +237,24 @@
   <script src="/nav.js"></script>
   <script src="/chat-header.js"></script>
 
-  <div id="pushBanner" class="push-banner" style="display:none">ðŸ”” Turn on notifications for new messages</div>
+  <div id="pushBanner" class="push-banner" style="display:none">🔔 Turn on notifications for new messages</div>
 
   <div class="chat-shell">
     <div class="sidebar pra-panel" style="border-radius:0">
       <div class="sidebar-head">
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <div class="pra-h2 pra-glow">CHATS</div>
-          <button class="convo-fav-toggle" id="favoritesViewToggle" title="Show only favorites">â˜… FAVORITES</button>
+          <button class="convo-fav-toggle" id="favoritesViewToggle" title="Show only favorites">★ FAVORITES</button>
         </div>
         <div class="sidebar-actions">
           <button class="icon-btn" id="newGroupBtn" title="New group" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
         </div>
       </div>
       <div class="sidebar-search search-clear-wrap">
-        <input class="pra-input" id="chatSearchInput" placeholder="Search nameâ€¦"/>
-        <button type="button" class="search-clear-btn" data-clears="chatSearchInput">âœ•</button>
+        <input class="pra-input" id="chatSearchInput" placeholder="Search name…"/>
+        <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
       </div>
-      <div class="convo-list" id="convoList"><div class="empty-hint">Loadingâ€¦</div></div>
+      <div class="convo-list" id="convoList"><div class="empty-hint">Loading…</div></div>
     </div>
     <div class="sidebar-resizer" id="sidebarResizer"></div>
 
@@ -266,7 +266,7 @@
 
       <div id="threadWrap">
         <div class="thread-head">
-          <button class="icon-btn back-btn" id="backBtn" title="Back to chats">â†</button>
+          <button class="icon-btn back-btn" id="backBtn" title="Back to chats">←</button>
           <div class="pra-avatar" id="threadAvatar"></div>
           <div class="thread-head-meta">
             <div class="thread-head-name" id="threadName"></div>
@@ -280,18 +280,18 @@
         </div>
         <div id="searchBar" style="padding:10px 20px;border-bottom:1px solid var(--pra-border)">
           <div class="search-clear-wrap">
-            <input class="pra-input" id="searchInput" placeholder="Search in this chatâ€¦"/>
-            <button type="button" class="search-clear-btn" data-clears="searchInput">âœ•</button>
+            <input class="pra-input" id="searchInput" placeholder="Search in this chat…"/>
+            <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
           </div>
           <div id="searchResults" style="margin-top:8px;font-size:.8rem"></div>
         </div>
         <div class="thread-body" id="threadBody"></div>
         <div class="composer">
-          <button class="icon-btn" id="emojiBtn">ðŸ˜Š</button>
+          <button class="icon-btn" id="emojiBtn">😊</button>
           <button class="icon-btn" id="gifBtn">GIF</button>
-          <button class="icon-btn" id="attachBtn">ðŸ“Ž</button>
+          <button class="icon-btn" id="attachBtn">📎</button>
           <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
-          <input type="text" id="textInput" class="pra-input" placeholder="Type a messageâ€¦"/>
+          <input type="text" id="textInput" class="pra-input" placeholder="Type a message…"/>
           <button class="pra-btn" id="sendBtn">Send</button>
 
           <div class="pra-panel picker-panel" id="emojiPanel">
@@ -299,7 +299,7 @@
             <div class="emoji-grid" id="emojiGrid"></div>
           </div>
           <div class="pra-panel picker-panel" id="gifPanel">
-            <input class="pra-input gif-search" id="gifSearchInput" placeholder="Search GIFsâ€¦"/>
+            <input class="pra-input gif-search" id="gifSearchInput" placeholder="Search GIFs…"/>
             <div class="gif-grid" id="gifGrid"></div>
           </div>
         </div>
@@ -312,7 +312,7 @@
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">New Group</div>
       <input class="pra-input" id="groupNameInput" placeholder="Group name" style="margin-bottom:12px"/>
-      <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">You're added to every group automatically â€” pick who else to include.</div>
+      <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">You're added to every group automatically — pick who else to include.</div>
       <div id="groupContactsList"></div>
       <button class="pra-btn" style="margin-top:14px;width:100%" id="createGroupBtn">Create Group</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupModal')">Cancel</button>
@@ -328,7 +328,7 @@
     </div>
   </div>
 
-  <!-- Favorite-naming modal (coach/admin only) â€” opened by tapping the star on a photo/video -->
+  <!-- Favorite-naming modal (coach/admin only) — opened by tapping the star on a photo/video -->
   <div class="modal-backdrop" id="favNameModal">
     <div class="pra-panel modal-box" style="max-width:340px">
       <div class="pra-h2" style="margin-bottom:14px">Rename This Media And Add It To Google Drive?</div>
@@ -354,7 +354,7 @@
     </div>
   </div>
 
-  <!-- Levels modal (coach/admin only) â€” click a DM contact's name/avatar -->
+  <!-- Levels modal (coach/admin only) — click a DM contact's name/avatar -->
   <div class="modal-backdrop" id="levelsModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" id="levelsModalName" style="margin-bottom:14px">Levels</div>
@@ -417,7 +417,7 @@
       <div class="lightbox-frame">
         <img id="lightboxImg" draggable="false"/>
         <video id="lightboxVideo" controls autoplay style="display:none"></video>
-        <button class="icon-btn lightbox-close" id="lightboxClose">âœ•</button>
+        <button class="icon-btn lightbox-close" id="lightboxClose">✕</button>
       </div>
     </div>
   </div>
@@ -425,19 +425,19 @@
 
 <script>
 const EMOJI_CATEGORIES = {
-  Smileys: ['ðŸ˜€','ðŸ˜ƒ','ðŸ˜„','ðŸ˜','ðŸ˜†','ðŸ˜…','ðŸ¤£','ðŸ˜‚','ðŸ™‚','ðŸ™ƒ','ðŸ˜‰','ðŸ˜Š','ðŸ˜‡','ðŸ¥°','ðŸ˜','ðŸ¤©','ðŸ˜˜','ðŸ˜—','â˜ºï¸','ðŸ˜š','ðŸ˜™','ðŸ¥²','ðŸ˜‹','ðŸ˜›','ðŸ˜œ','ðŸ¤ª','ðŸ˜','ðŸ¤‘','ðŸ¤—','ðŸ¤­','ðŸ¤«','ðŸ¤”','ðŸ¤','ðŸ¤¨','ðŸ˜','ðŸ˜‘','ðŸ˜¶','ðŸ˜','ðŸ˜’','ðŸ™„','ðŸ˜¬','ðŸ¤¥','ðŸ˜Œ','ðŸ˜”','ðŸ˜ª','ðŸ¤¤','ðŸ˜´','ðŸ˜·','ðŸ¤’','ðŸ¤•','ðŸ¤¢','ðŸ¤®','ðŸ¤§','ðŸ¥µ','ðŸ¥¶','ðŸ¥´','ðŸ˜µ','ðŸ¤¯','ðŸ¥³','ðŸ¥¸','ðŸ˜Ž','ðŸ¤“','ðŸ§','ðŸ˜•','ðŸ˜Ÿ','ðŸ™','â˜¹ï¸','ðŸ˜®','ðŸ˜¯','ðŸ˜²','ðŸ˜³','ðŸ¥º','ðŸ˜¦','ðŸ˜§','ðŸ˜¨','ðŸ˜°','ðŸ˜¥','ðŸ˜¢','ðŸ˜­','ðŸ˜±','ðŸ˜–','ðŸ˜£','ðŸ˜ž','ðŸ˜“','ðŸ˜©','ðŸ˜«','ðŸ¥±','ðŸ˜¤','ðŸ˜¡','ðŸ˜ ','ðŸ¤¬','ðŸ˜ˆ','ðŸ‘¿','ðŸ’€','â˜ ï¸','ðŸ’©','ðŸ¤¡','ðŸ‘¹','ðŸ‘º','ðŸ‘»','ðŸ‘½','ðŸ‘¾','ðŸ¤–'],
-  Gestures: ['ðŸ‘‹','ðŸ¤š','ðŸ–ï¸','âœ‹','ðŸ––','ðŸ‘Œ','ðŸ¤Œ','ðŸ¤','âœŒï¸','ðŸ¤ž','ðŸ¤Ÿ','ðŸ¤˜','ðŸ¤™','ðŸ‘ˆ','ðŸ‘‰','ðŸ‘†','ðŸ–•','ðŸ‘‡','â˜ï¸','ðŸ‘','ðŸ‘Ž','âœŠ','ðŸ‘Š','ðŸ¤›','ðŸ¤œ','ðŸ‘','ðŸ™Œ','ðŸ‘','ðŸ¤²','ðŸ™','âœï¸','ðŸ’…','ðŸ¤³','ðŸ’ª','ðŸ¦¾','ðŸ¦µ','ðŸ¦¿','ðŸ¦¶','ðŸ‘£','ðŸ‘€','ðŸ‘ï¸','ðŸ§ ','ðŸ¦·','ðŸ¦´'],
-  Hearts: ['â¤ï¸','ðŸ§¡','ðŸ’›','ðŸ’š','ðŸ’™','ðŸ’œ','ðŸ–¤','ðŸ¤','ðŸ¤Ž','ðŸ’”','â¤ï¸â€ðŸ”¥','â¤ï¸â€ðŸ©¹','ðŸ’•','ðŸ’ž','ðŸ’“','ðŸ’—','ðŸ’–','ðŸ’˜','ðŸ’','ðŸ’Ÿ','â˜®ï¸','âœï¸','â˜ªï¸','ðŸ•‰ï¸','â˜¸ï¸','âœ¡ï¸','ðŸ”¯','ðŸ’¯','âœ…','âŒ','â­','ðŸŒŸ','âœ¨','ðŸ”¥','ðŸ’¦','ðŸ’¥','âš¡'],
-  Animals: ['ðŸ¶','ðŸ±','ðŸ­','ðŸ¹','ðŸ°','ðŸ¦Š','ðŸ»','ðŸ¼','ðŸ»â€â„ï¸','ðŸ¨','ðŸ¯','ðŸ¦','ðŸ®','ðŸ·','ðŸ½','ðŸ¸','ðŸµ','ðŸ™ˆ','ðŸ™‰','ðŸ™Š','ðŸ’','ðŸ”','ðŸ§','ðŸ¦','ðŸ¤','ðŸ£','ðŸ¥','ðŸ¦†','ðŸ¦…','ðŸ¦‰','ðŸ¦‡','ðŸº','ðŸ—','ðŸ´','ðŸ¦„','ðŸ','ðŸ›','ðŸ¦‹','ðŸŒ','ðŸž','ðŸœ','ðŸ¦—','ðŸ•·ï¸','ðŸ¦‚','ðŸ¢','ðŸ','ðŸ¦Ž','ðŸ¦–','ðŸ¦•','ðŸ™','ðŸ¦‘','ðŸ¦','ðŸ¦ž','ðŸ¦€','ðŸ¡','ðŸ ','ðŸŸ','ðŸ¬','ðŸ³','ðŸ‹','ðŸ¦ˆ','ðŸŠ','ðŸ…','ðŸ†','ðŸ¦“','ðŸ¦','ðŸ˜','ðŸ¦›','ðŸ¦','ðŸª','ðŸ«','ðŸ¦’','ðŸ¦˜','ðŸƒ','ðŸ‚','ðŸ„','ðŸŽ','ðŸ–','ðŸ','ðŸ‘','ðŸ¦™','ðŸ','ðŸ¦Œ','ðŸ•','ðŸ©','ðŸˆ','ðŸ“','ðŸ¦ƒ','ðŸ¦š','ðŸ¦œ','ðŸ¦¢','ðŸ¦©','ðŸ‡','ðŸ¦','ðŸ¦¨','ðŸ¦¡','ðŸ¦¦','ðŸ¦¥','ðŸ','ðŸ€','ðŸ¿ï¸','ðŸ¦”','ðŸ¾'],
-  Food: ['ðŸ','ðŸŽ','ðŸ','ðŸŠ','ðŸ‹','ðŸŒ','ðŸ‰','ðŸ‡','ðŸ“','ðŸ«','ðŸˆ','ðŸ’','ðŸ‘','ðŸ¥­','ðŸ','ðŸ¥¥','ðŸ¥','ðŸ…','ðŸ†','ðŸ¥‘','ðŸ¥¦','ðŸ¥¬','ðŸ¥’','ðŸŒ¶ï¸','ðŸ«‘','ðŸŒ½','ðŸ¥•','ðŸ«’','ðŸ§„','ðŸ§…','ðŸ¥”','ðŸ ','ðŸ¥','ðŸ¥¯','ðŸž','ðŸ¥–','ðŸ¥¨','ðŸ§€','ðŸ¥š','ðŸ³','ðŸ§ˆ','ðŸ¥ž','ðŸ§‡','ðŸ¥“','ðŸ¥©','ðŸ—','ðŸ–','ðŸŒ­','ðŸ”','ðŸŸ','ðŸ•','ðŸ«“','ðŸ¥ª','ðŸŒ®','ðŸŒ¯','ðŸ«”','ðŸ¥™','ðŸ§†','ðŸ¥˜','ðŸ','ðŸœ','ðŸ²','ðŸ›','ðŸ£','ðŸ±','ðŸ¥Ÿ','ðŸ¤','ðŸ™','ðŸš','ðŸ˜','ðŸ¥','ðŸ¥ ','ðŸ¥®','ðŸ¢','ðŸ¡','ðŸ§','ðŸ¨','ðŸ¦','ðŸ¥§','ðŸ°','ðŸŽ‚','ðŸ§','ðŸ®','ðŸ­','ðŸ¬','ðŸ«','ðŸ¿','ðŸ§‚','ðŸ¥œ','ðŸ©','ðŸª','â˜•','ðŸµ','ðŸ§ƒ','ðŸ¥¤','ðŸ§‹','ðŸ¶','ðŸº','ðŸ»','ðŸ¥‚','ðŸ·','ðŸ¥ƒ','ðŸ¸','ðŸ¹','ðŸ§‰','ðŸ¾'],
-  Activities: ['âš½','ðŸ€','ðŸˆ','âš¾','ðŸ¥Ž','ðŸŽ¾','ðŸ','ðŸ‰','ðŸ¥','ðŸŽ±','ðŸª€','ðŸ“','ðŸ¸','ðŸ’','ðŸ‘','ðŸ¥','ðŸ','ðŸ¥…','â›³','ðŸª','ðŸ¹','ðŸŽ£','ðŸ¤¿','ðŸ¥Š','ðŸ¥‹','ðŸŽ½','ðŸ›¹','ðŸ›¼','ðŸ›·','â›¸ï¸','ðŸ¥Œ','ðŸŽ¿','â›·ï¸','ðŸ‚','ðŸª‚','ðŸ‹ï¸','ðŸ‹ï¸â€â™€ï¸','ðŸ‹ï¸â€â™‚ï¸','ðŸ¤¼','ðŸ¤¸','ðŸ¤¸â€â™€ï¸','ðŸ¤¸â€â™‚ï¸','â›¹ï¸','ðŸ¤º','ðŸ¤¾','ðŸŒï¸','ðŸ‡','ðŸ§˜','ðŸ„','ðŸŠ','ðŸ¤½','ðŸš£','ðŸ§—','ðŸšµ','ðŸš´','ðŸ†','ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰','ðŸ…','ðŸŽ–ï¸','ðŸµï¸','ðŸŽ—ï¸'],
-  Travel: ['ðŸš—','ðŸš•','ðŸš™','ðŸšŒ','ðŸšŽ','ðŸŽï¸','ðŸš“','ðŸš‘','ðŸš’','ðŸš','ðŸ›»','ðŸšš','ðŸš›','ðŸšœ','ðŸ›µ','ðŸï¸','ðŸ›º','ðŸš²','ðŸ›´','ðŸš¨','ðŸš”','ðŸš','ðŸš˜','ðŸš–','ðŸš¡','ðŸš ','ðŸšŸ','ðŸšƒ','ðŸš‹','ðŸšž','ðŸš','ðŸš„','ðŸš…','ðŸšˆ','ðŸš‚','ðŸš†','ðŸš‡','ðŸšŠ','ðŸš‰','âœˆï¸','ðŸ›«','ðŸ›¬','ðŸ›©ï¸','ðŸ’º','ðŸ›°ï¸','ðŸš€','ðŸ›¸','ðŸš','ðŸ›¶','â›µ','ðŸš¤','ðŸ›¥ï¸','ðŸ›³ï¸','â›´ï¸','ðŸš¢','âš“','ðŸ—ºï¸','ðŸ§­','ðŸ”ï¸','â›°ï¸','ðŸŒ‹','ðŸ•ï¸','ðŸ–ï¸','ðŸœï¸','ðŸï¸','ðŸžï¸','ðŸŸï¸','ðŸ›ï¸','ðŸ—ï¸','ðŸ§±','ðŸ˜ï¸','ðŸšï¸','ðŸ ','ðŸ¡','ðŸ¢','ðŸ£','ðŸ¤','ðŸ¥','ðŸ¦','ðŸ¨','ðŸ©','ðŸª','ðŸ«','ðŸ¬','ðŸ­','ðŸ¯','ðŸ°','ðŸ’’','ðŸ—¼','ðŸ—½','â›ª','ðŸ•Œ','ðŸ•','ðŸ›•','ðŸ•‹'],
-  Objects: ['ðŸ’ª','ðŸŽ¯','ðŸ†','ðŸ¥‡','âš¡','ðŸ”¥','ðŸ’¯','âœ…','âŒ','â­','ðŸŒŸ','âœ¨','ðŸ’¥','ðŸ’¦','ðŸ’§','ðŸŽ‰','ðŸŽŠ','ðŸŽˆ','ðŸŽ','ðŸ…','ðŸŽ—ï¸','ðŸ””','ðŸ”•','ðŸ“£','ðŸ“¢','ðŸ’¬','ðŸ—¯ï¸','ðŸ’­','ðŸ’¤','ðŸ•','ðŸ“…','ðŸ“Œ','ðŸ“','ðŸ”','ðŸ”Ž','ðŸ”’','ðŸ”“','ðŸ”‘','ðŸ›¡ï¸','âš”ï¸','ðŸ¹','ðŸŽª','ðŸŽ­','ðŸŽ¨','ðŸŽ¬','ðŸŽ¤','ðŸŽ§','ðŸŽ¼','ðŸŽ¹','ðŸ¥','ðŸŽ·','ðŸŽº','ðŸŽ¸','ðŸª•','ðŸŽ»'],
+  Smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
+  Gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👣','👀','👁️','🧠','🦷','🦴'],
+  Hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','💯','✅','❌','⭐','🌟','✨','🔥','💦','💥','⚡'],
+  Animals: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦗','🕷️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐾'],
+  Food: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🫓','🥪','🌮','🌯','🫔','🥙','🧆','🥘','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🍰','🎂','🧁','🍮','🍭','🍬','🍫','🍿','🧂','🥜','🍩','🍪','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾'],
+  Activities: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🏋️‍♀️','🏋️‍♂️','🤼','🤸','🤸‍♀️','🤸‍♂️','⛹️','🤺','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️'],
+  Travel: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍️','🛺','🚲','🛴','🚨','🚔','🚍','🚘','🚖','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','🗺️','🧭','🏔️','⛰️','🌋','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🧱','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🕍','🛕','🕋'],
+  Objects: ['💪','🎯','🏆','🥇','⚡','🔥','💯','✅','❌','⭐','🌟','✨','💥','💦','💧','🎉','🎊','🎈','🎁','🏅','🎗️','🔔','🔕','📣','📢','💬','🗯️','💭','💤','🕐','📅','📌','📍','🔍','🔎','🔒','🔓','🔑','🛡️','⚔️','🏹','🎪','🎭','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻'],
 };
 
 let me = null;
 // originalFileId of every message driveFileId this coach has already
-// favorited â€” keyed by the SOURCE file, not the Drive copy, so the star
+// favorited — keyed by the SOURCE file, not the Drive copy, so the star
 // on a chat bubble can check membership directly against m.driveFileId.
 let favoritedFileIds = new Set();
 let conversations = [];
@@ -449,7 +449,7 @@ let pollTimer = null;
 let reactingMessageId = null;
 
 // Position the (single, shared) emoji panel right next to whatever opened
-// it â€” the composer's ðŸ˜Š button, or a specific message's react-trigger â€”
+// it — the composer's 😊 button, or a specific message's react-trigger —
 // instead of always anchoring to one fixed spot.
 function positionPickerNear(panel, anchorEl) {
   const rect = anchorEl.getBoundingClientRect();
@@ -483,7 +483,7 @@ function toggleEmojiPanel(anchorEl, reactMid) {
   panel.classList.add('show');
 }
 
-// Shared by the composer's emoji panel and the per-message reaction picker â€”
+// Shared by the composer's emoji panel and the per-message reaction picker —
 // both are just a category-tabbed grid over EMOJI_CATEGORIES with a
 // different click action.
 function setupEmojiPicker(tabsId, gridId, onPick) {
@@ -517,7 +517,7 @@ function setupEmojiPicker(tabsId, gridId, onPick) {
 }
 
 // Every `.search-clear-wrap input[data-clears]` pairing across the app gets
-// the same X-to-clear behavior â€” the button's own visibility is handled by
+// the same X-to-clear behavior — the button's own visibility is handled by
 // CSS (:not(:placeholder-shown)), this just wires the click.
 function setupSearchClearButtons() {
   document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
@@ -609,7 +609,7 @@ async function loadConversations() {
 }
 
 // Every contact you're allowed to message appears here, whether or not a
-// conversation exists with them yet â€” no separate "New Chat" step. Contacts
+// conversation exists with them yet — no separate "New Chat" step. Contacts
 // with an existing DM show that conversation's preview; the rest show as
 // "No messages yet" and starting one is just clicking them.
 function buildDirectory() {
@@ -642,7 +642,7 @@ function buildDirectory() {
 const STAR_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.6 7.1.7-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7-5.4-4.7 7.1-.7z"/></svg>';
 
 function convoItemHtml(i) {
-  // Virtual rows (a contact with no conversation yet) can't be favorited â€”
+  // Virtual rows (a contact with no conversation yet) can't be favorited —
   // there's no conversation id to favorite until the first message exists.
   const favBtn = i.virtual ? '' : `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
   return `
@@ -689,7 +689,7 @@ function renderConvoList() {
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
   if (!items.length) {
     const msg = favoritesOnlyView
-      ? (q ? 'No favorites match your search.' : 'No favorites yet â€” tap the star on any chat to add it.')
+      ? (q ? 'No favorites match your search.' : 'No favorites yet — tap the star on any chat to add it.')
       : (q ? 'No matches.' : 'No one to chat with yet.');
     wrap.innerHTML = `<div class="empty-hint">${msg}</div>`;
     return;
@@ -714,7 +714,7 @@ function previewText(m) {
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'appointment') {
     const start = new Date(m.startISO);
-    if (start.getTime() <= Date.now()) return 'Last Session Â· ' + start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: m.timezone });
+    if (start.getTime() <= Date.now()) return 'Last Session · ' + start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: m.timezone });
     const when = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: m.timezone }) + ' at ' +
       start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: m.timezone });
     return `<span class="convo-preview-appt"><span class="preview-icon">${svgCalendar()}</span> Upcoming Session</span><div class="convo-preview-sub convo-preview-appt">${when}</div>`;
@@ -748,7 +748,7 @@ async function openConvo(id) {
     el.title = canEditLevels ? 'Click to view/edit levels' : '';
   });
 
-  // Coach/admin only â€” lets them see/edit the CLIENT's protocol from the
+  // Coach/admin only — lets them see/edit the CLIENT's protocol from the
   // chat. A regular user has their own dedicated top-bar icon for viewing
   // their own protocol instead, so this stays hidden for them here.
   const protocolLink = document.getElementById('threadProtocolLink');
@@ -777,9 +777,9 @@ function maybeOpenLevelsModal() {
 document.getElementById('threadAvatar').addEventListener('click', maybeOpenLevelsModal);
 document.getElementById('threadName').addEventListener('click', maybeOpenLevelsModal);
 
-// â”€â”€ Schedule appointment (coach/admin only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Schedule appointment (coach/admin only) ──────────────────────────────
 // DMs always have exactly one recipient (the other participant). Groups can
-// be scheduled too, but only once they actually have a student in them â€”
+// be scheduled too, but only once they actually have a student in them —
 // the recipients are then every student member, not the whole group (other
 // coaches/admins sitting in on the group chat aren't session attendees).
 function scheduleRecipients(convo) {
@@ -809,7 +809,7 @@ async function openScheduleModal() {
   now.setMinutes(now.getMinutes() - (now.getMinutes() % 15) + 15);
   document.getElementById('scheduleTime').value = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
-  // Default duration comes from Admin > Appointments settings â€” falls back
+  // Default duration comes from Admin > Appointments settings — falls back
   // to 15 if that admin endpoint isn't reachable for any reason.
   try {
     const r = await fetch('/api/admin/chat-config');
@@ -819,7 +819,7 @@ async function openScheduleModal() {
     }
   } catch {}
 
-  // Whoever's scheduling doesn't have to book it on their own calendar â€”
+  // Whoever's scheduling doesn't have to book it on their own calendar —
   // e.g. Alexis can be the one chatting with a student but put the session
   // on Megan's calendar instead. Only worth showing when there's actually
   // another coach/admin to pick.
@@ -846,7 +846,7 @@ async function submitSchedule() {
   const coachId = document.getElementById('scheduleCoach').value || me.id;
 
   const saveBtn = document.getElementById('scheduleSaveBtn');
-  saveBtn.disabled = true; saveBtn.textContent = 'Schedulingâ€¦';
+  saveBtn.disabled = true; saveBtn.textContent = 'Scheduling…';
   document.getElementById('scheduleMsg').textContent = '';
 
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/schedule', {
@@ -867,7 +867,7 @@ async function submitSchedule() {
   ].map(([label, icon, s]) => {
     const ok = s?.ok;
     const detail = ok ? 'Sent' : (s?.error === 'disabled' ? 'Disabled in settings' : (s?.error || 'Failed'));
-    return `<div class="schedule-status-row"><span class="${ok ? 'schedule-status-ok' : 'schedule-status-fail'}">${ok ? 'âœ“' : 'âœ•'}</span> <span class="status-icon">${icon}</span> ${label}: ${detail}</div>`;
+    return `<div class="schedule-status-row"><span class="${ok ? 'schedule-status-ok' : 'schedule-status-fail'}">${ok ? '✓' : '✕'}</span> <span class="status-icon">${icon}</span> ${label}: ${detail}</div>`;
   }).join('');
   document.getElementById('scheduleStatusRows').innerHTML = rows;
   saveBtn.textContent = 'Done';
@@ -880,7 +880,7 @@ document.getElementById('scheduleBtn').innerHTML = svgCalendar();
 document.getElementById('scheduleBtn').addEventListener('click', openScheduleModal);
 document.getElementById('scheduleSaveBtn').addEventListener('click', submitSchedule);
 
-// â”€â”€ Coach/admin editing a contact's Levels â€” matched by name across both
+// ── Coach/admin editing a contact's Levels — matched by name across both
 // the GYM and ONLINE sheets server-side (see /api/chat/levels/lookup).
 const LEVELS_NUMERIC_CATS = ['NINJA STRENGTH', 'HANDSTAND', 'POWERMOVES', 'FREERUN', 'CIRQUE'];
 function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
@@ -891,13 +891,13 @@ let levelsModalEntries = [];
 
 async function openLevelsModal(otherUser) {
   levelsModalUser = otherUser;
-  document.getElementById('levelsModalName').textContent = otherUser.first + ' ' + otherUser.last + ' â€” Levels';
+  document.getElementById('levelsModalName').textContent = otherUser.first + ' ' + otherUser.last + ' — Levels';
   document.getElementById('levelsMsg').textContent = '';
   document.getElementById('levelsCatFields').innerHTML = LEVELS_NUMERIC_CATS.map(cat =>
     `<div class="field"><label class="pra-label">${catLabel(cat)} <span class="current-level-tag" data-cat="${cat}" style="color:var(--pra-dim);font-weight:400;text-transform:none;letter-spacing:0">(current: 0)</span></label><input class="pra-input levels-cat-input" type="number" min="0" placeholder="0" data-cat="${cat}"/></div>`
   ).join('');
 
-  document.getElementById('levelsMsg').textContent = 'Loadingâ€¦';
+  document.getElementById('levelsMsg').textContent = 'Loading…';
   const r = await fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(otherUser.first) + '&last=' + encodeURIComponent(otherUser.last));
   const d = await r.json();
   levelsModalEntries = d.entries || [];
@@ -910,7 +910,7 @@ async function openLevelsModal(otherUser) {
   openModal('levelsModal');
 }
 
-// Completing Foundation means they've at least started every skill â€” an
+// Completing Foundation means they've at least started every skill — an
 // unrecorded category reads as Level 1, not 0, once Foundation is done.
 function effectiveLevel(entry, cat) {
   const raw = Number(entry?.levels?.[cat]) || 0;
@@ -938,7 +938,7 @@ document.getElementById('levelsSaveBtn').onclick = async () => {
   document.querySelectorAll('.levels-cat-input').forEach(input => { levels[input.dataset.cat] = input.value.trim(); });
   const team = document.getElementById('levelsTeam').checked;
   const msg = document.getElementById('levelsMsg');
-  msg.textContent = 'Savingâ€¦';
+  msg.textContent = 'Saving…';
   const r = await fetch('/api/chat/levels/update', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ first: levelsModalUser.first, last: levelsModalUser.last, program, levels, team }),
@@ -996,7 +996,7 @@ function updateThreadApptHeader(messages, convo) {
   el.style.display = 'flex';
 }
 
-// A plain `scrollTop = scrollHeight` right after innerHTML fires too early â€”
+// A plain `scrollTop = scrollHeight` right after innerHTML fires too early —
 // images/videos in the new bubbles haven't loaded yet, so scrollHeight is
 // still short of its final size, leaving the view resting just above the
 // real bottom once media finishes loading. Re-apply as each one loads.
@@ -1018,12 +1018,12 @@ function renderBubble(m, convo) {
   const canAct = isStaffMe() && mine;
   let content;
   if (m.type === 'text') {
-    const edited = m.editedAt ? '<span class="msg-edited">Â· edited</span>' : '';
-    const actions = canAct ? `<div class="msg-actions"><button class="msg-action-btn edit-btn" title="Edit">âœŽ</button><button class="msg-action-btn delete delete-btn" title="Delete">ðŸ—‘</button></div>` : '';
+    const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
+    const actions = canAct ? `<div class="msg-actions"><button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button></div>` : '';
     content = `<div class="bubble" data-text="${escapeHtml(m.text)}">${senderLabel}${escapeHtml(m.text)}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
-        <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">ðŸ˜Š</button></div>
+        <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
         ${renderReactionChips(m)}
         <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
@@ -1031,21 +1031,21 @@ function renderBubble(m, convo) {
   }
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}<video src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">â¤¢</button>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}<video src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
-  const mediaDeleteBtn = (canAct && m.type !== 'appointment') ? `<div class="msg-actions"><button class="msg-action-btn delete delete-btn" title="Delete">ðŸ—‘</button></div>` : '';
+  const mediaDeleteBtn = (canAct && m.type !== 'appointment') ? `<div class="msg-actions"><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button></div>` : '';
   const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
     <div>
-      <div class="bubble-wrap">${mediaDeleteBtn}${content}<button class="react-trigger" title="React">ðŸ˜Š</button></div>
+      <div class="bubble-wrap">${mediaDeleteBtn}${content}<button class="react-trigger" title="React">😊</button></div>
       ${renderReactionChips(m)}
       <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}</div>
     </div>
   </div>`;
 }
 
-// Shared icon set for the scheduling feature â€” same two-tone (white shape,
+// Shared icon set for the scheduling feature — same two-tone (white shape,
 // blue accent) line-icon language as the other header buttons (see
 // mediaGalleryBtn/newGroupBtn), so this doesn't read as a different UI system.
 function svgCalendar() {
@@ -1070,12 +1070,12 @@ function renderApptBubble(m, senderLabel, sender) {
   const zoomLink = sender?.zoomLink
     ? `<a class="appt-link appt-zoom-link" href="${sender.zoomLink}" target="_blank"><span class="status-icon">${svgVideoCam()}</span> Join Zoom</a>`
     : '';
-  const deleteBtn = (isStaffMe() && m.senderId === me.id) ? `<button class="appt-delete-btn delete-btn" title="Delete appointment">âœ•</button>` : '';
+  const deleteBtn = (isStaffMe() && m.senderId === me.id) ? `<button class="appt-delete-btn delete-btn" title="Delete appointment">✕</button>` : '';
   return `<div class="bubble appt">${deleteBtn}${senderLabel}
     <div class="appt-icon">${svgCalendar()}</div>
     <div>
       <div class="appt-title">Upcoming Session</div>
-      <div class="appt-when">${dateStr} at ${timeStr} Â· ${m.durationMinutes} min</div>
+      <div class="appt-when">${dateStr} at ${timeStr} · ${m.durationMinutes} min</div>
       ${calLink}
       ${zoomLink}
     </div>
@@ -1095,7 +1095,7 @@ function escapeHtml(s) {
   const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
 }
 
-// â”€â”€ Image lightbox (click to open, ctrl+wheel / pinch to zoom, drag to pan) â”€â”€
+// ── Image lightbox (click to open, ctrl+wheel / pinch to zoom, drag to pan) ──
 (function setupLightbox() {
   const backdrop = document.getElementById('lightbox');
   const img = document.getElementById('lightboxImg');
@@ -1127,7 +1127,7 @@ function escapeHtml(s) {
     video.pause(); video.src = '';
   }
 
-  // Shared Media and My Favorites grids â€” each cell is a mediaGridCellHtml
+  // Shared Media and My Favorites grids — each cell is a mediaGridCellHtml
   // wrapper (see its own comment for why it isn't just a native
   // <video controls>), delegated the same way as the thread-body listener
   // below since both grids' innerHTML gets replaced wholesale every time
@@ -1143,14 +1143,14 @@ function escapeHtml(s) {
   wireGridLightbox('mediaGrid');
   wireGridLightbox('favoritesGrid');
 
-  // Open on clicking any chat image/video (event-delegated â€” bubbles get
+  // Open on clicking any chat image/video (event-delegated — bubbles get
   // wholesale re-rendered on every poll, so a directly-bound listener
   // would just get thrown away each cycle).
   document.getElementById('threadBody').addEventListener('click', (e) => {
     const starBtn = e.target.closest('.fav-star-btn');
     if (starBtn) { openFavoriteNameModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested); return; }
     if (!e.target.closest('.bubble.media')) return;
-    // Video keeps its native controls for inline play/pause/scrub â€” only the
+    // Video keeps its native controls for inline play/pause/scrub — only the
     // dedicated expand button opens the lightbox, so clicking play doesn't
     // fight with clicking to go full-frame.
     if (e.target.tagName === 'IMG') openImage(e.target.src);
@@ -1159,8 +1159,8 @@ function escapeHtml(s) {
   document.getElementById('lightboxClose').onclick = close;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
-  // Reaction UI â€” the ðŸ˜Š trigger on any bubble (text, gif, image, video)
-  // opens the same emoji panel the composer uses (one shared DOM instance â€”
+  // Reaction UI — the 😊 trigger on any bubble (text, gif, image, video)
+  // opens the same emoji panel the composer uses (one shared DOM instance —
   // no need to duplicate the whole emoji list per message), but positioned
   // right next to whichever trigger opened it. `reactingMessageId` tells the
   // shared picker's onPick handler (in setupComposer) to send a reaction
@@ -1206,7 +1206,7 @@ function escapeHtml(s) {
   backdrop.addEventListener('wheel', (e) => {
     if (!backdrop.classList.contains('show')) return;
     e.preventDefault();
-    if (!e.ctrlKey) return; // plain scroll does nothing â€” avoids accidental zoom on a normal wheel nudge
+    if (!e.ctrlKey) return; // plain scroll does nothing — avoids accidental zoom on a normal wheel nudge
     const delta = -e.deltaY * 0.01;
     scale = Math.min(6, Math.max(1, scale + delta * scale));
     if (scale === 1) { originX = 0; originY = 0; }
@@ -1254,7 +1254,7 @@ function escapeHtml(s) {
   img.addEventListener('dblclick', resetTransform);
 })();
 
-// â”€â”€ Composer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Composer ─────────────────────────────────────────────────────────────
 function setupComposer() {
   const textInput = document.getElementById('textInput');
   const sendBtn = document.getElementById('sendBtn');
@@ -1265,7 +1265,7 @@ function setupComposer() {
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
 
-  // Same panel serves both composing and reacting â€” reactingMessageId (set
+  // Same panel serves both composing and reacting — reactingMessageId (set
   // by the .react-trigger handler above) decides which one a pick means.
   setupEmojiPicker('emojiTabs', 'emojiGrid', (emoji) => {
     if (reactingMessageId) {
@@ -1323,7 +1323,7 @@ function setupComposer() {
 
 async function loadGifs(q) {
   const grid = document.getElementById('gifGrid');
-  grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Loadingâ€¦</div>';
+  grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Loading…</div>';
   const r = await fetch('/api/chat/gifs?q=' + encodeURIComponent(q));
   const d = await r.json();
   if (d.needsConfig) { grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Ask an admin to add a Giphy API key in Admin Settings.</div>'; return; }
@@ -1401,7 +1401,7 @@ async function saveEditMessage(mid, text) {
   refreshThread(false);
 }
 
-// â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Modals ───────────────────────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 
@@ -1436,7 +1436,7 @@ async function loadContacts() {
   contacts = (await r.json()).contacts;
 }
 
-// Shared by the "Shared Media" and "My Favorites" grids â€” a clickable
+// Shared by the "Shared Media" and "My Favorites" grids — a clickable
 // thumbnail cell that opens the full lightbox (see setupLightbox's grid
 // click delegation below) rather than embedding native video controls,
 // which drop their play button at this thumbnail size.
@@ -1458,11 +1458,11 @@ async function openMediaGallery() {
   openModal('mediaModal');
 }
 
-// â”€â”€ Favorite media (coach/admin only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Favorite media (coach/admin only) ───────────────────────────────────
 function svgStar() {
   return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path class="star-fill" d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z"/></svg>`;
 }
-// Returns '' for non-staff â€” called from renderBubble for every image/video
+// Returns '' for non-staff — called from renderBubble for every image/video
 // message, so the star simply never renders in the DOM for students/users
 // rather than being hidden via CSS (keeps the click-delegation handler
 // below from ever having to re-check permission on click too).
@@ -1488,7 +1488,7 @@ function openFavoriteNameModal(fileId, suggestedName) {
   const input = document.getElementById('favNameInput');
   // Pre-filled from the same "FIRST LAST BEST-GUESS" label already used as
   // this file's own Drive filename (see chat_backend.js's guessContentLabel)
-  // instead of leaving the coach to type a name from scratch â€” selected
+  // instead of leaving the coach to type a name from scratch — selected
   // (not just focused) so typing immediately replaces it if they'd rather
   // rename it, while a plain click still lands the cursor to just tweak it.
   input.value = suggestedName || '';
@@ -1527,21 +1527,21 @@ async function submitFavoriteName() {
 
 async function openFavoritesGallery() {
   const grid = document.getElementById('favoritesGrid');
-  grid.innerHTML = '<div class="empty-hint">Loadingâ€¦</div>';
+  grid.innerHTML = '<div class="empty-hint">Loading…</div>';
   openModal('favoritesModal');
   const r = await fetch('/api/chat/favorites');
   const d = await r.json();
   const favorites = d.favorites || [];
   // Thumbnails load from the ORIGINAL chat file (already access-checked via
-  // the existing media proxy â€” it's tied to a message in a conversation
+  // the existing media proxy — it's tied to a message in a conversation
   // this user is a participant of), not the Drive copy the favorite record
   // points at. Same bytes either way; avoids opening up the media proxy to
   // a whole new authorization path just for a thumbnail.
   grid.innerHTML = favorites.map(f => mediaGridCellHtml(f.type, `/api/chat/media/${f.originalFileId}`)).join('')
-    || '<div class="empty-hint">No favorites yet â€” tap the star on any photo or video in a chat.</div>';
+    || '<div class="empty-hint">No favorites yet — tap the star on any photo or video in a chat.</div>';
 }
 
-// â”€â”€ Push notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Push notifications ──────────────────────────────────────────────────
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -1581,4 +1581,3 @@ init();
 </script>
 </body>
 </html>
-

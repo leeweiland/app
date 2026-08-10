@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Training Protocol â€” PRA</title>
+<title>Training Protocol — PRA</title>
 <link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
@@ -53,7 +53,7 @@
   <script src="/nav.js"></script>
   <script src="/chat-header.js"></script>
   <div class="wrap">
-    <div class="client-name" id="clientName">Loadingâ€¦</div>
+    <div class="client-name" id="clientName">Loading…</div>
     <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0">CUSTOM TRAINING PROTOCOL</div>
 
     <div class="steps" id="stepsList"></div>
@@ -82,13 +82,13 @@
   <div class="modal-backdrop" id="videoModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">Choose a Video</div>
-      <input class="pra-input" id="videoSearchInput" placeholder="Search video nameâ€¦" style="margin-bottom:12px"/>
+      <input class="pra-input" id="videoSearchInput" placeholder="Search video name…" style="margin-bottom:12px"/>
       <div id="videoResults"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('videoModal')">Cancel</button>
     </div>
   </div>
 
-  <!-- Video upload â€” no modal; "Upload Video" opens this directly via .click() -->
+  <!-- Video upload — no modal; "Upload Video" opens this directly via .click() -->
   <input type="file" id="videoFileInput" accept="video/*" style="display:none"/>
 
   <!-- Image upload -->
@@ -108,7 +108,7 @@
   <div class="modal-backdrop" id="textModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">Add Text</div>
-      <textarea class="pra-textarea" id="textStepInput" rows="6" style="width:100%" placeholder="Write the instructions for this stepâ€¦"></textarea>
+      <textarea class="pra-textarea" id="textStepInput" rows="6" style="width:100%" placeholder="Write the instructions for this step…"></textarea>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="pra-btn" id="textStepSaveBtn" style="flex:1">Add Step</button>
         <button class="pra-btn pra-btn-ghost" onclick="closeModal('textModal')">Cancel</button>
@@ -166,7 +166,7 @@ function render() {
     <div class="step">
       <div class="step-num">${i + 1}</div>
       <div class="pra-panel step-card">
-        ${canEdit ? `<button class="step-delete" data-idx="${i}" title="Remove step">âœ•</button>` : ''}
+        ${canEdit ? `<button class="step-delete" data-idx="${i}" title="Remove step">✕</button>` : ''}
         ${renderStepContent(s)}
       </div>
     </div>
@@ -227,7 +227,7 @@ function wireModals() {
     const file = e.target.files[0];
     if (!file) return; // user cancelled the OS picker
     const msg = document.getElementById('uploadStatusMsg');
-    msg.textContent = 'Uploadingâ€¦';
+    msg.textContent = 'Uploading…';
     const fd = new FormData();
     fd.append('video', file);
     try {
@@ -247,7 +247,7 @@ function wireModals() {
     const file = document.getElementById('imageFileInput').files[0];
     const msg = document.getElementById('imageUploadMsg');
     if (!file) { msg.textContent = 'Choose a file first.'; return; }
-    msg.textContent = 'Uploadingâ€¦';
+    msg.textContent = 'Uploading…';
     const fd = new FormData();
     fd.append('image', file);
     const r = await fetch('/api/chat/training-protocol/upload-image', { method: 'POST', body: fd });
@@ -271,7 +271,7 @@ function wireModals() {
 
 async function searchVideos(q) {
   const box = document.getElementById('videoResults');
-  box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Searchingâ€¦</div>';
+  box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Searching…</div>';
   const r = await fetch('/api/chat/training-protocol/search-videos?q=' + encodeURIComponent(q));
   const d = await r.json();
   if (d.needsConfig) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Ask an admin to set the Training Protocol Videos folder in Admin Settings.</div>'; return; }
@@ -296,4 +296,3 @@ init();
 </script>
 </body>
 </html>
-
