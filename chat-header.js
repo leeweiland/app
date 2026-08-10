@@ -20,6 +20,11 @@
         align-items: center;
         justify-content: space-between;
         padding: 10px 16px;
+        /* iOS notch/Dynamic Island/camera cutout sits right where this fixed
+           bar would otherwise start — env(safe-area-inset-top) is 0 unless
+           the viewport meta tag also has viewport-fit=cover, which every
+           page injecting this bar now sets. */
+        padding-top: max(10px, env(safe-area-inset-top));
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-bottom: 1px solid #26262e;
@@ -73,6 +78,7 @@
         justify-content: space-between;
         gap: 10px;
         padding: 10px 16px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-top: 1px solid #26262e;

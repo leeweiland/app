@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Levels — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
@@ -53,6 +53,9 @@
           <option value="last">Alphabetical — Last Name</option>
         </select>
       </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="pra-btn pra-btn-ghost" id="refreshBtn" style="display:none;white-space:nowrap" title="Re-fetch straight from the Levels sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh</button>
+      </div>
     </div>
     <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
     <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
@@ -96,6 +99,26 @@ async function load() {
   const d = await r.json();
   allPeople = d.people || [];
   applyFilters();
+}
+
+async function initRefreshButton() {
+  const meRes = await fetch('/api/auth/me');
+  if (!meRes.ok) return;
+  const me = (await meRes.json()).user;
+  if (me.role !== 'coach' && me.role !== 'admin') return;
+  const btn = document.getElementById('refreshBtn');
+  btn.style.display = '';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+    try {
+      await fetch('/api/chat/levels/refresh', { method: 'POST' });
+      await load();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Refresh';
+    }
+  });
 }
 
 function render(people) {
@@ -149,6 +172,7 @@ document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
 });
 
 load();
+initRefreshButton();
 </script>
 </body>
 </html>

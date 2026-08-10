@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Strength Ninjas — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
@@ -71,7 +71,10 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px">STRENGTH NINJAS WORLD MAP</div>
-    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Every dot is someone in the community — tap one to see who.</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap">
+      <div class="pra-muted" style="font-size:.85rem">Every dot is someone in the community — tap one to see who.</div>
+      <button class="pra-btn pra-btn-ghost" id="refreshLevelsBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Re-fetch levels straight from the sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh Levels</button>
+    </div>
     <div class="map-box pra-panel" id="mapBox" style="padding:6px">
       <svg id="mapSvg" viewBox="0 0 800 800"></svg>
     </div>
@@ -1027,6 +1030,22 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
 (async () => {
   const meRes = await fetch("/api/auth/me");
   if (!meRes.ok) { location.href = "/chat-app/login.html?next=" + encodeURIComponent(location.pathname); return; }
+  const me = (await meRes.json()).user;
+  if (me.role === "coach" || me.role === "admin") {
+    const refreshBtn = document.getElementById("refreshLevelsBtn");
+    refreshBtn.style.display = "";
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "Refreshing…";
+      try {
+        await fetch("/api/chat/levels/refresh", { method: "POST" });
+        await drawUsers(); // re-fetches users-map points, which re-matches levels fresh now that the cache is cleared
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "↻ Refresh Levels";
+      }
+    });
+  }
   await drawContinents();
   await drawUsers();
   await drawRetreats();
