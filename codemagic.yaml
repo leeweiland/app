@@ -19,6 +19,8 @@ workflows:
           fi
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Install CocoaPods
+        script: cd ios/App && pod install
       - name: Initialize keychain
         script: keychain initialize
       - name: Fetch signing files
