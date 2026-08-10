@@ -24,12 +24,14 @@ workflows:
       - name: Generate private key and fetch signing files
         script: |
           openssl genrsa -out /tmp/cert_key.pem 2048
+          export CM_CERTIFICATE_PRIVATE_KEY=$(cat /tmp/cert_key.pem)
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
-            --private-key @file:/tmp/cert_key.pem \
             --create
       - name: Add certificates to keychain
-        script: keychain add-certificates --certificate-key @file:/tmp/cert_key.pem
+        script: |
+          export CM_CERTIFICATE_PRIVATE_KEY=$(cat /tmp/cert_key.pem)
+          keychain add-certificates
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build iOS IPA
