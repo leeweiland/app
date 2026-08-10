@@ -14,8 +14,11 @@ workflows:
         script: npm install
       - name: Add iOS platform
         script: |
+          mkdir -p www
           rm -rf ios
           npx cap add ios
+          echo "--- Checking ios/App after cap add ---"
+          ls -la ios/App/ || echo "ios/App not found"
       - name: Capacitor sync
         script: npx cap sync ios
       - name: Install CocoaPods
