@@ -29,7 +29,7 @@ workflows:
             --certificate-key @file:/tmp/cert_key.pem \
             --create
       - name: Add certificates to keychain
-        script: keychain add-certificates --certificate-key @file:/tmp/cert_key.pem
+        script: keychain add-certificates
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build iOS IPA
