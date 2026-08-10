@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Admin — PRA Chat</title>
-<link rel="stylesheet" href="/pra-design-system.css"/>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
@@ -45,7 +45,7 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-header.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:18px">ADMIN PANEL</div>
 
@@ -267,7 +267,7 @@ function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;'
 
 async function init() {
   const meRes = await fetch('/api/auth/me');
-  if (!meRes.ok) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); return; }
+  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
   if (me.role !== 'admin') {
     document.querySelector('.wrap').innerHTML = '<div class="pra-panel section pra-glow">Admins only.</div>';

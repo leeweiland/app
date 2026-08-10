@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>PRA Chat — Sign In</title>
-<link rel="stylesheet" href="/pra-design-system.css"/>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -123,7 +123,7 @@ document.getElementById('profilePicInput').addEventListener('change', (e) => {
 
 function redirectAfterAuth() {
   const params = new URLSearchParams(location.search);
-  location.href = params.get('next') || '/chat.html';
+  location.href = params.get('next') || '/chat-app/chat.html';
 }
 
 loginForm.addEventListener('submit', async (e) => {

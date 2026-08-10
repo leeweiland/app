@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Training Protocol — PRA</title>
-<link rel="stylesheet" href="/pra-design-system.css"/>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 700px; margin: 0 auto; padding: 32px 20px 60px; }
@@ -51,7 +51,7 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-header.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="client-name" id="clientName">Loading…</div>
     <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0">CUSTOM TRAINING PROTOCOL</div>
@@ -128,7 +128,7 @@ function escapeHtml(s) { const d = document.createElement('div'); d.textContent 
 
 async function init() {
   const meRes = await fetch('/api/auth/me');
-  if (!meRes.ok) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
+  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
   me = (await meRes.json()).user;
 
   if (!targetUserId) { document.getElementById('clientName').textContent = 'No client specified.'; return; }

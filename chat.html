@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Chat — PRA</title>
-<link rel="stylesheet" href="/pra-design-system.css"/>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` —
      that magic number only ever accounted for chat-header.js's own bar and
@@ -235,7 +235,7 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-header.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
 
   <div id="pushBanner" class="push-banner" style="display:none">🔔 Turn on notifications for new messages</div>
 
@@ -577,7 +577,7 @@ function convoAvatarUser(convo) { return convo.type === 'group' ? { first: convo
 
 async function init() {
   const meRes = await fetch('/api/auth/me');
-  if (!meRes.ok) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname); return; }
+  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
   if (me.role === 'coach' || me.role === 'admin') {
     document.getElementById('newGroupBtn').style.display = '';
@@ -753,7 +753,7 @@ async function openConvo(id) {
   // their own protocol instead, so this stays hidden for them here.
   const protocolLink = document.getElementById('threadProtocolLink');
   if (convo.type === 'dm' && isStaffMe()) {
-    protocolLink.href = '/training-protocol.html?userId=' + threadOtherUser.id;
+    protocolLink.href = '/chat-app/training-protocol.html?userId=' + threadOtherUser.id;
     protocolLink.style.display = 'block';
   } else {
     protocolLink.style.display = 'none';

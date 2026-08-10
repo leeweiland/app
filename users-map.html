@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Strength Ninjas — PRA</title>
-<link rel="stylesheet" href="/pra-design-system.css"/>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 1400px; margin: 0 auto; padding: 12px 12px 30px; }
@@ -68,7 +68,7 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-header.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px">STRENGTH NINJAS WORLD MAP</div>
     <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Every dot is someone in the community — tap one to see who.</div>
@@ -264,7 +264,7 @@ async function drawContinents() {
   // right relative order for anything depending on paint order; the copy
   // that's actually visible over land is redrawn again below, on top.
   try {
-    const r = await fetch("/world-boundaries.json");
+    const r = await fetch("/chat-app/world-boundaries.json");
     const geo = await r.json();
     const landGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     geo.features.forEach(f => {
@@ -316,7 +316,7 @@ async function drawContinents() {
   // fill) so the country-level land fill underneath still shows through;
   // only the line itself is added on top.
   try {
-    const statesR = await fetch("/us-states.json");
+    const statesR = await fetch("/chat-app/us-states.json");
     const statesGeo = await statesR.json();
     const stateGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     statesGeo.features.forEach(f => {
@@ -723,7 +723,7 @@ async function drawUsers() {
       // applyDotSize, not here — see roleGlowFilter's comment.
       clickTarget.addEventListener("click", () => openPopup(u));
 
-      const imageUrl = u.archetypeImage || "/assets/handstand.jpg";
+      const imageUrl = u.archetypeImage || "/chat-app/assets/handstand.jpg";
       const isFallback = !u.archetypeImage;
 
       const clipId = "archetype-clip-" + (i++);
@@ -1026,7 +1026,7 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
 
 (async () => {
   const meRes = await fetch("/api/auth/me");
-  if (!meRes.ok) { location.href = "/login.html?next=" + encodeURIComponent(location.pathname); return; }
+  if (!meRes.ok) { location.href = "/chat-app/login.html?next=" + encodeURIComponent(location.pathname); return; }
   await drawContinents();
   await drawUsers();
   await drawRetreats();

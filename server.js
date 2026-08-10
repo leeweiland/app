@@ -39,8 +39,9 @@ createServer(async (req, res) => {
   if (await handleBodyAnalysisRequest(req, res, url)) return;
   if (await handleMovesDictionaryRequest(req, res, url)) return;
 
-  // Serve static files
-  let filePath = join(__dirname, url.pathname === "/" ? "login.html" : url.pathname);
+  // Serve static files — strip /chat-app/ prefix if present
+  let pathname = url.pathname.replace(/^\/chat-app\//, "/");
+  let filePath = join(__dirname, pathname === "/" ? "login.html" : pathname);
   if (!existsSync(filePath)) {
     res.writeHead(404); res.end("Not found"); return;
   }
