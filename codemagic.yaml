@@ -8,7 +8,6 @@ workflows:
     environment:
       node: 22
       xcode: latest
-      cocoapods: default
     scripts:
       - name: Install dependencies
         script: npm install
@@ -17,12 +16,8 @@ workflows:
           mkdir -p www
           rm -rf ios
           npx cap add ios
-          echo "--- Checking ios/App after cap add ---"
-          ls -la ios/App/ || echo "ios/App not found"
       - name: Capacitor sync
         script: npx cap sync ios
-      - name: Install CocoaPods
-        script: cd ios/App && pod install
       - name: Initialize keychain
         script: keychain initialize
       - name: Fetch signing files
@@ -39,7 +34,7 @@ workflows:
       - name: Build iOS IPA
         script: |
           xcode-project build-ipa \
-            --workspace ios/App/App.xcworkspace \
+            --project ios/App/App.xcodeproj \
             --scheme App \
             --config Release
     artifacts:
