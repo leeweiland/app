@@ -8,7 +8,7 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.pacificrimathletics.app
+        bundle_identifier: com.pacificrimathleticsapp.app
       node: 20
       xcode: latest
       cocoapods: default
