@@ -764,8 +764,11 @@ async function openConvo(id) {
   // chat. A regular user has their own dedicated top-bar icon for viewing
   // their own protocol instead, so this stays hidden for them here.
   const protocolLink = document.getElementById('threadProtocolLink');
-  if (convo.type === 'dm' && isStaffMe()) {
-    protocolLink.href = '/chat-app/training-protocol.html?userId=' + threadOtherUser.id;
+  const protocolStudent = convo.type === 'dm' ? threadOtherUser
+    : convo.type === 'group' ? convo.participants.find(p => p.role === 'student')
+    : null;
+  if (protocolStudent && isStaffMe()) {
+    protocolLink.href = '/chat-app/training-protocol.html?userId=' + protocolStudent.id;
     protocolLink.style.display = 'block';
   } else {
     protocolLink.style.display = 'none';

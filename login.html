@@ -21,6 +21,18 @@
   .avatar-picker input { display: none; }
   .err-msg { color: #ff5c5c; font-size: .82rem; margin: -4px 0 14px; min-height: 1em; font-family: var(--font-secondary); }
   form.hidden { display: none; }
+  .pw-field { position: relative; }
+  .pw-field .pra-input { padding-right: 46px; }
+  .pw-toggle {
+    position: absolute; right: 6px; top: 6px;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--pra-border);
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .pw-toggle:hover { border-color: var(--pra-blue); background: rgba(0,155,255,0.1); }
+  .pw-toggle svg { width: 17px; height: 17px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); }
 </style>
 </head>
 <body>
@@ -30,8 +42,7 @@
   <div class="auth-wrap">
     <div class="pra-panel auth-card">
       <div class="auth-logo">
-        <div class="pra-h1 pra-glow">PRA CHAT</div>
-        <div class="pra-label" style="margin-top:6px">Coaches &amp; Athletes</div>
+        <img src="/chat-app/assets/pra-logo.png" alt="Pacific Rim Athletics" style="width:180px;height:auto;display:inline-block"/>
       </div>
 
       <div class="auth-tabs">
@@ -45,7 +56,11 @@
         <div class="field"><label class="pra-label">Email</label><br/>
           <input class="pra-input" type="email" id="loginEmail" required style="margin-top:6px"/></div>
         <div class="field"><label class="pra-label">Password</label><br/>
-          <input class="pra-input" type="password" id="loginPassword" required style="margin-top:6px"/></div>
+          <div class="pw-field" style="margin-top:6px">
+            <input class="pra-input" type="password" id="loginPassword" required/>
+            <button type="button" class="pw-toggle" data-target="loginPassword" aria-label="Show password"></button>
+          </div>
+        </div>
         <div style="text-align:right;margin-bottom:8px"><span class="pra-link" id="forgotLink" style="font-size:.8rem">Forgot password?</span></div>
         <button class="pra-btn" type="submit" style="width:100%">SIGN IN</button>
       </form>
@@ -77,7 +92,11 @@
         <div class="field"><label class="pra-label">Phone</label><br/>
           <input class="pra-input" type="tel" id="suPhone" style="margin-top:6px"/></div>
         <div class="field"><label class="pra-label">Password</label><br/>
-          <input class="pra-input" type="password" id="suPassword" required minlength="8" style="margin-top:6px"/></div>
+          <div class="pw-field" style="margin-top:6px">
+            <input class="pra-input" type="password" id="suPassword" required minlength="8"/>
+            <button type="button" class="pw-toggle" data-target="suPassword" aria-label="Show password"></button>
+          </div>
+        </div>
         <button class="pra-btn" type="submit" style="width:100%;margin-top:8px">CREATE ACCOUNT</button>
       </form>
     </div>
@@ -156,6 +175,20 @@ signupForm.addEventListener('submit', async (e) => {
 
 // Already logged in? skip straight to chat.
 fetch('/api/auth/me').then(r => r.ok ? redirectAfterAuth() : null).catch(() => {});
+
+const EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_CLOSED = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.24 4.24"/><path d="M6.6 6.7C3.9 8.4 1 12 1 12s4 7 11 7c2.1 0 3.9-.6 5.4-1.4"/><path d="M17.9 17.9C20.4 16.2 23 12 23 12s-1.6-2.8-4.4-4.8"/><path d="M9.5 4.6C10.3 4.2 11.1 4 12 4c7 0 11 7 11 7"/></svg>';
+
+document.querySelectorAll('.pw-toggle').forEach(btn => {
+  btn.innerHTML = EYE_CLOSED;
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    const hidden = input.type === 'password';
+    input.type = hidden ? 'text' : 'password';
+    btn.innerHTML = hidden ? EYE_OPEN : EYE_CLOSED;
+    btn.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+  });
+});
 </script>
 </body>
 </html>

@@ -26,6 +26,10 @@
       }
       #chat-app-header .cah-label { display: block; }
       #chat-app-header .cah-logo { width: 150px; height: auto; display: block; }
+      #chat-app-header .cah-logo-fallback {
+        font-family: var(--font-primary, sans-serif); font-weight: 700;
+        font-size: 1.1rem; letter-spacing: .08em; color: #fff;
+      }
       #chat-app-header .cah-icons { display: flex; gap: 8px; }
       /* Logo + full icon row no longer fit side by side on a phone-width
          screen — stacking the logo on its own centered row above a
@@ -39,6 +43,7 @@
         }
         #chat-app-header .cah-label { align-self: center; }
         #chat-app-header .cah-logo { width: 100px; }
+        #chat-app-header .cah-logo-fallback { font-size: .85rem; }
         #chat-app-header .cah-icons { justify-content: center; flex-wrap: wrap; }
       }
       #chat-app-header .cah-icon {
@@ -241,8 +246,21 @@
     label.href = '/chat-app/chat.html';
     const logo = document.createElement('img');
     logo.className = 'cah-logo';
-    logo.src = '/chat-app/assets/pra-logo.png';
+    logo.width = 150;
+    logo.height = 45;
+    logo.loading = 'eager';
+    logo.decoding = 'sync';
     logo.alt = 'Pacific Rim Athletics';
+    // If the image request ever fails or lags (seen intermittently in the
+    // iOS WKWebView runtime), fall back to a text mark instead of leaving
+    // the header's logo slot visibly empty with no indication why.
+    logo.onerror = () => {
+      logo.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'cah-logo cah-logo-fallback',
+        textContent: 'PRA',
+      }));
+    };
+    logo.src = '/chat-app/assets/pra-logo.png';
     label.appendChild(logo);
     bar.appendChild(label);
 
