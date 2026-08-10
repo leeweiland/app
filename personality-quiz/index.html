@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pacific Rim Athletics – Training Personality Quiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Aldrich&display=swap" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: 'Aldrich', sans-serif;
+    background: #000;
+    color: #fff;
+  }
+  .container {
+    width: 90%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2em 1em;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    text-align: center;
+  }
+  h1 {
+    color: #ffffff;
+    font-size: clamp(1.2em, 4vw, 2em);
+    text-shadow: 0 0 10px #ffffff;
+  }
+  .question { margin: 1em 0; }
+  .options {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5em;
+    margin: 1em 0;
+  }
+  .options label {
+    background: rgba(255,255,255,0.1);
+    padding: 0.6em;
+    border-radius: 0.3em;
+    width: 100%;
+    max-width: 400px;
+    cursor: pointer;
+  }
+  button {
+    background: var(--accent, #009bff);
+    border: none;
+    padding: 0.6em 1.2em;
+    color: #fff;
+    font-size: 1em;
+    cursor: pointer;
+    border-radius: 0.3em;
+    margin: 0.5em;
+    font-family: 'Aldrich', sans-serif;
+    box-shadow: 0 0 10px var(--accent, #009bff);
+    transition: all 0.3s ease;
+  }
+  button:hover { background: #0077b6; box-shadow: 0 0 20px var(--accent, #009bff); }
+  input[type="text"], input[type="email"], input[type="tel"] {
+    width: 90%;
+    padding: 0.6em;
+    margin: 0.5em 0;
+    border: none;
+    border-radius: 0.3em;
+    font-size: 1em;
+  }
+  .progress { margin-top: 1em; font-size: 0.9em; color: #aaa; }
+  .progress-bar {
+    width: 100%;
+    background: rgba(255,255,255,0.1);
+    border-radius: 0.3em;
+    margin-top: 0.3em;
+    height: 6px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent, #009bff);
+    width: 0%;
+    box-shadow: 0 0 5px var(--accent, #009bff), 0 0 10px var(--accent, #009bff);
+    transition: width 0.3s ease;
+  }
+  .hidden { display: none; }
+  #nextBtn:disabled { background-color: #555; opacity: 0.6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/chat-header.js"></script>
+
+<div class="container" id="quizScreen">
+  <h1 id="quizHeading">Discover Your Training Personality</h1>
+  <div class="progress" id="progress"></div>
+  <div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+  <form id="quizForm">
+    <div id="questionContainer"></div>
+    <div><button type="button" id="backButton">Back</button><button id="nextBtn" disabled>Next</button></div>
+  </form>
+</div>
+
+<script>
+let CONFIG = null;
+let questions = [];
+let gender = '';
+let currentQuestion = 0;
+let responses = [];
+let me = null; // already signed in and logged in — no separate lead-capture form needed
+
+async function loadConfig() {
+  const meRes = await fetch('/api/auth/me');
+  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
+  me = (await meRes.json()).user;
+
+  const res = await fetch('/personality-quiz/config.json?_=' + Date.now());
+  CONFIG = await res.json();
+  questions = CONFIG.questions;
+  document.title = CONFIG.settings.siteTitle || document.title;
+  document.getElementById('quizHeading').textContent = CONFIG.settings.quizHeading;
+  document.documentElement.style.setProperty('--accent', CONFIG.settings.accentColor || '#009bff');
+  document.body.style.background = CONFIG.settings.backgroundColor || '#000';
+  showQuestion();
+}
+
+function showQuestion() {
+  const container = document.getElementById('questionContainer');
+  container.innerHTML = '';
+  document.getElementById('progress').innerText = `Question ${currentQuestion + 1} of ${questions.length}`;
+  document.getElementById('progressFill').style.width = `${((currentQuestion + 1)/questions.length)*100}%`;
+  const q = questions[currentQuestion];
+  const div = document.createElement('div');
+  div.className = 'question';
+  div.innerHTML = `<p>${q.text}</p>`;
+  const options = document.createElement('div');
+  options.className = 'options';
+  q.values.forEach((val, idx) => {
+    const isChecked = responses[currentQuestion] === val ? 'checked' : '';
+    const label = document.createElement('label');
+    label.innerHTML = `
+      <input type="radio" name="q${currentQuestion}" value="${val}" ${isChecked}>
+      ${["Strongly Agree","Agree","Neutral","Disagree","Strongly Disagree"][idx]}
+    `;
+    label.querySelector('input').addEventListener('click', () => {
+      responses[currentQuestion] = val;
+      const nextBtn = document.getElementById('nextBtn');
+      nextBtn.disabled = false;
+      setTimeout(() => {
+        currentQuestion++;
+        if (currentQuestion < questions.length) {
+          showQuestion();
+        } else {
+          showGenderQuestion();
+        }
+      }, 200);
+    });
+    options.appendChild(label);
+  });
+  div.appendChild(options);
+  container.appendChild(div);
+
+  const nextBtn = document.getElementById('nextBtn');
+  const selected = document.querySelector(`input[name="q${currentQuestion}"]:checked`);
+  nextBtn.disabled = !selected;
+
+  document.getElementById('backButton').style.display = currentQuestion === 0 ? 'none' : 'inline-block';
+}
+
+document.getElementById('backButton').addEventListener('click', () => {
+  if (currentQuestion > 0) {
+    currentQuestion--;
+    showQuestion();
+  }
+});
+
+function showGenderQuestion() {
+  const container = document.getElementById('questionContainer');
+  container.innerHTML = `
+    <p>${CONFIG.settings.genderQuestionText}</p>
+    <div class="options">
+      <label><input type="radio" name="gender" value="male"> Male</label>
+      <label><input type="radio" name="gender" value="female"> Female</label>
+    </div>
+  `;
+  document.getElementById('progress').innerText = `Question ${questions.length + 1} of ${questions.length + 1}`;
+  document.getElementById('progressFill').style.width = `100%`;
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.disabled = true;
+  document.querySelectorAll('input[name="gender"]').forEach(input => {
+    input.addEventListener('click', () => {
+      gender = input.value;
+      nextBtn.disabled = false;
+      setTimeout(submitAndShowResults, 300);
+    });
+  });
+  document.getElementById('backButton').style.display = 'inline-block';
+}
+
+function slugify(title) {
+  return title.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// They're already a signed-in app user — no separate lead-capture form,
+// just use their account info directly.
+async function submitAndShowResults() {
+  const scores = {E:0,I:0,S:0,N:0,T:0,F:0,J:0,P:0};
+  responses.forEach(value => {
+    const pairs = value.match(/.{2}/g);
+    pairs.forEach(pair => {
+      const letter = pair[0];
+      const num = parseInt(pair[1]);
+      scores[letter] += num;
+    });
+  });
+  const mbti =
+    (scores.E >= scores.I ? 'E' : 'I') +
+    (scores.S >= scores.N ? 'S' : 'N') +
+    (scores.T >= scores.F ? 'T' : 'F') +
+    (scores.J >= scores.P ? 'J' : 'P');
+
+  const result = CONFIG.archetypes[mbti];
+  const contact = {
+    firstName: me.first, lastName: me.last, email: me.email, phone: me.phone || '',
+    mbti,
+    standard: result?.standard || "",
+    archetype: result?.title || "",
+    summary: result?.summary || "",
+    gender,
+    image: gender === "female" ? result?.images?.female : result?.images?.male,
+  };
+
+  fetch("/api/personality-quiz/lead", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(contact)
+  }).catch(() => {});
+
+  const slug = slugify(result?.title || mbti);
+  window.location.href = `/personality-quiz/results.html?title=${encodeURIComponent(slug)}&gender=${encodeURIComponent(gender)}`;
+}
+
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (currentQuestion === questions.length) {
+    if (!gender) { alert("Please select a gender before continuing."); return; }
+    document.getElementById('nextBtn').disabled = true;
+    submitAndShowResults();
+    return;
+  }
+  if (!responses[currentQuestion]) { alert("Please select an answer before continuing."); return; }
+  currentQuestion++;
+  showQuestion();
+});
+
+loadConfig();
+</script>
+
+</body>
+</html>

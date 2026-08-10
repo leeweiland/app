@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Your Training Personality Result</title>
+<link href="https://fonts.googleapis.com/css2?family=Aldrich&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; background: #000; color: #fff; font-family: 'Aldrich', sans-serif; }
+  .container {
+    max-width: 800px;
+    margin: 2em auto;
+    padding: 1em;
+    background: rgba(255,255,255,0.05);
+    border-radius: 0.5em;
+    text-align: center;
+  }
+  h1 { color: var(--accent, #4da3ff); font-size: 1.8em; margin-bottom: 0.3em; }
+  p { margin: 0.5em 0; font-size: 1.1em; }
+  .result-image { max-width: 300px; margin: 1.5em auto; border-radius: 8px; }
+  .result-section { text-align: left; margin: 1.8em 0; padding-top: 1.2em; border-top: 1px solid rgba(255,255,255,0.12); }
+  .result-section h2 { color: var(--accent, #4da3ff); font-size: 1.15em; margin: 0 0 0.5em; }
+  .result-section p { font-size: 1em; line-height: 1.5; margin: 0; }
+  .not-found { padding: 3em 1em; text-align: center; }
+  .not-found a { color: var(--accent, #4da3ff); }
+</style>
+</head>
+<body>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/chat-header.js"></script>
+
+<div id="app"></div>
+
+<script>
+async function main() {
+  const params = new URLSearchParams(window.location.search);
+  const titleParam = (params.get('title') || '').toLowerCase();
+  const genderParam = (params.get('gender') || 'male').toLowerCase();
+
+  const res = await fetch('/personality-quiz/config.json?_=' + Date.now());
+  const CONFIG = await res.json();
+  const archetypes = CONFIG.archetypes;
+  const settings = CONFIG.settings;
+
+  document.documentElement.style.setProperty('--accent', settings.accentColor || '#4da3ff');
+  document.title = settings.resultHeading || document.title;
+
+  function slugify(title) { return title.toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+  let mbti = null, result = null;
+  for (const [key, data] of Object.entries(archetypes)) {
+    if (slugify(data.title) === titleParam) { mbti = key; result = data; break; }
+  }
+  if (!result && params.get('type') && archetypes[params.get('type').toUpperCase()]) {
+    mbti = params.get('type').toUpperCase();
+    result = archetypes[mbti];
+  }
+
+  const app = document.getElementById('app');
+
+  if (!result) {
+    app.innerHTML = `<div class="container not-found"><h1>Result Not Found</h1><p>Sorry, we couldn't find a result for this type.</p>
+      <p><a href="/personality-quiz/index.html">Take The Quiz</a></p></div>`;
+    return;
+  }
+
+  const imageUrl = genderParam === 'female' ? result.images.female : result.images.male;
+
+  // The strategy field already ships as one HTML blob with labeled
+  // sections ("<strong>Strengths:</strong> ... <br><br><strong>Weaknesses:
+  // </strong> ..." etc) — split it back into its parts instead of adding
+  // new copy, so this stays truthful to the existing archetype content.
+  function parseStrategy(html) {
+    const sections = {};
+    const re = /<strong>([^<:]+):<\/strong>\s*([\s\S]*?)(?=<strong>[^<:]+:<\/strong>|$)/g;
+    let m;
+    while ((m = re.exec(html || ''))) {
+      const label = m[1].trim().toLowerCase();
+      const content = m[2].replace(/(<br\s*\/?>\s*)+$/i, '').trim();
+      sections[label] = content;
+    }
+    return sections;
+  }
+  const parts = parseStrategy(result.strategy);
+
+  const sectionsHtml = [
+    ['Strengths', parts['strengths']],
+    ['Weaknesses', parts['weaknesses']],
+    ['Best Training Buddies', parts['best training buddies']],
+    ['Strategy', parts['strategy']],
+    ['Training Options', (result.elements || []).length
+      ? `Some great training options for you include <strong>${result.elements.join(', ')}</strong>. These are elements of Powerbatics training at Pacific Rim Athletics.`
+      : ''],
+  ].filter(([, content]) => content).map(([label, content]) => `
+    <div class="result-section">
+      <h2>${label}</h2>
+      <p>${content}</p>
+    </div>
+  `).join('');
+
+  app.innerHTML = `
+    <div class="container">
+      <h1>You Are The ${result.title}</h1>
+      <p>${result.summary}</p>
+      <img class="result-image" src="${imageUrl}" alt="${result.title}">
+      ${sectionsHtml}
+    </div>
+  `;
+}
+main();
+</script>
+</body>
+</html>

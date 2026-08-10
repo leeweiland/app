@@ -1,0 +1,469 @@
+{
+  "settings": {
+    "siteTitle": "Pacific Rim Athletics – Training Personality Quiz",
+    "quizHeading": "Discover Your Training Personality",
+    "resultHeading": "Your Training Personality Result",
+    "accentColor": "#009bff",
+    "backgroundColor": "#000000",
+    "fontFamily": "Aldrich",
+    "logoUrl": "https://custom.pacificrimathletics.com/wp-content/uploads/2022/10/v3_logo_1589841642-white.png",
+    "ctaButtonText": "Get The Best Training<br>For Your Training Type",
+    "ctaButtonUrl": "https://pacificrimathletics.com/online",
+    "retakeButtonText": "Find Your Training Type",
+    "contactHeading": "Almost Done!",
+    "contactSubheading": "Please enter your details to see your results:",
+    "genderQuestionText": "One last thing — what's your gender?",
+    "shareHeading": "Share Your Results With A Friend!",
+    "shareSubheading": "Have them take the quiz to see their results!",
+    "leadWebhookUrl": ""
+  },
+  "questions": [
+    {
+      "text": "I prefer training with others rather than alone.",
+      "values": [
+        "E5I1",
+        "E4I2",
+        "E3I3",
+        "E2I4",
+        "E1I5"
+      ]
+    },
+    {
+      "text": "I want to master handstands with perfect technique.",
+      "values": [
+        "J5P1",
+        "J4P2",
+        "J3P3",
+        "J2P4",
+        "J1P5"
+      ]
+    },
+    {
+      "text": "I feel recharged after solo training sessions.",
+      "values": [
+        "I5E1",
+        "I4E2",
+        "I3E3",
+        "I2E4",
+        "I1E5"
+      ]
+    },
+    {
+      "text": "Freerunning and dynamic movement excite me.",
+      "values": [
+        "P5J1",
+        "P4J2",
+        "P3J3",
+        "P2J4",
+        "P1J5"
+      ]
+    },
+    {
+      "text": "I enjoy imagining new possibilities for my training.",
+      "values": [
+        "N5S1",
+        "N4S2",
+        "N3S3",
+        "N2S4",
+        "N1S5"
+      ]
+    },
+    {
+      "text": "Seeing advanced calisthenics inspires me to train harder.",
+      "values": [
+        "E5I1",
+        "E4I2",
+        "E3I3",
+        "E2I4",
+        "E1I5"
+      ]
+    },
+    {
+      "text": "I prefer objective feedback over subjective encouragement.",
+      "values": [
+        "T5F1",
+        "T4F2",
+        "T3F3",
+        "T2F4",
+        "T1F5"
+      ]
+    },
+    {
+      "text": "I prefer training that feels artistic and flowing.",
+      "values": [
+        "N5S1",
+        "N4S2",
+        "N3S3",
+        "N2S4",
+        "N1S5"
+      ]
+    },
+    {
+      "text": "I feel most comfortable when my schedule is decided in advance.",
+      "values": [
+        "J5P1",
+        "J4P2",
+        "J3P3",
+        "J2P4",
+        "J1P5"
+      ]
+    },
+    {
+      "text": "I value the Powerbatics Elements like strength, control, and creativity.",
+      "values": [
+        "N5S1",
+        "S5N1",
+        "T5F1",
+        "F5T1",
+        "J5P1"
+      ]
+    },
+    {
+      "text": "I enjoy spontaneous workouts without a fixed plan.",
+      "values": [
+        "P5J1",
+        "P4J2",
+        "P3J3",
+        "P2J4",
+        "P1J5"
+      ]
+    },
+    {
+      "text": "Achieving high-level powermoves is important to me.",
+      "values": [
+        "T5F1",
+        "T4F2",
+        "T3F3",
+        "T2F4",
+        "T1F5"
+      ]
+    },
+    {
+      "text": "I often reflect deeply about the purpose of my training.",
+      "values": [
+        "I5E1",
+        "I4E2",
+        "I3E3",
+        "I2E4",
+        "I1E5"
+      ]
+    },
+    {
+      "text": "I plan each step carefully when learning new skills.",
+      "values": [
+        "J5P1",
+        "J4P2",
+        "J3P3",
+        "J2P4",
+        "J1P5"
+      ]
+    },
+    {
+      "text": "I am energized by interacting with other athletes.",
+      "values": [
+        "E5I1",
+        "E4I2",
+        "E3I3",
+        "E2I4",
+        "E1I5"
+      ]
+    },
+    {
+      "text": "Training outdoors feels exciting and motivating.",
+      "values": [
+        "P5J1",
+        "P4J2",
+        "P3J3",
+        "P2J4",
+        "P1J5"
+      ]
+    },
+    {
+      "text": "I trust tried-and-true techniques over experimenting.",
+      "values": [
+        "S5N1",
+        "S4N2",
+        "S3N3",
+        "S2N4",
+        "S1N5"
+      ]
+    },
+    {
+      "text": "My ideal session has clear structure and goals.",
+      "values": [
+        "J5P1",
+        "J4P2",
+        "J3P3",
+        "J2P4",
+        "J1P5"
+      ]
+    },
+    {
+      "text": "I love brainstorming new training methods.",
+      "values": [
+        "N5S1",
+        "N4S2",
+        "N3S3",
+        "N2S4",
+        "N1S5"
+      ]
+    },
+    {
+      "text": "Combining disciplines like calisthenics and freerunning interests me.",
+      "values": [
+        "N5S1",
+        "N4S2",
+        "N3S3",
+        "N2S4",
+        "N1S5"
+      ]
+    }
+  ],
+  "archetypes": {
+    "ISTJ": {
+      "standard": "Logistician",
+      "title": "Alchemist",
+      "summary": "Meticulous, disciplined, and thrives on routine mastery.",
+      "elements": [
+        "Handstand",
+        "Ninja Strength",
+        "Powermoves"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/strength-alchemist.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/strength-alchemist-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> The Alchemist thrives on discipline, structure, and measurable progress. They are methodical, consistent, and excel at grinding through complex patterns or techniques until mastery is achieved.<br><br><strong>Weaknesses:</strong> However, their rigidity can sometimes limit spontaneity or make them resistant to adaptive or creative training elements. They may struggle when thrown into chaotic or open-ended scenarios that lack a clear progression.<br><br><strong>Best Training Buddies:</strong> The Mechanic and the Creator are great matches—together they bring precision, data, and refinement to every movement.<br><br><strong>Strategy:</strong> Use progressive overload with detailed logging and pattern refinement. Build training blocks that gradually increase complexity without sacrificing foundational control."
+    },
+    "ISFJ": {
+      "standard": "Defender",
+      "title": "Guardian",
+      "summary": "Steady, supportive, and values purposeful training.",
+      "elements": [
+        "Handstand",
+        "Cirque",
+        "Ninja Strength"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/quiet-pillar.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/quiet-pillar-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Guardians bring loyalty, attention to detail, and quiet resilience to their training. They thrive on steady effort and protecting the foundation of good movement.<br><br><strong>Weaknesses:</strong> They may struggle to take risks or push intensity. Without encouragement, they can become stuck repeating familiar patterns.<br><br><strong>Best Training Buddies:</strong> The Pathfinder offers inspiration while the Mechanic provides trustworthy systems.<br><br><strong>Strategy:</strong> Stick to repeatable, dependable routines with periodic challenges to step outside the comfort zone. Track progress visually to boost motivation without overwhelming change."
+    },
+    "INFJ": {
+      "standard": "Advocate",
+      "title": "Seeker",
+      "summary": "Reflective, visionary, and trains with deeper meaning.",
+      "elements": [
+        "Cirque",
+        "Handstand",
+        "Freerun"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/mindful-mover.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/mindful-mover-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> The Seeker is driven by values and meaning. They're resilient, patient, and often push through long plateaus because their reason for training goes far deeper than ego or aesthetics.<br><br><strong>Weaknesses:</strong> Their emotional investment can lead to burnout or disappointment if progress stalls. They may also undertrain intensity in favor of \"sustainable\" pacing.<br><br><strong>Best Training Buddies:</strong> The Flowfinder and Performer bring out both grounding and levity, keeping them balanced and connected to the joy of training.<br><br><strong>Strategy:</strong> Anchor each training cycle to a personal mission. Use journaling, intention-setting, and high-effort, low-volume phases to break through mental and physical barriers."
+    },
+    "INTJ": {
+      "standard": "Architect",
+      "title": "Creator",
+      "summary": "Strategic, systems-oriented, and optimizes for success.",
+      "elements": [
+        "Handstand",
+        "Powermoves",
+        "Ninja Strength",
+        "Cirque",
+        "Freerun"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/tactical-architect.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/tactical-architect-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> The Creator has a long-term focus and the discipline to pursue difficult goals without distraction. They excel in structured progressions and thrive when training is tied to a larger mission.<br><br><strong>Weaknesses:</strong> Their high standards may cause frustration if progress isn't rapid. They can become overly rigid and dismiss new approaches that challenge their system.<br><br><strong>Best Training Buddies:</strong> The Alchemist provides grind-ready support while the Visionary offers new ideas that still honor structure.<br><br><strong>Strategy:</strong> Use layered goal-setting frameworks with built-in review cycles. Progress slowly but intentionally, measuring success in months and years rather than days or weeks."
+    },
+    "ISTP": {
+      "standard": "Virtuoso",
+      "title": "Mechanic",
+      "summary": "Hands-on, experimental, and learns by doing.",
+      "elements": [
+        "Freerun",
+        "Ninja Strength",
+        "Powermoves"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/movement-mechanic.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/movement-mechanic-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Obsessed with biomechanics, the Mechanic has an engineer's brain for body angles, levers, and torque. They shine in refining joint function, posture, and skill transfer.<br><br><strong>Weaknesses:</strong> Their analytical mindset can cause paralysis by over-analysis, or delay action while they seek the \"perfect\" cue or movement pattern.<br><br><strong>Best Training Buddies:</strong> The Alchemist and the Visionary—together they nerd out over structure, efficiency, and skill optimization.<br><br><strong>Strategy:</strong> Use film review, slow tempo reps, and detailed mechanical corrections. Pair strength work with micro-adjustments and tactile cueing for mastery-level control."
+    },
+    "ISFP": {
+      "standard": "Adventurer",
+      "title": "Flowfinder",
+      "summary": "Flexible, spontaneous, and moves with intuition.",
+      "elements": [
+        "Cirque",
+        "Freerun",
+        "Handstand"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/flow-seeker.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/flow-seeker-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Flowfinders excel at intuitive movement, spatial awareness, and rhythm. They're graceful under pressure and bring a meditative calm to high-skill sequences like hand-balancing or freerunning.<br><br><strong>Weaknesses:</strong> They may avoid structured repetition or resist uncomfortable strength phases that don't feel \"flowy.\" Their aversion to rigidity can slow progress in raw power development or joint integrity.<br><br><strong>Best Training Buddies:</strong> The Dynamo and the Pathfinder help them blend fluid movement with explosive power and intentionality.<br><br><strong>Strategy:</strong> Integrate rhythm-based drills with surprise challenges. Focus on chaining combos, kata-style sequences, and soft-to-hard transitions that harness creativity while building underlying strength."
+    },
+    "INFP": {
+      "standard": "Mediator",
+      "title": "Pathfinder",
+      "summary": "Idealistic and seeks meaning in movement.",
+      "elements": [
+        "Cirque",
+        "Freerun",
+        "Handstand"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/purposeful-explorer.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/purposeful-explorer-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Pathfinders connect deeply to expressive training and feel movement as art. They are highly adaptive and bring sincerity and grace to even basic skills.<br><br><strong>Weaknesses:</strong> They may neglect fundamentals or avoid intensity when their mood dips. Their progress can fluctuate based on emotional state.<br><br><strong>Best Training Buddies:</strong> The Flowfinder shares expressive freedom while the Pathfinder adds emotional grounding.<br><br><strong>Strategy:</strong> Let emotion guide movement but use structured playlists, mood-based routines, and creative assignments to maintain consistency."
+    },
+    "INTP": {
+      "standard": "Logician",
+      "title": "Visionary",
+      "summary": "Conceptual, curious, and reinvents training.",
+      "elements": [
+        "Handstand",
+        "Ninja Strength",
+        "Powermoves",
+        "Cirque",
+        "Freerun"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/analytical-innovator.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/analytical-innovator-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Innovative and strategic, the Visionary loves solving puzzles with movement. They thrive on experimentation, breaking traditional rules, and reverse-engineering progressions.<br><br><strong>Weaknesses:</strong> They can chase novelty too often, skipping foundational work. Their mind may outpace their body, leading to inconsistency or over-complication.<br><br><strong>Best Training Buddies:</strong> The Alchemist helps ground them, while the Mechanic keeps them biomechanically honest.<br><br><strong>Strategy:</strong> Allow space for experiments and custom solutions—but frame each within consistent testing benchmarks and weekly challenges that keep them accountable to results."
+    },
+    "ESTP": {
+      "standard": "Entrepreneur",
+      "title": "Dynamo",
+      "summary": "Energetic, action-oriented, and thrives on challenge.",
+      "elements": [
+        "Freerun",
+        "Powermoves",
+        "Ninja Strength"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/kinetic-dynamo.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/kinetic-dynamo-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Explosive, athletic, and raw. The Dynamo is your human lightning bolt—quick to act, fast to recover, and eager to conquer anything that looks like a challenge.<br><br><strong>Weaknesses:</strong> They may skip mobility, ignore rest, or get bored with slow tempo drills. Prone to injury if they don't respect the buildup process.<br><br><strong>Best Training Buddies:</strong> The Flowfinder adds refinement, and the Performer matches energy while keeping things exciting.<br><br><strong>Strategy:</strong> Build explosive training circuits with power-based intervals. Include mobility primers and cooldowns disguised as challenges or tests to keep them engaged."
+    },
+    "ESFP": {
+      "standard": "Entertainer",
+      "title": "Performer",
+      "summary": "Fun-loving, expressive, and loves dynamic workouts.",
+      "elements": [
+        "Freerun",
+        "Cirque",
+        "Powermoves"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/playful-performer.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/playful-performer-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Full of energy, charisma, and fearless creativity, Performers thrive in dynamic environments and naturally take risks that lead to breakthrough movements.<br><br><strong>Weaknesses:</strong> Consistency and patience may be weak points. They can flake on training when the spotlight or novelty fades and may avoid slower, grindy phases.<br><br><strong>Best Training Buddies:</strong> The Dynamo shares their energy, while the Seeker helps anchor them to deeper motives.<br><br><strong>Strategy:</strong> Gamify everything. Use skill ladders, combo goals, and crowd-friendly feats. Wrap \"boring\" training into performance-style circuits or movement games."
+    },
+    "ENFP": {
+      "standard": "Campaigner",
+      "title": "Catalyst",
+      "summary": "Enthusiastic, creative, and motivates others.",
+      "elements": [
+        "Freerun",
+        "Cirque",
+        "Handstand"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/inspired-catalyst.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/inspired-catalyst-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> The Catalyst brings contagious energy and excitement to training. They can master new skills quickly when inspired and are fearless in movement exploration.<br><br><strong>Weaknesses:</strong> Without novelty or variety, they can lose motivation. Follow-through and discipline may be inconsistent.<br><br><strong>Best Training Buddies:</strong> The Performer keeps training fun, while the Creator ensures momentum stays productive.<br><br><strong>Strategy:</strong> Use short-term challenges, evolving skill ladders, and creative workouts. Rotate movement goals frequently while tracking macro progress subtly in the background."
+    },
+    "ENTP": {
+      "standard": "Debater",
+      "title": "Tactician",
+      "summary": "Experimental, always testing boundaries.",
+      "elements": [
+        "Freerun",
+        "Powermoves",
+        "Handstand"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/tactical-mover.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/tactical-mover-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Tacticians love shaking up routines and challenging the norm. They bring dynamic thinking, courage, and unusual combinations to the gym.<br><br><strong>Weaknesses:</strong> They may neglect structured training or become bored with basics. They risk overreaching physically if mentally unchecked.<br><br><strong>Best Training Buddies:</strong> The Visionary keeps things efficient, and the Dynamo shares their love of adrenaline.<br><br><strong>Strategy:</strong> Offer creative puzzles and progressive unlocks. Make constraints the playground and set time-based goals to channel scattered energy into focused breakthroughs."
+    },
+    "ESTJ": {
+      "standard": "Executive",
+      "title": "Trailblazer",
+      "summary": "Organized, decisive, and takes charge in fitness.",
+      "elements": [
+        "Handstand",
+        "Ninja Strength",
+        "Powermoves"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/training-commander.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/training-commander-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Trailblazers bring order, consistency, and grit to any physical pursuit. They love seeing steady, visible results and thrive on discipline.<br><br><strong>Weaknesses:</strong> They can become dogmatic in methods or resistant to adjusting their system. Burnout or overuse injuries may arise if rest is undervalued.<br><br><strong>Best Training Buddies:</strong> The Alchemist matches their love of structure, while the Mechanic refines their execution.<br><br><strong>Strategy:</strong> Create long-term training maps with short benchmark tests. Emphasize periodization and strategic rest so strength gains compound cleanly."
+    },
+    "ESFJ": {
+      "standard": "Consul",
+      "title": "Harmonizer",
+      "summary": "Supportive, team-focused, and values shared progress.",
+      "elements": [
+        "Cirque",
+        "Handstand",
+        "Ninja Strength"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/motivated-connector.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/motivated-connector-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Harmonizers shine in supportive environments. They're loyal partners in training, bringing positive energy and consistency.<br><br><strong>Weaknesses:</strong> They may focus too much on others' goals at the expense of their own or avoid training alone.<br><br><strong>Best Training Buddies:</strong> The Seeker or Trailblazer help balance empathy with individual drive.<br><br><strong>Strategy:</strong> Set shared milestones but include solo test days. Use partner drills and mirrored movement routines to stay engaged and inspired."
+    },
+    "ENFJ": {
+      "standard": "Protagonist",
+      "title": "Initiator",
+      "summary": "Charismatic, inspiring, and leads by example.",
+      "elements": [
+        "Cirque",
+        "Freerun",
+        "Handstand"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/empowered-leader.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/empowered-leader-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> Initiators uplift others while pushing themselves. They're excellent communicators, adaptable, and naturally lead by example.<br><br><strong>Weaknesses:</strong> They may lose focus on their own growth or feel emotionally impacted by others' struggles. Burnout from overgiving is a real risk.<br><br><strong>Best Training Buddies:</strong> The Pathfinder helps them reconnect with internal purpose, while the Dynamo energizes their drive.<br><br><strong>Strategy:</strong> Include community or accountability groups in training. Schedule regular solo sessions to refuel the internal engine behind the external support."
+    },
+    "ENTJ": {
+      "standard": "Commander",
+      "title": "Strategist",
+      "summary": "Driven, goal-focused, and always advancing.",
+      "elements": [
+        "Handstand",
+        "Powermoves",
+        "Ninja Strength",
+        "Freerun"
+      ],
+      "images": {
+        "male": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/strategic-pioneer.png",
+        "female": "https://custom.pacificrimathletics.com/wp-content/uploads/2025/07/strategic-pioneer-female.png"
+      },
+      "strategy": "<strong>Strengths:</strong> The Strategist fuses mental tenacity with physical ambition. They crave excellence and will outwork anyone to achieve complete mastery.<br><br><strong>Weaknesses:</strong> They may impose impossible standards or ignore their body's signals. Flexibility—both mental and physical—can be an obstacle.<br><br><strong>Best Training Buddies:</strong> The Creator keeps goals aligned, while the Initiator softens their intensity with empathy.<br><br><strong>Strategy:</strong> Use elite-level planning tools and precision metrics. Introduce mind-body practices to balance high-octane work ethic with sustainable growth."
+    }
+  }
+}
