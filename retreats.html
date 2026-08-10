@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Retreats — PRA</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+  .pra-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .frame-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .frame-head { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--pra-border); }
+  .frame-head .pra-h2 { flex: 1; }
+  iframe { flex: 1; width: 100%; border: 0; display: block; background: #fff; }
+  .fallback { display: none; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 20px; text-align: center; }
+  .fallback.show { display: flex; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="frame-wrap">
+    <div class="frame-head">
+      <div class="pra-h2 pra-glow">RETREATS</div>
+      <a class="pra-btn pra-btn-ghost" href="https://www.pacificrimathletics.com/retreats" target="_blank" rel="noopener" style="padding:8px 14px;font-size:.75rem">Open in new tab ↗</a>
+    </div>
+    <iframe id="retreatsFrame" src="https://www.pacificrimathletics.com/retreats" title="Pacific Rim Athletics Retreats"></iframe>
+    <div class="fallback pra-center" id="fallback">
+      <div class="pra-h2">This page can't be embedded here.</div>
+      <div class="pra-muted" style="font-size:.85rem;max-width:360px">The retreats site doesn't allow being shown inside another page. Use the button above to open it.</div>
+    </div>
+  </div>
+</div>
+<script>
+  const frame = document.getElementById('retreatsFrame');
+  let loaded = false;
+  frame.addEventListener('load', () => { loaded = true; });
+  setTimeout(() => {
+    if (!loaded) {
+      frame.style.display = 'none';
+      document.getElementById('fallback').classList.add('show');
+    }
+  }, 4000);
+</script>
+</body>
+</html>

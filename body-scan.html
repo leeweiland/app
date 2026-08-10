@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Body &amp; Move Scan — PRA</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
+  .type-toggle { display: flex; gap: 8px; margin-bottom: 22px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
+  .type-tab { flex: 1; text-align: center; padding: 10px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); }
+  .type-tab.active { background: var(--pra-blue); color: #fff; }
+  .upload-box { position: relative; border: 2px dashed var(--pra-border); border-radius: 14px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 18px; transition: border-color .15s; }
+  .upload-box:hover { border-color: var(--pra-blue); }
+  .upload-box img { max-width: 100%; max-height: 260px; border-radius: 10px; }
+  .clear-photo-btn {
+    position: absolute; top: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
+    display: none; align-items: center; justify-content: center; font-size: 15px; cursor: pointer;
+    color: #fff; background: rgba(0,0,0,0.6); border: 1.5px solid rgba(255,255,255,0.5);
+  }
+  .clear-photo-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; margin-bottom: 6px; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .unit-row { display: flex; gap: 6px; }
+  .unit-row input { flex: 1; min-width: 0; }
+  .unit-row select { flex: 0 0 78px; padding-left: 8px; padding-right: 8px; }
+  #resultBox { display: none; margin-top: 24px; padding: 22px; }
+  .bodyfat-tile { text-align: center; padding: 16px; border-radius: 10px; background: rgba(0,155,255,0.08); border: 1px solid var(--pra-blue-dim); margin-bottom: 18px; }
+  .bodyfat-tile .val { font-size: 1.8rem; font-weight: 700; color: var(--pra-blue); }
+  .bodyfat-tile .lab { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
+  .macro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+  .macro-tile { text-align: center; padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.03); }
+  .macro-tile .val { font-size: 1.3rem; font-weight: 700; color: var(--pra-blue); }
+  .macro-tile .lab { font-family: var(--font-secondary); font-size: .65rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .06em; }
+  .meal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--pra-border); font-size: .84rem; }
+  .disclaimer { font-family: var(--font-secondary); font-size: .7rem; color: var(--pra-dim); margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--pra-border); line-height: 1.5; }
+  .spinner { display: none; text-align: center; padding: 20px; color: var(--pra-blue); }
+  .greeting { font-weight: 700; font-size: 1rem; margin-bottom: 12px; }
+  .signoff { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--pra-border); text-align: left; }
+  .signoff-text { font-family: var(--font-primary); font-weight: 700; font-size: 1.1rem; margin-bottom: 12px; }
+  .signoff-logo { width: 220px; height: auto; display: block; margin: 0 0 12px; }
+  .signoff-name { font-weight: 700; font-size: .92rem; }
+  .signoff-title { font-family: var(--font-primary); font-weight: 700; font-size: .74rem; color: var(--pra-dim); }
+  /* ── Previous Scans ── */
+  #pastScans { margin-top: 32px; }
+  .past-scan-card { padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+  .past-scan-head { display: flex; align-items: center; gap: 10px; }
+  .past-scan-type { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; background: rgba(0,155,255,0.12); color: var(--pra-blue); border-radius: 20px; padding: 2px 9px; }
+  .past-scan-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); flex: 1; }
+  .past-scan-bf { font-weight: 700; font-size: .85rem; color: var(--pra-blue); }
+  .past-scan-del { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
+  .past-scan-del:hover { color: #e74c3c; }
+  .past-scan-body { display: none; margin-top: 10px; font-size: .84rem; line-height: 1.6; white-space: pre-wrap; color: var(--pra-text); border-top: 1px solid var(--pra-border); padding-top: 10px; }
+  .past-scan-card.open .past-scan-body { display: block; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="wrap">
+    <div class="pra-h1 pra-glow" style="margin-bottom:6px">BODY &amp; MOVE SCAN</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Upload a photo — get an AI visual read plus a real macro plan.</div>
+
+    <div class="type-toggle">
+      <div class="type-tab active" data-type="body">Body Scan</div>
+      <div class="type-tab" data-type="move">Move Scan</div>
+    </div>
+
+    <div class="upload-box" id="uploadBox">
+      <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
+      <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
+      <input type="file" id="photoInput" accept="image/*" style="display:none"/>
+    </div>
+
+    <div id="moveTypeField" class="field" style="display:none">
+      <label class="pra-label">What move is this? (e.g. bridge, splits, handstand)</label>
+      <input class="pra-input" id="moveTypeInput" placeholder="Bridge"/>
+    </div>
+    <div id="moveGoalField" class="field" style="display:none">
+      <label class="pra-label">What's your goal with this move?</label>
+      <input class="pra-input" id="moveGoalInput" placeholder="e.g. hold a full bridge for 30 seconds"/>
+    </div>
+
+    <div class="pra-panel" id="nutritionPanel" style="padding:18px">
+      <div class="pra-label" style="margin-bottom:12px">For your calorie/macro plan (optional but recommended)</div>
+      <div class="field-row">
+        <div class="field">
+          <label class="pra-label">Height</label>
+          <div class="unit-row">
+            <input class="pra-input" id="heightFt" type="number" placeholder="ft"/>
+            <input class="pra-input" id="heightIn" type="number" placeholder="in"/>
+            <input class="pra-input" id="heightCm" type="number" placeholder="cm" style="display:none"/>
+            <select class="pra-select" id="heightUnit">
+              <option value="ftin" selected>ft/in</option>
+              <option value="cm">cm</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="pra-label">Weight</label>
+          <div class="unit-row">
+            <input class="pra-input" id="weightLbs" type="number" placeholder="lbs"/>
+            <input class="pra-input" id="weightKg" type="number" placeholder="kg" style="display:none"/>
+            <select class="pra-select" id="weightUnit">
+              <option value="lbs" selected>lbs</option>
+              <option value="kg">kg</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label class="pra-label">Age</label><input class="pra-input" id="age" type="number"/></div>
+        <div class="field"><label class="pra-label">Sex</label>
+          <select class="pra-select" id="sex"><option value="male">Male</option><option value="female">Female</option></select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label class="pra-label">Activity Level</label>
+          <select class="pra-select" id="activityLevel">
+            <option value="sedentary">Sedentary</option>
+            <option value="light" selected>Light</option>
+            <option value="moderate">Moderate</option>
+            <option value="active">Active</option>
+            <option value="very_active">Very Active</option>
+          </select>
+        </div>
+        <div class="field"><label class="pra-label">Goal</label>
+          <select class="pra-select" id="goal">
+            <option value="cut">Cut</option>
+            <option value="maintain" selected>Maintain</option>
+            <option value="bulk">Bulk</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="pra-btn" id="analyzeBtn" style="width:100%;margin-top:18px">ANALYZE</button>
+    <div class="spinner" id="spinner">Analyzing…</div>
+
+    <div class="pra-panel" id="resultBox"></div>
+
+    <div id="pastScans" style="display:none">
+      <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
+      <div id="pastScansList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let analysisType = 'body';
+let photoFile = null;
+let photoDataUrl = null;
+let lastResult = null;
+let me = null;
+
+// ── Persistence: photo, form fields, and the last result all survive a
+// refresh, nav-away-and-back, or server restart — stored client-side since
+// there's nothing server-side to key it to (no analysis-session concept).
+const STATE_KEY = 'pra-body-move-scan-state-v1';
+const FIELD_IDS = ['heightUnit','heightFt','heightIn','heightCm','weightUnit','weightLbs','weightKg','age','sex','activityLevel','goal','moveTypeInput','moveGoalInput'];
+
+function saveState() {
+  const state = { analysisType, photoDataUrl, lastResult, fields: {} };
+  FIELD_IDS.forEach(id => { state.fields[id] = document.getElementById(id).value; });
+  try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch {}
+}
+
+async function loadState() {
+  let state;
+  try { state = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch { state = null; }
+  if (!state) return;
+
+  if (state.fields) FIELD_IDS.forEach(id => { if (state.fields[id] !== undefined) document.getElementById(id).value = state.fields[id]; });
+  document.getElementById('heightUnit').dispatchEvent(new Event('change'));
+  document.getElementById('weightUnit').dispatchEvent(new Event('change'));
+  if (state.analysisType === 'move') document.querySelector('.type-tab[data-type="move"]').click();
+
+  if (state.photoDataUrl) {
+    photoDataUrl = state.photoDataUrl;
+    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
+    document.getElementById('clearPhotoBtn').style.display = 'flex';
+    try {
+      const blob = await (await fetch(photoDataUrl)).blob();
+      photoFile = new File([blob], 'restored-photo.jpg', { type: blob.type || 'image/jpeg' });
+    } catch {}
+  }
+
+  if (state.lastResult) {
+    lastResult = state.lastResult;
+    renderResult(lastResult, false);
+  }
+}
+
+document.querySelectorAll('.type-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    analysisType = tab.dataset.type;
+    document.getElementById('moveTypeField').style.display = analysisType === 'move' ? 'block' : 'none';
+    document.getElementById('moveGoalField').style.display = analysisType === 'move' ? 'block' : 'none';
+    // Move Technique is about the move only — no nutrition inputs or plan.
+    document.getElementById('nutritionPanel').style.display = analysisType === 'move' ? 'none' : 'block';
+    saveState();
+  };
+});
+FIELD_IDS.forEach(id => document.getElementById(id).addEventListener('input', saveState));
+FIELD_IDS.forEach(id => document.getElementById(id).addEventListener('change', saveState));
+
+document.getElementById('uploadBox').onclick = () => document.getElementById('photoInput').click();
+document.getElementById('photoInput').addEventListener('change', (e) => {
+  photoFile = e.target.files[0];
+  if (!photoFile) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    photoDataUrl = reader.result;
+    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
+    document.getElementById('clearPhotoBtn').style.display = 'flex';
+    saveState();
+  };
+  reader.readAsDataURL(photoFile);
+});
+document.getElementById('clearPhotoBtn').onclick = (e) => {
+  e.stopPropagation();
+  photoFile = null;
+  photoDataUrl = null;
+  lastResult = null;
+  document.getElementById('photoInput').value = '';
+  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to upload a photo';
+  document.getElementById('clearPhotoBtn').style.display = 'none';
+  document.getElementById('resultBox').style.display = 'none';
+  document.getElementById('resultBox').innerHTML = '';
+  saveState();
+};
+
+// ── Unit toggles: default ft/in + lbs (US-friendly), metric always what's sent to the backend ──
+document.getElementById('heightUnit').addEventListener('change', (e) => {
+  const isCm = e.target.value === 'cm';
+  document.getElementById('heightCm').style.display = isCm ? '' : 'none';
+  document.getElementById('heightFt').style.display = isCm ? 'none' : '';
+  document.getElementById('heightIn').style.display = isCm ? 'none' : '';
+});
+document.getElementById('weightUnit').addEventListener('change', (e) => {
+  const isKg = e.target.value === 'kg';
+  document.getElementById('weightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('weightLbs').style.display = isKg ? 'none' : '';
+});
+
+function getHeightCm() {
+  if (document.getElementById('heightUnit').value === 'cm') return document.getElementById('heightCm').value;
+  const ft = Number(document.getElementById('heightFt').value) || 0;
+  const inch = Number(document.getElementById('heightIn').value) || 0;
+  return (ft || inch) ? Math.round((ft * 30.48 + inch * 2.54) * 10) / 10 : '';
+}
+function getWeightKg() {
+  if (document.getElementById('weightUnit').value === 'kg') return document.getElementById('weightKg').value;
+  const lbs = Number(document.getElementById('weightLbs').value);
+  return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : '';
+}
+
+document.getElementById('analyzeBtn').onclick = async () => {
+  if (!photoFile) { alert('Upload a photo first.'); return; }
+  const fd = new FormData();
+  fd.append('photo', photoFile);
+  fd.append('analysisType', analysisType);
+  if (analysisType === 'move') {
+    fd.append('moveType', document.getElementById('moveTypeInput').value || 'this position');
+    fd.append('moveGoal', document.getElementById('moveGoalInput').value);
+  }
+  fd.append('heightCm', getHeightCm());
+  fd.append('weightKg', getWeightKg());
+  ['age','sex','activityLevel','goal'].forEach(id => fd.append(id, document.getElementById(id).value));
+
+  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('resultBox').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+  try {
+    const r = await fetch('/api/body-scan/analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Analysis failed'); return; }
+    lastResult = d;
+    saveState();
+    renderResult(d);
+  } finally {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+};
+
+function renderResult(d, scrollTo) {
+  const box = document.getElementById('resultBox');
+  // The body-fat estimate ships as a "BODY FAT ESTIMATE: X-Y%" line at the
+  // top of the AI text (per the system prompt) — pull it out into its own
+  // stat tile instead of leaving it buried in the paragraph.
+  let assessment = d.assessment || '';
+  let bodyFat = null;
+  const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+  if (bfMatch) {
+    bodyFat = bfMatch[1].trim();
+    assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
+  }
+
+  let html = bodyFat
+    ? `<div class="bodyfat-tile"><div class="val">${escapeHtml(bodyFat)}</div><div class="lab">Estimated Body Fat</div></div>`
+    : '';
+  // Reads like an actual email now, not a labeled report — the AI is told
+  // not to write its own greeting/sign-off, so both are added here instead.
+  const greetName = me?.first ? escapeHtml(me.first) : 'there';
+  html += `<div class="greeting">Hey ${greetName},</div>`;
+  html += `<div style="font-size:.9rem;line-height:1.6;white-space:pre-wrap">${escapeHtml(assessment)}</div>`;
+
+  if (d.analysisType === 'body' && d.calorieTarget) {
+    html += `
+      <div class="pra-h2" style="margin-top:22px;margin-bottom:6px">Daily Suggestion</div>
+      <div class="macro-grid">
+        <div class="macro-tile"><div class="val">${d.calorieTarget}</div><div class="lab">Calories</div></div>
+        <div class="macro-tile"><div class="val">${d.macros.proteinG}g</div><div class="lab">Protein 40%</div></div>
+        <div class="macro-tile"><div class="val">${d.macros.fatG}g</div><div class="lab">Fat 30%</div></div>
+      </div>
+      <div class="pra-h2" style="margin-top:18px;margin-bottom:8px">6-Meal Plan</div>
+      ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal · P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
+    `;
+  } else if (d.analysisType === 'body') {
+    html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Add height + weight above to get a personalized calorie/macro plan.</div>`;
+  }
+
+  html += `
+    <div class="signoff">
+      <div class="signoff-text">Blessings!</div>
+      <div class="signoff-text">Coach Lee</div>
+      <img class="signoff-logo" src="/chat-app/assets/lee-signature.png" alt="Lee Weiland signature"/>
+      <div class="signoff-name">Lee Weiland</div>
+      <div class="signoff-title">Creator Powerbatics</div>
+      <div class="signoff-title">Founder Pacific Rim Athletics</div>
+    </div>
+  `;
+  html += `<div class="disclaimer">${escapeHtml(d.disclaimer)}</div>`;
+  box.innerHTML = html;
+  box.style.display = 'block';
+  if (scrollTo !== false) box.scrollIntoView({ behavior: 'smooth' });
+}
+
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function loadPastScans() {
+  try {
+    const r = await fetch('/api/body-scan/scans');
+    if (!r.ok) return;
+    const { scans } = await r.json();
+    if (!scans || !scans.length) return;
+    const wrap = document.getElementById('pastScans');
+    const list = document.getElementById('pastScansList');
+    list.innerHTML = scans.map(s => {
+      const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      let preview = s.assessment || '';
+      const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+      const bfVal = bfMatch ? bfMatch[1].trim() : null;
+      const bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
+      const label = s.type === 'move' ? (s.moveType || 'Move Scan') : 'Body Scan';
+      return `<div class="pra-panel past-scan-card" data-id="${escapeHtml(s.id)}">
+        <div class="past-scan-head">
+          <span class="past-scan-type">${escapeHtml(label)}</span>
+          <span class="past-scan-date">${date}</span>
+          ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
+          <button class="past-scan-del" title="Delete">✕</button>
+        </div>
+        <div class="past-scan-body">${escapeHtml(bodyText)}</div>
+      </div>`;
+    }).join('');
+    wrap.style.display = 'block';
+    list.querySelectorAll('.past-scan-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.past-scan-del')) {
+          e.stopPropagation();
+          deleteScan(card.dataset.id, card);
+          return;
+        }
+        card.classList.toggle('open');
+      });
+    });
+  } catch {}
+}
+
+async function deleteScan(id, card) {
+  try {
+    await fetch(`/api/body-scan/scans/${id}`, { method: 'DELETE' });
+    card.remove();
+    if (!document.getElementById('pastScansList').children.length) {
+      document.getElementById('pastScans').style.display = 'none';
+    }
+  } catch {}
+}
+
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    if (r.ok) me = (await r.json()).user;
+  } catch {}
+  loadState();
+  loadPastScans();
+})();
+</script>
+</body>
+</html>

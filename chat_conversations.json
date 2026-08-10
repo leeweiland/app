@@ -1,0 +1,85 @@
+[
+  {
+    "id": "e3b91d71-4713-42f2-8883-5389ea2c15ca",
+    "type": "dm",
+    "participantIds": [
+      "a2ad8a1d-6fef-41ef-b97e-7a6a90392233",
+      "76f3579b-ed30-46dd-928f-42a32d269dd2"
+    ],
+    "createdBy": "a2ad8a1d-6fef-41ef-b97e-7a6a90392233",
+    "createdAt": "2026-08-09T03:28:19.138Z"
+  },
+  {
+    "id": "140dbdc7-5a0d-4ea7-8780-36c119b0b6f2",
+    "type": "group",
+    "name": "test group",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "a2ad8a1d-6fef-41ef-b97e-7a6a90392233"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T05:46:01.249Z"
+  },
+  {
+    "id": "159585b6-9fc5-4c60-bf96-de5548ada9cc",
+    "type": "dm",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "999752e6-f915-4dff-97d4-297621f5f9d1"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T08:54:13.108Z"
+  },
+  {
+    "id": "dded30a1-d6d0-4e03-9c09-cfa00a4d3407",
+    "type": "dm",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "c186e50d-4d2c-4c90-9f5e-1e0e03162b54"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T08:54:17.995Z"
+  },
+  {
+    "id": "b1fedbc5-2574-48e9-b82c-b6a6ce511e8d",
+    "type": "dm",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "025d97db-cbf6-40ca-81f1-d9c5c217482f"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T09:10:37.343Z"
+  },
+  {
+    "id": "861600fd-2bb5-4b35-a3f3-b22aa27d05cc",
+    "type": "dm",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "84e9259e-0afa-4637-a9db-a0fa3bc2e1d6"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T11:53:22.242Z"
+  },
+  {
+    "id": "a9ba47a7-31a6-41e4-86b9-4bff5a017b8d",
+    "type": "group",
+    "name": "Group Schedule Test",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "84e9259e-0afa-4637-a9db-a0fa3bc2e1d6",
+      "b8099951-375d-4b66-a1d4-84d3d96493e2"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-09T18:16:19.535Z"
+  },
+  {
+    "id": "bb05ea5f-0bc6-4eb3-a41f-a1b2019cc83e",
+    "type": "dm",
+    "participantIds": [
+      "76f3579b-ed30-46dd-928f-42a32d269dd2",
+      "b8099951-375d-4b66-a1d4-84d3d96493e2"
+    ],
+    "createdBy": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "createdAt": "2026-08-10T04:08:16.135Z"
+  }
+]

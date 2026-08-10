@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Levels — PRA</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+  .controls { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+  #searchInput { flex: 1; min-width: 220px; }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .person-card { padding: 16px 18px; }
+  .person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .person-name { font-weight: 700; font-size: .98rem; flex: 1; }
+  .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
+  .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
+  .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; max-width: 280px; }
+  .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
+  .level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="wrap">
+    <div class="pra-h1 pra-glow" style="margin-bottom:6px">LEVELS</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Gym and Online skill progress, combined — search by name.</div>
+    <div class="controls">
+      <div style="flex:1;min-width:220px">
+        <label class="pra-label" style="display:block;margin-bottom:6px">Search</label>
+        <div class="search-clear-wrap">
+          <input class="pra-input" id="searchInput" placeholder="Search a name…"/>
+          <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
+        </div>
+      </div>
+      <div>
+        <label class="pra-label" style="display:block;margin-bottom:6px">Sort By</label>
+        <select class="pra-select" id="sortSelect" style="max-width:200px">
+          <option value="superLevel">Highest Super Level</option>
+          <option value="highestLevel">Highest Level</option>
+          <option value="handstand">Highest Handstand</option>
+          <option value="ninjaStrength">Highest Ninja Strength</option>
+          <option value="powermoves">Highest Powermoves</option>
+          <option value="freerun">Highest Freerun</option>
+          <option value="cirque">Highest Cirque</option>
+          <option value="first">Alphabetical — First Name</option>
+          <option value="last">Alphabetical — Last Name</option>
+        </select>
+      </div>
+    </div>
+    <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
+    <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
+  </div>
+</div>
+
+<script>
+let allPeople = [];
+
+const LEVELS_NUMERIC_CATS = ['NINJA STRENGTH', 'HANDSTAND', 'POWERMOVES', 'FREERUN', 'CIRQUE'];
+const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
+function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
+function levelIsChecked(v) { return ['x', 'yes'].includes(String(v || '').trim().toLowerCase()); }
+function levelNumColor(n) { return LEVEL_NUM_COLORS[Number(n)] || '#5f727f'; }
+
+// Completing Foundation means they've at least started every skill — an
+// unrecorded category reads as Level 1, not 0, once Foundation is done.
+function effectiveLevel(p, cat) {
+  const raw = Number(p.levels[cat]) || 0;
+  if (raw > 0) return raw;
+  return levelIsChecked(p.levels['FOUNDATION']) ? 1 : 0;
+}
+function superLevel(p) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + effectiveLevel(p, cat), 0); }
+
+function renderLevelChips(p) {
+  const foundationSet = levelIsChecked(p.levels['FOUNDATION']);
+  const inProgress = String(p.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress';
+  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${foundationSet ? '✓' : (inProgress ? 'In Progress' : '0')}</span></div>`];
+  LEVELS_NUMERIC_CATS.forEach(cat => {
+    const n = effectiveLevel(p, cat);
+    rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
+  });
+  if (p.program === 'Gym') {
+    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${p.team ? '✓' : '0'}</span></div>`);
+  }
+  return `<div class="levels-col">${rows.join('')}</div>`;
+}
+
+async function load() {
+  const r = await fetch('/api/chat/levels');
+  const d = await r.json();
+  allPeople = d.people || [];
+  applyFilters();
+}
+
+function render(people) {
+  const list = document.getElementById('list');
+  document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
+  list.innerHTML = people.map(p => `
+    <div class="pra-panel person-card">
+      <div class="person-head">
+        <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last)}</div>
+        <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
+      </div>
+      ${renderLevelChips(p)}
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+
+const catSorter = cat => (a, b) => effectiveLevel(b, cat) - effectiveLevel(a, cat) || superLevel(b) - superLevel(a);
+// "Highest Level" — whichever single skill someone's best at, not the sum
+// (Super Level) or one specific category — so someone who's a 10/10 in just
+// one thing still sorts above someone spread evenly at 6/10 across all five.
+function highestSingle(p) { return Math.max(...LEVELS_NUMERIC_CATS.map(cat => effectiveLevel(p, cat))); }
+const SORTERS = {
+  superLevel:    (a, b) => superLevel(b) - superLevel(a),
+  highestLevel:  (a, b) => highestSingle(b) - highestSingle(a) || superLevel(b) - superLevel(a),
+  handstand:     catSorter('HANDSTAND'),
+  ninjaStrength: catSorter('NINJA STRENGTH'),
+  powermoves:    catSorter('POWERMOVES'),
+  freerun:       catSorter('FREERUN'),
+  cirque:        catSorter('CIRQUE'),
+  first:         (a, b) => a.first.localeCompare(b.first),
+  last:          (a, b) => a.last.localeCompare(b.last),
+};
+
+function applyFilters() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  let filtered = allPeople;
+  if (q) filtered = filtered.filter(p => (p.first + ' ' + p.last).toLowerCase().includes(q));
+  filtered = [...filtered].sort(SORTERS[sort] || SORTERS.superLevel);
+  render(filtered);
+}
+
+let searchTimer;
+document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(applyFilters, 200); });
+document.getElementById('sortSelect').addEventListener('change', applyFilters);
+document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
+  const input = document.getElementById(btn.dataset.clears);
+  btn.onclick = () => { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); };
+});
+
+load();
+</script>
+</body>
+</html>

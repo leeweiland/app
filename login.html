@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PRA Chat — Sign In</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  body { margin: 0; }
+  .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .auth-card { width: 100%; max-width: 420px; padding: 36px 32px; }
+  .auth-logo { text-align: center; margin-bottom: 22px; }
+  .auth-tabs { display: flex; gap: 8px; margin-bottom: 26px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
+  .auth-tab { flex: 1; text-align: center; padding: 9px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); }
+  .auth-tab.active { background: var(--pra-blue); color: #fff; }
+  .field { margin-bottom: 14px; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .avatar-picker { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .avatar-picker .pra-avatar { width: 56px; height: 56px; font-size: 1.3rem; }
+  .avatar-picker input { display: none; }
+  .err-msg { color: #ff5c5c; font-size: .82rem; margin: -4px 0 14px; min-height: 1em; font-family: var(--font-secondary); }
+  form.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <div class="auth-wrap">
+    <div class="pra-panel auth-card">
+      <div class="auth-logo">
+        <div class="pra-h1 pra-glow">PRA CHAT</div>
+        <div class="pra-label" style="margin-top:6px">Coaches &amp; Athletes</div>
+      </div>
+
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tabLogin">Sign In</div>
+        <div class="auth-tab" id="tabSignup">Sign Up</div>
+      </div>
+
+      <div class="err-msg" id="errMsg"></div>
+
+      <form id="loginForm">
+        <div class="field"><label class="pra-label">Email</label><br/>
+          <input class="pra-input" type="email" id="loginEmail" required style="margin-top:6px"/></div>
+        <div class="field"><label class="pra-label">Password</label><br/>
+          <input class="pra-input" type="password" id="loginPassword" required style="margin-top:6px"/></div>
+        <div style="text-align:right;margin-bottom:8px"><span class="pra-link" id="forgotLink" style="font-size:.8rem">Forgot password?</span></div>
+        <button class="pra-btn" type="submit" style="width:100%">SIGN IN</button>
+      </form>
+
+      <form id="forgotForm" class="hidden">
+        <div class="pra-muted" style="font-size:.82rem;margin-bottom:14px">Enter your email and we'll send you a reset link.</div>
+        <div class="field"><label class="pra-label">Email</label><br/>
+          <input class="pra-input" type="email" id="forgotEmail" required style="margin-top:6px"/></div>
+        <button class="pra-btn" type="submit" style="width:100%;margin-top:8px">SEND RESET LINK</button>
+        <div style="text-align:center;margin-top:12px"><span class="pra-link" id="backToLoginLink" style="font-size:.8rem">Back to sign in</span></div>
+      </form>
+
+      <form id="signupForm" class="hidden">
+        <div class="avatar-picker">
+          <div class="pra-avatar" id="avatarPreview">＋</div>
+          <div>
+            <label class="pra-btn pra-btn-ghost" for="profilePicInput" style="display:inline-block">Add Photo (optional)</label>
+            <input type="file" id="profilePicInput" accept="image/*"/>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label class="pra-label">First Name</label><br/>
+            <input class="pra-input" id="suFirst" required style="margin-top:6px"/></div>
+          <div class="field"><label class="pra-label">Last Name</label><br/>
+            <input class="pra-input" id="suLast" required style="margin-top:6px"/></div>
+        </div>
+        <div class="field"><label class="pra-label">Email</label><br/>
+          <input class="pra-input" type="email" id="suEmail" required style="margin-top:6px"/></div>
+        <div class="field"><label class="pra-label">Phone</label><br/>
+          <input class="pra-input" type="tel" id="suPhone" style="margin-top:6px"/></div>
+        <div class="field"><label class="pra-label">Password</label><br/>
+          <input class="pra-input" type="password" id="suPassword" required minlength="8" style="margin-top:6px"/></div>
+        <button class="pra-btn" type="submit" style="width:100%;margin-top:8px">CREATE ACCOUNT</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const tabLogin = document.getElementById('tabLogin');
+const tabSignup = document.getElementById('tabSignup');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+const forgotForm = document.getElementById('forgotForm');
+const errMsg = document.getElementById('errMsg');
+
+function showForm(form) {
+  [loginForm, signupForm, forgotForm].forEach(f => f.classList.toggle('hidden', f !== form));
+  errMsg.textContent = '';
+}
+
+tabLogin.onclick = () => { tabLogin.classList.add('active'); tabSignup.classList.remove('active'); showForm(loginForm); };
+tabSignup.onclick = () => { tabSignup.classList.add('active'); tabLogin.classList.remove('active'); showForm(signupForm); };
+document.getElementById('forgotLink').onclick = () => showForm(forgotForm);
+document.getElementById('backToLoginLink').onclick = () => { tabLogin.click(); };
+
+forgotForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errMsg.textContent = '';
+  const email = document.getElementById('forgotEmail').value;
+  const r = await fetch('/api/auth/forgot-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+  const d = await r.json();
+  forgotForm.innerHTML = '<div class="pra-muted" style="font-size:.85rem;text-align:center;padding:10px 0">' + (d.message || 'Check your email for a reset link.') + '</div>';
+});
+
+document.getElementById('profilePicInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('avatarPreview').innerHTML = '<img src="' + reader.result + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>';
+  };
+  reader.readAsDataURL(file);
+});
+
+function redirectAfterAuth() {
+  const params = new URLSearchParams(location.search);
+  location.href = params.get('next') || '/chat-app/chat.html';
+}
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errMsg.textContent = '';
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const r = await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+  const d = await r.json();
+  if (!r.ok) { errMsg.textContent = d.error || 'Login failed'; return; }
+  redirectAfterAuth();
+});
+
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errMsg.textContent = '';
+  const fd = new FormData();
+  fd.append('first', document.getElementById('suFirst').value);
+  fd.append('last', document.getElementById('suLast').value);
+  fd.append('email', document.getElementById('suEmail').value);
+  fd.append('phone', document.getElementById('suPhone').value);
+  fd.append('password', document.getElementById('suPassword').value);
+  const picFile = document.getElementById('profilePicInput').files[0];
+  if (picFile) fd.append('profilePicture', picFile);
+  const r = await fetch('/api/auth/signup', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (!r.ok) { errMsg.textContent = d.error || 'Sign up failed'; return; }
+  redirectAfterAuth();
+});
+
+// Already logged in? skip straight to chat.
+fetch('/api/auth/me').then(r => r.ok ? redirectAfterAuth() : null).catch(() => {});
+</script>
+</body>
+</html>

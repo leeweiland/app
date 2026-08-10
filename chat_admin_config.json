@@ -1,0 +1,40 @@
+{
+  "gifApiKey": "GQbvTcLiSrRhlpJ6GeDqX6As4uW6So6p",
+  "vapidPublicKey": "BC-kMBnWQjfAVDzAWdRZqIHYATsPJIR7HoTiLyRidEelzzmyx1-jHmrljgRZaOD_MUCsjl63hXGwI5WBE4yZMOw",
+  "vapidPrivateKey": "Ow2ZmDEwDHhsEVNXA3GgdwwPEvLK1ZZlGntUNDFE-q0",
+  "profilePhotosFolderId": "1ai5fTDbgvjYGEvH_IjR0WWCu3TQwJ_6O",
+  "chatImagesFolderId": "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw",
+  "chatVideosFolderId": "1jal8c6AEV0xb9LOUGi2snkoZjBth9a6Y",
+  "trainingProtocolFolderId": "1MJgNhTI-meKNIp0JrHebA1atyFH5DojF",
+  "appointments": {
+    "defaultDurationMinutes": 15,
+    "timezone": "America/Anchorage",
+    "emailEnabled": true,
+    "emailSubjectTemplate": "Your upcoming session with {{coachName}} — {{date}} at {{time}}",
+    "emailBodyTemplate": "Hi {{firstName}},<br><br>Your training session with {{coachName}} is confirmed for <strong>{{date}} at {{time}}</strong> ({{duration}} min).<br><br>See you then!",
+    "smsEnabled": true,
+    "smsTemplate": "Hi {{firstName}}, your session with {{coachName}} is confirmed for {{date}} at {{time}} ({{duration}} min).",
+    "emailRemindersEnabled": true,
+    "emailReminderMinutesBefore": [
+      60
+    ],
+    "emailReminderUsesInitialTemplate": true,
+    "emailReminderSubjectTemplate": "Reminder: your session with {{coachName}} is coming up",
+    "emailReminderBodyTemplate": "Hi {{firstName}},<br><br>Just a reminder — your training session with {{coachName}} is <strong>{{date}} at {{time}}</strong> ({{duration}} min).<br><br>See you soon!",
+    "smsRemindersEnabled": true,
+    "smsReminderMinutesBefore": [
+      60
+    ],
+    "smsReminderUsesInitialTemplate": true,
+    "smsReminderTemplate": "Reminder: your session with {{coachName}} is {{date}} at {{time}} ({{duration}} min).",
+    "messengerRemindersEnabled": true,
+    "messengerReminderMinutesBefore": [
+      60
+    ],
+    "messengerReminderUseDefault": true,
+    "messengerReminderTemplate": "Reminder: your session with {{coachName}} is {{date}} at {{time}} ({{duration}} min)."
+  },
+  "trainingProtocolVideoLibraryFolderId": "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX",
+  "powerbaticsVideosFolderId": "1U_1MW09oxv-568BWnUCwvUx4TZtve9wu",
+  "favoritesFolderId": "1tpeSt4ZRAkRlZ6AmyW78G5BDiXL_NySW"
+}

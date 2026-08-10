@@ -1,0 +1,258 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   PRA DESIGN SYSTEM — shared look for Chat / Body Scan / Moves Dictionary
+   Black + white + #009bff, animated glow background, Century Gothic (primary)
+   + Aldrich (secondary), glowing text utility for emphasis.
+
+   Century Gothic is a commercial Monotype font with no free web-embeddable
+   version — it's declared first so any machine that already has it
+   installed (common; ships with MS Office) uses the real thing, with a
+   close free geometric-sans stack (Poppins, via Google Fonts) as the
+   fallback for everyone else. Aldrich is genuinely free and self-hosted
+   from Google Fonts below.
+   ───────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Aldrich&family=Poppins:wght@400;600;700;800&display=swap');
+
+:root {
+  --pra-black: #000000;
+  --pra-black-soft: #0a0a0d;
+  --pra-panel: #101014;
+  --pra-panel-2: #16161c;
+  --pra-border: #26262e;
+  --pra-white: #ffffff;
+  --pra-dim: #9a9aa5;
+  --pra-blue: #009bff;
+  --pra-blue-glow: rgba(0, 155, 255, 0.55);
+  --pra-blue-dim: rgba(0, 155, 255, 0.12);
+  --font-primary: 'Century Gothic', 'Poppins', 'Trebuchet MS', sans-serif;
+  --font-secondary: 'Aldrich', 'Century Gothic', 'Poppins', sans-serif;
+}
+
+.pra-root, .pra-root * { box-sizing: border-box; }
+
+.pra-root {
+  font-family: var(--font-primary);
+  font-weight: 700;
+  color: var(--pra-white);
+  background: var(--pra-black);
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  /* Lets mobile-breakpoint rules elsewhere key off @container instead of
+     @media — a plain viewport media query can't tell the difference
+     between a real narrow phone and .pra-root being pinned to a narrow
+     width by the admin device-preview frame (chat-header.js), so it only
+     fired correctly by coincidence when the actual browser window also
+     happened to be narrow. Container queries read .pra-root's own
+     rendered width, which is correct in both cases. */
+  container-type: inline-size;
+  container-name: pra-app;
+  overflow-x: hidden;
+}
+
+/* ── Animated glow background ── */
+.pra-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--pra-black);
+  overflow: hidden;
+}
+.pra-bg::before, .pra-bg::after {
+  content: '';
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.pra-bg::before {
+  top: -15vmax;
+  left: -10vmax;
+  background: radial-gradient(circle, var(--pra-blue) 0%, transparent 70%);
+  animation: pra-drift-a 11s ease-in-out infinite;
+}
+.pra-bg::after {
+  bottom: -20vmax;
+  right: -10vmax;
+  background: radial-gradient(circle, #00e0c6 0%, transparent 70%);
+  animation: pra-drift-b 14s ease-in-out infinite;
+}
+@keyframes pra-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20vmax, 14vmax) scale(1.25); }
+}
+@keyframes pra-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-18vmax, -18vmax) scale(1.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pra-bg::before, .pra-bg::after { animation: none; }
+}
+
+/* ── Glowing text emphasis ── */
+.pra-glow {
+  color: var(--pra-white);
+  text-shadow: 0 0 8px var(--pra-blue-glow), 0 0 24px var(--pra-blue-glow);
+}
+.pra-glow-soft {
+  text-shadow: 0 0 6px rgba(255,255,255,0.35);
+}
+
+/* ── Typography ── */
+.pra-h1 { font-family: var(--font-primary); font-weight: 700; font-size: 2.2rem; letter-spacing: .01em; margin: 0; }
+.pra-h2 { font-family: var(--font-primary); font-weight: 700; font-size: 1.4rem; margin: 0; }
+.pra-label {
+  font-family: var(--font-secondary);
+  font-weight: 400;
+  font-size: .72rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pra-dim);
+}
+.pra-mono { font-family: var(--font-secondary); }
+
+/* ── Surfaces ── */
+.pra-panel {
+  background: var(--pra-panel);
+  border: 1px solid var(--pra-border);
+  border-radius: 14px;
+}
+.pra-card {
+  background: var(--pra-panel-2);
+  border: 1px solid var(--pra-border);
+  border-radius: 12px;
+}
+
+/* ── Buttons ── */
+.pra-btn {
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: .85rem;
+  letter-spacing: .03em;
+  color: var(--pra-white);
+  background: var(--pra-blue);
+  border: none;
+  border-radius: 10px;
+  padding: 11px 20px;
+  cursor: pointer;
+  transition: box-shadow .18s, transform .12s, background .18s;
+  box-shadow: 0 0 0 rgba(0,155,255,0);
+}
+.pra-btn:hover { box-shadow: 0 0 18px var(--pra-blue-glow); transform: translateY(-1px); }
+.pra-btn:active { transform: translateY(0); }
+.pra-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; transform: none; }
+.pra-btn-outline {
+  background: transparent;
+  color: var(--pra-blue);
+  border: 1.5px solid var(--pra-blue);
+}
+.pra-btn-outline:hover { background: var(--pra-blue-dim); }
+.pra-btn-ghost {
+  background: transparent;
+  color: var(--pra-dim);
+  border: 1px solid var(--pra-border);
+}
+.pra-btn-ghost:hover { color: var(--pra-white); border-color: var(--pra-blue); }
+
+/* ── Inputs ── */
+.pra-input, .pra-textarea, .pra-select {
+  font-family: var(--font-primary);
+  font-weight: 400;
+  font-size: .92rem;
+  color: var(--pra-white);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--pra-border);
+  border-radius: 9px;
+  padding: 11px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.pra-input::placeholder, .pra-textarea::placeholder { color: #55555f; }
+.pra-input:focus, .pra-textarea:focus, .pra-select:focus {
+  border-color: var(--pra-blue);
+  box-shadow: 0 0 0 3px var(--pra-blue-dim);
+}
+.pra-select { -webkit-appearance: none; appearance: none; cursor: pointer; }
+
+/* ── Search-with-clear wrapper: wrap any <input placeholder="…"> in this
+   plus a <button class="search-clear-btn">✕</button> — the button shows
+   itself automatically once there's text, no JS needed for the toggle. ── */
+.search-clear-wrap { position: relative; }
+.search-clear-wrap input { padding-right: 34px; }
+.search-clear-btn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.08); color: var(--pra-dim);
+  font-size: 11px; line-height: 1; cursor: pointer; display: none;
+  align-items: center; justify-content: center; padding: 0;
+}
+.search-clear-wrap input:not(:placeholder-shown) ~ .search-clear-btn { display: flex; }
+.search-clear-btn:hover { background: var(--pra-blue); color: #fff; }
+/* Without this, the native OS dropdown popup falls back to its own default
+   (usually white) background — invisible/blank rows against this dark theme
+   since only the closed box picks up our colors, not the open option list. */
+.pra-select option { background: var(--pra-panel, #101014); color: var(--pra-white); }
+
+/* ── Avatar ── */
+.pra-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--pra-panel-2);
+  border: 1px solid var(--pra-border);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-secondary);
+  font-size: .95rem;
+  color: var(--pra-blue);
+  object-fit: cover;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ── Role-colored avatar glow — steady, no pulsing, for all roles ── */
+.pra-avatar.role-admin { border-color: #009bff; box-shadow: 0 0 0 2px rgba(0,155,255,.35), 0 0 10px 2px rgba(0,155,255,.6); }
+.pra-avatar.role-coach { border-color: #ff3b3b; box-shadow: 0 0 0 2px rgba(255,59,59,.35), 0 0 10px 2px rgba(255,59,59,.6); }
+.pra-avatar.role-student { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+.pra-avatar.role-user { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35), 0 0 10px 2px rgba(255,255,255,.6); }
+.pra-avatar.role-group { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+
+/* ── Badge / pill ── */
+.pra-badge {
+  display: inline-block;
+  font-family: var(--font-secondary);
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--pra-blue-dim);
+  color: var(--pra-blue);
+  border: 1px solid rgba(0,155,255,0.35);
+}
+
+/* ── Role badge — same four colors as the avatar glow above, shared by
+   the chat sidebar/thread header and the Strength Ninjas map popup. ── */
+.role-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 20px;
+  font-family: var(--font-secondary); font-size: .6rem; letter-spacing: .04em;
+  text-transform: uppercase; font-weight: 700; vertical-align: middle;
+}
+.role-tag-admin { background: rgba(0,155,255,0.15); color: #009bff; }
+.role-tag-coach { background: rgba(255,59,59,0.15); color: #ff3b3b; }
+.role-tag-student { background: rgba(57,255,20,0.15); color: #39ff14; }
+.role-tag-user { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* ── Scrollbars ── */
+.pra-root ::-webkit-scrollbar { width: 8px; height: 8px; }
+.pra-root ::-webkit-scrollbar-track { background: transparent; }
+.pra-root ::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 8px; }
+.pra-root ::-webkit-scrollbar-thumb:hover { background: #3a3a45; }
+
+/* ── Utility ── */
+.pra-flex { display: flex; }
+.pra-center { display: flex; align-items: center; justify-content: center; }
+.pra-muted { color: var(--pra-dim); }
+.pra-link { color: var(--pra-blue); text-decoration: none; cursor: pointer; }
+.pra-link:hover { text-decoration: underline; }

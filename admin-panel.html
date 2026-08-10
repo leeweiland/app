@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin — PRA Chat</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+  .section { padding: 24px; margin-bottom: 20px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: auto; border-collapse: collapse; table-layout: auto; }
+  th { text-align: left; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); padding: 6px 10px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--pra-border); font-size: .8rem; white-space: nowrap; }
+  /* Every other column sizes to its own content (table-layout:auto, no
+     ellipsis) so nothing gets cut off — the zoom link is the one exception,
+     kept just wide enough for its "Zoom" header since the full URL already
+     lives in the input's title tooltip and isn't useful to see inline. */
+  td .zoom-link-input { width: 46px; box-sizing: border-box; font-size: .76rem; padding: 5px 7px; }
+  td .pra-input:not(.zoom-link-input), td .role-select { box-sizing: border-box; font-size: .76rem; padding: 5px 7px; }
+  td .pra-btn, td .pra-btn-ghost { font-size: .7rem; padding: 5px 8px; white-space: nowrap; }
+  .role-select { background: var(--pra-panel-2); color: #fff; border: 1px solid var(--pra-border); border-radius: 6px; padding: 5px 8px; font-family: var(--font-primary); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; margin-bottom: 6px; }
+  .save-msg { font-size: .8rem; color: var(--pra-blue); margin-top: 8px; min-height: 1em; }
+  .users-toolbar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }
+  .users-toolbar #userSearchInput { flex: 1; }
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+  .pagination button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: #fff; cursor: pointer; }
+  .pagination button:hover:not(:disabled) { border-color: var(--pra-blue); }
+  .pagination button:disabled { opacity: .35; cursor: not-allowed; }
+  .pagination .page-label { font-size: .8rem; color: var(--pra-dim); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-backdrop.show { display: flex; }
+  .modal-box { width: 100%; max-width: 400px; padding: 22px; }
+  .reminder-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .reminder-row .reminder-label { font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
+  .reminder-row .reminder-value { width: 70px; flex: none; }
+  .reminder-row .reminder-unit { width: 110px; flex: none; }
+  .reminder-row .reminder-suffix { font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="wrap">
+    <div class="pra-h1 pra-glow" style="margin-bottom:18px">ADMIN PANEL</div>
+
+    <div class="pra-panel section">
+      <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
+      <div class="users-toolbar">
+        <input class="pra-input" id="userSearchInput" placeholder="Search name or email…"/>
+        <button class="pra-btn" id="addUserBtn" style="white-space:nowrap">+ Add User</button>
+      </div>
+      <div id="usersTableWrap">Loading…</div>
+      <div class="pagination" id="usersPagination" style="display:none">
+        <button id="usersPrevBtn">←</button>
+        <div class="page-label" id="usersPageLabel"></div>
+        <button id="usersNextBtn">→</button>
+      </div>
+    </div>
+
+    <div class="pra-panel section">
+      <div class="pra-h2" style="margin-bottom:14px">Chat Configuration</div>
+      <div class="field">
+        <label class="pra-label">Profile Photos Drive Folder ID</label>
+        <input class="pra-input" id="profilePhotosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Chat Image Uploads Drive Folder ID</label>
+        <input class="pra-input" id="chatImagesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Chat Video Uploads Drive Folder ID (uncompressed)</label>
+        <input class="pra-input" id="chatVideosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Training Protocol Uploads Drive Folder ID (new coach-uploaded videos/images go here)</label>
+        <input class="pra-input" id="trainingProtocolFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Training Protocol Video Library Drive Folder ID (the "Choose a Video" picker searches this folder and all its subfolders)</label>
+        <input class="pra-input" id="trainingProtocolVideoLibraryFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Powerbatics Videos Drive Folder ID (source footage for the Powerbatics Training Videos catalog — reference only; each catalog entry is still added by hand in moves_dictionary.json)</label>
+        <input class="pra-input" id="powerbaticsVideosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Favorited Media Drive Folder ID (coaches' starred chat photos/videos are copied here)</label>
+        <input class="pra-input" id="favoritesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
+        <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
+      </div>
+      <button class="pra-btn" id="saveConfigBtn">SAVE CONFIG</button>
+      <div class="save-msg" id="saveMsg"></div>
+    </div>
+
+    <div class="pra-panel section">
+      <div class="pra-h2" style="margin-bottom:14px">Appointments</div>
+
+      <div class="field">
+        <label class="pra-label">Google Calendar Connection</label>
+        <div id="calendarStatusRow" style="font-size:.85rem;padding:8px 0">Checking…</div>
+        <div class="pra-muted" style="font-size:.76rem;line-height:1.5">
+          One connection (lee@pacificrimathletics.com) is enough — within your Workspace, that account can create events directly on any coach's own calendar (uses the email already on file for them, or their "Calendar email" override if it differs). The client is always added as an attendee, so they get Google's own "Add to Calendar" invite too.<br><br>
+          To (re)connect, run <code>node get_calendar_token.js</code>, sign in with lee@pacificrimathletics.com, add the printed line to <code>.env</code>, and restart the dashboard server.
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="pra-label">Default Duration</label>
+        <select class="pra-select" id="apptDefaultDuration" style="width:100%">
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="45">45 minutes</option>
+          <option value="60">60 minutes</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="apptEmailEnabled"/> Send confirmation email
+        </label>
+        <input class="pra-input" id="apptEmailSubject" placeholder="Email subject" style="margin-bottom:8px"/>
+        <textarea class="pra-input" id="apptEmailBody" rows="4" placeholder="Email body (HTML)" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Tokens: {{firstName}} {{lastName}} {{coachName}} {{date}} {{time}} {{duration}}</div>
+      </div>
+
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="apptSmsEnabled"/> Send confirmation text
+        </label>
+        <textarea class="pra-input" id="apptSmsTemplate" rows="2" placeholder="SMS text" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Sent via Close CRM from the number in CLOSE_FROM_PHONE — only works for clients who already exist as a Close lead under the same email.</div>
+      </div>
+
+      <div class="pra-h2" style="margin:22px 0 14px;font-size:1rem">Reminders</div>
+
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="apptEmailRemindersEnabled"/> Send reminder emails
+        </label>
+        <label class="pra-label" style="margin-top:10px">Number of reminders</label>
+        <select class="pra-select" id="apptEmailReminderCount" style="max-width:140px">
+          <option value="0">None</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+        <div id="apptEmailReminderRows" style="margin-top:10px"></div>
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+          <input type="checkbox" id="apptEmailReminderUsesInitial"/> Use the same email as the initial scheduling confirmation
+        </label>
+        <div id="apptEmailReminderTemplateFields">
+          <input class="pra-input" id="apptEmailReminderSubject" placeholder="Reminder email subject" style="margin-top:10px;margin-bottom:8px"/>
+          <textarea class="pra-input" id="apptEmailReminderBody" rows="4" placeholder="Reminder email body (HTML)" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
+          <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Tokens: {{firstName}} {{lastName}} {{coachName}} {{date}} {{time}} {{duration}}</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="apptSmsRemindersEnabled"/> Send reminder texts
+        </label>
+        <label class="pra-label" style="margin-top:10px">Number of reminders</label>
+        <select class="pra-select" id="apptSmsReminderCount" style="max-width:140px">
+          <option value="0">None</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+        <div id="apptSmsReminderRows" style="margin-top:10px"></div>
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+          <input type="checkbox" id="apptSmsReminderUsesInitial"/> Use the same text as the initial scheduling confirmation
+        </label>
+        <div id="apptSmsReminderTemplateFields">
+          <textarea class="pra-input" id="apptSmsReminderTemplate" rows="2" placeholder="Reminder SMS text" style="width:100%;font-family:var(--font-primary);resize:vertical;margin-top:10px"></textarea>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="apptMessengerRemindersEnabled"/> Send reminder messages
+        </label>
+        <label class="pra-label" style="margin-top:10px">Number of reminders</label>
+        <select class="pra-select" id="apptMessengerReminderCount" style="max-width:140px">
+          <option value="0">None</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+        <div id="apptMessengerReminderRows" style="margin-top:10px"></div>
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px">
+          <input type="checkbox" id="apptMessengerReminderUseDefault"/> Use the default reminder message (the same session card shown in the chat thread, with Calendar/Zoom links)
+        </label>
+        <div id="apptMessengerReminderTemplateFields">
+          <textarea class="pra-input" id="apptMessengerReminderTemplate" rows="2" placeholder="Reminder message text" style="width:100%;font-family:var(--font-primary);resize:vertical;margin-top:10px"></textarea>
+          <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Tokens: {{firstName}} {{lastName}} {{coachName}} {{date}} {{time}} {{duration}}</div>
+        </div>
+      </div>
+
+      <button class="pra-btn" id="saveApptConfigBtn">SAVE APPOINTMENT SETTINGS</button>
+      <div class="save-msg" id="apptSaveMsg"></div>
+    </div>
+  </div>
+
+  <!-- Add User -->
+  <div class="modal-backdrop" id="addUserModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Add User</div>
+      <div class="field">
+        <label class="pra-label">First Name</label>
+        <input class="pra-input" id="newUserFirst"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Last Name</label>
+        <input class="pra-input" id="newUserLast"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Email</label>
+        <input class="pra-input" id="newUserEmail" type="email"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Phone</label>
+        <input class="pra-input" id="newUserPhone" type="tel"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Password</label>
+        <input class="pra-input" id="newUserPassword" type="password" placeholder="At least 8 characters"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Role</label>
+        <select class="pra-select" id="newUserRole">
+          <option value="user">User</option>
+          <option value="student">Student</option>
+          <option value="coach">Coach</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="save-msg" id="addUserMsg"></div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="pra-btn" id="addUserSaveBtn" style="flex:1">Create</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('addUserModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Name/email/phone are now edited inline, directly in the table
+       (see .inline-edit wiring below) — no modal needed. -->
+</div>
+
+<script>
+let me = null;
+let allUsers = [];
+let usersPage = 0;
+const USERS_PER_PAGE = 10;
+
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+async function init() {
+  const meRes = await fetch('/api/auth/me');
+  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
+  me = (await meRes.json()).user;
+  if (me.role !== 'admin') {
+    document.querySelector('.wrap').innerHTML = '<div class="pra-panel section pra-glow">Admins only.</div>';
+    return;
+  }
+  loadUsers();
+  loadConfig();
+  loadCalendarStatus();
+  document.getElementById('saveConfigBtn').onclick = saveConfig;
+  document.getElementById('saveApptConfigBtn').onclick = saveApptConfig;
+  wireReminderCount('apptEmailReminderCount', 'apptEmailReminderRows', [1440, 60, 15]);
+  wireReminderCount('apptSmsReminderCount', 'apptSmsReminderRows', [60, 15, 5]);
+  wireReminderCount('apptMessengerReminderCount', 'apptMessengerReminderRows', [60, 15, 5]);
+
+  let searchTimer;
+  document.getElementById('userSearchInput').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { usersPage = 0; renderUsers(); }, 200);
+  });
+  document.getElementById('usersPrevBtn').onclick = () => { usersPage--; renderUsers(); };
+  document.getElementById('usersNextBtn').onclick = () => { usersPage++; renderUsers(); };
+
+  document.getElementById('addUserBtn').onclick = () => {
+    ['newUserFirst', 'newUserLast', 'newUserEmail', 'newUserPhone', 'newUserPassword'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('newUserRole').value = 'user';
+    document.getElementById('addUserMsg').textContent = '';
+    openModal('addUserModal');
+  };
+  document.getElementById('addUserSaveBtn').onclick = createUser;
+}
+
+async function loadUsers() {
+  const r = await fetch('/api/admin/users');
+  const d = await r.json();
+  allUsers = d.users;
+  usersPage = 0;
+  renderUsers();
+}
+
+let usersSortKey = null;   // 'name' | 'email' | 'phone' | 'role' | 'archived'
+let usersSortDir = 'asc';  // 'asc' | 'desc'
+
+const USERS_SORT_ACCESSORS = {
+  name: u => `${u.first} ${u.last}`.toLowerCase(),
+  email: u => (u.email || '').toLowerCase(),
+  phone: u => u.phone || '',           // empty sorts last in both directions, handled below
+  role: u => u.role || '',
+  archived: u => u.archived ? 1 : 0,
+};
+
+function sortUsers(list) {
+  if (!usersSortKey) return list;
+  const get = USERS_SORT_ACCESSORS[usersSortKey];
+  const dir = usersSortDir === 'asc' ? 1 : -1;
+  return [...list].sort((a, b) => {
+    const av = get(a), bv = get(b);
+    // Blank phone numbers always sort to the bottom regardless of direction,
+    // rather than clumping at the top on a descending sort.
+    if (usersSortKey === 'phone') {
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+    }
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+}
+
+function sortHeader(label, key) {
+  const isActive = usersSortKey === key;
+  const upColor = isActive && usersSortDir === 'asc' ? 'var(--pra-blue)' : '#fff';
+  const downColor = isActive && usersSortDir === 'desc' ? 'var(--pra-blue)' : '#fff';
+  return `
+    <th>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        ${label}
+        <span class="sort-arrows" data-key="${key}" style="display:inline-flex;flex-direction:column;line-height:.6;cursor:pointer;user-select:none;padding:6px 4px">
+          <span class="sort-arrow" style="font-size:.55rem;color:${upColor}">▲</span>
+          <span class="sort-arrow" style="font-size:.55rem;color:${downColor}">▼</span>
+        </span>
+      </span>
+    </th>
+  `;
+}
+
+function renderUsers() {
+  const q = document.getElementById('userSearchInput').value.trim().toLowerCase();
+  const searched = q
+    ? allUsers.filter(u => `${u.first} ${u.last} ${u.email}`.toLowerCase().includes(q))
+    : allUsers;
+  const filtered = sortUsers(searched);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / USERS_PER_PAGE));
+  usersPage = Math.min(usersPage, totalPages - 1);
+  const pageUsers = filtered.slice(usersPage * USERS_PER_PAGE, (usersPage + 1) * USERS_PER_PAGE);
+
+  const rows = pageUsers.map(u => `
+    <tr style="${u.archived ? 'opacity:.5' : ''}">
+      <td style="display:flex;gap:4px">
+        <input class="pra-input inline-edit" data-id="${u.id}" data-field="first" value="${escapeAttr(u.first)}" style="width:64px" placeholder="First"/>
+        <input class="pra-input inline-edit" data-id="${u.id}" data-field="last" value="${escapeAttr(u.last)}" style="width:84px" placeholder="Last"/>
+      </td>
+      <td><input class="pra-input inline-edit" data-id="${u.id}" data-field="email" type="email" value="${escapeAttr(u.email)}"/></td>
+      <td><input class="pra-input inline-edit" data-id="${u.id}" data-field="phone" type="tel" value="${escapeAttr(u.phone || '')}"/></td>
+      <td>
+        <select class="role-select" data-id="${u.id}">
+          <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+          <option value="student" ${u.role === 'student' ? 'selected' : ''}>Student</option>
+          <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+      </td>
+      <td>
+        ${u.role === 'coach' || u.role === 'admin' ? `
+          <input class="pra-input zoom-link-input" data-id="${u.id}" placeholder="https://zoom.us/j/..." value="${u.zoomLink || ''}" title="${u.zoomLink || ''}"/>
+        ` : '—'}
+      </td>
+      <td>
+        ${u.role === 'admin' ? '—' : `
+          <button class="pra-btn pra-btn-ghost archive-btn" data-id="${u.id}" data-archived="${!!u.archived}" style="padding:5px 12px;font-size:.75rem">
+            ${u.archived ? 'Unarchive' : 'Archive'}
+          </button>
+        `}
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
+    <div class="table-scroll">
+    <table>
+      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>
+  ` : '<div class="pra-muted" style="text-align:center;padding:20px 0">No users match.</div>';
+
+  document.querySelectorAll('.sort-arrows').forEach(el => {
+    // Whole up/down icon is one click target — no need to land precisely on
+    // the tiny ▲ or ▼ glyph. Clicking a new column sorts it ascending;
+    // clicking the already-active column toggles between asc/desc.
+    el.addEventListener('click', () => {
+      const key = el.dataset.key;
+      usersSortDir = (usersSortKey === key && usersSortDir === 'asc') ? 'desc' : 'asc';
+      usersSortKey = key;
+      usersPage = 0;
+      renderUsers();
+    });
+  });
+
+  const pagination = document.getElementById('usersPagination');
+  pagination.style.display = filtered.length > USERS_PER_PAGE ? 'flex' : 'none';
+  document.getElementById('usersPageLabel').textContent = `Page ${usersPage + 1} of ${totalPages}`;
+  document.getElementById('usersPrevBtn').disabled = usersPage === 0;
+  document.getElementById('usersNextBtn').disabled = usersPage >= totalPages - 1;
+
+  document.querySelectorAll('.role-select').forEach(sel => {
+    const prevValue = sel.value;
+    sel.addEventListener('change', async () => {
+      const r = await fetch('/api/admin/users/' + sel.dataset.id + '/role', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: sel.value })
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.error || 'Could not change role.');
+        sel.value = prevValue;
+        return;
+      }
+      const target = allUsers.find(u => u.id === sel.dataset.id);
+      if (target) target.role = sel.value;
+      renderUsers(); // role change can affect other columns (zoom link, archive) for this row
+    });
+  });
+  document.querySelectorAll('.zoom-link-input').forEach(input => {
+    input.addEventListener('blur', async () => {
+      await fetch('/api/admin/users/' + input.dataset.id + '/zoom-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zoomLink: input.value.trim() })
+      });
+      const target = allUsers.find(u => u.id === input.dataset.id);
+      if (target) target.zoomLink = input.value.trim();
+    });
+  });
+  document.querySelectorAll('.archive-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const wasArchived = btn.dataset.archived === 'true';
+      // Archiving locks the account out of login (kicking any live session
+      // too) and drops their dot off the Users Map — their spreadsheet row
+      // is never touched, this only flips a flag in chat_users.json.
+      if (!wasArchived && !confirm('Archive this user? They will be logged out and unable to sign back in until unarchived. Their spreadsheet data is untouched.')) return;
+      await fetch('/api/admin/users/' + btn.dataset.id + '/archived', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: !wasArchived })
+      });
+      loadUsers();
+    });
+  });
+  // Click into Name/Email/Phone and type — saves on blur (or Enter) with no
+  // separate Edit button/modal. Only fires when the value actually changed,
+  // and reverts + alerts on a rejected save (blank required field, or an
+  // email collision) so a bad edit never sits there looking saved.
+  document.querySelectorAll('.inline-edit').forEach(input => {
+    let original = input.value;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+    input.addEventListener('blur', async () => {
+      const val = input.value.trim();
+      if (val === original) return;
+      if ((input.dataset.field === 'first' || input.dataset.field === 'last' || input.dataset.field === 'email') && !val) {
+        alert((input.dataset.field === 'email' ? 'Email' : 'Name') + " can't be blank.");
+        input.value = original;
+        return;
+      }
+      const r = await fetch('/api/admin/users/' + input.dataset.id + '/profile', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [input.dataset.field]: val })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        alert(d.error || 'Could not save that change.');
+        input.value = original;
+        return;
+      }
+      const target = allUsers.find(u => u.id === input.dataset.id);
+      if (target) target[input.dataset.field] = d.user[input.dataset.field];
+      input.value = d.user[input.dataset.field];
+      original = input.value;
+      input.style.borderColor = '#3fb950';
+      setTimeout(() => { input.style.borderColor = ''; }, 1200);
+    });
+  });
+}
+
+async function createUser() {
+  const msg = document.getElementById('addUserMsg');
+  const payload = {
+    first: document.getElementById('newUserFirst').value.trim(),
+    last: document.getElementById('newUserLast').value.trim(),
+    email: document.getElementById('newUserEmail').value.trim(),
+    phone: document.getElementById('newUserPhone').value.trim(),
+    password: document.getElementById('newUserPassword').value,
+    role: document.getElementById('newUserRole').value,
+  };
+  if (!payload.first || !payload.last || !payload.email || !payload.password) { msg.textContent = 'First, last, email, and password are required.'; return; }
+  if (payload.password.length < 8) { msg.textContent = 'Password must be at least 8 characters.'; return; }
+  msg.textContent = 'Creating…';
+  const r = await fetch('/api/admin/users', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const d = await r.json();
+  if (!r.ok) { msg.textContent = d.error || 'Could not create user.'; return; }
+  closeModal('addUserModal');
+  loadUsers();
+}
+
+async function loadConfig() {
+  const r = await fetch('/api/admin/chat-config');
+  if (!r.ok) return;
+  const d = await r.json();
+  document.getElementById('profilePhotosFolderId').value = d.profilePhotosFolderId || '';
+  document.getElementById('chatImagesFolderId').value = d.chatImagesFolderId || '';
+  document.getElementById('chatVideosFolderId').value = d.chatVideosFolderId || '';
+  document.getElementById('trainingProtocolFolderId').value = d.trainingProtocolFolderId || '';
+  document.getElementById('trainingProtocolVideoLibraryFolderId').value = d.trainingProtocolVideoLibraryFolderId || '';
+  document.getElementById('powerbaticsVideosFolderId').value = d.powerbaticsVideosFolderId || '';
+  document.getElementById('favoritesFolderId').value = d.favoritesFolderId || '';
+  document.getElementById('gifApiKey').value = d.gifApiKey || '';
+
+  const a = d.appointments || {};
+  document.getElementById('apptDefaultDuration').value = String(a.defaultDurationMinutes || 15);
+  document.getElementById('apptEmailEnabled').checked = a.emailEnabled !== false;
+  document.getElementById('apptEmailSubject').value = a.emailSubjectTemplate || '';
+  document.getElementById('apptEmailBody').value = a.emailBodyTemplate || '';
+  document.getElementById('apptSmsEnabled').checked = a.smsEnabled !== false;
+  document.getElementById('apptSmsTemplate').value = a.smsTemplate || '';
+
+  document.getElementById('apptEmailRemindersEnabled').checked = a.emailRemindersEnabled !== false;
+  const emailMinutes = (a.emailReminderMinutesBefore || []).slice(0, 3);
+  document.getElementById('apptEmailReminderCount').value = String(emailMinutes.length);
+  renderReminderRows('apptEmailReminderRows', emailMinutes);
+  document.getElementById('apptEmailReminderSubject').value = a.emailReminderSubjectTemplate || '';
+  document.getElementById('apptEmailReminderBody').value = a.emailReminderBodyTemplate || '';
+  document.getElementById('apptEmailReminderUsesInitial').checked = !!a.emailReminderUsesInitialTemplate;
+  toggleReminderTemplateFields('apptEmailReminderUsesInitial', 'apptEmailReminderTemplateFields');
+
+  document.getElementById('apptSmsRemindersEnabled').checked = a.smsRemindersEnabled !== false;
+  const smsMinutes = (a.smsReminderMinutesBefore || []).slice(0, 3);
+  document.getElementById('apptSmsReminderCount').value = String(smsMinutes.length);
+  renderReminderRows('apptSmsReminderRows', smsMinutes);
+  document.getElementById('apptSmsReminderTemplate').value = a.smsReminderTemplate || '';
+  document.getElementById('apptSmsReminderUsesInitial').checked = !!a.smsReminderUsesInitialTemplate;
+  toggleReminderTemplateFields('apptSmsReminderUsesInitial', 'apptSmsReminderTemplateFields');
+
+  document.getElementById('apptMessengerRemindersEnabled').checked = a.messengerRemindersEnabled !== false;
+  const messengerMinutes = (a.messengerReminderMinutesBefore || []).slice(0, 3);
+  document.getElementById('apptMessengerReminderCount').value = String(messengerMinutes.length);
+  renderReminderRows('apptMessengerReminderRows', messengerMinutes);
+  document.getElementById('apptMessengerReminderTemplate').value = a.messengerReminderTemplate || '';
+  document.getElementById('apptMessengerReminderUseDefault').checked = a.messengerReminderUseDefault !== false;
+  toggleReminderTemplateFields('apptMessengerReminderUseDefault', 'apptMessengerReminderTemplateFields');
+}
+
+// Hides the reminder-specific subject/body fields while "use the same as
+// initial" is checked — nothing to fill in since the confirmation template
+// gets reused at send time (see chat_backend.js's reminder job).
+function toggleReminderTemplateFields(checkboxId, fieldsId) {
+  document.getElementById(fieldsId).style.display = document.getElementById(checkboxId).checked ? 'none' : '';
+}
+document.getElementById('apptEmailReminderUsesInitial').addEventListener('change', () => toggleReminderTemplateFields('apptEmailReminderUsesInitial', 'apptEmailReminderTemplateFields'));
+document.getElementById('apptSmsReminderUsesInitial').addEventListener('change', () => toggleReminderTemplateFields('apptSmsReminderUsesInitial', 'apptSmsReminderTemplateFields'));
+document.getElementById('apptMessengerReminderUseDefault').addEventListener('change', () => toggleReminderTemplateFields('apptMessengerReminderUseDefault', 'apptMessengerReminderTemplateFields'));
+
+// Reminders are stored as flat minutesBefore arrays, but edited as a
+// value + unit pair per row (e.g. "24" + "Hours") since raw minutes ("1440")
+// isn't a friendly thing to type or read for anything over an hour out.
+function minutesToValueUnit(minutes) {
+  if (minutes % 1440 === 0 && minutes > 0) return { value: minutes / 1440, unit: 1440 };
+  if (minutes % 60 === 0 && minutes > 0) return { value: minutes / 60, unit: 60 };
+  return { value: minutes, unit: 1 };
+}
+
+function renderReminderRows(containerId, minutesArray) {
+  document.getElementById(containerId).innerHTML = minutesArray.map((minutes, i) => {
+    const { value, unit } = minutesToValueUnit(minutes);
+    return `
+      <div class="reminder-row" data-idx="${i}">
+        <span class="reminder-label">Reminder ${i + 1} —</span>
+        <input type="number" class="pra-input reminder-value" min="1" value="${value}"/>
+        <select class="pra-select reminder-unit">
+          <option value="1" ${unit === 1 ? 'selected' : ''}>Minutes</option>
+          <option value="60" ${unit === 60 ? 'selected' : ''}>Hours</option>
+          <option value="1440" ${unit === 1440 ? 'selected' : ''}>Days</option>
+        </select>
+        <span class="reminder-suffix">before</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function readReminderRows(containerId) {
+  return [...document.querySelectorAll(`#${containerId} .reminder-row`)].map(row => {
+    const value = Math.max(1, Number(row.querySelector('.reminder-value').value) || 1);
+    const unit = Number(row.querySelector('.reminder-unit').value);
+    return value * unit;
+  });
+}
+
+// Growing the count keeps whatever rows already exist and fills new ones
+// with a sensible default lead time instead of resetting everything.
+function wireReminderCount(countId, containerId, defaultMinutes) {
+  document.getElementById(countId).addEventListener('change', (e) => {
+    const count = Number(e.target.value);
+    const current = readReminderRows(containerId);
+    const next = Array.from({ length: count }, (_, i) => current[i] || defaultMinutes[i] || defaultMinutes[defaultMinutes.length - 1]);
+    renderReminderRows(containerId, next);
+  });
+}
+
+async function loadCalendarStatus() {
+  const row = document.getElementById('calendarStatusRow');
+  try {
+    const r = await fetch('/api/admin/appointments-calendar-status');
+    const d = await r.json();
+    row.innerHTML = d.connected
+      ? `<span style="color:#3fb950">✓ Connected</span>${d.email ? ' — ' + d.email : ''}`
+      : `<span style="color:#ff3b3b">✕ Not connected</span>${d.error ? ' — ' + d.error : ''}`;
+  } catch (e) {
+    row.innerHTML = `<span style="color:#ff3b3b">✕ Could not check status</span>`;
+  }
+}
+
+async function saveConfig() {
+  await fetch('/api/admin/chat-config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profilePhotosFolderId: document.getElementById('profilePhotosFolderId').value.trim(),
+      chatImagesFolderId: document.getElementById('chatImagesFolderId').value.trim(),
+      chatVideosFolderId: document.getElementById('chatVideosFolderId').value.trim(),
+      trainingProtocolFolderId: document.getElementById('trainingProtocolFolderId').value.trim(),
+      trainingProtocolVideoLibraryFolderId: document.getElementById('trainingProtocolVideoLibraryFolderId').value.trim(),
+      powerbaticsVideosFolderId: document.getElementById('powerbaticsVideosFolderId').value.trim(),
+      favoritesFolderId: document.getElementById('favoritesFolderId').value.trim(),
+      gifApiKey: document.getElementById('gifApiKey').value.trim(),
+    }),
+  });
+  const msg = document.getElementById('saveMsg');
+  msg.textContent = 'Saved.';
+  setTimeout(() => msg.textContent = '', 2000);
+}
+
+async function saveApptConfig() {
+  await fetch('/api/admin/chat-config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      appointments: {
+        defaultDurationMinutes: Number(document.getElementById('apptDefaultDuration').value),
+        emailEnabled: document.getElementById('apptEmailEnabled').checked,
+        emailSubjectTemplate: document.getElementById('apptEmailSubject').value,
+        emailBodyTemplate: document.getElementById('apptEmailBody').value,
+        smsEnabled: document.getElementById('apptSmsEnabled').checked,
+        smsTemplate: document.getElementById('apptSmsTemplate').value,
+        emailRemindersEnabled: document.getElementById('apptEmailRemindersEnabled').checked,
+        emailReminderMinutesBefore: readReminderRows('apptEmailReminderRows'),
+        emailReminderUsesInitialTemplate: document.getElementById('apptEmailReminderUsesInitial').checked,
+        emailReminderSubjectTemplate: document.getElementById('apptEmailReminderSubject').value,
+        emailReminderBodyTemplate: document.getElementById('apptEmailReminderBody').value,
+        smsRemindersEnabled: document.getElementById('apptSmsRemindersEnabled').checked,
+        smsReminderMinutesBefore: readReminderRows('apptSmsReminderRows'),
+        smsReminderUsesInitialTemplate: document.getElementById('apptSmsReminderUsesInitial').checked,
+        smsReminderTemplate: document.getElementById('apptSmsReminderTemplate').value,
+        messengerRemindersEnabled: document.getElementById('apptMessengerRemindersEnabled').checked,
+        messengerReminderMinutesBefore: readReminderRows('apptMessengerReminderRows'),
+        messengerReminderUseDefault: document.getElementById('apptMessengerReminderUseDefault').checked,
+        messengerReminderTemplate: document.getElementById('apptMessengerReminderTemplate').value,
+      },
+    }),
+  });
+  const msg = document.getElementById('apptSaveMsg');
+  msg.textContent = 'Saved.';
+  setTimeout(() => msg.textContent = '', 2000);
+}
+
+init();
+</script>
+</body>
+</html>

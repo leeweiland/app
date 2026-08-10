@@ -1,0 +1,14 @@
+[
+  {
+    "userId": "a2ad8a1d-6fef-41ef-b97e-7a6a90392233",
+    "subscription": {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/e2E7z-eUyUA:APA91bFjESfT18TQVJ54D0nZBSLhqrppCq2ukvYyd4h2pdH2t036fLX4G96b15BJuGCrfIhYf2tdCygiol56XYpDobww4iDTdslXzKMi8CTbhoQdw_AIWUQd07og4eub3eKpu8gV_BN6",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BOMFzjiRNclZIrGuJGZ51BE04N44VzzruPyfrswLepYT4LD4pk6E-lZWcKFEULHKPQD8OhWBXl5KYEq5VvIdanA",
+        "auth": "wFD5r0mmS7DS-XrIssP_WQ"
+      }
+    },
+    "createdAt": "2026-08-10T03:50:07.880Z"
+  }
+]

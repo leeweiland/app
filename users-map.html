@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Strength Ninjas — PRA</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  body { margin: 0; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 12px 12px 30px; }
+  /* aspect-ratio:1/1 is the desktop/tablet default (unchanged, wide-screen
+     look). Below 640px (see the override further down and fitMapBox's own
+     width check) it's dropped instead: the box fills whatever rectangle is
+     actually available, letterboxed by the SVG's own default
+     preserveAspectRatio ("xMidYMid meet") to keep the circle undistorted
+     and centered. Tried dropping aspect-ratio unconditionally first, but on
+     desktop that turned the box into a WIDE rectangle with large empty
+     side-bars — fine on a portrait phone (small side-margin) but a real
+     regression on a landscape screen, so it's scoped to narrow widths only,
+     where a portrait phone's "small square stuck at the top, dead space
+     below" was the actual complaint. */
+  .map-box { position: relative; width: 100%; aspect-ratio: 1/1; min-height: 300px; margin: 0 auto; overflow: hidden; touch-action: none; }
+  @container pra-app (max-width: 640px) {
+    .map-box { aspect-ratio: unset; }
+  }
+  .map-box svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  .map-box svg.panning { cursor: grabbing; }
+  .water { fill: #0a1c30; }
+  .continent { fill: #0a5c40; stroke: #00e0c6; stroke-width: 0.6; fill-rule: evenodd; }
+  .continent-outline { fill: #2c5573; stroke: #00e0c6; stroke-width: 0.6; fill-rule: evenodd; }
+  .state-line { fill: none; stroke: #00e0c6; stroke-width: 0.25; opacity: 0.55; }
+  .grid-ring { fill: none; stroke: #5f727faa; stroke-width: 0.8; }
+  .grid-line { stroke: #5f727faa; stroke-width: 0.8; }
+  .user-dot { fill: var(--pra-blue); stroke: #fff; stroke-width: 1; cursor: pointer; }
+  .user-dot-img { }
+  .user-dot-ring { fill: none; stroke: var(--pra-blue); stroke-width: 1.5; }
+  .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 14px; }
+
+  /* ── Upcoming Retreats — tactical HUD-style map callouts ── */
+  .retreat-hud { cursor: pointer; }
+  .retreat-hud-leader { stroke: #009bff; stroke-dasharray: 2 2; opacity: .85; }
+  .retreat-hud-panel { fill: rgba(0,155,255,0.14); stroke: #009bff; }
+  .retreat-hud-bracket { fill: none; stroke: #009bff; }
+  .retreat-hud-reticle { fill: #009bff; stroke: #fff; }
+  @keyframes retreat-pulse { 0%, 100% { opacity: .15; } 50% { opacity: .65; } }
+  .retreat-hud-pulse { fill: none; stroke: #009bff; animation: retreat-pulse 2.4s ease-in-out infinite; }
+  .retreat-hud-location { fill: #fff; font-family: var(--font-secondary); font-weight: 700; letter-spacing: .04em; }
+  .retreat-hud-year { fill: #009bff; font-family: var(--font-secondary); letter-spacing: .03em; }
+  .retreat-hud:hover .retreat-hud-panel { fill: rgba(0,155,255,0.24); }
+
+  .popup-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .popup-backdrop.show { display: flex; }
+  .popup-box { padding: 26px; text-align: center; width: 300px; }
+  .popup-avatar { width: 84px; height: 84px; margin: 0 auto 14px; font-size: 1.8rem; }
+  .popup-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .popup-levels-program { margin-bottom: 10px; }
+  .popup-super-level { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 6px; }
+  .popup-super-level .num { color: #009bff; font-weight: 700; font-size: .8rem; }
+  .popup-levels-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .popup-level-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 7px; padding: 5px 10px; font-size: .72rem; width: 100%; }
+  .popup-level-chip .cat { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
+  .popup-level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .retreat-popup-photo { width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; background: rgba(0,155,255,0.1); border: 1px solid var(--pra-border); }
+  .retreat-popup-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="wrap">
+    <div class="pra-h1 pra-glow" style="margin-bottom:6px">STRENGTH NINJAS WORLD MAP</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Every dot is someone in the community — tap one to see who.</div>
+    <div class="map-box pra-panel" id="mapBox" style="padding:6px">
+      <svg id="mapSvg" viewBox="0 0 800 800"></svg>
+    </div>
+    <div class="empty-hint" id="emptyHint" style="display:none">No located users yet.</div>
+  </div>
+
+  <div class="popup-backdrop" id="popup">
+    <div class="pra-panel popup-box">
+      <div class="pra-avatar popup-avatar" id="popupAvatar"></div>
+      <div class="pra-h2" id="popupName"></div>
+      <div id="popupRoleBadge" style="margin-top:4px"></div>
+      <div class="pra-muted" id="popupLocation" style="margin-top:6px;font-size:.85rem"></div>
+      <div id="popupLevels" style="margin-top:14px;text-align:left"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closePopup()">Close</button>
+    </div>
+  </div>
+
+  <div class="popup-backdrop" id="retreatPopup">
+    <div class="pra-panel popup-box" style="width:340px">
+      <div class="retreat-popup-photo" id="retreatPopupPhoto"></div>
+      <div class="pra-h2" id="retreatPopupTitle" style="margin-top:14px"></div>
+      <div class="pra-muted" id="retreatPopupYear" style="font-size:.85rem;margin-top:2px"></div>
+      <div class="pra-muted" id="retreatPopupDesc" style="margin-top:12px;font-size:.8rem;line-height:1.6;text-align:left;display:flex;flex-direction:column;gap:6px"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closeRetreatPopup()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SIZE = 800, CENTER = 400, MAX_RADIUS = 370;
+let mapScale = 1;
+
+// The blur radii here are SVG user-units, not screen pixels — inside a
+// zoomable viewBox those get multiplied by the current zoom scale right
+// along with everything else, so a filter set once at a fixed px value
+// balloons into a screen-covering haze at high zoom. Deriving it from the
+// dot's already screen-px-anchored radius (see currentDotRadius) keeps the
+// glow's on-screen size constant the same way the dot itself stays constant.
+function roleGlowFilter(role, r) {
+  const inner = r / 3, outer = (r * 2) / 3;
+  if (role === "admin")  return `drop-shadow(0 0 ${inner}px #009bff) drop-shadow(0 0 ${outer}px #009bff)`;
+  if (role === "coach")  return `drop-shadow(0 0 ${inner}px #ff3333) drop-shadow(0 0 ${outer}px #ff3333)`;
+  if (role === "student") return `drop-shadow(0 0 ${inner}px #39ff14) drop-shadow(0 0 ${outer}px #39ff14)`;
+  return `drop-shadow(0 0 ${inner}px rgba(255,255,255,0.9)) drop-shadow(0 0 ${outer}px rgba(255,255,255,0.6))`;
+}
+function roleStroke(role) {
+  if (role === "admin") return "#009bff";
+  if (role === "coach")  return "#ff3333";
+  if (role === "student") return "#39ff14";
+  return "#ffffff";
+}
+function roleBadgeHtml(u) {
+  if (u?.role === "admin") return '<span class="role-tag role-tag-admin">Admin</span>';
+  if (u?.role === "coach") return '<span class="role-tag role-tag-coach">Coach</span>';
+  if (u?.role === "student") return '<span class="role-tag role-tag-student">Student</span>';
+  if (u?.role === "user") return '<span class="role-tag role-tag-user">User</span>';
+  return "";
+}
+
+// Azimuthal equidistant projection centered on the North Pole — the actual
+// projection real "flat earth" maps use (also the UN flag's projection).
+// Distance from center is linear in colatitude, not foreshortened like a
+// globe photo would be, so it directly matches the requested map style.
+function project(lng, lat) {
+  const colat = 90 - lat; // 0 at north pole, 180 at south pole
+  const radius = (colat / 180) * MAX_RADIUS;
+  // Rotation + mirror to match the reference flat-earth-style AE map: Africa
+  // (Cape of Good Hope, lng≈18E) sits at the BOTTOM of that map, not the top,
+  // and the Americas sit on the LEFT with Asia on the RIGHT. Earlier attempts
+  // only ever toggled the mirror while leaving Greenwich pointing straight up
+  // (angle = ±lng) — that's a different bug than the one shown in the
+  // reference. This is a mirror (negate lng) combined with a 180° rotation
+  // (Greenwich → bottom instead of top), derived directly from the reference
+  // image rather than from convention/memory.
+  const angle = ((180 - lng) * Math.PI) / 180;
+  return { x: CENTER + radius * Math.sin(angle), y: CENTER - radius * Math.cos(angle) };
+}
+
+// This projection is highly nonlinear (especially near the pole and near the
+// outer rim), so straight segments between the source data's real vertices
+// — sparse enough to look fine on an ordinary map — render as visibly jagged
+// chords here instead of the smooth coastline curves they should be.
+// Densifying each edge in lng/lat space before projecting fixes that: it's
+// the same technique mapping libraries (e.g. d3-geo's adaptive resampling)
+// use for exactly this reason.
+function densifyRing(ring, steps = 10) {
+  const out = [];
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [alng, alat] = ring[i];
+    let [blng, blat] = ring[i + 1];
+    // Guard against a spurious near-360° interpolation for a pair of points
+    // that are actually close together but landed on opposite sides of the
+    // ±180° seam — shouldn't occur in this pre-split dataset, but cheap to
+    // guard regardless of the underlying data's cleanliness.
+    if (blng - alng > 180) blng -= 360;
+    else if (alng - blng > 180) blng += 360;
+    out.push([alng, alat]);
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      out.push([alng + (blng - alng) * t, alat + (blat - alat) * t]);
+    }
+  }
+  out.push(ring[ring.length - 1]);
+  return out;
+}
+
+function ringToPath(ring) {
+  const dense = densifyRing(ring);
+  return dense.map((pt, i) => {
+    const { x, y } = project(pt[0], pt[1]);
+    return (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ") + " Z";
+}
+
+// Returns one path-string per polygon part, not one joined string for the
+// whole feature. A MultiPolygon's parts are otherwise-unrelated landmasses
+// (e.g. Chile's mainland vs. its southern archipelago) that only happen to
+// be near each other in real geography — but this projection's tangential
+// stretching (severe near the outer rim, where southern-hemisphere land
+// sits) can push two such parts into overlapping screen-space regions even
+// though they never overlap in lng/lat. Concatenated into one <path> under
+// fill-rule:evenodd, that overlap gets read as a hole and bites a chunk out
+// of solid land. Keeping each part its own <path> still lets evenodd punch
+// real holes (a lake ring inside that same part's outer ring) while making
+// it impossible for two unrelated parts to cancel each other out.
+function featureToPathParts(geometry) {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.map(rings => rings.map(ringToPath).join(" "));
+}
+
+// The map's own outer edge, as a path subpath (two arcs) rather than a
+// standalone <circle> — needed so it can be combined with Antarctica's own
+// ring in a single <path> and take part in that path's fill-rule.
+function outerBoundaryRingPath() {
+  const r = MAX_RADIUS;
+  return `M ${CENTER + r},${CENTER} A ${r},${r} 0 1,0 ${CENTER - r},${CENTER} A ${r},${r} 0 1,0 ${CENTER + r},${CENTER} Z`;
+}
+
+function buildGrid() {
+  const gridGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  for (let lat = 75; lat >= -75; lat -= 15) {
+    const r = ((90 - lat) / 180) * MAX_RADIUS;
+    const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    ring.setAttribute("cx", CENTER); ring.setAttribute("cy", CENTER); ring.setAttribute("r", r);
+    ring.setAttribute("class", "grid-ring");
+    gridGroup.appendChild(ring);
+  }
+  const outer = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  outer.setAttribute("cx", CENTER); outer.setAttribute("cy", CENTER); outer.setAttribute("r", MAX_RADIUS);
+  outer.setAttribute("class", "grid-ring");
+  gridGroup.appendChild(outer);
+  for (let lng = 0; lng < 360; lng += 15) {
+    const p = project(lng, -90);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", CENTER); line.setAttribute("y1", CENTER);
+    line.setAttribute("x2", p.x); line.setAttribute("y2", p.y);
+    line.setAttribute("class", "grid-line");
+    gridGroup.appendChild(line);
+  }
+  return gridGroup;
+}
+
+// Screen-space (post-projection) land polygons, populated by drawContinents
+// — see isOverLand below.
+let landPolygonsScreen = [];
+function isPointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    const intersect = (yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+function isOverLand(x, y) {
+  return landPolygonsScreen.some(poly =>
+    isPointInRing(x, y, poly.outer) && !poly.holes.some(h => isPointInRing(x, y, h))
+  );
+}
+
+async function drawContinents() {
+  const svg = document.getElementById("mapSvg");
+
+  const water = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  water.setAttribute("cx", CENTER); water.setAttribute("cy", CENTER); water.setAttribute("r", MAX_RADIUS);
+  water.setAttribute("class", "water");
+  svg.appendChild(water);
+
+  // Grid drawn once now (under the land) purely so it's in the DOM in the
+  // right relative order for anything depending on paint order; the copy
+  // that's actually visible over land is redrawn again below, on top.
+  try {
+    const r = await fetch("/chat-app/world-boundaries.json");
+    const geo = await r.json();
+    const landGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    geo.features.forEach(f => {
+      const polygons = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+      polygons.forEach(rings => {
+        // A ring spanning the full -180..180 range wraps the pole itself —
+        // the one real case is Antarctica's main coastline. In a
+        // north-pole-centered azimuthal projection the South Pole isn't a
+        // point, it's the ENTIRE outer edge, so that ring's "inside" (by
+        // ordinary fill rules) is almost the whole disc, not a thin ring at
+        // the rim. Appending the map's own outer boundary as a second
+        // subpath and relying on fill-rule:evenodd (already set on both
+        // classes) restricts the fill to just the true annulus between that
+        // coastline and the map's edge — the other 7 small sub-Antarctic
+        // island parts in this dataset don't span the pole and need no
+        // special handling, just their own ring.
+        const spansPole = rings.some(ring =>
+          ring.length && (Math.max(...ring.map(p => p[0])) - Math.min(...ring.map(p => p[0])) > 180)
+        );
+        // Screen-space copy of this same ring data, kept around purely so
+        // the retreat HUD placement (drawRetreats) can test whether a
+        // candidate panel position would land on green land instead of open
+        // water — see isOverLand below. GeoJSON convention: rings[0] is the
+        // outer boundary, any further rings are holes. A pole-spanning ring
+        // is skipped here: naive per-vertex projection turns its "hug the
+        // rim" shape into chords that cut straight across the disc (the
+        // same distortion the annulus trick above works around for
+        // rendering), which — left in — flagged the map's entire CENTER as
+        // land. Every retreat here is near the north pole, opposite
+        // Antarctica, so simply excluding it from the land test is safe.
+        if (!spansPole) {
+          landPolygonsScreen.push({
+            outer: rings[0].map(([lng, lat]) => { const p = project(lng, lat); return [p.x, p.y]; }),
+            holes: rings.slice(1).map(ring => ring.map(([lng, lat]) => { const p = project(lng, lat); return [p.x, p.y]; })),
+          });
+        }
+        let d = rings.map(ringToPath).join(" ");
+        if (spansPole) d += " " + outerBoundaryRingPath();
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d);
+        path.setAttribute("class", spansPole ? "continent-outline" : "continent");
+        landGroup.appendChild(path);
+      });
+    });
+    svg.appendChild(landGroup);
+  } catch (e) { console.warn("world boundaries failed to load", e); }
+
+  // US state borders — a second, subtler line weight drawn stroke-only (no
+  // fill) so the country-level land fill underneath still shows through;
+  // only the line itself is added on top.
+  try {
+    const statesR = await fetch("/chat-app/us-states.json");
+    const statesGeo = await statesR.json();
+    const stateGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    statesGeo.features.forEach(f => {
+      featureToPathParts(f.geometry).forEach(d => {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d);
+        path.setAttribute("class", "state-line");
+        stateGroup.appendChild(path);
+      });
+    });
+    svg.appendChild(stateGroup);
+  } catch (e) { console.warn("us state boundaries failed to load", e); }
+
+  // Redrawn on top of the land fill so the lat/long lines stay visible
+  // instead of being painted over by the continents.
+  svg.appendChild(buildGrid());
+}
+
+let users = [];
+let dotDescriptors = [];
+
+function clientToSvgPoint(clientX, clientY) {
+  const svg = document.getElementById("mapSvg");
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const p = pt.matrixTransform(ctm.inverse());
+  return { x: p.x, y: p.y };
+}
+function dotCurrentCenter(d, scale) {
+  const baseR = currentDotRadius(scale);
+  const { dx, dy } = spreadOffset(d.n, d.angle, baseR, scale);
+  return { x: d.baseX + dx, y: d.baseY + dy };
+}
+
+// Hover is driven by cursor distance to each dot's actual center rather
+// than native per-shape mouseenter/mouseleave. Native events broke down
+// once dots overlap (a routine case — same-city clusters) and one of them
+// enlarges + jumps to the DOM front on hover: the enlarged dot's own hit
+// area balloons and re-layers on top of its neighbors, which could swallow
+// a neighbor's mouseenter entirely — hovering "into" a neighboring dot
+// never actually handed hover over, so the first dot stayed enlarged (or,
+// with a fast enough motion, got stuck permanently). A single source of
+// truth — whichever dot is closest to the cursor, within its own radius —
+// sidesteps all of that: switching hover on every mousemove is naturally
+// hover-hand-off-safe, and there's no per-shape event wiring left to race.
+let hoveredDesc = null;
+let dotHoverSetup = false;
+function setupDotHover() {
+  if (dotHoverSetup) return;
+  dotHoverSetup = true;
+  const svg = document.getElementById("mapSvg");
+  svg.addEventListener("mousemove", (e) => {
+    const p = clientToSvgPoint(e.clientX, e.clientY);
+    const hitR = currentDotRadius(mapScale);
+    let closest = null, closestDist = Infinity;
+    dotDescriptors.forEach(d => {
+      const c = dotCurrentCenter(d, mapScale);
+      const dist = Math.hypot(p.x - c.x, p.y - c.y);
+      if (dist <= hitR && dist < closestDist) { closest = d; closestDist = dist; }
+    });
+    if (closest === hoveredDesc) return;
+    if (hoveredDesc) hoveredDesc.revert();
+    hoveredDesc = closest;
+    if (hoveredDesc) hoveredDesc.enlarge();
+  });
+  svg.addEventListener("mouseleave", () => {
+    if (hoveredDesc) { hoveredDesc.revert(); hoveredDesc = null; }
+  });
+}
+
+// Dots hold a constant 30px on-screen size at every zoom level — they never
+// shrink, so a tap target and a person's marker always read the same.
+const DOT_PX = 30;
+function pxPerSvgUnit(scale) {
+  const rect = document.getElementById("mapBox").getBoundingClientRect();
+  // mapBox is no longer forced square, but the SVG's own viewBox always is
+  // — its default preserveAspectRatio ("meet") fits that square content to
+  // whichever of the box's two dimensions is smaller (letterboxing the
+  // other), so that's the dimension that actually determines screen-px-
+  // per-SVG-unit. Using rect.width unconditionally (fine back when the box
+  // itself was always square, so width===height) went wrong as soon as the
+  // box could be taller or wider than it is deep.
+  const renderedSize = Math.min(rect.width, rect.height);
+  return (renderedSize * scale) / SIZE;
+}
+function currentDotRadius(scale) {
+  return (DOT_PX / 2) / pxPerSvgUnit(scale);
+}
+
+// Same-city dots (identical/near-identical lat+lng) fan out around their
+// shared point on a small ring instead of stacking exactly on top of each
+// other. Zoomed all the way out, that ring is deliberately tight — dots are
+// allowed to overlap a bit (like overlapping coins) as long as each one's
+// edge is still visible, rather than ballooning out to a full non-overlap
+// spread the map doesn't have room for at world scale. Zooming in relaxes
+// the ring until, by city level, everyone in the cluster is fully separated
+// and individually tappable.
+function spreadOffset(n, angle, dotRadius, scale) {
+  if (n <= 1) return { dx: 0, dy: 0 };
+  const t = Math.min(1, Math.log2(scale) / Math.log2(16)); // 0 at scale 1 → 1 by scale 16
+  const chordMult = 1.6 + t * 0.8; // 1.6r (partial overlap) → 2.4r (clear gap)
+  const ringR = (chordMult * dotRadius) / (2 * Math.sin(Math.PI / n));
+  return { dx: ringR * Math.cos(angle), dy: ringR * Math.sin(angle) };
+}
+
+// Stroke width is set here (inline style, not the CSS class default) so it
+// scales down together with the dot radius — a border that's fine at
+// scale 1 otherwise stays fixed in SVG units and ends up dwarfing an
+// already-shrunk dot at high zoom. No separate floor needed: r is already
+// screen-px-anchored (currentDotRadius), so a plain ratio of it keeps the
+// stroke's on-screen thickness bounded the same way the dot itself is.
+function applyDotSize(d, r, scale, hover) {
+  const strokeW = r * 0.16;
+  const baseR = currentDotRadius(scale);
+  const { dx, dy } = spreadOffset(d.n, d.angle, baseR, scale);
+  const x = d.baseX + dx, y = d.baseY + dy;
+  d.clickTarget.style.filter = roleGlowFilter(d.role, r);
+  if (d.kind === "img") {
+    d.els.clipCircle.setAttribute("cx", x); d.els.clipCircle.setAttribute("cy", y); d.els.clipCircle.setAttribute("r", r);
+    if (d.els.bg) { d.els.bg.setAttribute("cx", x); d.els.bg.setAttribute("cy", y); d.els.bg.setAttribute("r", r); }
+    d.els.img.setAttribute("x", x - r); d.els.img.setAttribute("y", y - r);
+    d.els.img.setAttribute("width", r * 2); d.els.img.setAttribute("height", r * 2);
+    d.els.ring.setAttribute("cx", x); d.els.ring.setAttribute("cy", y); d.els.ring.setAttribute("r", r);
+    d.els.ring.style.strokeWidth = strokeW * 1.5;
+  } else {
+    d.els.dot.setAttribute("cx", x); d.els.dot.setAttribute("cy", y); d.els.dot.setAttribute("r", r);
+    d.els.dot.style.strokeWidth = strokeW;
+    if (hover) d.els.dot.setAttribute("fill", "#fff");
+    else d.els.dot.setAttribute("fill", "var(--pra-blue)");
+  }
+}
+function updateDotVisuals(scale) {
+  const r = currentDotRadius(scale);
+  // Skip the currently-hovered dot — re-normalizing it here (a resize/zoom
+  // mid-hover) would visually shrink it back down without clearing
+  // hoveredDesc, leaving JS and the screen disagreeing about its state
+  // until the next hover change.
+  dotDescriptors.forEach(d => { if (d !== hoveredDesc) applyDotSize(d, r, scale, false); });
+  if (hoveredDesc) hoveredDesc.enlarge();
+}
+
+// ── Upcoming Retreats — tactical HUD-style map callouts ─────────────────
+// A reticle at the real location, a leader line, and a translucent blue
+// callout panel with the location + year — all sized in fixed screen-px
+// (same pxPerSvgUnit trick as the person-dots) so the HUD overlay reads as
+// a constant-size readout regardless of zoom, the way a real heads-up
+// display would, instead of scaling with the map underneath it.
+let retreatDescriptors = [];
+// The HUD's on-screen pixel sizes (panel, leader length, text) were a flat
+// constant regardless of how big the map itself is rendered — fine on a
+// ~860px desktop map, but on a narrow mobile map (~350px) a 112px-wide
+// panel is nearly a third of the whole map's width, and easily pushes past
+// the map's edge and gets clipped. Scaling those base px values down along
+// with the map's own rendered width keeps the HUD proportionate at every
+// size; clamped so it doesn't keep shrinking below legibility once the map
+// gets very small.
+const RETREAT_REF_MAPBOX_PX = 860;
+function retreatSizeFactor() {
+  const rect = document.getElementById("mapBox").getBoundingClientRect();
+  // min(width,height), not just width — see pxPerSvgUnit's comment: the box
+  // isn't forced square anymore, and whichever dimension is smaller is the
+  // one that actually bounds the rendered map content.
+  const w = Math.min(rect.width, rect.height);
+  // Floor raised from 0.45 to 0.9 (2x) — on a mobile-width map the panels
+  // were shrinking to less than half their desktop size, which read as too
+  // small/hard to tap. The off-frame risk that the shrinking was originally
+  // protecting against is now handled by applyRetreatVisuals' own position
+  // clamp instead, so a higher floor here is safe.
+  return Math.max(0.9, Math.min(1, w / RETREAT_REF_MAPBOX_PX));
+}
+function retreatPx(px, scale) { return (px * retreatSizeFactor()) / pxPerSvgUnit(scale); }
+
+// Shared with drawRetreats' angle-picking (pickWaterAngle) so the test
+// point it evaluates lines up with where the panel will actually end up.
+const RETREAT_LEADER_LEN_PX = 150;
+
+function applyRetreatVisuals(d, scale) {
+  const reticleR = retreatPx(4, scale);
+  const pulseR = retreatPx(9, scale);
+  const panelW = retreatPx(112, scale), panelH = retreatPx(40, scale);
+  const strokeW = retreatPx(1.2, scale);
+  // Leader length is deliberately generous — see drawRetreats for how
+  // d.angle is chosen (pushed away from the crowd of person-dots, fanned
+  // out from any other nearby retreats, steered toward open water) so a
+  // longer line reliably clears all three instead of just repositioning
+  // the overlap closer in.
+  const leaderLen = retreatPx(RETREAT_LEADER_LEN_PX, scale);
+
+  const px = d.baseX, py = d.baseY;
+  const lx = px + Math.cos(d.angle) * leaderLen, ly = py + Math.sin(d.angle) * leaderLen;
+  // Panel is centered on the leader's far end, not anchored by a corner —
+  // keeps the math direction-agnostic since d.angle can point anywhere,
+  // not just up-right like the old fixed diagonal did. Clamped to stay
+  // fully inside the 0-800 viewBox as a hard backstop against going off-
+  // frame — the size scaling above handles the common case, this handles
+  // whatever it doesn't (a retreat near the map's own edge, an extreme
+  // fan-out angle, etc).
+  const panelMargin = retreatPx(4, scale);
+  let panelX = lx - panelW / 2, panelY = ly - panelH / 2;
+  panelX = Math.max(panelMargin, Math.min(SIZE - panelMargin - panelW, panelX));
+  panelY = Math.max(panelMargin, Math.min(SIZE - panelMargin - panelH, panelY));
+
+  d.els.reticle.setAttribute("cx", px); d.els.reticle.setAttribute("cy", py); d.els.reticle.setAttribute("r", reticleR);
+  d.els.pulse.setAttribute("cx", px); d.els.pulse.setAttribute("cy", py); d.els.pulse.setAttribute("r", pulseR);
+  d.els.pulse.style.strokeWidth = strokeW;
+  d.els.leader.setAttribute("x1", px); d.els.leader.setAttribute("y1", py);
+  d.els.leader.setAttribute("x2", lx); d.els.leader.setAttribute("y2", ly);
+  d.els.leader.style.strokeWidth = strokeW;
+
+  d.els.panel.setAttribute("x", panelX); d.els.panel.setAttribute("y", panelY);
+  d.els.panel.setAttribute("width", panelW); d.els.panel.setAttribute("height", panelH);
+  d.els.panel.style.strokeWidth = strokeW;
+
+  const bracketLen = retreatPx(7, scale);
+  const corners = [
+    [panelX, panelY, 1, 1], [panelX + panelW, panelY, -1, 1],
+    [panelX, panelY + panelH, 1, -1], [panelX + panelW, panelY + panelH, -1, -1],
+  ];
+  d.els.brackets.forEach((pathEl, i) => {
+    const [cx0, cy0, sx, sy] = corners[i];
+    pathEl.setAttribute("d", `M ${cx0 + sx * bracketLen},${cy0} L ${cx0},${cy0} L ${cx0},${cy0 + sy * bracketLen}`);
+    pathEl.style.strokeWidth = strokeW;
+  });
+
+  const padX = retreatPx(9, scale);
+  d.els.locationText.setAttribute("x", panelX + padX);
+  d.els.locationText.setAttribute("y", panelY + panelH * 0.42);
+  d.els.locationText.style.fontSize = retreatPx(11, scale) + "px";
+  d.els.yearText.setAttribute("x", panelX + padX);
+  d.els.yearText.setAttribute("y", panelY + panelH * 0.8);
+  d.els.yearText.style.fontSize = retreatPx(9, scale) + "px";
+}
+function updateRetreatVisuals(scale) {
+  retreatDescriptors.forEach(d => applyRetreatVisuals(d, scale));
+}
+
+// Where a panel should point away FROM — the centroid of every person-dot,
+// so panels default to opening away from the crowd rather than straight
+// over it. Falls back to the map center (no meaningful "away" direction
+// otherwise) when nobody's located yet.
+function crowdCenter() {
+  if (!dotDescriptors.length) return { x: CENTER, y: CENTER };
+  return {
+    x: dotDescriptors.reduce((s, d) => s + d.baseX, 0) / dotDescriptors.length,
+    y: dotDescriptors.reduce((s, d) => s + d.baseY, 0) / dotDescriptors.length,
+  };
+}
+
+// Retreats whose real locations land close together on screen (California/
+// Alaska/Florida are all near the pole in this projection, even though
+// they're nowhere near each other geographically) get grouped so their
+// panels can be fanned out in different directions — same idea as the
+// same-city person-dot clustering above, just for retreats instead.
+function clusterRetreatPoints(points, thresholdPx) {
+  const clusters = [];
+  points.forEach(p => {
+    const c = clusters.find(c => Math.hypot(c.cx - p.x, c.cy - p.y) < thresholdPx);
+    if (c) { c.members.push(p); c.cx = c.members.reduce((s, m) => s + m.x, 0) / c.members.length; c.cy = c.members.reduce((s, m) => s + m.y, 0) / c.members.length; }
+    else clusters.push({ cx: p.x, cy: p.y, members: [p] });
+  });
+  return clusters;
+}
+
+// Picks the angle closest to `preferred` whose leader line would land the
+// panel over water rather than on top of a landmass — the panel itself is a
+// translucent HUD callout, not a real map marker, so it's meant to float
+// over open ocean the way the reference tactical-HUD look implies, not sit
+// on top of a continent. Tries `preferred` first (the crowd/cluster-
+// avoidance angle already computed), then fans outward in both directions
+// in 10° steps up to a full circle; falls back to `preferred` untouched if
+// literally nothing within range lands on water (shouldn't happen in
+// practice — every retreat here is coastal or island).
+function pickWaterAngle(x, y, preferred) {
+  const testDist = retreatPx(RETREAT_LEADER_LEN_PX, mapScale);
+  const test = (angle) => {
+    const tx = x + Math.cos(angle) * testDist, ty = y + Math.sin(angle) * testDist;
+    return !isOverLand(tx, ty);
+  };
+  if (test(preferred)) return preferred;
+  const step = (10 * Math.PI) / 180;
+  for (let i = 1; i <= 18; i++) {
+    if (test(preferred + i * step)) return preferred + i * step;
+    if (test(preferred - i * step)) return preferred - i * step;
+  }
+  return preferred;
+}
+
+async function drawRetreats() {
+  let retreats = [];
+  try {
+    const r = await fetch("/api/chat/upcoming-retreats", { cache: "no-store" });
+    if (r.ok) { const d = await r.json(); retreats = d.upcomingRetreats || []; }
+  } catch (e) { console.warn("upcoming retreats failed to load", e); }
+
+  const svg = document.getElementById("mapSvg");
+  const NS = "http://www.w3.org/2000/svg";
+  const outerGroup = document.createElementNS(NS, "g");
+  retreatDescriptors = [];
+
+  const points = retreats
+    .filter(ret => ret.lat != null && ret.lng != null)
+    .map(ret => ({ ...ret, ...project(ret.lng, ret.lat) }));
+  const crowd = crowdCenter();
+  // Threshold is in world-scale (zoom 1) SVG units — generous enough to
+  // catch points that are merely "in the same general region" on screen at
+  // the overview zoom, which is exactly when their panels would otherwise
+  // collide.
+  const clusters = clusterRetreatPoints(points, 70);
+
+  clusters.forEach(cluster => {
+    // Base direction: straight out from the crowd, through this cluster's
+    // own position — i.e. keep going the way the point already is from the
+    // crowd, rather than toward it.
+    const baseAngle = Math.atan2(cluster.cy - crowd.y, cluster.cx - crowd.x) || 0;
+    cluster.members.forEach((p, idx) => {
+      const spread = cluster.members.length > 1 ? (idx - (cluster.members.length - 1) / 2) * (Math.PI / 4.5) : 0;
+      const angle = pickWaterAngle(p.x, p.y, baseAngle + spread);
+      buildRetreatMarker(p, angle, outerGroup, NS, svg);
+    });
+  });
+
+  svg.appendChild(outerGroup);
+  updateRetreatVisuals(mapScale);
+}
+
+function buildRetreatMarker(ret, angle, outerGroup, NS, svg) {
+  const x = ret.x, y = ret.y;
+  const g = document.createElementNS(NS, "g");
+  g.setAttribute("class", "retreat-hud");
+  g.addEventListener("click", () => openRetreatPopup(ret));
+
+  const leader = document.createElementNS(NS, "line");
+  leader.setAttribute("class", "retreat-hud-leader");
+  g.appendChild(leader);
+
+  const panel = document.createElementNS(NS, "rect");
+  panel.setAttribute("class", "retreat-hud-panel");
+  g.appendChild(panel);
+
+  const brackets = [0, 1, 2, 3].map(() => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("class", "retreat-hud-bracket");
+    g.appendChild(p);
+    return p;
+  });
+
+  const pulse = document.createElementNS(NS, "circle");
+  pulse.setAttribute("class", "retreat-hud-pulse");
+  g.appendChild(pulse);
+  const reticle = document.createElementNS(NS, "circle");
+  reticle.setAttribute("class", "retreat-hud-reticle");
+  g.appendChild(reticle);
+
+  const locationText = document.createElementNS(NS, "text");
+  locationText.setAttribute("class", "retreat-hud-location");
+  locationText.textContent = ret.location.toUpperCase();
+  g.appendChild(locationText);
+
+  const yearText = document.createElementNS(NS, "text");
+  yearText.setAttribute("class", "retreat-hud-year");
+  yearText.textContent = ret.year + " RETREAT";
+  g.appendChild(yearText);
+
+  outerGroup.appendChild(g);
+  retreatDescriptors.push({ baseX: x, baseY: y, angle, els: { leader, panel, brackets, pulse, reticle, locationText, yearText } });
+}
+
+async function drawUsers() {
+  const r = await fetch("/api/chat/users-map?t=" + Date.now(), { cache: "no-store" });
+  if (!r.ok) return;
+  const d = await r.json();
+  users = d.points;
+  document.getElementById("emptyHint").style.display = users.length ? "none" : "block";
+  const svg = document.getElementById("mapSvg");
+  const NS = "http://www.w3.org/2000/svg";
+  const dotGroup = document.createElementNS(NS, "g");
+
+  // Group users sharing (near-)identical coordinates into clusters so each
+  // member can be given a distinct angle to spread out at.
+  const clusters = new Map();
+  users.forEach(u => {
+    const key = u.lat.toFixed(2) + "," + u.lng.toFixed(2);
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key).push(u);
+  });
+
+  dotDescriptors = [];
+  let i = 0;
+  clusters.forEach(members => {
+    const { x, y } = project(members[0].lng, members[0].lat);
+    members.forEach((u, idx) => {
+      const angle = (idx / members.length) * Math.PI * 2 - Math.PI / 2;
+      const stroke = roleStroke(u.role);
+
+      const clickTarget = document.createElementNS(NS, "g");
+      clickTarget.setAttribute("class", "user-dot-group");
+      clickTarget.style.cursor = "pointer";
+      clickTarget.style.overflow = "visible";
+      // Filter on the group instead of children — group bounding box is larger,
+      // giving the SVG filter region room to render the full glow at all zoom
+      // levels. Actual value is set (and kept in sync with zoom) in
+      // applyDotSize, not here — see roleGlowFilter's comment.
+      clickTarget.addEventListener("click", () => openPopup(u));
+
+      const imageUrl = u.archetypeImage || "/chat-app/assets/handstand.jpg";
+      const isFallback = !u.archetypeImage;
+
+      const clipId = "archetype-clip-" + (i++);
+      const defs = document.createElementNS(NS, "defs");
+      const clipPath = document.createElementNS(NS, "clipPath");
+      clipPath.setAttribute("id", clipId);
+      const clipCircle = document.createElementNS(NS, "circle");
+      clipPath.appendChild(clipCircle);
+      defs.appendChild(clipPath);
+      clickTarget.appendChild(defs);
+
+      const bg = document.createElementNS(NS, "circle");
+      bg.setAttribute("fill", "#000");
+      clickTarget.appendChild(bg);
+
+      const img = document.createElementNS(NS, "image");
+      img.setAttribute("href", imageUrl);
+      img.setAttribute("preserveAspectRatio", isFallback ? "xMidYMid meet" : "xMidYMid slice");
+      img.setAttribute("clip-path", `url(#${clipId})`);
+      clickTarget.appendChild(img);
+
+      const ring = document.createElementNS(NS, "circle");
+      ring.setAttribute("fill", "none");
+      ring.setAttribute("stroke", stroke);
+      clickTarget.appendChild(ring);
+
+      const desc = { baseX: x, baseY: y, angle, n: members.length, kind: "img", role: u.role, clickTarget, els: { clipCircle, img, ring, bg } };
+      dotDescriptors.push(desc);
+
+      // Hover is managed centrally (see setupDotHover) via cursor distance
+      // rather than per-shape mouseenter/mouseleave — see that function's
+      // comment for why native hover events don't work reliably here once
+      // dots overlap and one of them enlarges. desc.revert/enlarge are the
+      // hooks the central manager calls; desc.originalNextSibling (recorded
+      // once, after the whole cluster is built, below) is what lets revert
+      // put this dot back exactly where it started in dotGroup's paint
+      // order after enlarge moved it to the front.
+      desc.enlarge = () => {
+        applyDotSize(desc, currentDotRadius(mapScale) * 2, mapScale, true);
+        document.getElementById("mapSvg").appendChild(clickTarget);
+      };
+      desc.revert = () => {
+        applyDotSize(desc, currentDotRadius(mapScale), mapScale, false);
+        if (clickTarget.parentNode !== dotGroup) {
+          const ref = desc.originalNextSibling && desc.originalNextSibling.parentNode === dotGroup ? desc.originalNextSibling : null;
+          dotGroup.insertBefore(clickTarget, ref);
+        }
+      };
+
+      dotGroup.appendChild(clickTarget);
+    });
+  });
+  dotDescriptors.forEach(d => { d.originalNextSibling = d.clickTarget.nextSibling; });
+  svg.appendChild(dotGroup);
+  updateDotVisuals(mapScale);
+  setupDotHover();
+}
+
+const LEVELS_NUMERIC_CATS = ["NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
+const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
+function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
+function levelsIsChecked(v) { return ["x", "yes"].includes(String(v || "").trim().toLowerCase()); }
+function levelNumColor(n) { return LEVEL_NUM_COLORS[Number(n)] || '#5f727f'; }
+// Completing Foundation means they've at least started every skill — an
+// unrecorded category reads as Level 1, not 0, once Foundation is done.
+function effectiveLevel(e, cat) {
+  const raw = Number(e.levels[cat]) || 0;
+  if (raw > 0) return raw;
+  return levelsIsChecked(e.levels['FOUNDATION']) ? 1 : 0;
+}
+function superLevel(e) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + effectiveLevel(e, cat), 0); }
+
+function openPopup(u) {
+  document.getElementById("popupAvatar").innerHTML = u.profilePictureFileId
+    ? '<img src="/api/chat/media/' + u.profilePictureFileId + '"/>'
+    : (u.first?.[0] || "?").toUpperCase();
+  document.getElementById("popupName").textContent = u.first;
+  document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
+  document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
+
+  // Levels ship pre-matched from the server (see /api/chat/users-map) —
+  // never a last name here, just whatever levels (if any) matched.
+  const entries = u.levels || [];
+  document.getElementById("popupLevels").innerHTML = entries.map(e => `
+    <div class="popup-levels-program">
+      <div class="popup-super-level">Super Level <span class="num">${superLevel(e)}</span></div>
+      <div class="popup-levels-col">
+        <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${levelsIsChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
+        ${LEVELS_NUMERIC_CATS.map(cat => {
+          const n = effectiveLevel(e, cat);
+          return `<div class="popup-level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
+        }).join('')}
+        ${e.program === 'Gym' ? `<div class="popup-level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${e.team ? '✓' : '0'}</span></div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById("popup").classList.add("show");
+}
+function closePopup() { document.getElementById("popup").classList.remove("show"); }
+
+function openRetreatPopup(ret) {
+  document.getElementById("retreatPopupPhoto").innerHTML = ret.photo
+    ? '<img src="' + ret.photo + '" alt="' + ret.location + '"/>'
+    : "";
+  document.getElementById("retreatPopupTitle").textContent = ret.location.toUpperCase();
+  document.getElementById("retreatPopupYear").textContent = ret.year + " Retreat";
+  const parts = Array.isArray(ret.description) ? ret.description : (ret.description ? [ret.description] : []);
+  document.getElementById("retreatPopupDesc").innerHTML = parts.map(p => '<div>' + escapeHtml(p) + '</div>').join('');
+  document.getElementById("retreatPopup").classList.add("show");
+}
+function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function closeRetreatPopup() { document.getElementById("retreatPopup").classList.remove("show"); }
+
+// ── Zoom (wheel / pinch) and pan (drag) on the map itself ──────────────────
+// initial: optional { cx, cy, scale } to open already framed on the actual
+// user cluster instead of the whole compressed-to-a-disc world view — at
+// world scale, high-latitude landmasses (Alaska included) get warped into
+// unfamiliar shapes near the pole; framing on where people actually are
+// avoids that entirely rather than requiring a manual zoom first.
+function setupMapZoomPan(initial) {
+  const box = document.getElementById("mapBox");
+  const svg = document.getElementById("mapSvg");
+  // Zoom is driven by the SVG's own viewBox rather than a CSS transform:
+  // scale(). A CSS transform scales an already-rasterized composited layer
+  // (blurry, and only re-sharpens on a forced repaint like a window resize);
+  // resizing the viewBox makes the browser re-render the vector paths at
+  // full sharpness for every frame, at any zoom level.
+  let cx = initial?.cx ?? CENTER, cy = initial?.cy ?? CENTER;
+  let lastVisualScale = mapScale; // capture before updating so first apply() always redraws dots
+  if (initial?.scale) mapScale = initial.scale;
+  let panning = false, lastX = 0, lastY = 0;
+  let pinchStartDist = 0, pinchStartScale = 1;
+
+  function clampScale(s) { return Math.min(60, Math.max(1, s)); }
+  function clampCenter() {
+    const half = (SIZE / mapScale) / 2;
+    cx = Math.min(SIZE - half, Math.max(half, cx));
+    cy = Math.min(SIZE - half, Math.max(half, cy));
+  }
+  function apply() {
+    clampCenter();
+    const v = SIZE / mapScale;
+    svg.setAttribute("viewBox", `${cx - v / 2} ${cy - v / 2} ${v} ${v}`);
+    if (mapScale !== lastVisualScale) {
+      lastVisualScale = mapScale;
+      updateDotVisuals(mapScale);
+      updateRetreatVisuals(mapScale);
+    }
+  }
+  function pxToSvg(px) {
+    const rect = box.getBoundingClientRect();
+    // min(width,height) — see pxPerSvgUnit's comment; "meet" scales both
+    // axes uniformly by whichever dimension is smaller, so that's the one
+    // pan deltas (screen px -> SVG units) need to convert through too, on
+    // both axes, regardless of which one is actually being dragged.
+    return (px * (SIZE / mapScale)) / Math.min(rect.width, rect.height);
+  }
+
+  box.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const clampedDeltaY = Math.max(-100, Math.min(100, e.deltaY));
+    const factor = Math.exp(-clampedDeltaY * 0.0015);
+    mapScale = clampScale(mapScale * factor);
+    if (mapScale === 1) { cx = CENTER; cy = CENTER; }
+    apply();
+  }, { passive: false });
+
+  svg.addEventListener("mousedown", (e) => {
+    if (mapScale <= 1) return;
+    panning = true; svg.classList.add("panning");
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!panning) return;
+    cx -= pxToSvg(e.clientX - lastX); cy -= pxToSvg(e.clientY - lastY);
+    lastX = e.clientX; lastY = e.clientY;
+    apply();
+  });
+  window.addEventListener("mouseup", () => { panning = false; svg.classList.remove("panning"); });
+
+  function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  box.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      pinchStartDist = touchDist(e.touches); pinchStartScale = mapScale;
+    } else if (e.touches.length === 1 && mapScale > 1) {
+      panning = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+  box.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      const dist = touchDist(e.touches);
+      mapScale = clampScale(pinchStartScale * (dist / pinchStartDist));
+      if (mapScale === 1) { cx = CENTER; cy = CENTER; }
+      apply();
+    } else if (e.touches.length === 1 && panning) {
+      cx -= pxToSvg(e.touches[0].clientX - lastX); cy -= pxToSvg(e.touches[0].clientY - lastY);
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      apply();
+    }
+  }, { passive: false });
+  box.addEventListener("touchend", () => { panning = false; });
+
+  svg.addEventListener("dblclick", () => { mapScale = 1; cx = CENTER; cy = CENTER; apply(); });
+
+  apply(); // render the initial framing (world view, or the cluster view passed in via `initial`)
+}
+
+// Frames the initial view on wherever the actual users are instead of the
+// full world disc — at world scale, high-latitude landmasses (Alaska
+// included) warp into unfamiliar shapes near the pole, which reads as
+// "wrong" even though it's geographically accurate. Floors the span so a
+// single tight cluster (e.g. everyone in one city) doesn't zoom in absurdly.
+function computeClusterFraming() {
+  if (!dotDescriptors.length) return null;
+  const xs = dotDescriptors.map(d => d.baseX), ys = dotDescriptors.map(d => d.baseY);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY, 20);
+  const scale = Math.min(20, Math.max(1, SIZE / (span * 2.5)));
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, scale };
+}
+
+// The map box is square (aspect-ratio 1/1) and otherwise just fills the
+// wrap's width, so on a short/wide window the full circle can run off the
+// bottom of the screen. Capping its width to whatever vertical room is
+// actually left below it (measured live, since the dashboard's nav/device-
+// preview chrome above it can vary and resize) keeps the whole circle
+// visible without scrolling.
+function fitMapBox() {
+  const mapBox = document.getElementById("mapBox");
+  if (!mapBox) return;
+  const top = mapBox.getBoundingClientRect().top;
+  // A flat 32px guess used to stand in for "whatever's below the map" —
+  // wrap's own 30px bottom padding, roughly. It didn't account for
+  // #chat-app-bottom-bar-spacer, a SEPARATE block chat-header.js appends
+  // after .wrap (reserving room in normal document flow for the actual
+  // fixed bottom nav bar), which added another ~65px past where this
+  // function thought the page ended — so the page was consistently a
+  // bottom-bar's-height too tall, forcing a scroll to reach it even though
+  // the map itself fit fine. Measuring it directly instead of guessing.
+  const bottomBarSpacerEl = document.getElementById("chat-app-bottom-bar-spacer");
+  const bottomBarReserve = bottomBarSpacerEl ? bottomBarSpacerEl.getBoundingClientRect().height : 0;
+  const bottomPad = 32 + bottomBarReserve;
+  // window.innerHeight is the REAL browser window — correct in production,
+  // but wrong inside chat-header.js's admin device-preview frame, where the
+  // page is pinned to a simulated phone/tablet size well short of the real
+  // window and scrolls inside #pra-device-content-wrap instead. Using the
+  // real window there computed "available" space that didn't exist on
+  // screen, sizing the map taller than the frame and forcing a scrollbar
+  // instead of fitting it. #pra-device-content-wrap only has a real box
+  // (non-zero rect) while a device mode is actually active — it's
+  // `display: contents` (zero-size) the rest of the time, so checking its
+  // height distinguishes "inside the simulated frame" from normal/desktop.
+  const contentWrap = document.getElementById("pra-device-content-wrap");
+  const wrapRect = contentWrap ? contentWrap.getBoundingClientRect() : null;
+  const viewportBottom = (wrapRect && wrapRect.height > 0) ? wrapRect.bottom : window.innerHeight;
+  const available = viewportBottom - top - bottomPad;
+  // .pra-root's own rendered width, not window.innerWidth: same reasoning
+  // as viewportBottom above — needs to reflect the simulated device frame's
+  // width when one is active, not the real (possibly much wider) browser
+  // window.
+  const root = document.querySelector(".pra-root");
+  const containerWidth = root ? root.getBoundingClientRect().width : window.innerWidth;
+  const fitted = Math.max(240, Math.floor(available));
+  if (containerWidth <= 640) {
+    // Narrow/mobile: fill the whole available rectangle (matches the CSS's
+    // aspect-ratio override at this width) — an explicit height always
+    // wins over aspect-ratio, so max-width is cleared to make sure it isn't
+    // still capping the width from a previous wide-viewport pass.
+    mapBox.style.height = fitted + "px";
+    mapBox.style.maxWidth = "";
+  } else {
+    // Wide/desktop: stay square (aspect-ratio:1/1 governs, so clearing
+    // height lets it), but cap max-width to whatever vertical room is
+    // actually available — without this a wide-but-short window (a large
+    // monitor with the browser not maximized, a laptop lid mostly closed,
+    // the admin device-preview frame at certain sizes, etc) let the square
+    // grow past the viewport's own height and forced a page scroll to see
+    // the rest of it.
+    mapBox.style.height = "";
+    mapBox.style.maxWidth = fitted + "px";
+  }
+}
+window.addEventListener("resize", () => requestAnimationFrame(fitMapBox));
+requestAnimationFrame(fitMapBox);
+// Nav/device-preview chrome above the map can still be settling its own
+// size shortly after load (see the mapBox ResizeObserver below) — one more
+// pass after that's had time to happen.
+setTimeout(fitMapBox, 400);
+// The admin device-preview strip's Desktop/Tablet/Mobile buttons resize
+// .pra-root by toggling a CSS class, not by resizing the actual browser
+// window — no "resize" event fires, so fitMapBox's above-640px/below-640px
+// branch was never re-checked after switching modes and could get stuck on
+// whatever it computed before the switch. Observing .pra-root directly
+// catches that (and real window resizes/orientation changes) uniformly.
+const praRootEl = document.querySelector(".pra-root");
+if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
+
+(async () => {
+  const meRes = await fetch("/api/auth/me");
+  if (!meRes.ok) { location.href = "/chat-app/login.html?next=" + encodeURIComponent(location.pathname); return; }
+  await drawContinents();
+  await drawUsers();
+  await drawRetreats();
+  // Opening on the full world (not computeClusterFraming()) for now — auto-
+  // framing on the cluster pushes the pole off-center, which made it much
+  // harder to sanity-check the map against a reference (the pole location
+  // is the one fixed, unambiguous anchor point). Worth re-enabling once the
+  // base projection is fully confirmed correct.
+  setupMapZoomPan();
+
+  // pxPerSvgUnit reads #mapBox's live getBoundingClientRect() width, but
+  // that box sits inside the shared dashboard's nav/device-preview chrome,
+  // which can still be animating into its final size right after page load
+  // (nav-bar collapse, device-preview strip, etc). Dot and HUD sizing was
+  // computed once, immediately after each draw — if the box was mid-resize
+  // at that instant, every size stayed wrong until the user zoomed. A
+  // ResizeObserver re-applies both any time the box's actual rendered size
+  // changes, so a late-settling layout self-corrects instead of leaving
+  // giant misplaced dots/panels behind.
+  new ResizeObserver(() => {
+    updateDotVisuals(mapScale);
+    updateRetreatVisuals(mapScale);
+  }).observe(document.getElementById("mapBox"));
+})();
+</script>
+</body>
+</html>

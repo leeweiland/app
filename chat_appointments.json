@@ -1,0 +1,77 @@
+[
+  {
+    "id": "8c70e781-3b36-4185-b6aa-cca1160a9ed1",
+    "conversationId": "e3b91d71-4713-42f2-8883-5389ea2c15ca",
+    "coachId": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "clientId": "a2ad8a1d-6fef-41ef-b97e-7a6a90392233",
+    "startISO": "2026-08-09T09:45:00.000Z",
+    "durationMinutes": 15,
+    "googleEventId": "tmv80ieb8h2f3spf49vr56rmhc",
+    "status": {
+      "calendar": {
+        "ok": true
+      },
+      "email": {
+        "ok": true
+      },
+      "sms": {
+        "ok": true
+      }
+    },
+    "createdAt": "2026-08-09T09:35:23.745Z",
+    "remindersSent": [
+      "email:0",
+      "email:1",
+      "sms:0"
+    ]
+  },
+  {
+    "id": "fe67ad09-0cb5-4704-a167-e2b7e897401f",
+    "conversationId": "e3b91d71-4713-42f2-8883-5389ea2c15ca",
+    "coachId": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "clientId": "a2ad8a1d-6fef-41ef-b97e-7a6a90392233",
+    "startISO": "2026-08-09T10:45:00.000Z",
+    "durationMinutes": 15,
+    "googleEventId": "lc2vd1afds8dv636lselo1udfo",
+    "status": {
+      "calendar": {
+        "ok": true
+      },
+      "email": {
+        "ok": true
+      },
+      "sms": {
+        "ok": true
+      }
+    },
+    "createdAt": "2026-08-09T10:39:08.495Z",
+    "remindersSent": [
+      "email:0",
+      "sms:0"
+    ]
+  },
+  {
+    "id": "47ea94ea-0659-4c72-b174-557cea55e09b",
+    "conversationId": "a9ba47a7-31a6-41e4-86b9-4bff5a017b8d",
+    "coachId": "76f3579b-ed30-46dd-928f-42a32d269dd2",
+    "clientIds": [
+      "84e9259e-0afa-4637-a9db-a0fa3bc2e1d6"
+    ],
+    "startISO": "2026-09-08T17:00:00.000Z",
+    "durationMinutes": 15,
+    "googleEventId": "22m04g744eug5jhgmu8nofbaj4",
+    "status": {
+      "calendar": {
+        "ok": true
+      },
+      "email": {
+        "ok": true
+      },
+      "sms": {
+        "ok": false,
+        "error": "No matching Close lead found for teststudent@pacificrimathletics.com"
+      }
+    },
+    "createdAt": "2026-08-09T18:17:32.097Z"
+  }
+]
