@@ -9,6 +9,8 @@ workflows:
       node: 22
       xcode: latest
       cocoapods: default
+      groups:
+        - ios-signing
     scripts:
       - name: Install dependencies
         script: npm install
@@ -21,15 +23,15 @@ workflows:
         script: npx cap sync ios
       - name: Initialize keychain
         script: keychain initialize
-      - name: Generate private key and fetch signing files
+      - name: Add certificate to keychain
         script: |
-          openssl genrsa -out /tmp/cert_key.pem 2048
-          export CERTIFICATE_PRIVATE_KEY="$(cat /tmp/cert_key.pem)"
+          echo $CM_CERTIFICATE | base64 --decode > /tmp/certificate.p12
+          keychain add-certificates --certificate /tmp/certificate.p12 --certificate-password $CM_CERTIFICATE_PASSWORD
+      - name: Fetch provisioning profiles
+        script: |
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
             --create
-      - name: Add certificates to keychain
-        script: keychain add-certificates --certificate-key "$(cat /tmp/cert_key.pem)"
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build iOS IPA
