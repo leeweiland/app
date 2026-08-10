@@ -16,6 +16,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "busboy": "^1.6.0",
     "dotenv": "^17.4.2",
     "googleapis": "^174.0.1",
