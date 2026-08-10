@@ -21,10 +21,13 @@
         justify-content: space-between;
         padding: 10px 16px;
         /* iOS notch/Dynamic Island/camera cutout sits right where this fixed
-           bar would otherwise start — env(safe-area-inset-top) is 0 unless
-           the viewport meta tag also has viewport-fit=cover, which every
-           page injecting this bar now sets. */
-        padding-top: max(10px, env(safe-area-inset-top));
+           bar would otherwise start. env(safe-area-inset-top) is the
+           "correct" way to clear it, but it measured 0 in this app's actual
+           WKWebView (Capacitor's safe-area wiring doesn't always propagate
+           it reliably) even with viewport-fit=cover set — so this floors at
+           a flat 54px, enough to clear every current notch/Dynamic Island,
+           and only lets env() push it further if a device ever needs more. */
+        padding-top: max(54px, env(safe-area-inset-top));
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-bottom: 1px solid #26262e;
