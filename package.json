@@ -1,8 +1,9 @@
 {
   "name": "chat-app",
   "version": "1.0.0",
-  "main": "body_analysis_backend.js",
+  "main": "chat_backend.js",
   "scripts": {
+    "start": "node chat_backend.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
