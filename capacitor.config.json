@@ -3,6 +3,7 @@
   "appName": "Pacific Rim Athletics",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "url": "https://app-production-3c6a1.up.railway.app",
+    "cleartext": false
   }
 }
