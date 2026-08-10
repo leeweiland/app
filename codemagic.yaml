@@ -12,11 +12,10 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm install
-      - name: Add iOS platform if missing
+      - name: Add iOS platform
         script: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
+          rm -rf ios
+          npx cap add ios
       - name: Capacitor sync
         script: npx cap sync ios
       - name: Install CocoaPods
