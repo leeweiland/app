@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>PRA Chat — Sign In</title>
-<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<title>PRA Chat â€” Sign In</title>
+<link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -60,7 +60,7 @@
 
       <form id="signupForm" class="hidden">
         <div class="avatar-picker">
-          <div class="pra-avatar" id="avatarPreview">＋</div>
+          <div class="pra-avatar" id="avatarPreview">ï¼‹</div>
           <div>
             <label class="pra-btn pra-btn-ghost" for="profilePicInput" style="display:inline-block">Add Photo (optional)</label>
             <input type="file" id="profilePicInput" accept="image/*"/>
@@ -123,7 +123,7 @@ document.getElementById('profilePicInput').addEventListener('change', (e) => {
 
 function redirectAfterAuth() {
   const params = new URLSearchParams(location.search);
-  location.href = params.get('next') || '/chat-app/chat.html';
+  location.href = params.get('next') || '/chat.html';
 }
 
 loginForm.addEventListener('submit', async (e) => {
@@ -159,3 +159,4 @@ fetch('/api/auth/me').then(r => r.ok ? redirectAfterAuth() : null).catch(() => {
 </script>
 </body>
 </html>
+

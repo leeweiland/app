@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Body &amp; Move Scan — PRA</title>
-<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<title>Body &amp; Move Scan â€” PRA</title>
+<link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
@@ -44,7 +44,7 @@
   .signoff-logo { width: 220px; height: auto; display: block; margin: 0 0 12px; }
   .signoff-name { font-weight: 700; font-size: .92rem; }
   .signoff-title { font-family: var(--font-primary); font-weight: 700; font-size: .74rem; color: var(--pra-dim); }
-  /* ── Previous Scans ── */
+  /* â”€â”€ Previous Scans â”€â”€ */
   #pastScans { margin-top: 32px; }
   .past-scan-card { padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
   .past-scan-head { display: flex; align-items: center; gap: 10px; }
@@ -61,10 +61,10 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-app/chat-header.js"></script>
+  <script src="/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px">BODY &amp; MOVE SCAN</div>
-    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Upload a photo — get an AI visual read plus a real macro plan.</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Upload a photo â€” get an AI visual read plus a real macro plan.</div>
 
     <div class="type-toggle">
       <div class="type-tab active" data-type="body">Body Scan</div>
@@ -73,7 +73,7 @@
 
     <div class="upload-box" id="uploadBox">
       <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
-      <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
+      <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">âœ•</button>
       <input type="file" id="photoInput" accept="image/*" style="display:none"/>
     </div>
 
@@ -140,7 +140,7 @@
     </div>
 
     <button class="pra-btn" id="analyzeBtn" style="width:100%;margin-top:18px">ANALYZE</button>
-    <div class="spinner" id="spinner">Analyzing…</div>
+    <div class="spinner" id="spinner">Analyzingâ€¦</div>
 
     <div class="pra-panel" id="resultBox"></div>
 
@@ -158,8 +158,8 @@ let photoDataUrl = null;
 let lastResult = null;
 let me = null;
 
-// ── Persistence: photo, form fields, and the last result all survive a
-// refresh, nav-away-and-back, or server restart — stored client-side since
+// â”€â”€ Persistence: photo, form fields, and the last result all survive a
+// refresh, nav-away-and-back, or server restart â€” stored client-side since
 // there's nothing server-side to key it to (no analysis-session concept).
 const STATE_KEY = 'pra-body-move-scan-state-v1';
 const FIELD_IDS = ['heightUnit','heightFt','heightIn','heightCm','weightUnit','weightLbs','weightKg','age','sex','activityLevel','goal','moveTypeInput','moveGoalInput'];
@@ -203,7 +203,7 @@ document.querySelectorAll('.type-tab').forEach(tab => {
     analysisType = tab.dataset.type;
     document.getElementById('moveTypeField').style.display = analysisType === 'move' ? 'block' : 'none';
     document.getElementById('moveGoalField').style.display = analysisType === 'move' ? 'block' : 'none';
-    // Move Technique is about the move only — no nutrition inputs or plan.
+    // Move Technique is about the move only â€” no nutrition inputs or plan.
     document.getElementById('nutritionPanel').style.display = analysisType === 'move' ? 'none' : 'block';
     saveState();
   };
@@ -230,14 +230,14 @@ document.getElementById('clearPhotoBtn').onclick = (e) => {
   photoDataUrl = null;
   lastResult = null;
   document.getElementById('photoInput').value = '';
-  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to upload a photo';
+  document.getElementById('uploadPrompt').innerHTML = 'ðŸ“· Tap to upload a photo';
   document.getElementById('clearPhotoBtn').style.display = 'none';
   document.getElementById('resultBox').style.display = 'none';
   document.getElementById('resultBox').innerHTML = '';
   saveState();
 };
 
-// ── Unit toggles: default ft/in + lbs (US-friendly), metric always what's sent to the backend ──
+// â”€â”€ Unit toggles: default ft/in + lbs (US-friendly), metric always what's sent to the backend â”€â”€
 document.getElementById('heightUnit').addEventListener('change', (e) => {
   const isCm = e.target.value === 'cm';
   document.getElementById('heightCm').style.display = isCm ? '' : 'none';
@@ -294,7 +294,7 @@ document.getElementById('analyzeBtn').onclick = async () => {
 function renderResult(d, scrollTo) {
   const box = document.getElementById('resultBox');
   // The body-fat estimate ships as a "BODY FAT ESTIMATE: X-Y%" line at the
-  // top of the AI text (per the system prompt) — pull it out into its own
+  // top of the AI text (per the system prompt) â€” pull it out into its own
   // stat tile instead of leaving it buried in the paragraph.
   let assessment = d.assessment || '';
   let bodyFat = null;
@@ -307,7 +307,7 @@ function renderResult(d, scrollTo) {
   let html = bodyFat
     ? `<div class="bodyfat-tile"><div class="val">${escapeHtml(bodyFat)}</div><div class="lab">Estimated Body Fat</div></div>`
     : '';
-  // Reads like an actual email now, not a labeled report — the AI is told
+  // Reads like an actual email now, not a labeled report â€” the AI is told
   // not to write its own greeting/sign-off, so both are added here instead.
   const greetName = me?.first ? escapeHtml(me.first) : 'there';
   html += `<div class="greeting">Hey ${greetName},</div>`;
@@ -322,7 +322,7 @@ function renderResult(d, scrollTo) {
         <div class="macro-tile"><div class="val">${d.macros.fatG}g</div><div class="lab">Fat 30%</div></div>
       </div>
       <div class="pra-h2" style="margin-top:18px;margin-bottom:8px">6-Meal Plan</div>
-      ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal · P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
+      ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal Â· P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
     `;
   } else if (d.analysisType === 'body') {
     html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Add height + weight above to get a personalized calorie/macro plan.</div>`;
@@ -332,7 +332,7 @@ function renderResult(d, scrollTo) {
     <div class="signoff">
       <div class="signoff-text">Blessings!</div>
       <div class="signoff-text">Coach Lee</div>
-      <img class="signoff-logo" src="/chat-app/assets/lee-signature.png" alt="Lee Weiland signature"/>
+      <img class="signoff-logo" src="/assets/lee-signature.png" alt="Lee Weiland signature"/>
       <div class="signoff-name">Lee Weiland</div>
       <div class="signoff-title">Creator Powerbatics</div>
       <div class="signoff-title">Founder Pacific Rim Athletics</div>
@@ -366,7 +366,7 @@ async function loadPastScans() {
           <span class="past-scan-type">${escapeHtml(label)}</span>
           <span class="past-scan-date">${date}</span>
           ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
-          <button class="past-scan-del" title="Delete">✕</button>
+          <button class="past-scan-del" title="Delete">âœ•</button>
         </div>
         <div class="past-scan-body">${escapeHtml(bodyText)}</div>
       </div>`;
@@ -406,3 +406,4 @@ async function deleteScan(id, card) {
 </script>
 </body>
 </html>
+

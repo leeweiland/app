@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Profile — PRA Chat</title>
-<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<title>Profile â€” PRA Chat</title>
+<link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 32px 20px 60px; }
@@ -29,9 +29,9 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-app/chat-header.js"></script>
+  <script src="/chat-header.js"></script>
   <div class="wrap">
-    <div class="pra-panel profile-card" id="profileCard">Loading…</div>
+    <div class="pra-panel profile-card" id="profileCard">Loadingâ€¦</div>
   </div>
 </div>
 
@@ -42,7 +42,7 @@ const viewUserId = params.get('userId');
 
 async function load() {
   const meRes = await fetch('/api/auth/me');
-  if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
+  if (!meRes.ok) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
   me = (await meRes.json()).user;
 
   if (viewUserId && viewUserId !== me.id) {
@@ -67,7 +67,7 @@ function render(u, editable) {
     <div class="pra-badge role-badge">${u.role}</div>
 
     <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">My Levels</div>
-    <div id="levelsSection"><div class="pra-muted" style="font-size:.82rem;text-align:left">Loading…</div></div>
+    <div id="levelsSection"><div class="pra-muted" style="font-size:.82rem;text-align:left">Loadingâ€¦</div></div>
 
     <div class="fields">
       <div class="field"><label class="pra-label">Email</label>
@@ -102,13 +102,13 @@ function render(u, editable) {
         <input class="pra-input" type="password" id="fConfirmPw" autocomplete="new-password"/></div>
       <button class="pra-btn pra-btn-outline" id="changePwBtn" style="width:100%">CHANGE PASSWORD</button>
       <div class="save-msg" id="pwMsg"></div>
-    ` : `<div class="btn-row"><a class="pra-btn" style="flex:1;text-decoration:none;text-align:center" href="/chat-app/chat.html">MESSAGE</a></div>`}
+    ` : `<div class="btn-row"><a class="pra-btn" style="flex:1;text-decoration:none;text-align:center" href="/chat.html">MESSAGE</a></div>`}
   `;
 
   if (editable) {
     document.getElementById('uploadLabel').onclick = () => document.getElementById('picInput').click();
     document.getElementById('saveBtn').onclick = save;
-    document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/chat-app/login.html'; };
+    document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login.html'; };
     document.getElementById('changePwBtn').onclick = changePassword;
   }
   loadLevels(u);
@@ -119,7 +119,7 @@ const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e
 function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
 function isChecked(v) { return ["x", "yes"].includes(String(v || "").trim().toLowerCase()); }
 function levelNumColor(n) { return LEVEL_NUM_COLORS[Number(n)] || '#5f727f'; }
-// Completing Foundation means they've at least started every skill — an
+// Completing Foundation means they've at least started every skill â€” an
 // unrecorded category reads as Level 1, not 0, once Foundation is done.
 function effectiveLevel(e, cat) {
   const raw = Number(e.levels[cat]) || 0;
@@ -127,7 +127,7 @@ function effectiveLevel(e, cat) {
   return isChecked(e.levels['FOUNDATION']) ? 1 : 0;
 }
 
-// Read-only — levels are only ever edited by a coach, from chat.
+// Read-only â€” levels are only ever edited by a coach, from chat.
 async function loadLevels(u) {
   const box = document.getElementById('levelsSection');
   const r = await fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(u.first) + '&last=' + encodeURIComponent(u.last));
@@ -135,12 +135,12 @@ async function loadLevels(u) {
   const entries = d.entries && d.entries.length ? d.entries : [{ program: null, levels: {}, team: false }];
   box.innerHTML = entries.map(e => `
     <div class="levels-col">
-      <div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${isChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
+      <div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${isChecked(e.levels['FOUNDATION']) ? 'âœ“' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
       ${LEVELS_CATS.map(cat => {
         const n = effectiveLevel(e, cat);
         return `<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
       }).join('')}
-      ${e.program === 'Gym' ? `<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${e.team ? '✓' : '0'}</span></div>` : ''}
+      ${e.program === 'Gym' ? `<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${e.team ? 'âœ“' : '0'}</span></div>` : ''}
     </div>
   `).join('');
 }
@@ -181,3 +181,4 @@ load();
 </script>
 </body>
 </html>
+

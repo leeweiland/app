@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Powerbatics Training Videos — PRA</title>
-<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<title>Powerbatics Training Videos â€” PRA</title>
+<link rel="stylesheet" href="/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
@@ -30,17 +30,17 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-app/chat-header.js"></script>
+  <script src="/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:18px">POWERBATICS TRAINING VIDEOS</div>
     <div class="controls">
       <div class="search-clear-wrap" style="flex:1;min-width:220px">
-        <input class="pra-input" id="searchInput" placeholder="Search moves — e.g. 'handstand', 'flexibility', 'core'…"/>
-        <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
+        <input class="pra-input" id="searchInput" placeholder="Search moves â€” e.g. 'handstand', 'flexibility', 'core'â€¦"/>
+        <button type="button" class="search-clear-btn" data-clears="searchInput">âœ•</button>
       </div>
       <select class="pra-select" id="categoryFilter"><option value="">All Categories</option></select>
     </div>
-    <div class="grid" id="grid"><div class="pra-muted">Loading…</div></div>
+    <div class="grid" id="grid"><div class="pra-muted">Loadingâ€¦</div></div>
   </div>
 
   <div class="modal-backdrop" id="playerModal">
@@ -72,7 +72,7 @@ function render(moves) {
     <div class="pra-card move-card" data-id="${m.id}">
       <div class="move-thumb">
         <video src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="metadata" muted playsinline></video>
-        <div class="play-icon">▶</div>
+        <div class="play-icon">â–¶</div>
       </div>
       <div class="move-info">
         <div class="move-name">${m.name}</div>
@@ -124,3 +124,4 @@ load();
 </script>
 </body>
 </html>
+
