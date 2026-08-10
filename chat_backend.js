@@ -417,7 +417,7 @@ async function geocodeLocationTextCached(text) {
 // on each new submission (newest first), so the first match is the latest.
 function getLatestArchetypeImage(email) {
   if (!email) return null;
-  const leads = readJson(join("..", "personality-quiz", "leads.json"), []);
+  const leads = readJson(join("personality-quiz", "leads.json"), []);
   const lead = leads.find(l => (l.email || "").toLowerCase() === email.toLowerCase());
   return lead?.image || null;
 }
@@ -425,7 +425,7 @@ function getLatestArchetypeImage(email) {
 // Build lookups from MBTI code, PRA title, and 16P standard name → {male, female} image URLs.
 // All keys are normalized for case-insensitive matching.
 function buildArchetypeImageMaps() {
-  const cfg = readJson(join("..", "personality-quiz", "config.json"), {});
+  const cfg = readJson(join("personality-quiz", "config.json"), {});
   const byCode = {}, byTitle = {}, byStandard = {};
   for (const [code, arch] of Object.entries(cfg.archetypes || {})) {
     if (!arch.images) continue;
