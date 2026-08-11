@@ -1304,12 +1304,6 @@ function canCreateDm(creator, otherUser) {
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
 
-  // TEMP — confirms the Railway Volume is actually being used before relying
-  // on it for real data. Remove once verified.
-  if (p === "/api/_debug/data-dir") {
-    return sendJson(res, 200, { dataDir: DATA_DIR, dirname: __dirname, usingVolume: DATA_DIR !== __dirname });
-  }
-
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {
     const ct = req.headers["content-type"] || "";
