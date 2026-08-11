@@ -38,9 +38,14 @@
   .convo-meta { min-width: 0; flex: 1; }
   .convo-name { font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
-  .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; }
+  .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
   .convo-time.has-unread { color: #39ff14; font-weight: 700; }
+  /* # / pin / star / count always render in this fixed order — hidden
+     (visibility, not display) rather than omitted when a row doesn't have
+     one, so every row's icons and count line up in the same columns. */
+  .convo-actions-row { display: flex; align-items: center; gap: 2px; }
   .convo-unread-badge { background: #39ff14; color: #0a0a0d; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+  .convo-unread-badge.empty { visibility: hidden; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
   .convo-preview { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -779,16 +784,16 @@ function convoTimeLabel(iso) {
 }
 
 function convoItemHtml(i) {
-  // Virtual rows (a contact with no conversation yet) can't be favorited —
-  // there's no conversation id to favorite until the first message exists.
-  const favBtn = i.virtual ? '' : `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
-  const pinBtn = i.virtual ? '' : `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}">${PIN_ICON}</button>`;
+  // Every icon/badge slot is always rendered — just hidden (visibility, not
+  // display, so its space stays reserved) when it doesn't apply to this row
+  // — so the # / pin / star / count column always lines up the same across
+  // every row, whether or not a given row actually has that icon or a count.
   const canToggleChannel = !i.virtual && i.isGroup && isAdminMe() && (i.isChannel || !i.hasStudent);
-  const channelBtn = canToggleChannel
-    ? `<button class="convo-channel-btn ${i.isChannel ? 'on' : ''}" data-channel-id="${i.convoId}" data-channel-on="${i.isChannel ? '0' : '1'}" title="${i.isChannel ? 'Remove from channels' : 'Mark as channel'}">#</button>`
-    : '';
-  const timeLabel = i.timestamp ? `<div class="convo-time${i.unread ? ' has-unread' : ''}">${convoTimeLabel(i.timestamp)}</div>` : '';
-  const unreadBadge = i.unreadCount > 0 ? `<div class="convo-unread-badge">${i.unreadCount > 99 ? '99+' : i.unreadCount}</div>` : '';
+  const channelBtn = `<button class="convo-channel-btn ${i.isChannel ? 'on' : ''}" data-channel-id="${i.convoId || ''}" data-channel-on="${i.isChannel ? '0' : '1'}" title="${i.isChannel ? 'Remove from channels' : 'Mark as channel'}" style="${canToggleChannel ? '' : 'visibility:hidden'}">#</button>`;
+  const pinBtn = `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId || ''}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}" style="${i.virtual ? 'visibility:hidden' : ''}">${PIN_ICON}</button>`;
+  const favBtn = `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId || ''}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}" style="${i.virtual ? 'visibility:hidden' : ''}">${STAR_ICON}</button>`;
+  const unreadBadge = `<div class="convo-unread-badge${i.unreadCount > 0 ? '' : ' empty'}">${i.unreadCount > 99 ? '99+' : (i.unreadCount || '')}</div>`;
+  const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
   return `
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''}" data-key="${i.key}">
@@ -798,12 +803,14 @@ function convoItemHtml(i) {
         <div class="convo-preview">${i.preview}</div>
       </div>
       <div class="convo-side">
-        ${timeLabel}
-        ${unreadBadge}
+        <div class="convo-time${i.unread ? ' has-unread' : ''}">${timeLabel}</div>
+        <div class="convo-actions-row">
+          ${channelBtn}
+          ${pinBtn}
+          ${favBtn}
+          ${unreadBadge}
+        </div>
       </div>
-      ${channelBtn}
-      ${pinBtn}
-      ${favBtn}
     </div>
   `;
 }

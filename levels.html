@@ -23,6 +23,9 @@
   .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
   .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
   .chip-val-input { width: 40px; font-size: .8rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
+  .team-checkbox { display: inline-block; width: 16px; height: 16px; border: 1.5px solid var(--pra-dim); border-radius: 4px; position: relative; vertical-align: middle; }
+  .team-checkbox.checked { border-color: #fff; background: #fff; }
+  .team-checkbox.checked::after { content: ''; position: absolute; left: 4px; top: 0px; width: 5px; height: 9px; border: solid #0a0a0d; border-width: 0 2px 2px 0; transform: rotate(45deg); }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 24px; }
 </style>
 </head>
@@ -87,15 +90,14 @@ let isStaffUser = false;
 
 function renderLevelChips(p, idx) {
   const foundationSet = levelIsChecked(p.levels['FOUNDATION']);
-  const inProgress = String(p.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress';
   const editCls = isStaffUser ? ' editable' : '';
-  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : (inProgress ? 'In Progress' : '0')}</span></div>`];
+  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>`];
   LEVELS_NUMERIC_CATS.forEach(cat => {
     const n = effectiveLevel(p, cat);
     rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
   });
   if (p.program === 'Gym') {
-    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="TEAM" style="color:#fff">${p.team ? '✓' : '0'}</span></div>`);
+    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls} team-checkbox${p.team ? ' checked' : ''}" data-idx="${idx}" data-cat="TEAM"></span></div>`);
   }
   return `<div class="levels-col">${rows.join('')}</div>`;
 }
@@ -120,6 +122,22 @@ async function saveLevelField(p, cat, value) {
   return true;
 }
 
+// Updates just the one card that changed, in place — deliberately does NOT
+// re-sort/re-filter the list. Re-sorting immediately after an edit was
+// yanking the person to a new position mid-edit (e.g. sorted by level, bump
+// their score, they jump rows), which made it easy to lose track of who you
+// were editing and hard to spot/undo a mis-click. The list only re-sorts
+// when you actually navigate back to the page (or change search/sort).
+function updateCardInPlace(idx) {
+  const p = currentFiltered[idx];
+  const card = document.querySelectorAll('.person-card')[idx];
+  if (!p || !card) return;
+  card.querySelector('.super-level-badge .num').textContent = superLevel(p);
+  const colEl = card.querySelector('.levels-col');
+  if (colEl) colEl.outerHTML = renderLevelChips(p, idx);
+  attachChipHandlers();
+}
+
 function attachChipHandlers() {
   document.querySelectorAll('.chip-val.editable').forEach(el => {
     el.addEventListener('click', async () => {
@@ -134,7 +152,7 @@ function attachChipHandlers() {
         el.style.opacity = '.5';
         const ok = await saveLevelField(p, cat, next);
         el.style.opacity = '';
-        if (ok) applyFilters();
+        if (ok) updateCardInPlace(idx);
         return;
       }
 
@@ -150,12 +168,12 @@ function attachChipHandlers() {
       const commit = async () => {
         const val = Math.max(0, Math.min(10, Number(input.value) || 0));
         await saveLevelField(p, cat, String(val));
-        applyFilters();
+        updateCardInPlace(idx);
       };
       input.addEventListener('blur', commit);
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') input.blur();
-        if (e.key === 'Escape') { input.removeEventListener('blur', commit); applyFilters(); }
+        if (e.key === 'Escape') { input.removeEventListener('blur', commit); updateCardInPlace(idx); }
       });
     });
   });
