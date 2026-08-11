@@ -102,7 +102,7 @@
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
   .group-member-link:hover { opacity: .75; }
-  .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: none; }
+  .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: underline; }
   .thread-protocol-link:hover { text-decoration: underline; }
   .thread-appt-row { display: none; font-family: var(--font-secondary); font-size: .66rem; color: #39ff14; margin-top: 3px; gap: 8px; flex-wrap: wrap; align-items: center; }
   .thread-appt-link { color: #39ff14; text-decoration: underline; white-space: nowrap; }
@@ -1423,7 +1423,8 @@ function updateThreadApptHeader(messages, convo) {
   const calLink = upcoming.googleEventLink
     ? `<a class="thread-appt-link" href="${upcoming.googleEventLink}" target="_blank">View on Google Calendar</a>`
     : '';
-  const zoomLink = sender?.zoomLink
+  // Gym sessions are in-person — no video-call link to show.
+  const zoomLink = (sender?.zoomLink && !upcoming.isGym)
     ? `<a class="thread-appt-link" href="${sender.zoomLink}" target="_blank">Join Zoom</a>`
     : '';
   const canCancel = isStaffMe() || (upcoming.isGym && me.role === 'gym' && upcoming.clientIds?.includes(me.id));
@@ -1516,7 +1517,8 @@ function renderApptBubble(m, senderLabel, sender) {
   const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
   const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
   const calLink = m.googleEventLink ? `<a class="appt-link" href="${m.googleEventLink}" target="_blank">View on Google Calendar</a>` : '';
-  const zoomLink = sender?.zoomLink
+  // Gym sessions are in-person — no video-call link to show.
+  const zoomLink = (sender?.zoomLink && !m.isGym)
     ? `<a class="appt-link appt-zoom-link" href="${sender.zoomLink}" target="_blank"><span class="status-icon">${svgVideoCam()}</span> Join Zoom</a>`
     : '';
   const canCancelBubble = (isStaffMe() && m.senderId === me.id) || (m.isGym && me.role === 'gym' && m.clientIds?.includes(me.id));

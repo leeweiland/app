@@ -1391,6 +1391,44 @@ function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // actually enrolled in.
 function isClientRole(role) { return role === "online" || role === "gym"; }
 
+// Every plain "user" and every online/gym client gets their OWN dedicated
+// group (not one shared group for everyone) -- "User First Last Group" with
+// them + every admin/admin2, or "Student First Last Group" with them +
+// every admin/admin2/coach. Re-run after anything that could change who
+// belongs in a group (signup, role change, archive/unarchive, the
+// auto-promotion sync, a new admin/coach joining) so every existing
+// person's group picks up staff roster changes too, not just brand new
+// accounts. Matched by autoGroupUserId, not name, so a duplicate name never
+// collides with the wrong person's group. A group stays put (frozen, not
+// deleted) once someone's archived or promoted out of user/online/gym --
+// preserves history instead of losing it.
+function syncDefaultGroups() {
+  const users = readJson(USERS_FILE, []);
+  const convos = readJson(CONVOS_FILE, []);
+  const active = users.filter(u => !u.archived);
+  const adminIds = active.filter(u => isAdmin(u)).map(u => u.id);
+  const coachIds = active.filter(u => u.role === "coach").map(u => u.id);
+
+  function ensurePersonalGroup(person, autoType, staffIds, labelPrefix) {
+    const desired = Array.from(new Set([person.id, ...staffIds]));
+    const name = `${labelPrefix} ${person.first} ${person.last} Group`;
+    let convo = convos.find(c => c.autoGroupType === autoType && c.autoGroupUserId === person.id);
+    if (!convo) {
+      convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() });
+    } else {
+      convo.name = name;
+      if (JSON.stringify([...convo.participantIds].sort()) !== JSON.stringify([...desired].sort())) {
+        convo.participantIds = desired;
+      }
+    }
+  }
+  active.forEach(u => {
+    if (u.role === "user") ensurePersonalGroup(u, "user", adminIds, "User");
+    else if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds], "Student");
+  });
+  writeJson(CONVOS_FILE, convos);
+}
+
 // Team-chat-first policy: a plain user/online/gym account can never
 // initiate a DM at all (no directory to pick anyone from in the first
 // place — see the /contacts endpoint below — but this is the real
@@ -1399,38 +1437,6 @@ function isClientRole(role) { return role === "online" || role === "gym"; }
 // only an admin/admin2 can start a new DM reaching a user/online/gym
 // account. Staff-to-staff DMs (any mix of coach/admin/admin2) are
 // unaffected either direction.
-// Keeps two always-current shared groups in sync with actual roles: every
-// plain "user" together with every admin/admin2, and every online/gym
-// client together with every admin/admin2/coach. Called after anything that
-// could change who belongs in either bucket (signup, role change, archive/
-// unarchive, the auto-promotion sync) so new accounts land in the right
-// group immediately and no one lingers in one after their role moves on.
-// Membership here is entirely rule-computed -- these two groups' own
-// participant lists aren't meant to be hand-edited via the normal group UI,
-// since the next sync will just recompute them anyway.
-function syncDefaultGroups() {
-  const users = readJson(USERS_FILE, []);
-  const convos = readJson(CONVOS_FILE, []);
-  const active = users.filter(u => !u.archived);
-  const admins = active.filter(u => isAdmin(u)).map(u => u.id);
-  const allStaff = active.filter(u => isStaff(u)).map(u => u.id);
-  const plainUsers = active.filter(u => u.role === "user").map(u => u.id);
-  const clients = active.filter(u => isClientRole(u.role)).map(u => u.id);
-
-  function ensureGroup(autoType, name, memberIds) {
-    const desired = Array.from(new Set(memberIds));
-    let convo = convos.find(c => c.autoGroupType === autoType);
-    if (!convo) {
-      if (!desired.length) return;
-      convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, createdBy: null, createdAt: new Date().toISOString() });
-    } else if (JSON.stringify([...convo.participantIds].sort()) !== JSON.stringify([...desired].sort())) {
-      convo.participantIds = desired;
-    }
-  }
-  ensureGroup("users", "New Users", [...plainUsers, ...admins]);
-  ensureGroup("students", "New Students", [...clients, ...allStaff]);
-  writeJson(CONVOS_FILE, convos);
-}
 
 function canCreateDm(creator, otherUser) {
   const creatorIsClient = !isStaff(creator);
