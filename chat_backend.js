@@ -2179,6 +2179,17 @@ export async function handleChatRequest(req, res, url) {
         return sendJson(res, 200, { ok: true });
       }
 
+      if (sub === "" && req.method === "PATCH") {
+        if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be renamed" });
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        const { name } = await readJsonBody(req);
+        const trimmed = String(name || "").trim();
+        if (!trimmed) return sendJson(res, 400, { error: "Name can't be blank" });
+        convo.name = trimmed;
+        writeJson(CONVOS_FILE, convos);
+        return sendJson(res, 200, { ok: true, conversation: convo });
+      }
+
       const removeParticipantMatch = sub.match(/^\/participants\/([^/]+)$/);
       if (removeParticipantMatch && req.method === "DELETE") {
         if (convo.type !== "group") return sendJson(res, 400, { error: "Can only remove members from a group" });

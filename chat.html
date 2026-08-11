@@ -335,7 +335,10 @@
   <!-- Group info modal (coach/admin only) -->
   <div class="modal-backdrop" id="groupInfoModal">
     <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:14px" id="groupInfoTitle">Group Info</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input class="pra-input" id="groupInfoNameInput" style="flex:1;font-weight:700"/>
+        <button class="pra-btn" id="groupInfoRenameBtn" style="padding:8px 14px;font-size:.78rem">Save</button>
+      </div>
       <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
       <div id="groupInfoMembers"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
@@ -1449,7 +1452,7 @@ document.getElementById('newGroupBtn').onclick = async () => {
 document.getElementById('groupInfoBtn').onclick = () => {
   const convo = conversations.find(c => c.id === activeConvoId);
   if (!convo || convo.type !== 'group') return;
-  document.getElementById('groupInfoTitle').textContent = convo.name || 'Group Info';
+  document.getElementById('groupInfoNameInput').value = convo.name || '';
   document.getElementById('groupInfoMembers').innerHTML = convo.participants.map(p => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(p)}</div>
@@ -1468,6 +1471,17 @@ document.getElementById('groupInfoBtn').onclick = () => {
     };
   });
   openModal('groupInfoModal');
+};
+
+document.getElementById('groupInfoRenameBtn').onclick = async () => {
+  const name = document.getElementById('groupInfoNameInput').value.trim();
+  if (!name) { alert("Name can't be blank."); return; }
+  const r = await fetch(`/api/chat/conversations/${activeConvoId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not rename group.'); return; }
+  await loadConversations();
+  openConvo(activeConvoId);
 };
 
 document.getElementById('deleteGroupBtn').onclick = async () => {
