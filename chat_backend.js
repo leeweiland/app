@@ -315,9 +315,24 @@ async function getDriveAccessToken() {
 // Same token also covers Sheets + Gmail scopes — reused for both below.
 const getGoogleAccessToken = getDriveAccessToken;
 
+// Chat-account role -> the App sheet's own TYPE column vocabulary (see the
+// "prefix match" comment on sheetRole in fetchUsersMapPoints — Admin 2
+// still glows blue there because it starts with "admin").
+function roleToSheetType(role) {
+  if (role === "admin") return "Admin";
+  if (role === "admin2") return "Admin 2";
+  if (role === "coach") return "Coach";
+  if (role === "online" || role === "gym") return "Student";
+  return "User";
+}
+
 // Append-or-update a signup's row in the shared "APP" tracking sheet, matched by
 // email. Never allowed to break signup/reset flows — callers swallow its errors.
-async function upsertAppSheetRow({ first, last, email, phone, ip, location }) {
+// `role`, if passed, also writes column J (TYPE) so a manually-created
+// account or a role change shows up correctly on the Strength Ninjas map —
+// omitted for the plain signup/reset-password callers below, which leave
+// TYPE for the business to set by hand same as always.
+async function upsertAppSheetRow({ first, last, email, phone, ip, location, role }) {
   const accessToken = await getGoogleAccessToken();
   const range = `'${APP_SHEET_TAB}'!A:F`;
   const getRes = await fetch(
@@ -328,6 +343,7 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location }) {
   const rows = getData.values || [];
   const rowIndex = rows.findIndex((r, i) => i > 0 && (r[2] || "").toLowerCase() === email.toLowerCase());
   const rowValues = [[first, last, email, phone || "", ip || "", location || ""]];
+  const type = role ? roleToSheetType(role) : undefined;
 
   if (rowIndex > 0) {
     const sheetRow = rowIndex + 1; // 1-indexed
@@ -339,13 +355,65 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location }) {
         body: JSON.stringify({ values: rowValues }),
       }
     );
+    if (type) {
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ values: [[type]] }),
+        }
+      );
+    }
   } else {
+    // New row: A-F as before, then G/H/I (personality) left blank and J
+    // (TYPE) filled in if a role was given — matches the column layout
+    // updatePersonalityColumn() uses for its own append below.
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:F1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ values: rowValues }),
+        body: JSON.stringify({ values: [[first, last, email, phone || "", ip || "", location || "", "", "", "", type || ""]] }),
+      }
+    );
+  }
+}
+
+// Role-only sync — used when an existing account's role changes. Deliberately
+// separate from upsertAppSheetRow: that one always rewrites A-F (contact
+// info) too, which would blank out an existing row's IP/location on every
+// role change. This only ever touches column J, and only writes A-F (via a
+// full-row append) for the fallback case where the person has no row yet.
+async function syncAppSheetRole(targetUser) {
+  const accessToken = await getGoogleAccessToken();
+  const range = `'${APP_SHEET_TAB}'!A:F`;
+  const getRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const getData = await getRes.json();
+  const rows = getData.values || [];
+  const rowIndex = rows.findIndex((r, i) => i > 0 && (r[2] || "").toLowerCase() === (targetUser.email || "").toLowerCase());
+  const type = roleToSheetType(targetUser.role);
+
+  if (rowIndex > 0) {
+    const sheetRow = rowIndex + 1;
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [[type]] }),
+      }
+    );
+  } else {
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ values: [[targetUser.first, targetUser.last, targetUser.email, targetUser.phone || "", "", "", "", "", "", type]] }),
       }
     );
   }
@@ -1770,6 +1838,7 @@ export async function handleChatRequest(req, res, url) {
     target.role = role;
     writeJson(USERS_FILE, users);
     syncDefaultGroups();
+    syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
   }
 
@@ -1894,6 +1963,11 @@ export async function handleChatRequest(req, res, url) {
         users.push(newUser);
         writeJson(USERS_FILE, users);
         syncDefaultGroups();
+        // Someone created straight from Admin Panel never went through
+        // signup, so they'd otherwise have no App sheet row at all and
+        // wouldn't show on the Strength Ninjas map. Add one now, TYPE
+        // already set from their assigned role.
+        upsertAppSheetRow({ first, last, email: newUser.email, phone, role }).catch(e => console.error("[APP sheet sync]", e.message));
         // Admin creating someone else's account — no session cookie set here,
         // unlike signup. They'll get their own session when they log in.
         return sendJson(res, 200, { ok: true, user: publicUser(newUser) });
@@ -1915,6 +1989,7 @@ export async function handleChatRequest(req, res, url) {
       target.role = role;
       writeJson(USERS_FILE, users);
       syncDefaultGroups();
+      syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
     // Correct a name/email/phone typo directly (e.g. "Muros" vs the real
