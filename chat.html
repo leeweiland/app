@@ -55,12 +55,18 @@
   /* ── Favorites (a coach's caseload — a quick-access shortlist distinct
      from the full contact/conversation list) ── */
   .convo-fav-toggle { flex-shrink: 0; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; font-weight: 700; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
-  .convo-fav-toggle:hover { color: #ffd54a; border-color: #ffd54a; }
   .convo-fav-toggle.on { color: #0a0a0d; background: #ffd54a; border-color: #ffd54a; }
-  #unreadViewToggle:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
   #unreadViewToggle.on { color: #fff; background: var(--pra-blue); border-color: var(--pra-blue); }
-  #channelsViewToggle:hover { color: #a855f7; border-color: #a855f7; }
   #channelsViewToggle.on { color: #fff; background: #a855f7; border-color: #a855f7; }
+  /* Real mouse-hover only — on touch devices :hover has no "leave" event, so
+     tapping a toggle left it visually stuck in the hover color until some
+     other element happened to receive a stray hover state (e.g. navigating
+     away), even after the tap itself had already toggled .on back off. */
+  @media (hover: hover) {
+    .convo-fav-toggle:hover { color: #ffd54a; border-color: #ffd54a; }
+    #unreadViewToggle:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
+    #channelsViewToggle:hover { color: #a855f7; border-color: #a855f7; }
+  }
   .convo-fav-btn { flex-shrink: 0; align-self: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .5; transition: opacity .15s, color .15s; }
   .convo-fav-btn:hover { opacity: 1; color: #ffd54a; }
   .convo-fav-btn.on { opacity: 1; color: #ffd54a; }
