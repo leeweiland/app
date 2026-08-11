@@ -600,7 +600,16 @@ function convoDisplayName(convo) {
   const other = otherParticipant(convo);
   return other ? (other.first + ' ' + other.last) : 'Unknown';
 }
-function convoAvatarUser(convo) { return convo.type === 'group' ? { first: convo.name, last: '', role: 'group' } : otherParticipant(convo); }
+// Group avatars glow the color of the "client" role present in the group —
+// student (green) takes priority since that's the typical case, falling
+// back to user (white) for groups like a plain-user + coach with no
+// student, and finally the old default green for staff-only groups.
+function convoAvatarUser(convo) {
+  if (convo.type !== 'group') return otherParticipant(convo);
+  const student = convo.participants.find(p => p.role === 'student');
+  const plainUser = convo.participants.find(p => p.role === 'user');
+  return { first: convo.name, last: '', role: student ? 'student' : plainUser ? 'user' : 'group' };
+}
 
 async function init() {
   const meRes = await fetch('/api/auth/me');
@@ -642,7 +651,7 @@ async function loadConversations() {
 function buildDirectory() {
   const items = conversations.map(c => ({
     key: 'c:' + c.id, convoId: c.id, virtual: false,
-    name: convoDisplayName(c), avatarUser: convoAvatarUser(c),
+    name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group',
     preview: previewText(c.lastMessage),
     timestamp: c.lastMessage?.createdAt || c.createdAt,
     favorite: !!c.favorite,
@@ -676,7 +685,7 @@ function convoItemHtml(i) {
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''}" data-key="${i.key}">
       <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${i.name}${roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       ${favBtn}
