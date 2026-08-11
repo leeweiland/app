@@ -20,14 +20,14 @@
         align-items: center;
         justify-content: space-between;
         padding: 10px 16px;
-        /* iOS notch/Dynamic Island/camera cutout sits right where this fixed
-           bar would otherwise start. env(safe-area-inset-top) is the
-           "correct" way to clear it, but it measured 0 in this app's actual
-           WKWebView (Capacitor's safe-area wiring doesn't always propagate
-           it reliably) even with viewport-fit=cover set — so this floors at
-           a flat 54px, enough to clear every current notch/Dynamic Island,
-           and only lets env() push it further if a device ever needs more. */
-        padding-top: max(54px, env(safe-area-inset-top));
+        /* Flat clearance so the logo isn't obscured by the phone's own
+           front-camera housing — reported on both iOS and Android, so this
+           is deliberately not iOS-notch-specific (env(safe-area-inset-top)
+           measured unreliably in this app's WKWebView anyway). Also
+           reasserted inside the @container mobile block below: its own
+           padding shorthand would otherwise reset this back to 10px on
+           exactly the narrow/phone viewports where it matters most. */
+        padding-top: 48px;
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-bottom: 1px solid #26262e;
@@ -48,6 +48,7 @@
           flex-direction: column;
           gap: 8px;
           padding: 10px 12px;
+          padding-top: 48px;
         }
         #chat-app-header .cah-label { align-self: center; }
         #chat-app-header .cah-logo { width: 100px; }
