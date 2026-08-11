@@ -1409,9 +1409,15 @@ function syncDefaultGroups() {
   const adminIds = active.filter(u => isAdmin(u)).map(u => u.id);
   const coachIds = active.filter(u => u.role === "coach").map(u => u.id);
 
+  // Normalizes to Title Case regardless of how the name is actually stored
+  // (someone typed "JOHN SMITH" in all caps, etc.) so the generated group
+  // name always reads as a normal name, never shouty.
+  function titleCase(s) {
+    return String(s || "").toLowerCase().replace(/(^|[\s'-])\S/g, (c) => c.toUpperCase());
+  }
   function ensurePersonalGroup(person, autoType, staffIds) {
     const desired = Array.from(new Set([person.id, ...staffIds]));
-    const name = `${person.first} ${person.last} Group`;
+    const name = `${titleCase(person.first)} ${titleCase(person.last)} Group`;
     let convo = convos.find(c => c.autoGroupType === autoType && c.autoGroupUserId === person.id);
     if (!convo) {
       convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() });
