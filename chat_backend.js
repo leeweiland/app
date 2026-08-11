@@ -1392,8 +1392,8 @@ function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 function isClientRole(role) { return role === "online" || role === "gym"; }
 
 // Every plain "user" and every online/gym client gets their OWN dedicated
-// group (not one shared group for everyone) -- "User First Last Group" with
-// them + every admin/admin2, or "Student First Last Group" with them +
+// group (not one shared group for everyone), named "First Last Group" --
+// a user's has them + every admin/admin2, an online/gym client's has them +
 // every admin/admin2/coach. Re-run after anything that could change who
 // belongs in a group (signup, role change, archive/unarchive, the
 // auto-promotion sync, a new admin/coach joining) so every existing
@@ -1409,9 +1409,9 @@ function syncDefaultGroups() {
   const adminIds = active.filter(u => isAdmin(u)).map(u => u.id);
   const coachIds = active.filter(u => u.role === "coach").map(u => u.id);
 
-  function ensurePersonalGroup(person, autoType, staffIds, labelPrefix) {
+  function ensurePersonalGroup(person, autoType, staffIds) {
     const desired = Array.from(new Set([person.id, ...staffIds]));
-    const name = `${labelPrefix} ${person.first} ${person.last} Group`;
+    const name = `${person.first} ${person.last} Group`;
     let convo = convos.find(c => c.autoGroupType === autoType && c.autoGroupUserId === person.id);
     if (!convo) {
       convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() });
@@ -1423,8 +1423,8 @@ function syncDefaultGroups() {
     }
   }
   active.forEach(u => {
-    if (u.role === "user") ensurePersonalGroup(u, "user", adminIds, "User");
-    else if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds], "Student");
+    if (u.role === "user") ensurePersonalGroup(u, "user", adminIds);
+    else if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
   });
   writeJson(CONVOS_FILE, convos);
 }
