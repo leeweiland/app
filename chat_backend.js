@@ -1657,6 +1657,20 @@ export async function handleChatRequest(req, res, url) {
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
+    const setPasswordMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
+    if (setPasswordMatch && req.method === "POST") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const { password } = await readJsonBody(req);
+      if (!password || password.length < 8) return sendJson(res, 400, { error: "Password must be at least 8 characters" });
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === setPasswordMatch[1]);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      const { salt, hash } = hashPassword(password);
+      target.passwordSalt = salt;
+      target.passwordHash = hash;
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true });
+    }
     const archiveMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/archived$/);
     if (archiveMatch && req.method === "POST") {
       if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });

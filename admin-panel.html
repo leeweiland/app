@@ -400,12 +400,16 @@ function renderUsers() {
           </button>
         `}
       </td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <input class="pra-input set-password-input" type="text" data-id="${u.id}" placeholder="New password" style="width:120px;font-size:.78rem"/>
+        <button class="pra-btn pra-btn-ghost set-password-btn" data-id="${u.id}" style="padding:5px 10px;font-size:.75rem">Set</button>
+      </td>
     </tr>
   `).join('');
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th><th>Set Password</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
@@ -476,6 +480,19 @@ function renderUsers() {
       const r = await fetch('/api/admin/users/' + btn.dataset.id, { method: 'DELETE' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Delete failed'); return; }
       loadUsers();
+    });
+  });
+  document.querySelectorAll('.set-password-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const input = document.querySelector(`.set-password-input[data-id="${btn.dataset.id}"]`);
+      const password = input.value;
+      if (password.length < 8) { alert('Password must be at least 8 characters.'); return; }
+      const r = await fetch('/api/admin/users/' + btn.dataset.id + '/password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password })
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not set password.'); return; }
+      input.value = '';
+      alert('Password set.');
     });
   });
   // Click into Name/Email/Phone and type — saves on blur (or Enter) with no
