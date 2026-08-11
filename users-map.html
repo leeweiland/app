@@ -68,6 +68,11 @@
   .popup-level-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 7px; padding: 5px 10px; font-size: .72rem; width: 100%; }
   .popup-level-chip .cat { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
   .popup-level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  /* Coach/admin only — same editable-chip pattern as the Levels page. */
+  .popup-level-chip .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
+  .popup-level-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
+  .popup-chip-val-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
+  .popup-team-checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--pra-dim); border-radius: 4px; vertical-align: middle; }
   .retreat-popup-photo { width: 100%; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; background: rgba(0,155,255,0.1); border: 1px solid var(--pra-border); }
   .retreat-popup-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 </style>
@@ -799,6 +804,7 @@ async function drawUsers() {
   setupDotHover();
 }
 
+let isStaffUser = false;
 const LEVELS_NUMERIC_CATS = ["NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
 const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
 function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
@@ -813,52 +819,121 @@ function effectiveLevel(e, cat) {
 }
 function superLevel(e) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + effectiveLevel(e, cat), 0); }
 
+let popupUser = null;
+let popupEntries = [];
+
 function openPopup(u) {
+  popupUser = u;
+  popupEntries = u.levels || [];
   document.getElementById("popupAvatar").innerHTML = u.profilePictureFileId
     ? '<img src="/api/chat/media/' + u.profilePictureFileId + '"/>'
     : (u.first?.[0] || "?").toUpperCase();
   document.getElementById("popupName").textContent = u.first;
   document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
   document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
+  renderPopupLevels();
+  document.getElementById("popup").classList.add("show");
+}
+
+// Coach/admin only — clicking a level's number or a checkmark edits it right
+// on the map popup, matching by first+last name via the same
+// /api/chat/levels/update endpoint the Levels page uses. A client/user
+// viewer's popupUser has no `levels` field at all (stripped server-side) and
+// no `last` name either, so entries is always empty and isStaffUser gates
+// the edit affordance off anyway.
+function renderPopupLevels() {
+  const editCls = isStaffUser ? ' editable' : '';
 
   // Training personality is a per-person attribute, not per-program, so it
   // only needs rendering once — placed directly above Foundation on
   // whichever program card ends up first.
-  const personalityRow = u.archetypeTitle ? `
+  const personalityRow = popupUser.archetypeTitle ? `
     <div class="popup-level-chip">
       <span class="cat">Training Personality</span>
       <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
-        ${u.archetypeTitle}
-        ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
+        ${popupUser.archetypeTitle}
+        ${popupUser.archetypeImage ? `<img src="${popupUser.archetypeImage}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
       </span>
     </div>
   ` : '';
 
-  // Levels ship pre-matched from the server (see /api/chat/users-map), but
-  // only for a staff viewer — a client/user viewer's response has no
-  // `levels` field at all (stripped server-side), so entries is always
-  // empty for them and only the personality row (rendered separately,
-  // below) shows. Never a last name here, just whatever levels matched.
-  const entries = u.levels || [];
-  const levelsHtml = entries.map(e => `
+  const levelsHtml = popupEntries.map((e, idx) => {
+    const foundationSet = levelsIsChecked(e.levels['FOUNDATION']);
+    const teamChecked = !!e.team;
+    return `
     <div class="popup-levels-program">
       <div class="popup-super-level">Super Level <span class="num">${superLevel(e)}</span></div>
       <div class="popup-levels-col">
-        <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${levelsIsChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
+        <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
         ${LEVELS_NUMERIC_CATS.map(cat => {
           const n = effectiveLevel(e, cat);
-          return `<div class="popup-level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
+          return `<div class="popup-level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
         }).join('')}
-        ${e.program === 'Gym' ? `<div class="popup-level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${e.team ? '✓' : '0'}</span></div>` : ''}
+        ${e.program === 'Gym' ? `<div class="popup-level-chip"><span class="cat">Team</span><span class="chip-val${editCls}${teamChecked ? '' : ' popup-team-checkbox'}" data-idx="${idx}" data-cat="TEAM"${teamChecked ? ' style="color:#fff"' : ''}>${teamChecked ? '✓' : ''}</span></div>` : ''}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
+
   document.getElementById("popupLevels").innerHTML = `
     <div class="popup-levels-col">${personalityRow}</div>
     ${levelsHtml}
   `;
+  if (isStaffUser) attachPopupChipHandlers();
+}
 
-  document.getElementById("popup").classList.add("show");
+async function savePopupLevelField(idx, cat, value) {
+  const e = popupEntries[idx];
+  const levels = { ...e.levels };
+  if (cat === 'TEAM') e.team = value;
+  else levels[cat] = value;
+  const r = await fetch('/api/chat/levels/update', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first: popupUser.first, last: popupUser.last, program: e.program, levels, team: e.team }),
+  });
+  if (!r.ok) { alert('Could not save — try again.'); return false; }
+  e.levels = levels;
+  return true;
+}
+
+function attachPopupChipHandlers() {
+  document.querySelectorAll('#popupLevels .chip-val.editable').forEach(el => {
+    el.addEventListener('click', async () => {
+      const idx = Number(el.dataset.idx);
+      const cat = el.dataset.cat;
+      const e = popupEntries[idx];
+      if (!e) return;
+
+      if (cat === 'FOUNDATION' || cat === 'TEAM') {
+        const current = cat === 'TEAM' ? !!e.team : levelsIsChecked(e.levels['FOUNDATION']);
+        const next = cat === 'TEAM' ? !current : (current ? '' : (e.program === 'Online' ? 'Yes' : 'X'));
+        el.style.opacity = '.5';
+        const ok = await savePopupLevelField(idx, cat, next);
+        el.style.opacity = '';
+        if (ok) renderPopupLevels();
+        return;
+      }
+
+      const current = effectiveLevel(e, cat);
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = '0'; input.max = '10';
+      input.value = current;
+      input.className = 'popup-chip-val-input';
+      el.replaceWith(input);
+      input.focus(); input.select();
+
+      const commit = async () => {
+        const val = Math.max(0, Math.min(10, Number(input.value) || 0));
+        await savePopupLevelField(idx, cat, String(val));
+        renderPopupLevels();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') { input.removeEventListener('blur', commit); renderPopupLevels(); }
+      });
+    });
+  });
 }
 function closePopup() { document.getElementById("popup").classList.remove("show"); }
 
@@ -1065,7 +1140,8 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
   const meRes = await fetch("/api/auth/me");
   if (!meRes.ok) { location.href = "/chat-app/login.html?next=" + encodeURIComponent(location.pathname); return; }
   const me = (await meRes.json()).user;
-  if (me.role === "coach" || me.role === "admin") {
+  isStaffUser = me.role === "coach" || me.role === "admin" || me.role === "admin2";
+  if (isStaffUser) {
     const refreshBtn = document.getElementById("refreshLevelsBtn");
     refreshBtn.style.display = "";
     refreshBtn.addEventListener("click", async () => {

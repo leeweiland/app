@@ -628,6 +628,11 @@ async function fetchUsersMapPoints() {
 
     points.push({
       first,
+      // Only ever sent to a staff viewer (stripped in the /api/chat/users-map
+      // handler for anyone else, same as levels below) — needed to target
+      // the right person when a coach/admin edits levels from the map
+      // popup, via the name-matched /api/chat/levels/update endpoint.
+      last,
       profilePictureFileId: localUser?.profilePictureFileId || null,
       archetypeImage,
       archetypeTitle,
@@ -683,6 +688,59 @@ async function fetchUserProfileCard(targetUser) {
   card.archetypeImage = pick(matchedArchetype) || getLatestArchetypeImage(email) || null;
   card.archetypeTitle = matchedArchetype?.title || null;
   return card;
+}
+
+// Attaches role/profilePictureFileId/location/archetype to each Levels-sheet
+// entry, same App-sheet matching as fetchUserProfileCard() above but done
+// once as a batch instead of once per person — the Levels page (staff-only)
+// wants to show the same profile header the map popup does, right on each
+// card. Matched by name only (like findLevelsEntries already does), not by
+// chat account id — same convention this whole file already uses to bridge
+// the Levels sheet, the App sheet, and chat accounts, none of which share a
+// key any other way.
+async function enrichLevelsPeople(people) {
+  const localUsers = readJson(USERS_FILE, []);
+  const accessToken = await getGoogleAccessToken();
+  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const data = await r.json();
+  const rows = (data.values || []).slice(1);
+  const archetypeMaps = buildArchetypeImageMaps();
+
+  return Promise.all(people.map(async p => {
+    const localUser = localUsers.find(u =>
+      u.first.trim().toLowerCase() === p.first.trim().toLowerCase() &&
+      u.last.trim().toLowerCase() === p.last.trim().toLowerCase()
+    );
+    const row = rows.find(row =>
+      (row[0] || "").trim().toLowerCase() === p.first.trim().toLowerCase() &&
+      (row[1] || "").trim().toLowerCase() === p.last.trim().toLowerCase()
+    );
+    const enriched = {
+      ...p,
+      role: localUser?.role || null,
+      profilePictureFileId: localUser?.profilePictureFileId || null,
+      location: null, archetypeImage: null, archetypeTitle: null,
+    };
+    if (!row) return enriched;
+    const [, , email, , ip, location, mbtiCode, sheetPersona16p, praPersona, , sheetGender] = row;
+    let geo = ip ? await geolocateIpCached(ip) : null;
+    if (!geo && location) geo = await geocodeLocationTextCached(location);
+    if (geo) enriched.location = { city: geo.city, region: geo.region, country: geo.country };
+    const gender = localUser?.gender || (sheetGender || "").toLowerCase() || "male";
+    const pick = entry => entry ? (entry[gender] || entry.male || null) : null;
+    const matchedArchetype =
+      archetypeMaps.byTitle[(praPersona || "").toLowerCase()] ||
+      archetypeMaps.byCode[(mbtiCode || "").toUpperCase()] ||
+      archetypeMaps.byStandard[(sheetPersona16p || "").toLowerCase()] ||
+      null;
+    enriched.archetypeImage = pick(matchedArchetype) || getLatestArchetypeImage(email) || null;
+    enriched.archetypeTitle = matchedArchetype?.title || null;
+    return enriched;
+  }));
 }
 
 let levelsCache = null; // { at, people } — 10-minute cache, same idea as the geo caches below
@@ -2200,7 +2258,7 @@ export async function handleChatRequest(req, res, url) {
         // other field (avatar, role, location, training personality) but
         // never level data, even about themselves, matching the /levels*
         // endpoints and levels.html.
-        const visible = isStaff(user) ? points : points.map(({ levels, ...rest }) => rest);
+        const visible = isStaff(user) ? points : points.map(({ levels, last, ...rest }) => rest);
         return sendJson(res, 200, { points: visible });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
@@ -2314,7 +2372,8 @@ export async function handleChatRequest(req, res, url) {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
-        return sendJson(res, 200, { people, categories: LEVELS_CATEGORIES });
+        const enriched = await enrichLevelsPeople(people);
+        return sendJson(res, 200, { people: enriched, categories: LEVELS_CATEGORIES });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }

@@ -13,7 +13,8 @@
   .list { display: flex; flex-direction: column; gap: 10px; }
   .person-card { padding: 16px 18px; }
   .person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .person-name { font-weight: 700; font-size: .98rem; flex: 1; }
+  .person-meta { flex: 1; min-width: 0; }
+  .person-name { font-weight: 700; font-size: .98rem; }
   .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
   .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
   .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -98,7 +99,12 @@ function renderLevelChips(p, idx) {
     rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
   });
   if (p.program === 'Gym') {
-    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls} team-checkbox${p.team ? ' checked' : ''}" data-idx="${idx}" data-cat="TEAM"></span></div>`);
+    // Checked looks exactly like Foundation's checkmark (plain glyph, no
+    // box); unchecked keeps a small empty box outline so it still reads as
+    // a toggle-able checkbox — the .checked box-fill variant read as
+    // inconsistent with Foundation's style right next to it.
+    const teamChecked = !!p.team;
+    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls}${teamChecked ? '' : ' team-checkbox'}" data-idx="${idx}" data-cat="TEAM"${teamChecked ? ' style="color:#fff"' : ''}>${teamChecked ? '✓' : ''}</span></div>`);
   }
   return `<div class="levels-col">${rows.join('')}</div>`;
 }
@@ -216,18 +222,38 @@ async function initStaffFeatures() {
   });
 }
 
+function initials(p) { return ((p.first?.[0] || '') + (p.last?.[0] || '')).toUpperCase(); }
+function avatarRoleClass(p) { return p.role ? ' role-' + (p.role === 'admin2' ? 'admin' : p.role) : ''; }
+function avatarHtml(p) { return p.profilePictureFileId ? '<img src="/api/chat/media/' + p.profilePictureFileId + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>' : initials(p); }
+function roleBadgeHtml(p) {
+  if (p.role === 'admin' || p.role === 'admin2') return '<span class="role-tag role-tag-admin">Admin</span>';
+  if (p.role === 'coach') return '<span class="role-tag role-tag-coach">Coach</span>';
+  if (p.role === 'online') return '<span class="role-tag role-tag-online">Online</span>';
+  if (p.role === 'gym') return '<span class="role-tag role-tag-gym">Gym</span>';
+  if (p.role === 'user') return '<span class="role-tag role-tag-user">User</span>';
+  return '';
+}
+
 function render(people) {
   const list = document.getElementById('list');
   document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
-  list.innerHTML = people.map((p, idx) => `
+  list.innerHTML = people.map((p, idx) => {
+    const location = p.location ? [p.location.city, p.location.region, p.location.country].filter(Boolean).join(', ') : '';
+    return `
     <div class="pra-panel person-card">
       <div class="person-head">
-        <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last)}</div>
+        <div class="pra-avatar${avatarRoleClass(p)}" style="width:52px;height:52px;flex-shrink:0">${avatarHtml(p)}</div>
+        <div class="person-meta">
+          <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last)}${roleBadgeHtml(p)}</div>
+          ${location ? `<div class="pra-muted" style="font-size:.78rem">${escapeHtml(location)}</div>` : ''}
+          ${p.archetypeTitle ? `<div class="pra-muted" style="font-size:.78rem;display:flex;align-items:center;gap:5px;margin-top:2px">${escapeHtml(p.archetypeTitle)}${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:18px;height:18px;border-radius:4px;object-fit:cover"/>` : ''}</div>` : ''}
+        </div>
         <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
       </div>
       ${renderLevelChips(p, idx)}
     </div>
-  `).join('');
+  `;
+  }).join('');
   if (isStaffUser) attachChipHandlers();
 }
 

@@ -289,6 +289,19 @@
     .bubble-row { max-width: 82%; }
     .picker-panel { width: calc(100cqi - 32px); left: 8px; }
   }
+  /* Levels modal's chip cards — same visual language/pattern as the
+     Strength Ninjas map popup and the Levels page (levels.html). */
+  .popup-levels-program { margin-bottom: 10px; }
+  .popup-super-level { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 6px; }
+  .popup-super-level .num { color: #009bff; font-weight: 700; font-size: .8rem; }
+  .popup-levels-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .popup-level-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 7px; padding: 5px 10px; font-size: .72rem; width: 100%; }
+  .popup-level-chip .cat { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
+  .popup-level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .popup-level-chip .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
+  .popup-level-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
+  .popup-chip-val-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
+  .popup-team-checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--pra-dim); border-radius: 4px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -466,25 +479,22 @@
     </div>
   </div>
 
-  <!-- Levels modal (coach/admin only) — click a DM contact's name/avatar -->
+  <!-- Levels modal (coach/admin only) — click any contact's name/avatar.
+       Same map-popup visual language as #profileModal above, but staff can
+       click any level chip to edit it in place (see the Levels page's
+       .chip-val.editable pattern in levels.html — same endpoint, same
+       interaction, reused here). -->
   <div class="modal-backdrop" id="levelsModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" id="levelsModalName" style="margin-bottom:14px">Levels</div>
-      <div class="btn-row" id="levelsAccountActions" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"></div>
-      <div class="field"><label class="pra-label">Program</label>
-        <select class="pra-select" id="levelsProgram" style="width:100%">
-          <option value="Gym">Gym</option>
-          <option value="Online">Online</option>
-        </select>
-      </div>
-      <div class="field-row" style="display:flex;gap:16px;margin:12px 0">
-        <label class="pra-label" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="levelsFoundation"/> Foundation</label>
-        <label class="pra-label" id="levelsTeamRow" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="levelsTeam"/> Team</label>
-      </div>
-      <div id="levelsCatFields"></div>
+    <div class="pra-panel modal-box" style="max-width:360px;text-align:center">
+      <div class="pra-avatar" id="levelsAvatar" style="width:80px;height:80px;font-size:1.7rem;margin:0 auto 12px"></div>
+      <div class="pra-h2" id="levelsName" style="margin-bottom:6px"></div>
+      <div id="levelsRoleBadge" style="margin-bottom:8px"></div>
+      <div class="pra-muted" id="levelsLocation" style="font-size:.85rem;margin-bottom:10px"></div>
+      <div class="btn-row" id="levelsAccountActions" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
+      <div style="text-align:left" id="levelsBody"></div>
       <div class="btn-row" style="display:flex;gap:10px;margin-top:16px">
-        <button class="pra-btn" id="levelsSaveBtn" style="flex:1">SAVE LEVELS</button>
-        <button class="pra-btn pra-btn-ghost" onclick="closeModal('levelsModal')">Cancel</button>
+        <button class="pra-btn pra-btn-ghost" id="levelsMessageBtn" style="flex:1">Message</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('levelsModal')">Close</button>
       </div>
       <div class="pra-muted" id="levelsMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
     </div>
@@ -901,12 +911,13 @@ function wireConvoItems(wrap, items) {
     if (!item) return;
     el.onclick = (e) => {
       if (e.target.closest('.convo-fav-btn, .convo-pin-btn, .convo-channel-btn')) return; // handled separately below
-      // A non-staff viewer can see everyone in the directory now, but a new
-      // DM only ever reaches staff for them (canCreateDm on the backend) —
-      // clicking anyone they don't already have a real conversation with
-      // just shows a read-only profile instead of attempting (and failing)
-      // to start a chat.
-      if (item.virtual) { if (isStaffMe()) startConvo(item.contactId); else openContactProfile(item.contactId); }
+      // Same click behavior for every contact regardless of role (student,
+      // coach, or admin) and regardless of viewer: anyone not already a
+      // real conversation opens a profile popup instead of jumping straight
+      // into a chat — the editable Levels panel for a staff viewer, a
+      // read-only card for everyone else. Staff can still start a chat from
+      // the "Message" button inside that panel (openLevelsModal).
+      if (item.virtual) { if (isStaffMe()) openLevelsModal(item.avatarUser); else openContactProfile(item.contactId); }
       else openConvo(item.convoId);
     };
   });
@@ -1080,9 +1091,10 @@ function isAdminMe() { return !!me && (me.role === 'admin' || me.role === 'admin
 function isStaffMe() { return !!me && (me.role === 'coach' || isAdminMe()); }
 function maybeOpenLevelsModal() {
   const convo = conversations.find(c => c.id === activeConvoId);
-  if (!isStaffMe() || !convo || convo.type !== 'dm') return;
+  if (!convo || convo.type !== 'dm') return;
   const other = otherParticipant(convo);
-  if (other) openLevelsModal(other);
+  if (!other) return;
+  if (isStaffMe()) openLevelsModal(other); else openContactProfile(other.id);
 }
 document.getElementById('threadAvatar').addEventListener('click', maybeOpenLevelsModal);
 document.getElementById('threadName').addEventListener('click', maybeOpenLevelsModal);
@@ -1091,7 +1103,8 @@ document.getElementById('threadGroupMembers').addEventListener('click', (e) => {
   if (!link) return;
   const convo = conversations.find(c => c.id === activeConvoId);
   const member = convo?.participants.find(p => p.id === link.dataset.uid);
-  if (member) openLevelsModal(member);
+  if (!member) return;
+  if (isStaffMe()) openLevelsModal(member); else openContactProfile(member.id);
 });
 
 // ── Schedule appointment (coach/admin only) ──────────────────────────────
@@ -1310,11 +1323,17 @@ document.getElementById('scheduleBtn').addEventListener('click', () => {
 });
 document.getElementById('scheduleSaveBtn').addEventListener('click', submitSchedule);
 
-// ── Coach/admin editing a contact's Levels — matched by name across both
-// the GYM and ONLINE sheets server-side (see /api/chat/levels/lookup).
+// ── Coach/admin viewing/editing a contact's profile + Levels — matched by
+// name across both the GYM and ONLINE sheets server-side (see
+// /api/chat/levels/lookup + /update). Same map-popup visual language and
+// same click-a-chip-to-edit interaction as the Levels page (levels.html) —
+// this modal is that page's editable card, opened for one person at a time
+// from wherever their name/avatar is clicked in chat.
 const LEVELS_NUMERIC_CATS = ['NINJA STRENGTH', 'HANDSTAND', 'POWERMOVES', 'FREERUN', 'CIRQUE'];
+const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
 function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
 function levelsIsChecked(v) { return ['x', 'yes'].includes(String(v || '').trim().toLowerCase()); }
+function levelNumColor(n) { return LEVEL_NUM_COLORS[Number(n)] || '#5f727f'; }
 
 let levelsModalUser = null;
 let levelsModalEntries = [];
@@ -1360,24 +1379,29 @@ function renderLevelsAccountActions(otherUser) {
 
 async function openLevelsModal(otherUser) {
   levelsModalUser = otherUser;
-  document.getElementById('levelsModalName').textContent = otherUser.first + ' ' + otherUser.last + ' — Levels';
-  document.getElementById('levelsMsg').textContent = '';
-  renderLevelsAccountActions(otherUser);
-  document.getElementById('levelsCatFields').innerHTML = LEVELS_NUMERIC_CATS.map(cat =>
-    `<div class="field"><label class="pra-label">${catLabel(cat)} <span class="current-level-tag" data-cat="${cat}" style="color:var(--pra-dim);font-weight:400;text-transform:none;letter-spacing:0">(current: 0)</span></label><input class="pra-input levels-cat-input" type="number" min="0" placeholder="0" data-cat="${cat}"/></div>`
-  ).join('');
-
+  document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
+  document.getElementById('levelsAvatar').innerHTML = avatarHtml(otherUser);
+  document.getElementById('levelsName').textContent = otherUser.first + ' ' + otherUser.last;
+  document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser);
+  document.getElementById('levelsLocation').textContent = '';
   document.getElementById('levelsMsg').textContent = 'Loading…';
-  const r = await fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(otherUser.first) + '&last=' + encodeURIComponent(otherUser.last));
-  const d = await r.json();
-  levelsModalEntries = d.entries || [];
+  document.getElementById('levelsBody').innerHTML = '';
+  renderLevelsAccountActions(otherUser);
+  document.getElementById('levelsMessageBtn').onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
+  openModal('levelsModal');
+
+  const [profileRes, levelsRes] = await Promise.all([
+    fetch('/api/chat/profile/' + otherUser.id),
+    fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(otherUser.first) + '&last=' + encodeURIComponent(otherUser.last)),
+  ]);
+  const profile = profileRes.ok ? (await profileRes.json()).profile : null;
+  levelsModalEntries = levelsRes.ok ? (await levelsRes.json()).entries || [] : [];
   document.getElementById('levelsMsg').textContent = '';
 
-  const programSelect = document.getElementById('levelsProgram');
-  programSelect.value = levelsModalEntries[0]?.program || 'Gym';
-  programSelect.onchange = () => fillLevelsForm(programSelect.value);
-  fillLevelsForm(programSelect.value);
-  openModal('levelsModal');
+  const loc = profile?.location ? [profile.location.city, profile.location.region, profile.location.country].filter(Boolean).join(', ') : '';
+  document.getElementById('levelsLocation').textContent = loc;
+  levelsModalArchetype = profile ? { title: profile.archetypeTitle, image: profile.archetypeImage } : { title: null, image: null };
+  renderLevelsBody();
 }
 
 // Completing Foundation means they've at least started every skill — an
@@ -1388,36 +1412,111 @@ function effectiveLevel(entry, cat) {
   return entry && levelsIsChecked(entry.levels['FOUNDATION']) ? 1 : 0;
 }
 
-function fillLevelsForm(program) {
-  const entry = levelsModalEntries.find(e => e.program === program);
-  document.getElementById('levelsTeamRow').style.display = program === 'Gym' ? 'flex' : 'none';
-  document.getElementById('levelsFoundation').checked = entry ? levelsIsChecked(entry.levels['FOUNDATION']) : false;
-  document.getElementById('levelsTeam').checked = entry ? !!entry.team : false;
-  document.querySelectorAll('.levels-cat-input').forEach(input => {
-    input.value = entry?.levels?.[input.dataset.cat] || '';
+let levelsModalArchetype = { title: null, image: null };
+
+function renderLevelsBody() {
+  const personalityRow = levelsModalArchetype.title ? `
+    <div class="popup-level-chip">
+      <span class="cat">Training Personality</span>
+      <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
+        ${levelsModalArchetype.title}
+        ${levelsModalArchetype.image ? `<img src="${levelsModalArchetype.image}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
+      </span>
+    </div>
+  ` : '';
+
+  const programsHtml = levelsModalEntries.map((e, idx) => {
+    const foundationSet = levelsIsChecked(e.levels['FOUNDATION']);
+    const teamChecked = !!e.team;
+    return `
+    <div class="popup-levels-program">
+      <div class="popup-super-level">${e.program} — Super Level <span class="num">${LEVELS_NUMERIC_CATS.reduce((s, c) => s + effectiveLevel(e, c), 0)}</span></div>
+      <div class="popup-levels-col">
+        <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val editable" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>
+        ${LEVELS_NUMERIC_CATS.map(cat => {
+          const n = effectiveLevel(e, cat);
+          return `<div class="popup-level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val editable" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
+        }).join('')}
+        ${e.program === 'Gym' ? `<div class="popup-level-chip"><span class="cat">Team</span><span class="chip-val editable${teamChecked ? '' : ' popup-team-checkbox'}" data-idx="${idx}" data-cat="TEAM"${teamChecked ? ' style="color:#fff"' : ''}>${teamChecked ? '✓' : ''}</span></div>` : ''}
+      </div>
+    </div>
+  `;
+  }).join('');
+
+  // A person might not have a row in one or both programs yet — offer to
+  // start one instead of just omitting it silently.
+  const missingPrograms = ['Gym', 'Online'].filter(p => !levelsModalEntries.some(e => e.program === p));
+  const addButtons = missingPrograms.map(p =>
+    `<button class="pra-btn pra-btn-ghost add-program-btn" data-program="${p}" style="width:100%;margin-bottom:8px;font-size:.8rem">+ Add ${p} Levels</button>`
+  ).join('');
+
+  document.getElementById('levelsBody').innerHTML = `
+    <div class="popup-levels-col">${personalityRow}</div>
+    ${programsHtml}
+    ${addButtons}
+  `;
+  document.querySelectorAll('#levelsBody .add-program-btn').forEach(btn => {
+    btn.onclick = () => {
+      levelsModalEntries.push({ program: btn.dataset.program, team: false, levels: {} });
+      renderLevelsBody();
+    };
   });
-  document.querySelectorAll('.current-level-tag').forEach(tag => {
-    tag.textContent = `(current: ${effectiveLevel(entry, tag.dataset.cat)})`;
-  });
+  attachLevelsChipHandlers();
 }
 
-document.getElementById('levelsSaveBtn').onclick = async () => {
-  const program = document.getElementById('levelsProgram').value;
-  const levels = {};
-  levels['FOUNDATION'] = document.getElementById('levelsFoundation').checked ? (program === 'Online' ? 'Yes' : 'X') : '';
-  document.querySelectorAll('.levels-cat-input').forEach(input => { levels[input.dataset.cat] = input.value.trim(); });
-  const team = document.getElementById('levelsTeam').checked;
-  const msg = document.getElementById('levelsMsg');
-  msg.textContent = 'Saving…';
+async function saveLevelsField(idx, cat, value) {
+  const e = levelsModalEntries[idx];
+  const levels = { ...e.levels };
+  if (cat === 'TEAM') e.team = value;
+  else levels[cat] = value;
   const r = await fetch('/api/chat/levels/update', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ first: levelsModalUser.first, last: levelsModalUser.last, program, levels, team }),
+    body: JSON.stringify({ first: levelsModalUser.first, last: levelsModalUser.last, program: e.program, levels, team: e.team }),
   });
-  const d = await r.json();
-  if (!r.ok) { msg.textContent = d.error || 'Failed to save.'; return; }
-  msg.textContent = 'Saved.';
-  setTimeout(() => closeModal('levelsModal'), 700);
-};
+  if (!r.ok) { const d = await r.json().catch(() => ({})); document.getElementById('levelsMsg').textContent = d.error || 'Could not save — try again.'; return false; }
+  e.levels = levels;
+  return true;
+}
+
+function attachLevelsChipHandlers() {
+  document.querySelectorAll('#levelsBody .chip-val.editable').forEach(el => {
+    el.addEventListener('click', async () => {
+      const idx = Number(el.dataset.idx);
+      const cat = el.dataset.cat;
+      const e = levelsModalEntries[idx];
+      if (!e) return;
+
+      if (cat === 'FOUNDATION' || cat === 'TEAM') {
+        const current = cat === 'TEAM' ? !!e.team : levelsIsChecked(e.levels['FOUNDATION']);
+        const next = cat === 'TEAM' ? !current : (current ? '' : (e.program === 'Online' ? 'Yes' : 'X'));
+        el.style.opacity = '.5';
+        const ok = await saveLevelsField(idx, cat, next);
+        el.style.opacity = '';
+        if (ok) renderLevelsBody();
+        return;
+      }
+
+      const current = effectiveLevel(e, cat);
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = '0'; input.max = '10';
+      input.value = current;
+      input.className = 'popup-chip-val-input';
+      el.replaceWith(input);
+      input.focus(); input.select();
+
+      const commit = async () => {
+        const val = Math.max(0, Math.min(10, Number(input.value) || 0));
+        await saveLevelsField(idx, cat, String(val));
+        renderLevelsBody();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') { input.removeEventListener('blur', commit); renderLevelsBody(); }
+      });
+    });
+  });
+}
 
 function closeConvo() {
   activeConvoId = null;
