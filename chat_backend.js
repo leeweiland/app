@@ -674,7 +674,7 @@ async function syncStudentRoles(users) {
       if (gym.has(key)) { u.role = "gym"; changed = true; }
       else if (online.has(key)) { u.role = "online"; changed = true; }
     });
-    if (changed) writeJson(USERS_FILE, users);
+    if (changed) { writeJson(USERS_FILE, users); syncDefaultGroups(); }
   } catch (e) {
     console.error("[student role sync]", e.message); // best-effort — never blocks the admin panel from loading
   }
@@ -1391,11 +1391,60 @@ function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // actually enrolled in.
 function isClientRole(role) { return role === "online" || role === "gym"; }
 
-function canCreateDm(creator, otherUser) {
-  // Either side being staff is enough — students can only ever reach a
-  // coach/admin, and staff can reach anyone (including each other).
-  return isStaff(creator) || isStaff(otherUser);
+// Team-chat-first policy: a plain user/online/gym account can never
+// initiate a DM at all (no directory to pick anyone from in the first
+// place — see the /contacts endpoint below — but this is the real
+// enforcement). Coaches lose 1:1 access to clients too, on purpose, so
+// coaching happens visibly in the shared group instead of private DMs —
+// only an admin/admin2 can start a new DM reaching a user/online/gym
+// account. Staff-to-staff DMs (any mix of coach/admin/admin2) are
+// unaffected either direction.
+// Keeps two always-current shared groups in sync with actual roles: every
+// plain "user" together with every admin/admin2, and every online/gym
+// client together with every admin/admin2/coach. Called after anything that
+// could change who belongs in either bucket (signup, role change, archive/
+// unarchive, the auto-promotion sync) so new accounts land in the right
+// group immediately and no one lingers in one after their role moves on.
+// Membership here is entirely rule-computed -- these two groups' own
+// participant lists aren't meant to be hand-edited via the normal group UI,
+// since the next sync will just recompute them anyway.
+function syncDefaultGroups() {
+  const users = readJson(USERS_FILE, []);
+  const convos = readJson(CONVOS_FILE, []);
+  const active = users.filter(u => !u.archived);
+  const admins = active.filter(u => isAdmin(u)).map(u => u.id);
+  const allStaff = active.filter(u => isStaff(u)).map(u => u.id);
+  const plainUsers = active.filter(u => u.role === "user").map(u => u.id);
+  const clients = active.filter(u => isClientRole(u.role)).map(u => u.id);
+
+  function ensureGroup(autoType, name, memberIds) {
+    const desired = Array.from(new Set(memberIds));
+    let convo = convos.find(c => c.autoGroupType === autoType);
+    if (!convo) {
+      if (!desired.length) return;
+      convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, createdBy: null, createdAt: new Date().toISOString() });
+    } else if (JSON.stringify([...convo.participantIds].sort()) !== JSON.stringify([...desired].sort())) {
+      convo.participantIds = desired;
+    }
+  }
+  ensureGroup("users", "New Users", [...plainUsers, ...admins]);
+  ensureGroup("students", "New Students", [...clients, ...allStaff]);
+  writeJson(CONVOS_FILE, convos);
 }
+
+function canCreateDm(creator, otherUser) {
+  const creatorIsClient = !isStaff(creator);
+  const otherIsClient = !isStaff(otherUser);
+  if (creatorIsClient) return isAdmin(otherUser);
+  if (otherIsClient) return isAdmin(creator);
+  return true;
+}
+
+// Run once at boot too, so the two groups reflect the current roster right
+// away (covers the accounts renamed student->online moments ago, and any
+// roster drift from before this feature existed) without waiting for the
+// next signup/role-change to trigger it.
+syncDefaultGroups();
 
 // ── Route handler ────────────────────────────────────────────────────────
 export async function handleChatRequest(req, res, url) {
@@ -1464,6 +1513,7 @@ export async function handleChatRequest(req, res, url) {
     };
     users.push(user);
     writeJson(USERS_FILE, users);
+    syncDefaultGroups();
     const token = createSession(user.id);
     setSessionCookie(res, token);
     const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
@@ -1658,6 +1708,7 @@ export async function handleChatRequest(req, res, url) {
     if (!["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between user/online/gym this way" });
     target.role = role;
     writeJson(USERS_FILE, users);
+    syncDefaultGroups();
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
   }
 
@@ -1673,6 +1724,7 @@ export async function handleChatRequest(req, res, url) {
     if (!["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Can only archive a user/online/gym account this way" });
     target.archived = !!archived;
     writeJson(USERS_FILE, users);
+    syncDefaultGroups();
     if (target.archived) {
       const sessions = readJson(SESSIONS_FILE, {});
       Object.keys(sessions).forEach(token => { if (sessions[token].userId === target.id) delete sessions[token]; });
@@ -1780,6 +1832,7 @@ export async function handleChatRequest(req, res, url) {
         };
         users.push(newUser);
         writeJson(USERS_FILE, users);
+        syncDefaultGroups();
         // Admin creating someone else's account — no session cookie set here,
         // unlike signup. They'll get their own session when they log in.
         return sendJson(res, 200, { ok: true, user: publicUser(newUser) });
@@ -1800,6 +1853,7 @@ export async function handleChatRequest(req, res, url) {
       if (target.id === user.id && !isAdmin({ role })) return sendJson(res, 400, { error: "Can't remove your own admin access" });
       target.role = role;
       writeJson(USERS_FILE, users);
+      syncDefaultGroups();
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
     // Correct a name/email/phone typo directly (e.g. "Muros" vs the real
@@ -1869,6 +1923,7 @@ export async function handleChatRequest(req, res, url) {
       if (isAdmin(target)) return sendJson(res, 400, { error: "Can't archive an admin" });
       target.archived = !!archived;
       writeJson(USERS_FILE, users);
+      syncDefaultGroups();
       // Archiving should boot them out right away, not just block future logins.
       if (target.archived) {
         const sessions = readJson(SESSIONS_FILE, {});
@@ -1887,6 +1942,7 @@ export async function handleChatRequest(req, res, url) {
       if (isAdmin(target)) return sendJson(res, 400, { error: "Can't delete an admin" });
 
       writeJson(USERS_FILE, users.filter(u => u.id !== targetId));
+      syncDefaultGroups();
 
       const sessions = readJson(SESSIONS_FILE, {});
       Object.keys(sessions).forEach(token => { if (sessions[token].userId === targetId) delete sessions[token]; });
@@ -1983,6 +2039,11 @@ export async function handleChatRequest(req, res, url) {
 
     // ─── Contacts (coach-only visibility for regular users) ───────────────
     if (p === "/api/chat/contacts" && req.method === "GET") {
+      // A plain user/online/gym account gets no directory at all -- they
+      // can't see or start a chat with anyone; the shared group (auto-
+      // membership, see syncDefaultGroups) plus whatever an admin starts
+      // with them directly are the only conversations they'll ever have.
+      if (!isStaff(user)) return sendJson(res, 200, { contacts: [] });
       const users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
       const visible = isStaff(user) ? users : users.filter(isStaff);
       return sendJson(res, 200, { contacts: visible.map(publicUser) });
