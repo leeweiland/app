@@ -20,14 +20,6 @@
         align-items: center;
         justify-content: space-between;
         padding: 10px 16px;
-        /* Flat clearance so the logo isn't obscured by the phone's own
-           front-camera housing — reported on both iOS and Android, so this
-           is deliberately not iOS-notch-specific (env(safe-area-inset-top)
-           measured unreliably in this app's WKWebView anyway). Also
-           reasserted inside the @container mobile block below: its own
-           padding shorthand would otherwise reset this back to 10px on
-           exactly the narrow/phone viewports where it matters most. */
-        padding-top: 48px;
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-bottom: 1px solid #26262e;
@@ -48,6 +40,9 @@
           flex-direction: column;
           gap: 8px;
           padding: 10px 12px;
+          /* Only phones have a front-camera housing to clear (reported on
+             both iOS and Android) — desktop/tablet widths never hit this
+             query, so they stay at the normal 10px padding above. */
           padding-top: 48px;
         }
         #chat-app-header .cah-label { align-self: center; }
