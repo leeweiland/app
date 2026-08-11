@@ -101,6 +101,9 @@
   .thread-head-name { font-weight: 700; font-size: .95rem; overflow-wrap: break-word; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
+  /* Coaches/admins in a group's member list stay gray — clickable same as
+     a client member, just not visually implying "this is the trainee." */
+  .group-member-link.staff-member-link { color: var(--pra-dim); }
   .group-member-link:hover { opacity: .75; }
   .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: underline; }
   .thread-protocol-link:hover { text-decoration: underline; }
@@ -1042,10 +1045,13 @@ async function openConvo(id) {
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
       const label = p.id === me.id ? 'You' : `${p.first} ${p.last}`;
-      // Only online/gym clients, and only for a coach/admin viewing — matches
-      // the same "click a name to see levels" behavior a DM header already has.
-      if (p.id !== me.id && isClientRole(p.role) && isStaffMe()) {
-        return `<span class="group-member-link" data-uid="${p.id}">${escapeHtml(label)}</span>`;
+      // Any other member — client, coach, or admin — is clickable, same
+      // "click a name to open their profile" behavior a DM header has.
+      // Staff get the editable Levels panel; everyone else gets the
+      // read-only profile popup (see threadGroupMembers' click handler).
+      if (p.id !== me.id) {
+        const staffCls = isClientRole(p.role) ? '' : ' staff-member-link';
+        return `<span class="group-member-link${staffCls}" data-uid="${p.id}">${escapeHtml(label)}</span>`;
       }
       return escapeHtml(label);
     }).join(', ');
