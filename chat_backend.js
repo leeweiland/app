@@ -551,8 +551,12 @@ async function fetchUsersMapPoints() {
     // role="student" set on its chat account rendered green). Blank/
     // unrecognized TYPE just means "no special classification" (plain
     // default glow), not "go look somewhere else."
+    // Matched by prefix, not exact equality — the sheet has entries like
+    // "Admin 2 (no panel access)" that are still clearly an Admin row, just
+    // with a parenthetical note attached. An exact match silently dropped
+    // those to the default white glow instead of blue.
     const normalizedSheetType = (sheetType || "").trim().toLowerCase();
-    const sheetRole = ["admin", "coach", "student", "user"].includes(normalizedSheetType) ? normalizedSheetType : null;
+    const sheetRole = ["admin", "coach", "student", "user"].find(r => normalizedSheetType.startsWith(r)) || null;
 
     points.push({
       first,
