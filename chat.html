@@ -1975,6 +1975,14 @@ function urlBase64ToUint8Array(base64String) {
 
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // Without an actual registered service worker on this origin, the Push
+  // API has nothing to deliver a push event to — navigator.serviceWorker
+  // .ready inside subscribePush() would just hang forever, and even a
+  // subscription that somehow got created would have no listener to call
+  // showNotification() when a push arrived. This is normally handled by
+  // nav.js on other pages, but that file 404s here — /nav.js belongs to a
+  // completely different project/origin, not this one.
+  try { await navigator.serviceWorker.register('/chat-app/sw.js'); } catch (e) { console.warn('service worker registration failed', e); return; }
   if (Notification.permission === 'granted') { subscribePush(); return; }
   if (Notification.permission === 'denied') return;
   const banner = document.getElementById('pushBanner');
