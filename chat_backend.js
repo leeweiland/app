@@ -29,6 +29,7 @@ const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
 const FAVORITES_FILE = "chat_favorites.json";
 const MESSAGE_TEMPLATES_FILE = "chat_message_templates.json";
 const PROTOCOL_STEP_TEMPLATES_FILE = "chat_protocol_step_templates.json";
+const GYM_BLOCKED_DATES_FILE = "chat_gym_blocked_dates.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
 const APP_SHEET_TAB = "APP";
@@ -67,6 +68,7 @@ function migrateDataFile(file) {
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
+  "chat_gym_blocked_dates.json",
 ].forEach(migrateDataFile);
 
 function readJson(file, fallback) {
@@ -113,6 +115,11 @@ function extractDriveFolderId(value) {
 const DEFAULT_APPOINTMENTS_CONFIG = {
   defaultDurationMinutes: 15,
   timezone: "America/Anchorage",
+  // The Google Calendar ID/email for the shared "GYM 90 MINUTE TRAINING
+  // BLOCK" calendar -- Gym self-serve bookings are created directly on this
+  // calendar (with the client as an attendee, so it also lands on their own
+  // calendar via the invite), not on an individual coach's calendar.
+  gymCalendarId: "",
   emailEnabled: true,
   emailSubjectTemplate: "Your upcoming session with {{coachName}} — {{date}} at {{time}}",
   emailBodyTemplate: "Hi {{firstName}},<br><br>Your training session with {{coachName}} is confirmed for <strong>{{date}} at {{time}}</strong> ({{duration}} min).<br><br>See you then!",
@@ -1040,6 +1047,30 @@ function fillTemplate(tpl, vars) {
   return String(tpl || "").replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] != null ? vars[k] : ""));
 }
 
+// Converts a wall-clock date+time in a specific IANA zone to the correct
+// absolute UTC Date — used for the Gym schedule's fixed slots, which are
+// always meant literally as "4:15pm Anchorage time" regardless of which
+// timezone the device doing the booking happens to be in. Standard trick:
+// treat the wall-clock string as if it were UTC, then measure how far that
+// same instant actually reads in the target zone vs. true UTC, and shift by
+// the difference. Naturally DST-correct for the given date since both sides
+// are evaluated for that specific date, not a fixed offset.
+function zonedTimeToUtc(dateStr, timeStr, timeZone) {
+  const asIfUtc = new Date(`${dateStr}T${timeStr}:00Z`);
+  const tzString = asIfUtc.toLocaleString("en-US", { timeZone });
+  const utcString = asIfUtc.toLocaleString("en-US", { timeZone: "UTC" });
+  const offset = new Date(tzString).getTime() - new Date(utcString).getTime();
+  return new Date(asIfUtc.getTime() - offset);
+}
+// Weekday (0=Sun..6=Sat) of a date as observed in a specific IANA zone —
+// needed for the Gym schedule's Mon-Fri check, since a UTC calendar date can
+// be a different weekday than the same instant read in Anchorage.
+function weekdayInZone(dateStr, timeZone) {
+  const d = new Date(`${dateStr}T12:00:00Z`); // noon UTC — safely mid-day in any real-world zone, avoids date-boundary edge cases
+  const wd = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(d);
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd];
+}
+
 // ── Appointment reminders ───────────────────────────────────────────────
 // Polls booked appointments (chat_appointments.json) and fires email/SMS
 // reminders at the admin-configured lead times before each session. Each
@@ -1084,7 +1115,12 @@ async function checkAppointmentReminders() {
       for (const client of clients) {
         const key = `${job.channel}:${job.index}:${client.id}`;
         if (appt.remindersSent.includes(key)) continue;
-        const vars = { coachName, firstName: client.first, lastName: client.last, date: dateStr, time: timeStr, duration: appt.durationMinutes };
+        // Each recipient's own stored timezone, not the shared admin
+        // default — same reasoning as the initial booking confirmation.
+        const clientTz = client.timezone || apptCfg.timezone;
+        const clientDateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: clientTz });
+        const clientTimeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: clientTz });
+        const vars = { coachName, firstName: client.first, lastName: client.last, date: clientDateStr, time: clientTimeStr, duration: appt.durationMinutes };
         try {
           if (job.channel === "email") {
             const subjectTpl = apptCfg.emailReminderUsesInitialTemplate ? apptCfg.emailSubjectTemplate : apptCfg.emailReminderSubjectTemplate;
@@ -1122,7 +1158,8 @@ async function checkAppointmentReminders() {
           const messages = readJson(MESSAGES_FILE, []);
           const reminderMsg = apptCfg.messengerReminderUseDefault
             ? { id: randomUUID(), conversationId: appt.conversationId, senderId: appt.coachId, type: "appointment",
-                startISO: appt.startISO, durationMinutes: appt.durationMinutes, timezone: apptCfg.timezone,
+                startISO: appt.startISO, durationMinutes: appt.durationMinutes, timezone: appt.isGym ? "America/Anchorage" : null,
+                isGym: !!appt.isGym, clientIds: appt.clientIds || [],
                 googleEventId: appt.googleEventId, googleEventLink: messages.find(m => m.id === appt.id)?.googleEventLink || null,
                 createdAt: new Date().toISOString() }
             : { id: randomUUID(), conversationId: appt.conversationId, senderId: appt.coachId, type: "text",
@@ -1571,6 +1608,26 @@ export async function handleChatRequest(req, res, url) {
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
   }
 
+  // Self-reported IANA timezone (e.g. "America/Denver"), detected client-side
+  // from the browser's own Intl settings on every page load and posted here
+  // whenever it differs from what's stored — keeps it current automatically
+  // as someone travels, no settings screen needed. Powers per-recipient
+  // appointment display (chat header/bubble, email, SMS) so each person sees
+  // times in their own zone instead of one fixed zone for everyone.
+  if (p === "/api/chat/me/timezone" && req.method === "POST") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    const { timezone } = await readJsonBody(req);
+    if (!timezone || typeof timezone !== "string" || timezone.length > 100) return sendJson(res, 400, { error: "Invalid timezone" });
+    const users = readJson(USERS_FILE, []);
+    const target = users.find(u => u.id === me.id);
+    if (target && target.timezone !== timezone) {
+      target.timezone = timezone;
+      writeJson(USERS_FILE, users);
+    }
+    return sendJson(res, 200, { ok: true });
+  }
+
   const userLookupMatch = p.match(/^\/api\/chat\/users\/([^/]+)$/);
   if (userLookupMatch && req.method === "GET") {
     const me = getSessionUser(req);
@@ -1886,6 +1943,23 @@ export async function handleChatRequest(req, res, url) {
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });
       }
+    }
+
+    // ─── Gym schedule: dates blocked off from booking ──────────────────────
+    // Global, not per-student — the Gym's 2 fixed daily slots are a shared
+    // facility resource, so blocking a date (holiday, gym closure, etc.)
+    // blocks it for every Gym client's booking, not just one person's.
+    if (p === "/api/chat/gym-blocked-dates" && req.method === "GET") {
+      return sendJson(res, 200, { dates: readJson(GYM_BLOCKED_DATES_FILE, []) });
+    }
+    if (p === "/api/admin/gym-blocked-dates" && req.method === "POST") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const { dates } = await readJsonBody(req);
+      if (!Array.isArray(dates) || dates.some(d => typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d))) {
+        return sendJson(res, 400, { error: "dates must be an array of 'YYYY-MM-DD' strings" });
+      }
+      writeJson(GYM_BLOCKED_DATES_FILE, Array.from(new Set(dates)).sort());
+      return sendJson(res, 200, { ok: true });
     }
 
     // ─── Appointments: Google Calendar connection status ───────────────────
@@ -2675,15 +2749,22 @@ export async function handleChatRequest(req, res, url) {
           : { ok: false, error: `${calendarResults.filter(r => !r.ok).length}/${calendarResults.length} failed` };
 
         // Email/SMS/calendar-description all address each recipient by their
-        // own name — sent per-recipient rather than one shared message.
+        // own name — sent per-recipient rather than one shared message, and
+        // each one's date/time is formatted in THAT recipient's own stored
+        // timezone (falling back to the admin-configured default for anyone
+        // who hasn't been detected yet) rather than one fixed zone for
+        // everyone.
         const evSummary = `Training session — ${coachName} & ${recipientNames}`;
         const evDescription = "Scheduled from PRA Chat.";
         const emailResults = [], smsResults = [];
         for (const client of recipients) {
-          const vars = { coachName, firstName: client.first, lastName: client.last, date: dateStr, time: timeStr, duration: durationMinutes };
+          const clientTz = client.timezone || apptCfg.timezone;
+          const clientDateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: clientTz });
+          const clientTimeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: clientTz });
+          const vars = { coachName, firstName: client.first, lastName: client.last, date: clientDateStr, time: clientTimeStr, duration: durationMinutes };
           if (apptCfg.emailEnabled) {
             try {
-              const calButtons = addToCalendarButtonsHtml({ summary: evSummary, description: evDescription, start, end, timezone: apptCfg.timezone, uid: msgId });
+              const calButtons = addToCalendarButtonsHtml({ summary: evSummary, description: evDescription, start, end, timezone: clientTz, uid: msgId });
               const html = fillTemplate(apptCfg.emailBodyTemplate, vars) + calButtons;
               const ics = buildIcs({ summary: evSummary, description: evDescription, start, end, uid: msgId });
               await sendEmail(client.email, `${client.first} ${client.last}`, fillTemplate(apptCfg.emailSubjectTemplate, vars), html, [
@@ -2716,7 +2797,12 @@ export async function handleChatRequest(req, res, url) {
         const messages = readJson(MESSAGES_FILE, []);
         const msg = {
           id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
-          startISO, durationMinutes, timezone: apptCfg.timezone,
+          startISO, durationMinutes,
+          // No forced timezone — the chat header/bubble render this in
+          // whichever viewer's own local device time, per-person, instead of
+          // one fixed zone for everyone.
+          timezone: null,
+          clientIds: recipients.map(r => r.id),
           googleEventId: googleEventIds[0] || null, googleEventLink: googleEventLinks[0] || null,
           googleEventIds, googleEventLinks,
           createdAt: new Date().toISOString(),
@@ -2734,6 +2820,116 @@ export async function handleChatRequest(req, res, url) {
         writeJson("chat_appointments.json", appointments);
 
         notifyParticipants(convoId, user.id, { title: coachName, body: `📅 Session scheduled: ${dateStr} at ${timeStr}`, conversationId: convoId }).catch(() => {});
+
+        return sendJson(res, 200, { message: msg, status });
+      }
+
+      // ── Gym schedule: fixed 4:15pm/6:15pm 90-min slots, Mon-Fri, always
+      // Anchorage time regardless of who's booking or from where. Visible
+      // to staff (booking on a client's behalf, same as normal scheduling)
+      // and — unlike normal scheduling — to the Gym client themselves,
+      // self-serve, in their own DM with a coach.
+      if (sub === "/schedule-gym" && req.method === "POST") {
+        if (convo.type !== "dm") return sendJson(res, 400, { error: "Gym scheduling is only available in a 1:1 chat" });
+        const users = readJson(USERS_FILE, []);
+        const otherId = convo.participantIds.find(id => id !== user.id);
+        // Whichever participant actually has the "gym" role is the client,
+        // regardless of which of the two people is the one booking.
+        const clientCandidate = user.role === "gym" ? user : users.find(u => u.id === otherId && u.role === "gym");
+        if (!clientCandidate) return sendJson(res, 400, { error: "This chat has no Gym client to schedule with" });
+        if (!isStaff(user) && user.id !== clientCandidate.id) return sendJson(res, 403, { error: "Coaches, admins, or the Gym client themselves only" });
+
+        const { date, slot } = await readJsonBody(req);
+        const SLOTS = { "1615": "16:15", "1815": "18:15" };
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return sendJson(res, 400, { error: "date must be 'YYYY-MM-DD'" });
+        if (!SLOTS[slot]) return sendJson(res, 400, { error: "slot must be '1615' (4:15pm) or '1815' (6:15pm)" });
+
+        const ANCHORAGE = "America/Anchorage";
+        const weekday = weekdayInZone(date, ANCHORAGE);
+        if (weekday === 0 || weekday === 6) return sendJson(res, 400, { error: "Gym sessions are only available Monday through Friday" });
+
+        const blockedDates = readJson(GYM_BLOCKED_DATES_FILE, []);
+        if (blockedDates.includes(date)) return sendJson(res, 400, { error: "That date isn't available for scheduling" });
+
+        const start = zonedTimeToUtc(date, SLOTS[slot], ANCHORAGE);
+        if (start.getTime() <= Date.now()) return sendJson(res, 400, { error: "That slot is in the past" });
+        const durationMinutes = 90;
+        const end = new Date(start.getTime() + durationMinutes * 60000);
+        const startISO = start.toISOString();
+
+        const cfg = getConfig();
+        const apptCfg = cfg.appointments;
+        if (!apptCfg.gymCalendarId) return sendJson(res, 400, { error: "Ask an admin to set the Gym 90 Minute Training Block calendar ID in Admin Settings first." });
+
+        // Whoever's on the OTHER side of this DM from the client is treated
+        // as "the coach" for the message/calendar description — could be
+        // staff booking on the client's behalf, or (if the client booked it
+        // themselves) whichever staff member they're chatting with.
+        const coach = clientCandidate.id === user.id ? users.find(u => u.id === otherId) : user;
+        const coachName = coach ? `${coach.first} ${coach.last}` : "PRA Gym";
+        const msgId = randomUUID();
+
+        const status = { calendar: null, email: null, sms: null };
+        let googleEventId = null, googleEventLink = null;
+        try {
+          const ev = await createCalendarEvent({
+            summary: `GYM 90 MINUTE TRAINING BLOCK — ${clientCandidate.first} ${clientCandidate.last}`,
+            description: "Scheduled from PRA Chat.",
+            startISO, durationMinutes,
+            attendees: [{ email: clientCandidate.email, name: `${clientCandidate.first} ${clientCandidate.last}` }],
+            timezone: ANCHORAGE, calendarId: apptCfg.gymCalendarId,
+          });
+          googleEventId = ev.id; googleEventLink = ev.htmlLink;
+          status.calendar = { ok: true };
+        } catch (e) { status.calendar = { ok: false, error: e.message }; }
+
+        const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: ANCHORAGE });
+        const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: ANCHORAGE });
+        const vars = { coachName, firstName: clientCandidate.first, lastName: clientCandidate.last, date: dateStr, time: timeStr, duration: durationMinutes };
+        const evSummary = `GYM 90 MINUTE TRAINING BLOCK — ${clientCandidate.first} ${clientCandidate.last}`;
+
+        if (apptCfg.emailEnabled) {
+          try {
+            const calButtons = addToCalendarButtonsHtml({ summary: evSummary, description: "Scheduled from PRA Chat.", start, end, timezone: ANCHORAGE, uid: msgId });
+            const html = fillTemplate(apptCfg.emailBodyTemplate, vars) + calButtons;
+            const ics = buildIcs({ summary: evSummary, description: "Scheduled from PRA Chat.", start, end, uid: msgId });
+            await sendEmail(clientCandidate.email, `${clientCandidate.first} ${clientCandidate.last}`, fillTemplate(apptCfg.emailSubjectTemplate, vars), html, [
+              { filename: "invite.ics", mimeType: "text/calendar", content: ics },
+            ]);
+            status.email = { ok: true };
+          } catch (e) { status.email = { ok: false, error: e.message }; }
+        } else status.email = { ok: false, error: "disabled" };
+
+        if (apptCfg.smsEnabled) {
+          try {
+            await sendApptSms(clientCandidate.email, clientCandidate.phone, fillTemplate(apptCfg.smsTemplate, vars));
+            status.sms = { ok: true };
+          } catch (e) { status.sms = { ok: false, error: e.message }; }
+        } else status.sms = { ok: false, error: "disabled" };
+
+        const messages = readJson(MESSAGES_FILE, []);
+        const msg = {
+          id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
+          startISO, durationMinutes,
+          timezone: ANCHORAGE, // Gym slots are always shown as Anchorage time, not per-viewer
+          isGym: true, clientIds: [clientCandidate.id],
+          googleEventId, googleEventLink, googleEventIds: googleEventId ? [googleEventId] : [], googleEventLinks: googleEventLink ? [googleEventLink] : [],
+          createdAt: new Date().toISOString(),
+        };
+        messages.push(msg);
+        writeJson(MESSAGES_FILE, messages);
+
+        const appointments = readJson("chat_appointments.json", []);
+        appointments.push({
+          id: msg.id, conversationId: convoId,
+          coachId: coach?.id || null, coachIds: coach ? [coach.id] : [],
+          clientIds: [clientCandidate.id], startISO, durationMinutes,
+          isGym: true,
+          googleEventId, googleEventIds: googleEventId ? [googleEventId] : [], status, createdAt: msg.createdAt,
+        });
+        writeJson("chat_appointments.json", appointments);
+
+        notifyParticipants(convoId, user.id, { title: coachName, body: `📅 Gym session scheduled: ${dateStr} at ${timeStr}`, conversationId: convoId }).catch(() => {});
 
         return sendJson(res, 200, { message: msg, status });
       }
@@ -2777,13 +2973,18 @@ export async function handleChatRequest(req, res, url) {
       // ── Delete / edit a message (staff only) ──────────────────────────────
       const msgMatch = sub.match(/^\/messages\/([^/]+)$/);
       if (msgMatch && (req.method === "DELETE" || req.method === "PATCH")) {
-        if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
         const messageId = msgMatch[1];
         const messages = readJson(MESSAGES_FILE, []);
         const msgIdx = messages.findIndex(m => m.id === messageId && m.conversationId === convoId);
         if (msgIdx < 0) return sendJson(res, 404, { error: "Message not found" });
         if (req.method === "DELETE") {
           const deleted = messages[msgIdx];
+          // Staff can cancel any appointment; a gym client can additionally
+          // cancel their own Gym slot booking without needing staff — Gym
+          // is the one appointment type visible/self-serviceable to clients
+          // at all. Every other message type stays staff-only.
+          const canCancelOwnGym = deleted.type === "appointment" && deleted.isGym && user.role === "gym" && deleted.clientIds?.includes(user.id);
+          if (!isStaff(user) && !canCancelOwnGym) return sendJson(res, 403, { error: "Staff only" });
           messages.splice(msgIdx, 1);
           writeJson(MESSAGES_FILE, messages);
 
@@ -2819,13 +3020,15 @@ export async function handleChatRequest(req, res, url) {
               const cfg = getConfig();
               const apptCfg = cfg.appointments;
               const start = new Date(appt.startISO);
-              const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: apptCfg.timezone });
-              const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: apptCfg.timezone });
               const coachName = coaches.length ? coaches.map(c => `${c.first} ${c.last}`).join(" & ") : "your coach";
+              const gymTz = appt.isGym ? "America/Anchorage" : null;
               if (apptCfg.smsEnabled) {
                 (appt.clientIds || []).forEach(clientId => {
                   const client = users.find(u => u.id === clientId);
                   if (!client) return;
+                  const clientTz = gymTz || client.timezone || apptCfg.timezone;
+                  const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: clientTz });
+                  const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: clientTz });
                   sendApptSms(client.email, client.phone, `Hi ${client.first}, your session with ${coachName} on ${dateStr} at ${timeStr} has been cancelled.`)
                     .catch(e => console.error("[appt cancel] SMS failed", e.message));
                 });
@@ -2835,7 +3038,8 @@ export async function handleChatRequest(req, res, url) {
 
           return sendJson(res, 200, { ok: true });
         }
-        // PATCH — edit text
+        // PATCH — edit text (always staff-only, unlike the DELETE path above)
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
         const { text } = await readJsonBody(req);
         if (!text) return sendJson(res, 400, { error: "text required" });
         if (messages[msgIdx].type !== "text") return sendJson(res, 400, { error: "Only text messages can be edited" });

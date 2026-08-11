@@ -128,6 +128,7 @@
   #scheduleDate, #scheduleTime { color-scheme: dark; color: #fff; }
   .schedule-status-ok { color: #3fb950; }
   .schedule-status-fail { color: #ff3b3b; }
+  .gym-slot-btn.on { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .thread-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; }
   .bubble-row { display: flex; gap: 8px; max-width: 62%; }
   .bubble-row.mine { align-self: flex-end; flex-direction: row-reverse; }
@@ -507,6 +508,34 @@
     </div>
   </div>
 
+  <!-- Gym schedule — fixed 4:15pm/6:15pm 90-min slots, Mon-Fri, Anchorage
+       time always. Visible to staff (booking for the client) and to the
+       Gym client themselves (self-serve), in their own DM. -->
+  <div class="modal-backdrop" id="gymScheduleModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:6px">Schedule Gym Training</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">90 minutes · Monday–Friday · Anchorage time</div>
+      <div class="field">
+        <label class="pra-label">Date</label>
+        <input class="pra-input" type="date" id="gymScheduleDate"/>
+        <div class="pra-muted" id="gymScheduleDateMsg" style="font-size:.76rem;margin-top:6px;min-height:1em"></div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Time</label>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="pra-btn pra-btn-ghost gym-slot-btn" data-slot="1615" style="flex:1">4:15 PM</button>
+          <button type="button" class="pra-btn pra-btn-ghost gym-slot-btn" data-slot="1815" style="flex:1">6:15 PM</button>
+        </div>
+      </div>
+      <div id="gymScheduleStatusRows"></div>
+      <div class="btn-row" style="display:flex;gap:10px;margin-top:16px">
+        <button class="pra-btn" id="gymScheduleSaveBtn" style="flex:1">Confirm & Send</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('gymScheduleModal')">Cancel</button>
+      </div>
+      <div class="pra-muted" id="gymScheduleMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+    </div>
+  </div>
+
   <!-- Media lightbox: click an image or video to open full-frame; ctrl+wheel/pinch to zoom (images) -->
   <div class="lightbox-backdrop" id="lightbox">
     <div class="lightbox-stage" id="lightboxStage">
@@ -695,6 +724,18 @@ async function init() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
+
+  // Self-report the device's own timezone if it's changed since last time —
+  // powers per-recipient appointment display (everyone sees times in their
+  // own zone) without needing a settings screen.
+  try {
+    const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detectedTz && detectedTz !== me.timezone) {
+      fetch('/api/chat/me/timezone', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timezone: detectedTz }) }).catch(() => {});
+      me.timezone = detectedTz;
+    }
+  } catch {}
+
   if (isStaffMe()) {
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
@@ -981,7 +1022,7 @@ async function openConvo(id) {
   }
 
   document.getElementById('groupInfoBtn').style.display = (convo.type === 'group' && isStaffMe()) ? '' : 'none';
-  document.getElementById('scheduleBtn').style.display = canScheduleIn(convo) ? '' : 'none';
+  document.getElementById('scheduleBtn').style.display = (canScheduleIn(convo) || canScheduleGym(convo)) ? '' : 'none';
   const apptInfo = document.getElementById('threadApptInfo');
   if (apptInfo) apptInfo.style.display = 'none';
 
@@ -1023,7 +1064,24 @@ function scheduleRecipients(convo) {
   return [];
 }
 function canScheduleIn(convo) {
-  return isStaffMe() && !!convo && scheduleRecipients(convo).length > 0;
+  if (!convo) return false;
+  // A DM with a Gym client uses the restricted fixed-slot flow instead of
+  // the general one — see canScheduleGym/openGymScheduleModal below.
+  if (convo.type === 'dm' && otherParticipant(convo)?.role === 'gym') return false;
+  return isStaffMe() && scheduleRecipients(convo).length > 0;
+}
+// The Gym client in a DM, whichever side of it they're on — works whether
+// the viewer is that client (self-serve booking) or the coach/admin on the
+// other end (booking on their behalf).
+function gymClientIn(convo) {
+  if (!convo || convo.type !== 'dm') return null;
+  if (me.role === 'gym') return me;
+  const other = otherParticipant(convo);
+  return other?.role === 'gym' ? other : null;
+}
+function canScheduleGym(convo) {
+  const client = gymClientIn(convo);
+  return !!client && (isStaffMe() || me.id === client.id);
 }
 
 let scheduleModalRecipients = [];
@@ -1117,8 +1175,98 @@ async function submitSchedule() {
   setTimeout(() => closeModal('scheduleModal'), 1600);
 }
 
+// ── Gym schedule (fixed slots, self-serve for Gym clients too) ───────────
+let gymBlockedDates = new Set();
+let gymScheduleSelectedSlot = null;
+
+async function openGymScheduleModal() {
+  document.getElementById('gymScheduleMsg').textContent = '';
+  document.getElementById('gymScheduleStatusRows').innerHTML = '';
+  document.getElementById('gymScheduleSaveBtn').disabled = false;
+  document.getElementById('gymScheduleSaveBtn').textContent = 'Confirm & Send';
+  gymScheduleSelectedSlot = null;
+  document.querySelectorAll('.gym-slot-btn').forEach(b => b.classList.remove('on'));
+
+  const dateInput = document.getElementById('gymScheduleDate');
+  const today = new Date();
+  dateInput.min = today.toISOString().slice(0, 10);
+  dateInput.value = '';
+  document.getElementById('gymScheduleDateMsg').textContent = '';
+
+  try {
+    const r = await fetch('/api/chat/gym-blocked-dates');
+    const d = await r.json();
+    gymBlockedDates = new Set(d.dates || []);
+  } catch { gymBlockedDates = new Set(); }
+
+  openModal('gymScheduleModal');
+}
+
+function validateGymDate() {
+  const dateInput = document.getElementById('gymScheduleDate');
+  const msg = document.getElementById('gymScheduleDateMsg');
+  const val = dateInput.value;
+  if (!val) { msg.textContent = ''; return false; }
+  // A bare 'YYYY-MM-DD' date's weekday is the same everywhere regardless of
+  // viewer timezone — noon UTC just avoids any date-boundary edge case.
+  const weekday = new Date(val + 'T12:00:00Z').getUTCDay();
+  if (weekday === 0 || weekday === 6) { msg.textContent = 'Gym sessions are only available Monday–Friday.'; return false; }
+  if (gymBlockedDates.has(val)) { msg.textContent = 'That date is blocked off — pick another.'; return false; }
+  msg.textContent = '';
+  return true;
+}
+document.getElementById('gymScheduleDate').addEventListener('change', validateGymDate);
+
+document.querySelectorAll('.gym-slot-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    gymScheduleSelectedSlot = btn.dataset.slot;
+    document.querySelectorAll('.gym-slot-btn').forEach(b => b.classList.toggle('on', b === btn));
+  });
+});
+
+document.getElementById('gymScheduleSaveBtn').addEventListener('click', async () => {
+  const date = document.getElementById('gymScheduleDate').value;
+  const msg = document.getElementById('gymScheduleMsg');
+  if (!validateGymDate()) { msg.textContent = 'Pick a valid date first.'; return; }
+  if (!gymScheduleSelectedSlot) { msg.textContent = 'Pick a time slot.'; return; }
+
+  const saveBtn = document.getElementById('gymScheduleSaveBtn');
+  saveBtn.disabled = true; saveBtn.textContent = 'Scheduling…';
+  msg.textContent = '';
+
+  const r = await fetch('/api/chat/conversations/' + activeConvoId + '/schedule-gym', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, slot: gymScheduleSelectedSlot }),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    msg.textContent = d.error || 'Failed to schedule.';
+    saveBtn.disabled = false; saveBtn.textContent = 'Confirm & Send';
+    return;
+  }
+
+  const rows = [
+    ['Calendar', svgCalendar(), d.status.calendar],
+    ['Email', svgEmail(), d.status.email],
+    ['Text', svgSms(), d.status.sms],
+  ].map(([label, icon, s]) => {
+    const ok = s?.ok;
+    const detail = ok ? 'Sent' : (s?.error === 'disabled' ? 'Disabled in settings' : (s?.error || 'Failed'));
+    return `<div class="schedule-status-row"><span class="${ok ? 'schedule-status-ok' : 'schedule-status-fail'}">${ok ? '✓' : '✕'}</span> <span class="status-icon">${icon}</span> ${label}: ${detail}</div>`;
+  }).join('');
+  document.getElementById('gymScheduleStatusRows').innerHTML = rows;
+  saveBtn.textContent = 'Done';
+
+  await refreshThread(true);
+  setTimeout(() => closeModal('gymScheduleModal'), 1600);
+});
+
 document.getElementById('scheduleBtn').innerHTML = svgCalendar();
-document.getElementById('scheduleBtn').addEventListener('click', openScheduleModal);
+document.getElementById('scheduleBtn').addEventListener('click', () => {
+  const convo = conversations.find(c => c.id === activeConvoId);
+  if (canScheduleGym(convo)) openGymScheduleModal();
+  else openScheduleModal();
+});
 document.getElementById('scheduleSaveBtn').addEventListener('click', submitSchedule);
 
 // ── Coach/admin editing a contact's Levels — matched by name across both
@@ -1264,8 +1412,13 @@ function updateThreadApptHeader(messages, convo) {
     .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))[0]; // earliest future appointment
   if (!upcoming) { el.style.display = 'none'; return; }
   const start = new Date(upcoming.startISO);
-  const dateStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: upcoming.timezone });
-  const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: upcoming.timezone });
+  // No forced timezone (regular sessions) means each viewer sees it in their
+  // own device's local time automatically; Gym slots force "America/
+  // Anchorage" since those are fixed-slot bookings meant literally as
+  // Anchorage wall-clock time for everyone, not a per-viewer conversion.
+  const tz = upcoming.timezone || undefined;
+  const dateStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz });
+  const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
   const sender = convo?.participants.find(p => p.id === upcoming.senderId);
   const calLink = upcoming.googleEventLink
     ? `<a class="thread-appt-link" href="${upcoming.googleEventLink}" target="_blank">View on Google Calendar</a>`
@@ -1273,7 +1426,8 @@ function updateThreadApptHeader(messages, convo) {
   const zoomLink = sender?.zoomLink
     ? `<a class="thread-appt-link" href="${sender.zoomLink}" target="_blank">Join Zoom</a>`
     : '';
-  const cancelLink = isStaffMe()
+  const canCancel = isStaffMe() || (upcoming.isGym && me.role === 'gym' && upcoming.clientIds?.includes(me.id));
+  const cancelLink = canCancel
     ? `<span class="thread-appt-cancel" data-mid="${upcoming.id}">Cancel</span>`
     : '';
   el.innerHTML = `<span>Upcoming Session</span><span>${dateStr} at ${timeStr}</span>${calLink}${zoomLink}${cancelLink}`;
@@ -1354,13 +1508,19 @@ function svgVideoCam() {
 
 function renderApptBubble(m, senderLabel, sender) {
   const start = new Date(m.startISO);
-  const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: m.timezone });
-  const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: m.timezone });
+  // No forced timezone (regular sessions) means each viewer sees it in their
+  // own device's local time; Gym slots force "America/Anchorage" since
+  // those are fixed-slot bookings meant literally as Anchorage wall-clock
+  // time for everyone.
+  const tz = m.timezone || undefined;
+  const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
+  const timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
   const calLink = m.googleEventLink ? `<a class="appt-link" href="${m.googleEventLink}" target="_blank">View on Google Calendar</a>` : '';
   const zoomLink = sender?.zoomLink
     ? `<a class="appt-link appt-zoom-link" href="${sender.zoomLink}" target="_blank"><span class="status-icon">${svgVideoCam()}</span> Join Zoom</a>`
     : '';
-  const deleteBtn = (isStaffMe() && m.senderId === me.id) ? `<button class="appt-delete-btn delete-btn" title="Delete appointment">✕</button>` : '';
+  const canCancelBubble = (isStaffMe() && m.senderId === me.id) || (m.isGym && me.role === 'gym' && m.clientIds?.includes(me.id));
+  const deleteBtn = canCancelBubble ? `<button class="appt-delete-btn delete-btn" title="Delete appointment">✕</button>` : '';
   return `<div class="bubble appt">${deleteBtn}${senderLabel}
     <div class="appt-icon">${svgCalendar()}</div>
     <div>

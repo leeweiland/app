@@ -33,7 +33,7 @@
   .pagination .page-label { font-size: .8rem; color: var(--pra-dim); }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
-  .modal-box { width: 100%; max-width: 400px; padding: 22px; }
+  .modal-box { width: 100%; max-width: 400px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
   .reminder-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .reminder-row .reminder-label { font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
   .reminder-row .reminder-value { width: 70px; flex: none; }
@@ -121,6 +121,15 @@
           <option value="45">45 minutes</option>
           <option value="60">60 minutes</option>
         </select>
+      </div>
+
+      <div class="field">
+        <label class="pra-label">Gym 90 Minute Training Block Calendar ID</label>
+        <input class="pra-input" id="apptGymCalendarId" placeholder="e.g. c_abc123@group.calendar.google.com" style="width:100%"/>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">The Google Calendar Gym self-serve bookings (4:15pm/6:15pm, Mon-Fri, 90 min) get created on directly — find it under that calendar's Settings → "Integrate calendar" → Calendar ID.</div>
+      </div>
+      <div class="field">
+        <button class="pra-btn pra-btn-ghost" id="manageGymBlockedDatesBtn" type="button" style="width:100%">Manage Gym Blocked Dates</button>
       </div>
 
       <div class="field">
@@ -253,6 +262,22 @@
     </div>
   </div>
 
+  <!-- Gym Blocked Dates — global, not per-student (see the endpoint's own
+       comment for why): the next 8 weeks of Mon-Fri dates, toggle any off
+       to block that date from Gym self-serve/staff booking entirely. -->
+  <div class="modal-backdrop" id="gymBlockedDatesModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:6px">Gym Blocked Dates</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Tap a date to block or unblock it from Gym scheduling (4:15pm/6:15pm slots). Applies to every Gym client — not per-student.</div>
+      <div id="gymBlockedDatesList" style="display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto"></div>
+      <div class="save-msg" id="gymBlockedDatesMsg"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn" id="gymBlockedDatesSaveBtn" style="flex:1">Save</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('gymBlockedDatesModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Name/email/phone are now edited inline, directly in the table
        (see .inline-edit wiring below) — no modal needed. -->
 </div>
@@ -299,6 +324,58 @@ async function init() {
     openModal('addUserModal');
   };
   document.getElementById('addUserSaveBtn').onclick = createUser;
+
+  document.getElementById('manageGymBlockedDatesBtn').onclick = openGymBlockedDatesModal;
+  document.getElementById('gymBlockedDatesSaveBtn').onclick = saveGymBlockedDates;
+}
+
+let gymBlockedDatesSelected = new Set();
+async function openGymBlockedDatesModal() {
+  const msg = document.getElementById('gymBlockedDatesMsg');
+  msg.textContent = 'Loading…';
+  openModal('gymBlockedDatesModal');
+  const r = await fetch('/api/chat/gym-blocked-dates');
+  const d = await r.json();
+  gymBlockedDatesSelected = new Set(d.dates || []);
+  msg.textContent = '';
+  renderGymBlockedDatesList();
+}
+function renderGymBlockedDatesList() {
+  const list = document.getElementById('gymBlockedDatesList');
+  const days = [];
+  const cursor = new Date();
+  cursor.setHours(0, 0, 0, 0);
+  while (days.length < 40) {
+    const dow = cursor.getDay();
+    if (dow !== 0 && dow !== 6) {
+      const iso = cursor.toISOString().slice(0, 10);
+      days.push({ iso, label: cursor.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  list.innerHTML = days.map(d => `
+    <button type="button" class="pra-btn pra-btn-ghost gym-blocked-date-btn" data-date="${d.iso}" style="width:100%;text-align:left;font-size:.82rem${gymBlockedDatesSelected.has(d.iso) ? ';border-color:#ff5c5c;color:#ff5c5c' : ''}">
+      ${d.label}${gymBlockedDatesSelected.has(d.iso) ? ' — BLOCKED' : ''}
+    </button>
+  `).join('');
+  list.querySelectorAll('.gym-blocked-date-btn').forEach(btn => {
+    btn.onclick = () => {
+      const iso = btn.dataset.date;
+      if (gymBlockedDatesSelected.has(iso)) gymBlockedDatesSelected.delete(iso);
+      else gymBlockedDatesSelected.add(iso);
+      renderGymBlockedDatesList();
+    };
+  });
+}
+async function saveGymBlockedDates() {
+  const msg = document.getElementById('gymBlockedDatesMsg');
+  msg.textContent = 'Saving…';
+  const r = await fetch('/api/admin/gym-blocked-dates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dates: Array.from(gymBlockedDatesSelected) }),
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); msg.textContent = d.error || 'Could not save.'; return; }
+  msg.textContent = 'Saved.';
+  setTimeout(() => { msg.textContent = ''; closeModal('gymBlockedDatesModal'); }, 700);
 }
 
 async function loadUsers() {
@@ -571,6 +648,7 @@ async function loadConfig() {
 
   const a = d.appointments || {};
   document.getElementById('apptDefaultDuration').value = String(a.defaultDurationMinutes || 15);
+  document.getElementById('apptGymCalendarId').value = a.gymCalendarId || '';
   document.getElementById('apptEmailEnabled').checked = a.emailEnabled !== false;
   document.getElementById('apptEmailSubject').value = a.emailSubjectTemplate || '';
   document.getElementById('apptEmailBody').value = a.emailBodyTemplate || '';
@@ -697,6 +775,7 @@ async function saveApptConfig() {
     body: JSON.stringify({
       appointments: {
         defaultDurationMinutes: Number(document.getElementById('apptDefaultDuration').value),
+        gymCalendarId: document.getElementById('apptGymCalendarId').value.trim(),
         emailEnabled: document.getElementById('apptEmailEnabled').checked,
         emailSubjectTemplate: document.getElementById('apptEmailSubject').value,
         emailBodyTemplate: document.getElementById('apptEmailBody').value,
