@@ -2401,6 +2401,11 @@ export async function handleChatRequest(req, res, url) {
         if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be marked as a channel" });
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { isChannel } = await readJsonBody(req);
+        if (isChannel) {
+          const groupUsers = readJson(USERS_FILE, []);
+          const hasStudent = convo.participantIds.some(id => groupUsers.find(u => u.id === id)?.role === "student");
+          if (hasStudent) return sendJson(res, 400, { error: "A group with students in it can't be marked as a channel" });
+        }
         convo.isChannel = !!isChannel;
         writeJson(CONVOS_FILE, convos);
         return sendJson(res, 200, { ok: true, conversation: convo });
@@ -2413,6 +2418,9 @@ export async function handleChatRequest(req, res, url) {
         const users = readJson(USERS_FILE, []);
         const toAdd = Array.from(new Set(participantIds || [])).filter(id => !convo.participantIds.includes(id));
         if (toAdd.some(id => !users.some(u => u.id === id))) return sendJson(res, 400, { error: "Unknown participant" });
+        if (convo.isChannel && toAdd.some(id => users.find(u => u.id === id)?.role === "student")) {
+          return sendJson(res, 400, { error: "Can't add a student to a channel" });
+        }
         convo.participantIds.push(...toAdd);
         writeJson(CONVOS_FILE, convos);
         return sendJson(res, 200, { ok: true, conversation: convo });
