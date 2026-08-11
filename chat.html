@@ -225,7 +225,7 @@
      video bubbles. Hidden until hover UNLESS already favorited (.favorited
      stays visible always — that's the "star remains on the media" part) —
      the hover-only state before that is deliberately the plain gray outline
-     star, filled blue once actually favorited. */
+     star, filled yellow once actually favorited. */
   .fav-star-btn {
     position: absolute; top: 9px; left: 9px; z-index: 3; width: 28px; height: 28px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -236,7 +236,7 @@
   .fav-star-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); }
   .fav-star-btn svg { width: 15px; height: 15px; }
   .fav-star-btn .star-fill { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
-  .fav-star-btn.favorited .star-fill { fill: #009bff; stroke: #009bff; }
+  .fav-star-btn.favorited .star-fill { fill: #ffd54a; stroke: #ffd54a; }
 
   /* ── Mobile: one panel at a time, WhatsApp-style, instead of squeezing a
      320px sidebar + thread into a phone screen. @container (not @media) so
