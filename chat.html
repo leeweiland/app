@@ -1020,9 +1020,17 @@ function previewText(m) {
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'appointment') {
     const start = new Date(m.startISO);
-    if (start.getTime() <= Date.now()) return 'Last Session · ' + start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: m.timezone });
-    const when = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: m.timezone }) + ' at ' +
-      start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: m.timezone });
+    // Intl throws a RangeError for timeZone:null (not treated as "unset"
+    // the way undefined is) — a message saved before the timezone field
+    // existed, or from any path that didn't set it, had null here, which
+    // crashed this .map() and took the ENTIRE conversation list down with
+    // it (nothing after the throw ever rendered, stuck on "Loading…"
+    // forever even though the underlying fetch had already succeeded).
+    // Falling back to undefined lets Intl use the browser's local zone.
+    const tz = m.timezone || undefined;
+    if (start.getTime() <= Date.now()) return 'Last Session · ' + start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz });
+    const when = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz }) + ' at ' +
+      start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
     return `<span class="convo-preview-appt"><span class="preview-icon">${svgCalendar()}</span> Upcoming Session</span><div class="convo-preview-sub convo-preview-appt">${when}</div>`;
   }
   return m.type === 'video' ? 'Video' : 'Photo';

@@ -3010,12 +3010,17 @@ export async function handleChatRequest(req, res, url) {
         const apptCfg = cfg.appointments;
         // Gym clients train on the shared Gym 90 Minute Training Block
         // calendar, never on an individual coach's own calendar — a group
-        // whose clients are all Gym role must book there too, even when
+        // that includes ANY Gym-role client must book there too, even when
         // scheduled through this generic flow instead of the dedicated Gym
         // slot picker, or the event lands on the wrong calendar (and later
         // cancellation can't find it there either — see deleteCalendarEvent
-        // call below in the DELETE handler).
-        const isGymBooking = recipients.length > 0 && recipients.every(r => r.role === "gym");
+        // call below in the DELETE handler). .some(), not .every() — a
+        // mixed group (a Gym client sitting alongside Online/other roles)
+        // still needs the Gym client to see it on the calendar they
+        // actually train on; requiring every recipient to be Gym-role
+        // meant any mixed group silently fell through to the per-coach/
+        // Online path instead.
+        const isGymBooking = recipients.some(r => r.role === "gym");
         if (isGymBooking && !apptCfg.gymCalendarId) {
           return sendJson(res, 400, { error: "Ask an admin to set the Gym 90 Minute Training Block calendar ID in Admin Settings first." });
         }
