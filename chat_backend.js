@@ -3,7 +3,7 @@
 // Mounted from server.js: handleChatRequest(req, res, url) returns true if it
 // handled the request, false to let server.js's existing routing continue.
 
-import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
@@ -1303,29 +1303,6 @@ function canCreateDm(creator, otherUser) {
 // ── Route handler ────────────────────────────────────────────────────────
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
-
-  // TEMP — diagnosing why data still reverted after the Volume was attached.
-  // Remove once resolved.
-  if (p === "/api/_debug/data-dir") {
-    const filesInfo = {};
-    ["chat_users.json", "chat_conversations.json", "chat_admin_config.json"].forEach(f => {
-      const full = join(DATA_DIR, f);
-      try {
-        const stat = statSync(full);
-        filesInfo[f] = { exists: true, size: stat.size, mtime: stat.mtime.toISOString() };
-      } catch { filesInfo[f] = { exists: false }; }
-    });
-    const users = readJson(USERS_FILE, []);
-    const convos = readJson(CONVOS_FILE, []);
-    const cfg = readJson(CONFIG_FILE, {});
-    return sendJson(res, 200, {
-      dataDir: DATA_DIR, dirname: __dirname, usingVolume: DATA_DIR !== __dirname,
-      files: filesInfo,
-      admins: users.filter(u => u.role === "admin").map(u => u.first + " " + u.last),
-      groups: convos.filter(c => c.type === "group").map(c => ({ name: c.name, members: c.participantIds.length })),
-      powerbaticsVideosFolderId: cfg.powerbaticsVideosFolderId || null,
-    });
-  }
 
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {
