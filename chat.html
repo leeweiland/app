@@ -1557,12 +1557,12 @@ function setupComposer() {
   gifBtn.onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); templatesPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadGifs(''); };
   templatesBtn.onclick = () => { templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
   document.addEventListener('click', (e) => {
-    if (!emojiPanel.contains(e.target) && e.target !== emojiBtn && !e.target.closest('.react-trigger')) {
+    if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.react-trigger')) {
       emojiPanel.classList.remove('show');
       reactingMessageId = null;
     }
-    if (!gifPanel.contains(e.target) && e.target !== gifBtn) gifPanel.classList.remove('show');
-    if (!templatesPanel.contains(e.target) && e.target !== templatesBtn) templatesPanel.classList.remove('show');
+    if (!gifPanel.contains(e.target) && !e.target.closest('#gifBtn')) gifPanel.classList.remove('show');
+    if (!templatesPanel.contains(e.target) && !e.target.closest('#templatesBtn')) templatesPanel.classList.remove('show');
   });
 
   let gifSearchTimer;
