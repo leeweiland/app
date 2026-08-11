@@ -37,7 +37,10 @@
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
   .convo-name { font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .convo-unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pra-blue); box-shadow: 0 0 6px 1px rgba(0,155,255,.7); margin-right: 6px; vertical-align: middle; }
+  .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
+  .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; }
+  .convo-time.has-unread { color: #39ff14; font-weight: 700; }
+  .convo-unread-badge { background: #39ff14; color: #0a0a0d; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
   .convo-preview { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -703,6 +706,7 @@ function buildDirectory() {
     timestamp: c.lastMessage?.createdAt || c.createdAt,
     favorite: !!c.favorite,
     unread: !!c.unread,
+    unreadCount: c.unreadCount || 0,
   }));
   const dmContactIds = new Set(
     conversations.filter(c => c.type === 'dm').map(c => otherParticipant(c)?.id)
@@ -725,17 +729,35 @@ function buildDirectory() {
 
 const STAR_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.6 7.1.7-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7-5.4-4.7 7.1-.7z"/></svg>';
 
+// Same calendar day as now shows just the time (matches how the message
+// bubbles themselves are timestamped); anything older shows a short date
+// instead, since "9:56 AM" alone would be misleading for a week-old chat.
+function convoTimeLabel(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 function convoItemHtml(i) {
   // Virtual rows (a contact with no conversation yet) can't be favorited —
   // there's no conversation id to favorite until the first message exists.
   const favBtn = i.virtual ? '' : `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
-  const unreadDot = i.unread ? '<span class="convo-unread-dot" title="Unread"></span>' : '';
+  const timeLabel = i.timestamp ? `<div class="convo-time${i.unread ? ' has-unread' : ''}">${convoTimeLabel(i.timestamp)}</div>` : '';
+  const unreadBadge = i.unreadCount > 0 ? `<div class="convo-unread-badge">${i.unreadCount > 99 ? '99+' : i.unreadCount}</div>` : '';
   return `
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''}" data-key="${i.key}">
       <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${unreadDot}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
+      </div>
+      <div class="convo-side">
+        ${timeLabel}
+        ${unreadBadge}
       </div>
       ${favBtn}
     </div>

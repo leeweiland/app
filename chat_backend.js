@@ -2222,13 +2222,14 @@ export async function handleChatRequest(req, res, url) {
         const convoMsgs = messages.filter(m => m.conversationId === c.id);
         const last = convoMsgs[convoMsgs.length - 1];
         const lastReadAt = readState[c.id];
-        const unread = !!last && last.senderId !== user.id && (!lastReadAt || new Date(last.createdAt) > new Date(lastReadAt));
+        const unreadCount = convoMsgs.filter(m => m.senderId !== user.id && (!lastReadAt || new Date(m.createdAt) > new Date(lastReadAt))).length;
         return {
           ...c,
           participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean),
           lastMessage: last ? { type: last.type, text: last.text || "", senderId: last.senderId, createdAt: last.createdAt, startISO: last.startISO, durationMinutes: last.durationMinutes, timezone: last.timezone } : null,
           favorite: favoriteIds.has(c.id),
-          unread,
+          unreadCount,
+          unread: unreadCount > 0,
         };
       }).sort((a, b) => new Date(b.lastMessage?.createdAt || b.createdAt) - new Date(a.lastMessage?.createdAt || a.createdAt));
       return sendJson(res, 200, { conversations: enriched });
