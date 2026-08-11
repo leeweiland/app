@@ -54,10 +54,19 @@
   .convo-fav-toggle.on { color: #0a0a0d; background: #ffd54a; border-color: #ffd54a; }
   #unreadViewToggle:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
   #unreadViewToggle.on { color: #fff; background: var(--pra-blue); border-color: var(--pra-blue); }
+  #channelsViewToggle:hover { color: #a855f7; border-color: #a855f7; }
+  #channelsViewToggle.on { color: #fff; background: #a855f7; border-color: #a855f7; }
   .convo-fav-btn { flex-shrink: 0; align-self: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .5; transition: opacity .15s, color .15s; }
   .convo-fav-btn:hover { opacity: 1; color: #ffd54a; }
   .convo-fav-btn.on { opacity: 1; color: #ffd54a; }
   .convo-fav-btn svg { width: 17px; height: 17px; }
+  .convo-pin-btn { flex-shrink: 0; align-self: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .5; transition: opacity .15s, color .15s; }
+  .convo-pin-btn:hover { opacity: 1; color: var(--pra-blue); }
+  .convo-pin-btn.on { opacity: 1; color: var(--pra-blue); }
+  .convo-pin-btn svg { width: 15px; height: 15px; }
+  .convo-pinned-mark { display: inline-flex; color: var(--pra-blue); margin-right: 5px; vertical-align: middle; }
+  .convo-pinned-mark svg { width: 12px; height: 12px; }
+  .convo-item.pinned-row { background: rgba(0,155,255,0.04); }
 
   /* ── Main panel ── */
   .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -279,6 +288,7 @@
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button class="convo-fav-toggle" id="favoritesViewToggle" title="Show only favorites">★ FAVORITES</button>
           <button class="convo-fav-toggle" id="unreadViewToggle" title="Show only unread">● UNREAD</button>
+          <button class="convo-fav-toggle" id="channelsViewToggle" title="Show only channels">▤ CHANNELS</button>
         </div>
       </div>
       <div class="sidebar-search search-clear-wrap">
@@ -377,6 +387,7 @@
       <div class="pra-muted" style="font-size:.76rem;margin-top:16px;margin-bottom:8px">Add Members</div>
       <div id="groupInfoAddList"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="groupInfoAddBtn">Add Selected</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;display:none" id="groupInfoChannelBtn">Mark as Channel</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupInfoModal')">Close</button>
     </div>
@@ -639,12 +650,15 @@ function convoDisplayName(convo) {
 // Group avatars glow the color of the "client" role present in the group —
 // student (green) takes priority since that's the typical case, falling
 // back to user (white) for groups like a plain-user + coach with no
-// student, and finally the old default green for staff-only groups.
+// student, then coach (red) for an all-staff group like "Team", and
+// finally the old default green as a last resort.
 function convoAvatarUser(convo) {
   if (convo.type !== 'group') return otherParticipant(convo);
   const student = convo.participants.find(p => p.role === 'student');
   const plainUser = convo.participants.find(p => p.role === 'user');
-  return { first: convo.name, last: '', role: student ? 'student' : plainUser ? 'user' : 'group' };
+  const coach = convo.participants.find(p => p.role === 'coach' || p.role === 'admin');
+  const role = student ? 'student' : plainUser ? 'user' : coach ? 'coach' : 'group';
+  return { first: convo.name, last: '', role };
 }
 
 async function init() {
@@ -676,6 +690,11 @@ async function init() {
     document.getElementById('unreadViewToggle').classList.toggle('on', unreadOnlyView);
     renderConvoList();
   });
+  document.getElementById('channelsViewToggle').addEventListener('click', () => {
+    channelsOnlyView = !channelsOnlyView;
+    document.getElementById('channelsViewToggle').classList.toggle('on', channelsOnlyView);
+    renderConvoList();
+  });
   pollTimer = setInterval(loadConversations, 3000);
 }
 
@@ -705,6 +724,8 @@ function buildDirectory() {
     preview: previewText(c.lastMessage),
     timestamp: c.lastMessage?.createdAt || c.createdAt,
     favorite: !!c.favorite,
+    pinned: !!c.pinned,
+    isChannel: !!c.isChannel,
     unread: !!c.unread,
     unreadCount: c.unreadCount || 0,
   }));
@@ -719,6 +740,7 @@ function buildDirectory() {
     });
   });
   items.sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
     if (a.timestamp) return -1;
     if (b.timestamp) return 1;
@@ -728,6 +750,7 @@ function buildDirectory() {
 }
 
 const STAR_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 6.6 7.1.7-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7-5.4-4.7 7.1-.7z"/></svg>';
+const PIN_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.5a1.5 1.5 0 0 1 2.1 0l4.9 4.9a1.5 1.5 0 0 1 0 2.1l-2.1 2.1-1.4-1.4-3.5 3.5.5 4.6-1.6 1.6-4.2-4.2-5.4 5.4-1.1-1.1 5.4-5.4-4.2-4.2 1.6-1.6 4.6.5 3.5-3.5-1.4-1.4Z"/></svg>';
 
 // Same calendar day as now shows just the time (matches how the message
 // bubbles themselves are timestamped); anything older shows a short date
@@ -746,19 +769,22 @@ function convoItemHtml(i) {
   // Virtual rows (a contact with no conversation yet) can't be favorited —
   // there's no conversation id to favorite until the first message exists.
   const favBtn = i.virtual ? '' : `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
+  const pinBtn = i.virtual ? '' : `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}">${PIN_ICON}</button>`;
   const timeLabel = i.timestamp ? `<div class="convo-time${i.unread ? ' has-unread' : ''}">${convoTimeLabel(i.timestamp)}</div>` : '';
   const unreadBadge = i.unreadCount > 0 ? `<div class="convo-unread-badge">${i.unreadCount > 99 ? '99+' : i.unreadCount}</div>` : '';
+  const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
   return `
-    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''}" data-key="${i.key}">
+    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''}" data-key="${i.key}">
       <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${pinnedMark}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       <div class="convo-side">
         ${timeLabel}
         ${unreadBadge}
       </div>
+      ${pinBtn}
       ${favBtn}
     </div>
   `;
@@ -769,7 +795,7 @@ function wireConvoItems(wrap, items) {
     const item = items.find(i => i.key === el.dataset.key);
     if (!item) return;
     el.onclick = (e) => {
-      if (e.target.closest('.convo-fav-btn')) return; // handled separately below
+      if (e.target.closest('.convo-fav-btn, .convo-pin-btn')) return; // handled separately below
       if (item.virtual) startConvo(item.contactId);
       else openConvo(item.convoId);
     };
@@ -784,10 +810,21 @@ function wireConvoItems(wrap, items) {
       await loadConversations();
     };
   });
+  wrap.querySelectorAll('.convo-pin-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const pinned = btn.dataset.pinOn === '1';
+      await fetch(`/api/chat/conversations/${btn.dataset.pinId}/pin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned })
+      });
+      await loadConversations();
+    };
+  });
 }
 
 let favoritesOnlyView = false;
 let unreadOnlyView = false;
+let channelsOnlyView = false;
 
 function renderConvoList() {
   const wrap = document.getElementById('convoList');
@@ -795,9 +832,12 @@ function renderConvoList() {
   let items = buildDirectory();
   if (favoritesOnlyView) items = items.filter(i => i.favorite);
   if (unreadOnlyView) items = items.filter(i => i.unread);
+  if (channelsOnlyView) items = items.filter(i => i.isChannel);
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
   if (!items.length) {
-    const msg = unreadOnlyView
+    const msg = channelsOnlyView
+      ? (q ? 'No channels match your search.' : 'No channels yet — an admin can mark a group as a channel from Group Info.')
+      : unreadOnlyView
       ? (q ? 'No unread chats match your search.' : "You're all caught up — no unread chats.")
       : favoritesOnlyView
       ? (q ? 'No favorites match your search.' : 'No favorites yet — tap the star on any chat to add it.')
@@ -1651,9 +1691,28 @@ async function renderGroupInfoModal() {
       `).join('')
     : '<div class="pra-muted" style="font-size:.78rem">Everyone you can message is already in this group.</div>';
 
+  const channelBtn = document.getElementById('groupInfoChannelBtn');
+  if (me.role === 'admin') {
+    channelBtn.style.display = '';
+    channelBtn.textContent = convo.isChannel ? 'Remove from Channels' : 'Mark as Channel';
+  } else {
+    channelBtn.style.display = 'none';
+  }
+
   openModal('groupInfoModal');
 }
 document.getElementById('groupInfoBtn').onclick = renderGroupInfoModal;
+
+document.getElementById('groupInfoChannelBtn').onclick = async () => {
+  const convo = conversations.find(c => c.id === activeConvoId);
+  if (!convo || convo.type !== 'group') return;
+  const r = await fetch(`/api/chat/conversations/${activeConvoId}/channel`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isChannel: !convo.isChannel })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update channel status.'); return; }
+  await loadConversations();
+  await renderGroupInfoModal();
+};
 
 document.getElementById('groupInfoAddBtn').onclick = async () => {
   const ids = Array.from(document.querySelectorAll('#groupInfoAddList input:checked')).map(el => el.value);

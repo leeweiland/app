@@ -2217,6 +2217,7 @@ export async function handleChatRequest(req, res, url) {
       const messages = readJson(MESSAGES_FILE, []);
       const users = readJson(USERS_FILE, []);
       const favoriteIds = new Set(user.favoriteConvoIds || []);
+      const pinnedIds = new Set(user.pinnedConvoIds || []);
       const readState = user.readState || {};
       const enriched = convos.map(c => {
         const convoMsgs = messages.filter(m => m.conversationId === c.id);
@@ -2228,10 +2229,14 @@ export async function handleChatRequest(req, res, url) {
           participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean),
           lastMessage: last ? { type: last.type, text: last.text || "", senderId: last.senderId, createdAt: last.createdAt, startISO: last.startISO, durationMinutes: last.durationMinutes, timezone: last.timezone } : null,
           favorite: favoriteIds.has(c.id),
+          pinned: pinnedIds.has(c.id),
           unreadCount,
           unread: unreadCount > 0,
         };
-      }).sort((a, b) => new Date(b.lastMessage?.createdAt || b.createdAt) - new Date(a.lastMessage?.createdAt || a.createdAt));
+      }).sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return new Date(b.lastMessage?.createdAt || b.createdAt) - new Date(a.lastMessage?.createdAt || a.createdAt);
+      });
       return sendJson(res, 200, { conversations: enriched });
     }
 
@@ -2256,6 +2261,23 @@ export async function handleChatRequest(req, res, url) {
       if (!favorite && idx !== -1) target.favoriteConvoIds.splice(idx, 1);
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true, favorite: !!favorite });
+    }
+
+    const pinMatch = p.match(/^\/api\/chat\/conversations\/([^/]+)\/pin$/);
+    if (pinMatch && req.method === "POST") {
+      const convoId = pinMatch[1];
+      const convos = readJson(CONVOS_FILE, []);
+      const convo = convos.find(c => c.id === convoId);
+      if (!convo || !convo.participantIds.includes(user.id)) return sendJson(res, 404, { error: "Conversation not found" });
+      const { pinned } = await readJsonBody(req);
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === user.id);
+      target.pinnedConvoIds = target.pinnedConvoIds || [];
+      const idx = target.pinnedConvoIds.indexOf(convoId);
+      if (pinned && idx === -1) target.pinnedConvoIds.push(convoId);
+      if (!pinned && idx !== -1) target.pinnedConvoIds.splice(idx, 1);
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true, pinned: !!pinned });
     }
 
     const readMatch = p.match(/^\/api\/chat\/conversations\/([^/]+)\/read$/);
@@ -2323,6 +2345,15 @@ export async function handleChatRequest(req, res, url) {
         const trimmed = String(name || "").trim();
         if (!trimmed) return sendJson(res, 400, { error: "Name can't be blank" });
         convo.name = trimmed;
+        writeJson(CONVOS_FILE, convos);
+        return sendJson(res, 200, { ok: true, conversation: convo });
+      }
+
+      if (sub === "/channel" && req.method === "POST") {
+        if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be marked as a channel" });
+        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        const { isChannel } = await readJsonBody(req);
+        convo.isChannel = !!isChannel;
         writeJson(CONVOS_FILE, convos);
         return sendJson(res, 200, { ok: true, conversation: convo });
       }
