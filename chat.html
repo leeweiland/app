@@ -186,9 +186,13 @@
   .template-add-form textarea { resize: vertical; min-height: 50px; font-family: inherit; }
 
   /* ── Modal (contacts / group / search / media) ── */
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
   .modal-backdrop.show { display: flex; }
-  .modal-box { width: 100%; max-width: 420px; max-height: 80vh; overflow-y: auto; padding: 22px; }
+  /* vh doesn't account for mobile browser/OS chrome (address bar, nav
+     buttons), so 80vh can run taller than what's actually visible on a
+     phone — dvh does, but isn't supported everywhere, hence both: browsers
+     that don't understand the dvh line just ignore it and keep the vh one. */
+  .modal-box { width: 100%; max-width: 420px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
   .contact-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
   .contact-row:hover { background: rgba(255,255,255,0.04); }
   .contact-row input[type=checkbox] { margin-left: auto; }
