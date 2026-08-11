@@ -8,6 +8,10 @@
 <style>
   body { margin: 0; }
   .wrap { max-width: 700px; margin: 0 auto; padding: 32px 20px 60px; }
+  .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
+  @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
+  .protocol-head { display: flex; align-items: center; gap: 12px; }
+  .protocol-head-titles { flex: 1; min-width: 0; }
   .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
   .steps { position: relative; margin-top: 28px; }
   .step { position: relative; padding-left: 42px; padding-bottom: 28px; }
@@ -64,8 +68,13 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
-    <div class="client-name" id="clientName">Loading…</div>
-    <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
+    <div class="protocol-head">
+      <button class="icon-btn" id="backBtn" title="Back to chat">←</button>
+      <div class="protocol-head-titles">
+        <div class="client-name" id="clientName">Loading…</div>
+        <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
+      </div>
+    </div>
 
     <div class="steps" id="stepsList"></div>
     <div class="empty-hint" id="emptyHint" style="display:none">No steps yet.</div>
@@ -380,6 +389,19 @@ async function submitNewTemplate() {
   document.getElementById('templateAddText').value = '';
   searchTemplates(document.getElementById('templateSearchInput').value || '');
 }
+
+// Getting here is always a click on a chat conversation's "Current Training
+// Protocol" link, so a normal browser back-navigation lands right back on
+// that same conversation, scroll position and all. document.referrer is the
+// fallback for anyone who lands here with no history (a fresh tab, a
+// bookmark) — going to chat.html generically instead of leaving Back inert.
+document.getElementById('backBtn').onclick = () => {
+  if (document.referrer && new URL(document.referrer).origin === location.origin) {
+    history.back();
+  } else {
+    location.href = '/chat-app/chat.html';
+  }
+};
 
 init();
 </script>
