@@ -214,7 +214,8 @@
 /* ── Role-colored avatar glow — steady, no pulsing, for all roles ── */
 .pra-avatar.role-admin { border-color: #009bff; box-shadow: 0 0 0 2px rgba(0,155,255,.35), 0 0 10px 2px rgba(0,155,255,.6); }
 .pra-avatar.role-coach { border-color: #ff3b3b; box-shadow: 0 0 0 2px rgba(255,59,59,.35), 0 0 10px 2px rgba(255,59,59,.6); }
-.pra-avatar.role-student { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+.pra-avatar.role-online { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+.pra-avatar.role-gym { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
 .pra-avatar.role-user { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35), 0 0 10px 2px rgba(255,255,255,.6); }
 .pra-avatar.role-group { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
 
@@ -241,7 +242,8 @@
 }
 .role-tag-admin { background: rgba(0,155,255,0.15); color: #009bff; }
 .role-tag-coach { background: rgba(255,59,59,0.15); color: #ff3b3b; }
-.role-tag-student { background: rgba(57,255,20,0.15); color: #39ff14; }
+.role-tag-online { background: rgba(57,255,20,0.15); color: #39ff14; }
+.role-tag-gym { background: rgba(57,255,20,0.15); color: #39ff14; }
 .role-tag-user { background: rgba(255,255,255,0.12); color: #fff; }
 
 /* ── Scrollbars ── */

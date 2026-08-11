@@ -77,6 +77,17 @@ function writeJson(file, data) {
   writeFileSync(join(DATA_DIR, file), JSON.stringify(data, null, 2), "utf8");
 }
 
+// One-time role rename: "student" -> "online" (the "gym" role is new
+// alongside it, not a rename target — existing gym-program clients were
+// never called "student" in this system). Runs on every boot but only ever
+// writes once, since after the first pass no account is left at "student".
+(function migrateStudentRoleToOnline() {
+  const users = readJson(USERS_FILE, []);
+  let changed = false;
+  users.forEach(u => { if (u.role === "student") { u.role = "online"; changed = true; } });
+  if (changed) writeJson(USERS_FILE, users);
+})();
+
 // Static, bundled-with-code content (not user data) — always read from the
 // app's own directory, never the Volume. personality-quiz/config.json and
 // leads.json aren't in the migrated data-file list and this server has no
@@ -597,20 +608,21 @@ function findLevelsEntries(people, first, last) {
   return people.filter(p => p.first.trim().toLowerCase() === f && p.last.trim().toLowerCase() === l);
 }
 
-// ── Student eligibility ─────────────────────────────────────────────────
-// A plain "user" account is treated as a "student" once their name shows up
-// in either sales sheet (they've actually signed up for online or gym
-// training) — as long as they aren't on the shared blacklist, checked two
+// ── Online/Gym eligibility ───────────────────────────────────────────────
+// A plain "user" account is promoted to "online" or "gym" once their name
+// shows up in the matching sales sheet (they've actually signed up for that
+// program) — as long as they aren't on the shared blacklist, checked two
 // ways: the dedicated BLACKLIST tab, and a "BLACKLIST" marker some rows
 // carry directly in their own Status column instead.
-const STUDENT_SHEET_TABS = ["ONLINE KICKOFF / BUYERS", "GYM KICKOFF / BUYERS"];
+const ONLINE_SHEET_TAB = "ONLINE KICKOFF / BUYERS";
+const GYM_SHEET_TAB = "GYM KICKOFF / BUYERS";
 const STUDENT_BLACKLIST_TAB = "BLACKLIST ONLINE & GYM";
 function nameKey(first, last) {
   return `${String(first || "").trim().toLowerCase()}|${String(last || "").trim().toLowerCase()}`;
 }
-let studentEligibilityCache = null; // { at, eligible: Set<nameKey> } — 10-minute cache, same idea as the levels cache
+let studentEligibilityCache = null; // { at, online: Set<nameKey>, gym: Set<nameKey> } — 10-minute cache, same idea as the levels cache
 async function fetchStudentEligibility() {
-  if (studentEligibilityCache && Date.now() - studentEligibilityCache.at < 10 * 60 * 1000) return studentEligibilityCache.eligible;
+  if (studentEligibilityCache && Date.now() - studentEligibilityCache.at < 10 * 60 * 1000) return studentEligibilityCache;
   const accessToken = await getGoogleAccessToken();
   async function fetchTab(tabName, range) {
     const r = await fetch(
@@ -620,13 +632,14 @@ async function fetchStudentEligibility() {
     const d = await r.json();
     return (d.values || []).slice(1); // drop header row
   }
-  const [blacklistRows, ...tabRows] = await Promise.all([
+  const [blacklistRows, onlineRows, gymRows] = await Promise.all([
     fetchTab(STUDENT_BLACKLIST_TAB, "A1:B"),
-    ...STUDENT_SHEET_TABS.map(t => fetchTab(t, "A1:E")),
+    fetchTab(ONLINE_SHEET_TAB, "A1:E"),
+    fetchTab(GYM_SHEET_TAB, "A1:E"),
   ]);
   const blacklisted = new Set(blacklistRows.filter(([first, last]) => first || last).map(([first, last]) => nameKey(first, last)));
-  const eligible = new Set();
-  tabRows.forEach(rows => {
+  function toEligibleSet(rows) {
+    const eligible = new Set();
     rows.forEach(([first, last, , , status]) => {
       if (!first && !last) return;
       const key = nameKey(first, last);
@@ -634,20 +647,25 @@ async function fetchStudentEligibility() {
       if (String(status || "").toUpperCase().includes("BLACKLIST")) return;
       eligible.add(key);
     });
-  });
-  studentEligibilityCache = { at: Date.now(), eligible };
-  return eligible;
+    return eligible;
+  }
+  studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows) };
+  return studentEligibilityCache;
 }
 // Auto-promotes any plain "user" whose name is now sheet-eligible to
-// "student" — a manual admin override to any other role always takes
-// precedence going forward, since this only ever touches accounts still
-// sitting at the plain "user" default.
+// "online" or "gym" (gym takes priority if somehow eligible for both) — a
+// manual admin override to any other role always takes precedence going
+// forward, since this only ever touches accounts still sitting at the plain
+// "user" default.
 async function syncStudentRoles(users) {
   try {
-    const eligible = await fetchStudentEligibility();
+    const { online, gym } = await fetchStudentEligibility();
     let changed = false;
     users.forEach(u => {
-      if (u.role === "user" && eligible.has(nameKey(u.first, u.last))) { u.role = "student"; changed = true; }
+      if (u.role !== "user") return;
+      const key = nameKey(u.first, u.last);
+      if (gym.has(key)) { u.role = "gym"; changed = true; }
+      else if (online.has(key)) { u.role = "online"; changed = true; }
     });
     if (changed) writeJson(USERS_FILE, users);
   } catch (e) {
@@ -1331,6 +1349,10 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
 // goes through isAdmin() so admin2 gets full parity everywhere else.
 function isAdmin(user) { return user.role === "admin" || user.role === "admin2"; }
 function isStaff(user) { return user.role === "coach" || isAdmin(user); }
+// "online" and "gym" are both client-facing training roles -- same
+// permissions/behaviors everywhere, just tracking which program someone's
+// actually enrolled in.
+function isClientRole(role) { return role === "online" || role === "gym"; }
 
 function canCreateDm(creator, otherUser) {
   // Either side being staff is enough — students can only ever reach a
@@ -1560,11 +1582,11 @@ export async function handleChatRequest(req, res, url) {
   }
 
   // Quick actions from the chat Levels modal — coaches (not just admins) can
-  // flip a client between student/user or archive/unarchive them right from
-  // the chat, without needing Admin Panel access. Deliberately narrower than
-  // the admin panel's own role/archive endpoints: only allows the
-  // student<->user swap (never promoting to coach/admin/admin2) and only
-  // targets someone who's currently a student or user, so a coach can never
+  // move a client between user/online/gym or archive/unarchive them right
+  // from the chat, without needing Admin Panel access. Deliberately narrower
+  // than the admin panel's own role/archive endpoints: only allows moving
+  // between user/online/gym (never promoting to coach/admin/admin2) and only
+  // targets someone who's currently one of those three, so a coach can never
   // touch a staff account through this path.
   const quickRoleMatch = p.match(/^\/api\/chat\/users\/([^/]+)\/role$/);
   if (quickRoleMatch && req.method === "POST") {
@@ -1572,11 +1594,11 @@ export async function handleChatRequest(req, res, url) {
     if (!me) return sendJson(res, 401, { error: "Not logged in" });
     if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
     const { role } = await readJsonBody(req);
-    if (!["student", "user"].includes(role)) return sendJson(res, 400, { error: "role must be 'student' or 'user'" });
+    if (!["user", "online", "gym"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'online', or 'gym'" });
     const users = readJson(USERS_FILE, []);
     const target = users.find(u => u.id === quickRoleMatch[1]);
     if (!target) return sendJson(res, 404, { error: "User not found" });
-    if (!["student", "user"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between student and user this way" });
+    if (!["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between user/online/gym this way" });
     target.role = role;
     writeJson(USERS_FILE, users);
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
@@ -1591,7 +1613,7 @@ export async function handleChatRequest(req, res, url) {
     const users = readJson(USERS_FILE, []);
     const target = users.find(u => u.id === quickArchiveMatch[1]);
     if (!target) return sendJson(res, 404, { error: "User not found" });
-    if (!["student", "user"].includes(target.role)) return sendJson(res, 400, { error: "Can only archive a student or user this way" });
+    if (!["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Can only archive a user/online/gym account this way" });
     target.archived = !!archived;
     writeJson(USERS_FILE, users);
     if (target.archived) {
@@ -1684,7 +1706,7 @@ export async function handleChatRequest(req, res, url) {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { first, last, email, phone, password, role } = await readJsonBody(req);
         if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
-        if (!["user", "student", "coach", "admin", "admin2"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', 'admin', or 'admin2'" });
+        if (["user", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
         const users = readJson(USERS_FILE, []);
         if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
           return sendJson(res, 409, { error: "An account with that email already exists" });
@@ -1710,7 +1732,7 @@ export async function handleChatRequest(req, res, url) {
     if (roleMatch && req.method === "POST") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { role } = await readJsonBody(req);
-      if (!["user", "student", "coach", "admin", "admin2"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', 'admin', or 'admin2'" });
+      if (["user", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === roleMatch[1]);
       if (!target) return sendJson(res, 404, { error: "User not found" });
@@ -2405,8 +2427,8 @@ export async function handleChatRequest(req, res, url) {
         const { isChannel } = await readJsonBody(req);
         if (isChannel) {
           const groupUsers = readJson(USERS_FILE, []);
-          const hasStudent = convo.participantIds.some(id => groupUsers.find(u => u.id === id)?.role === "student");
-          if (hasStudent) return sendJson(res, 400, { error: "A group with students in it can't be marked as a channel" });
+          const hasClient = convo.participantIds.some(id => isClientRole(groupUsers.find(u => u.id === id)?.role));
+          if (hasClient) return sendJson(res, 400, { error: "A group with online/gym clients in it can't be marked as a channel" });
         }
         convo.isChannel = !!isChannel;
         writeJson(CONVOS_FILE, convos);
@@ -2420,8 +2442,8 @@ export async function handleChatRequest(req, res, url) {
         const users = readJson(USERS_FILE, []);
         const toAdd = Array.from(new Set(participantIds || [])).filter(id => !convo.participantIds.includes(id));
         if (toAdd.some(id => !users.some(u => u.id === id))) return sendJson(res, 400, { error: "Unknown participant" });
-        if (convo.isChannel && toAdd.some(id => users.find(u => u.id === id)?.role === "student")) {
-          return sendJson(res, 400, { error: "Can't add a student to a channel" });
+        if (convo.isChannel && toAdd.some(id => isClientRole(users.find(u => u.id === id)?.role))) {
+          return sendJson(res, 400, { error: "Can't add an online/gym client to a channel" });
         }
         convo.participantIds.push(...toAdd);
         writeJson(CONVOS_FILE, convos);
@@ -2601,8 +2623,8 @@ export async function handleChatRequest(req, res, url) {
           if (!client) return sendJson(res, 404, { error: "Client not found" });
           recipients = [client];
         } else if (convo.type === "group") {
-          recipients = convo.participantIds.map(id => users.find(u => u.id === id)).filter(u => u && u.role === "student");
-          if (!recipients.length) return sendJson(res, 400, { error: "This group has no students to schedule with yet" });
+          recipients = convo.participantIds.map(id => users.find(u => u.id === id)).filter(u => u && isClientRole(u.role));
+          if (!recipients.length) return sendJson(res, 400, { error: "This group has no online/gym clients to schedule with yet" });
         } else {
           return sendJson(res, 400, { error: "Scheduling is only available in 1:1 or group chats" });
         }

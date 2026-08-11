@@ -657,12 +657,17 @@ function avatarHtml(u) {
 }
 // admin2 gets the same visual treatment as admin everywhere (no separate
 // glow color/badge) — the only thing that differs is Admin Panel access.
+// "online" and "gym" are both client-facing training roles — same green
+// color, same permissions/behaviors everywhere, just tracking which
+// program someone's actually enrolled in.
+function isClientRole(role) { return role === 'online' || role === 'gym'; }
 function avatarRoleClass(u) { return u?.role ? ' role-' + (u.role === 'admin2' ? 'admin' : u.role) : ''; }
 function roleBadgeHtml(u) {
   if (u?.role === 'admin') return '<span class="role-tag role-tag-admin">Admin</span>';
   if (u?.role === 'admin2') return '<span class="role-tag role-tag-admin">Admin</span>';
   if (u?.role === 'coach') return '<span class="role-tag role-tag-coach">Coach</span>';
-  if (u?.role === 'student') return '<span class="role-tag role-tag-student">Student</span>';
+  if (u?.role === 'online') return '<span class="role-tag role-tag-online">Online</span>';
+  if (u?.role === 'gym') return '<span class="role-tag role-tag-gym">Gym</span>';
   if (u?.role === 'user') return '<span class="role-tag role-tag-user">User</span>';
   return '';
 }
@@ -673,16 +678,16 @@ function convoDisplayName(convo) {
   return other ? (other.first + ' ' + other.last) : 'Unknown';
 }
 // Group avatars glow the color of the "client" role present in the group —
-// student (green) takes priority since that's the typical case, falling
+// online/gym (green) takes priority since that's the typical case, falling
 // back to user (white) for groups like a plain-user + coach with no
-// student, then coach (red) for an all-staff group like "Team", and
+// client, then coach (red) for an all-staff group like "Team", and
 // finally the old default green as a last resort.
 function convoAvatarUser(convo) {
   if (convo.type !== 'group') return otherParticipant(convo);
-  const student = convo.participants.find(p => p.role === 'student');
+  const client = convo.participants.find(p => isClientRole(p.role));
   const plainUser = convo.participants.find(p => p.role === 'user');
   const coach = convo.participants.find(p => p.role === 'coach' || p.role === 'admin' || p.role === 'admin2');
-  const role = student ? 'student' : plainUser ? 'user' : coach ? 'coach' : 'group';
+  const role = client ? client.role : plainUser ? 'user' : coach ? 'coach' : 'group';
   return { first: convo.name, last: '', role };
 }
 
@@ -761,7 +766,7 @@ function buildDirectory() {
     favorite: !!c.favorite,
     pinned: !!c.pinned,
     isChannel: !!c.isChannel,
-    hasStudent: c.type === 'group' && c.participants.some(p => p.role === 'student'),
+    hasClient: c.type === 'group' && c.participants.some(p => isClientRole(p.role)),
     unread: !!c.unread,
     unreadCount: c.unreadCount || 0,
   }));
@@ -806,7 +811,7 @@ function convoItemHtml(i) {
   // display, so its space stays reserved) when it doesn't apply to this row
   // — so the # / pin / star / count column always lines up the same across
   // every row, whether or not a given row actually has that icon or a count.
-  const canToggleChannel = !i.virtual && i.isGroup && isAdminMe() && (i.isChannel || !i.hasStudent);
+  const canToggleChannel = !i.virtual && i.isGroup && isAdminMe() && (i.isChannel || !i.hasClient);
   const channelBtn = `<button class="convo-channel-btn ${i.isChannel ? 'on' : ''}" data-channel-id="${i.convoId || ''}" data-channel-on="${i.isChannel ? '0' : '1'}" title="${i.isChannel ? 'Remove from channels' : 'Mark as channel'}" style="${canToggleChannel ? '' : 'visibility:hidden'}">#</button>`;
   const pinBtn = `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId || ''}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}" style="${i.virtual ? 'visibility:hidden' : ''}">${PIN_ICON}</button>`;
   const favBtn = `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId || ''}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}" style="${i.virtual ? 'visibility:hidden' : ''}">${STAR_ICON}</button>`;
@@ -944,9 +949,9 @@ async function openConvo(id) {
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
       const label = p.id === me.id ? 'You' : `${p.first} ${p.last}`;
-      // Only students, and only for a coach/admin viewing — matches the same
-      // "click a name to see levels" behavior a DM header already has.
-      if (p.id !== me.id && p.role === 'student' && isStaffMe()) {
+      // Only online/gym clients, and only for a coach/admin viewing — matches
+      // the same "click a name to see levels" behavior a DM header already has.
+      if (p.id !== me.id && isClientRole(p.role) && isStaffMe()) {
         return `<span class="group-member-link" data-uid="${p.id}">${escapeHtml(label)}</span>`;
       }
       return escapeHtml(label);
@@ -966,7 +971,7 @@ async function openConvo(id) {
   // their own protocol instead, so this stays hidden for them here.
   const protocolLink = document.getElementById('threadProtocolLink');
   const protocolStudent = convo.type === 'dm' ? threadOtherUser
-    : convo.type === 'group' ? convo.participants.find(p => p.role === 'student')
+    : convo.type === 'group' ? convo.participants.find(p => isClientRole(p.role))
     : null;
   if (protocolStudent && isStaffMe()) {
     protocolLink.href = '/chat-app/training-protocol.html?userId=' + protocolStudent.id + '&convo=' + convo.id;
@@ -1009,12 +1014,12 @@ document.getElementById('threadGroupMembers').addEventListener('click', (e) => {
 
 // ── Schedule appointment (coach/admin only) ──────────────────────────────
 // DMs always have exactly one recipient (the other participant). Groups can
-// be scheduled too, but only once they actually have a student in them —
-// the recipients are then every student member, not the whole group (other
-// coaches/admins sitting in on the group chat aren't session attendees).
+// be scheduled too, but only once they actually have an online/gym client in
+// them — the recipients are then every client member, not the whole group
+// (other coaches/admins sitting in on the group chat aren't session attendees).
 function scheduleRecipients(convo) {
   if (convo.type === 'dm') return [otherParticipant(convo)];
-  if (convo.type === 'group') return convo.participants.filter(p => p.role === 'student');
+  if (convo.type === 'group') return convo.participants.filter(p => isClientRole(p.role));
   return [];
 }
 function canScheduleIn(convo) {
@@ -1126,28 +1131,31 @@ let levelsModalUser = null;
 let levelsModalEntries = [];
 
 // Quick account actions right from the Levels modal — a coach/admin
-// switching a client between student/user or archiving them without a trip
-// to the Admin Panel. Only shown for student/user targets (matches the
+// switching a client between user/online/gym or archiving them without a
+// trip to the Admin Panel. Only shown for those three targets (matches the
 // narrower quick-action endpoints' own restriction).
+const LEVELS_QUICK_ROLES = ['user', 'online', 'gym'];
+function levelsRoleLabel(r) { return r === 'user' ? 'a User' : r === 'online' ? 'Online' : 'Gym'; }
 function renderLevelsAccountActions(otherUser) {
   const wrap = document.getElementById('levelsAccountActions');
-  if (!['student', 'user'].includes(otherUser.role)) { wrap.innerHTML = ''; return; }
-  const otherLabel = otherUser.role === 'student' ? 'user' : 'student';
-  wrap.innerHTML = `
-    <button class="pra-btn pra-btn-ghost" id="levelsRoleToggleBtn" style="flex:1;font-size:.78rem">Make ${otherLabel === 'user' ? 'a User' : 'a Student'}</button>
+  if (!LEVELS_QUICK_ROLES.includes(otherUser.role)) { wrap.innerHTML = ''; return; }
+  const targets = LEVELS_QUICK_ROLES.filter(r => r !== otherUser.role);
+  wrap.innerHTML = targets.map(r => `<button class="pra-btn pra-btn-ghost levels-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">Make ${levelsRoleLabel(r)}</button>`).join('') + `
     <button class="pra-btn pra-btn-ghost" id="levelsArchiveToggleBtn" style="flex:1;font-size:.78rem${otherUser.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${otherUser.archived ? 'Unarchive' : 'Archive'}</button>
   `;
-  document.getElementById('levelsRoleToggleBtn').onclick = async () => {
-    const r = await fetch(`/api/chat/users/${otherUser.id}/role`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: otherLabel })
-    });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change role.'); return; }
-    const d = await r.json();
-    otherUser.role = d.user.role;
-    levelsModalUser = otherUser;
-    renderLevelsAccountActions(otherUser);
-    await loadConversations();
-  };
+  wrap.querySelectorAll('.levels-role-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const r = await fetch(`/api/chat/users/${otherUser.id}/role`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: btn.dataset.role })
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change role.'); return; }
+      const d = await r.json();
+      otherUser.role = d.user.role;
+      levelsModalUser = otherUser;
+      renderLevelsAccountActions(otherUser);
+      await loadConversations();
+    };
+  });
   document.getElementById('levelsArchiveToggleBtn').onclick = async () => {
     const nextArchived = !otherUser.archived;
     if (nextArchived && !confirm(`Archive ${otherUser.first} ${otherUser.last}? They'll be logged out and unable to sign back in until unarchived.`)) return;

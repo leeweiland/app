@@ -238,7 +238,8 @@
         <label class="pra-label">Role</label>
         <select class="pra-select" id="newUserRole">
           <option value="user">User</option>
-          <option value="student">Student</option>
+          <option value="online">Online</option>
+          <option value="gym">Gym</option>
           <option value="coach">Coach</option>
           <option value="admin">Admin</option>
           <option value="admin2">Admin 2 (no panel access)</option>
@@ -377,7 +378,8 @@ function renderUsers() {
       <td>
         <select class="role-select" data-id="${u.id}">
           <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-          <option value="student" ${u.role === 'student' ? 'selected' : ''}>Student</option>
+          <option value="online" ${u.role === 'online' ? 'selected' : ''}>Online</option>
+          <option value="gym" ${u.role === 'gym' ? 'selected' : ''}>Gym</option>
           <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>
           <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
           <option value="admin2" ${u.role === 'admin2' ? 'selected' : ''}>Admin 2 (no panel access)</option>
