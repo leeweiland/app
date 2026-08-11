@@ -16,7 +16,14 @@ self.addEventListener('push', (e) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       data: { conversationId: data.conversationId },
+      // Every message in a conversation shares this tag (so a burst of
+      // messages collapses into one notification instead of stacking) --
+      // but without renotify, the browser treats a same-tag notification as
+      // a silent update, not a new alert, once the first one's already been
+      // dismissed/read. That looked like "only the first message ever
+      // notifies" even though every push was arriving and firing fine.
       tag: data.conversationId || undefined,
+      renotify: !!data.conversationId,
     })
   );
 });
