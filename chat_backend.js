@@ -38,12 +38,40 @@ const APP_SHEET_TAB = "APP";
 const LEVELS_SHEET_ID = "1N3HCeHkt6ELLonZ2u2RbV-8x43UM9VWvGaNVNvGZIA0";
 const LEVELS_CATEGORIES = ["FOUNDATION", "NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
 
+// Railway rebuilds the container from a fresh git checkout on every deploy —
+// without a mounted Volume, these data files would live at __dirname
+// alongside the code and get reset to whatever's committed in git on every
+// deploy, silently reverting any admin/user action taken since the last
+// commit (renames, role changes, deletions, new messages, everything).
+// RAILWAY_VOLUME_MOUNT_PATH is set automatically once a Volume is attached
+// to this service in the Railway dashboard; falls back to __dirname (the
+// old, non-persistent behavior) if none is attached yet.
+const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+
+// One-time seed: the first boot after a Volume is attached, its mount dir is
+// empty — copy each file's last git-committed version over as a starting
+// point so existing users/conversations/etc. aren't wiped by the switch.
+// No-ops on every boot after that (dest already exists), and no-ops entirely
+// if no Volume is attached (DATA_DIR === __dirname, dest === seed).
+function migrateDataFile(file) {
+  const dest = join(DATA_DIR, file);
+  const seed = join(__dirname, file);
+  if (dest !== seed && !existsSync(dest) && existsSync(seed)) {
+    writeFileSync(dest, readFileSync(seed));
+  }
+}
+[
+  "chat_users.json", "chat_sessions.json", "chat_conversations.json", "chat_messages.json",
+  "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
+  "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
+].forEach(migrateDataFile);
+
 function readJson(file, fallback) {
-  const p = join(__dirname, file);
+  const p = join(DATA_DIR, file);
   try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
 }
 function writeJson(file, data) {
-  writeFileSync(join(__dirname, file), JSON.stringify(data, null, 2), "utf8");
+  writeFileSync(join(DATA_DIR, file), JSON.stringify(data, null, 2), "utf8");
 }
 
 // Admin settings fields for a Drive folder are documented as "the ID", but
@@ -2186,6 +2214,18 @@ export async function handleChatRequest(req, res, url) {
         const trimmed = String(name || "").trim();
         if (!trimmed) return sendJson(res, 400, { error: "Name can't be blank" });
         convo.name = trimmed;
+        writeJson(CONVOS_FILE, convos);
+        return sendJson(res, 200, { ok: true, conversation: convo });
+      }
+
+      if (sub === "/participants" && req.method === "POST") {
+        if (convo.type !== "group") return sendJson(res, 400, { error: "Can only add members to a group" });
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        const { participantIds } = await readJsonBody(req);
+        const users = readJson(USERS_FILE, []);
+        const toAdd = Array.from(new Set(participantIds || [])).filter(id => !convo.participantIds.includes(id));
+        if (toAdd.some(id => !users.some(u => u.id === id))) return sendJson(res, 400, { error: "Unknown participant" });
+        convo.participantIds.push(...toAdd);
         writeJson(CONVOS_FILE, convos);
         return sendJson(res, 200, { ok: true, conversation: convo });
       }

@@ -341,6 +341,9 @@
       </div>
       <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
       <div id="groupInfoMembers"></div>
+      <div class="pra-muted" style="font-size:.76rem;margin-top:16px;margin-bottom:8px">Add Members</div>
+      <div id="groupInfoAddList"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="groupInfoAddBtn">Add Selected</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupInfoModal')">Close</button>
     </div>
@@ -1458,7 +1461,7 @@ document.getElementById('newGroupBtn').onclick = async () => {
   openModal('groupModal');
 };
 
-document.getElementById('groupInfoBtn').onclick = () => {
+async function renderGroupInfoModal() {
   const convo = conversations.find(c => c.id === activeConvoId);
   if (!convo || convo.type !== 'group') return;
   document.getElementById('groupInfoNameInput').value = convo.name || '';
@@ -1475,11 +1478,38 @@ document.getElementById('groupInfoBtn').onclick = () => {
       const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants/${btn.dataset.id}`, { method: 'DELETE' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not remove member.'); return; }
       await loadConversations();
-      document.getElementById('groupInfoBtn').onclick();
+      await renderGroupInfoModal();
       openConvo(activeConvoId);
     };
   });
+
+  await loadContacts();
+  const memberIds = new Set(convo.participantIds);
+  const available = contacts.filter(c => !memberIds.has(c.id));
+  document.getElementById('groupInfoAddList').innerHTML = available.length
+    ? available.map(c => `
+        <div class="contact-row">
+          <div class="pra-avatar">${avatarHtml(c)}</div>
+          <div>${c.first} ${c.last} <span class="pra-badge">${c.role}</span></div>
+          <input type="checkbox" value="${c.id}"/>
+        </div>
+      `).join('')
+    : '<div class="pra-muted" style="font-size:.78rem">Everyone you can message is already in this group.</div>';
+
   openModal('groupInfoModal');
+}
+document.getElementById('groupInfoBtn').onclick = renderGroupInfoModal;
+
+document.getElementById('groupInfoAddBtn').onclick = async () => {
+  const ids = Array.from(document.querySelectorAll('#groupInfoAddList input:checked')).map(el => el.value);
+  if (!ids.length) return;
+  const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantIds: ids })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not add members.'); return; }
+  await loadConversations();
+  await renderGroupInfoModal();
+  openConvo(activeConvoId);
 };
 
 document.getElementById('groupInfoRenameBtn').onclick = async () => {
