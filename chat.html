@@ -77,6 +77,8 @@
   .thread-appt-row { display: none; font-family: var(--font-secondary); font-size: .66rem; color: #39ff14; margin-top: 3px; gap: 8px; flex-wrap: wrap; align-items: center; }
   .thread-appt-link { color: #39ff14; text-decoration: underline; white-space: nowrap; }
   .thread-appt-link:hover { opacity: 0.75; }
+  .thread-appt-cancel { color: #ff5c5c; text-decoration: underline; white-space: nowrap; cursor: pointer; }
+  .thread-appt-cancel:hover { opacity: 0.75; }
 
   /* ── Appointment bubble ── */
   .bubble.appt { position: relative; display: flex; align-items: center; gap: 10px; border: 1px solid var(--pra-blue); background: rgba(0,155,255,0.08); }
@@ -1064,9 +1066,18 @@ function updateThreadApptHeader(messages, convo) {
   const zoomLink = sender?.zoomLink
     ? `<a class="thread-appt-link" href="${sender.zoomLink}" target="_blank">Join Zoom</a>`
     : '';
-  el.innerHTML = `<span>Upcoming Session</span><span>${dateStr} at ${timeStr}</span>${calLink}${zoomLink}`;
+  const cancelLink = isStaffMe()
+    ? `<span class="thread-appt-cancel" data-mid="${upcoming.id}">Cancel</span>`
+    : '';
+  el.innerHTML = `<span>Upcoming Session</span><span>${dateStr} at ${timeStr}</span>${calLink}${zoomLink}${cancelLink}`;
   el.style.display = 'flex';
 }
+
+document.getElementById('threadApptInfo').addEventListener('click', (e) => {
+  const cancelEl = e.target.closest('.thread-appt-cancel');
+  if (!cancelEl) return;
+  if (confirm('Cancel this upcoming session?')) deleteMessage(cancelEl.dataset.mid);
+});
 
 // A plain `scrollTop = scrollHeight` right after innerHTML fires too early —
 // images/videos in the new bubbles haven't loaded yet, so scrollHeight is
