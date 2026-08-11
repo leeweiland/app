@@ -393,12 +393,19 @@ function renderUsers() {
           </button>
         `}
       </td>
+      <td>
+        ${u.role === 'admin' ? '—' : `
+          <button class="pra-btn pra-btn-ghost delete-user-btn" data-id="${u.id}" data-name="${escapeAttr(u.first + ' ' + u.last)}" style="padding:5px 12px;font-size:.75rem;border-color:#ff5c5c;color:#ff5c5c">
+            Delete
+          </button>
+        `}
+      </td>
     </tr>
   `).join('');
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
@@ -459,6 +466,16 @@ function renderUsers() {
       await fetch('/api/admin/users/' + btn.dataset.id + '/archived', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: !wasArchived })
       });
+      loadUsers();
+    });
+  });
+  document.querySelectorAll('.delete-user-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name;
+      if (!confirm(`Permanently delete ${name}? This removes their account, DMs, sessions, favorites, and training protocol for good — this cannot be undone. Type-check: click OK only if you're sure.`)) return;
+      if (!confirm(`Really delete ${name}? Last chance to cancel.`)) return;
+      const r = await fetch('/api/admin/users/' + btn.dataset.id, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Delete failed'); return; }
       loadUsers();
     });
   });

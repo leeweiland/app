@@ -1675,6 +1675,49 @@ export async function handleChatRequest(req, res, url) {
       }
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
+    const hardDeleteMatch = p.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (hardDeleteMatch && req.method === "DELETE") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const targetId = hardDeleteMatch[1];
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === targetId);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      if (target.role === "admin") return sendJson(res, 400, { error: "Can't delete an admin" });
+
+      writeJson(USERS_FILE, users.filter(u => u.id !== targetId));
+
+      const sessions = readJson(SESSIONS_FILE, {});
+      Object.keys(sessions).forEach(token => { if (sessions[token].userId === targetId) delete sessions[token]; });
+      writeJson(SESSIONS_FILE, sessions);
+
+      const resets = readJson(RESETS_FILE, {});
+      Object.keys(resets).forEach(token => { if (resets[token].userId === targetId) delete resets[token]; });
+      writeJson(RESETS_FILE, resets);
+
+      writeJson(PUSH_FILE, readJson(PUSH_FILE, []).filter(s => s.userId !== targetId));
+      writeJson(FAVORITES_FILE, readJson(FAVORITES_FILE, []).filter(f => f.userId !== targetId));
+
+      const protocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+      delete protocols[targetId];
+      writeJson(TRAINING_PROTOCOLS_FILE, protocols);
+
+      // DMs involving the deleted user have no one left to keep them for —
+      // remove the conversation and its messages entirely. Group chats stay
+      // alive for the remaining members; just drop the user from the
+      // participant list and scrub any messages they personally sent.
+      const convos = readJson(CONVOS_FILE, []);
+      const dmIdsToRemove = convos.filter(c => c.type === "dm" && c.participantIds.includes(targetId)).map(c => c.id);
+      const remainingConvos = convos
+        .filter(c => !dmIdsToRemove.includes(c.id))
+        .map(c => c.type === "group" ? { ...c, participantIds: c.participantIds.filter(id => id !== targetId) } : c);
+      writeJson(CONVOS_FILE, remainingConvos);
+
+      const messages = readJson(MESSAGES_FILE, []);
+      const remainingMessages = messages.filter(m => !dmIdsToRemove.includes(m.conversationId) && m.senderId !== targetId);
+      writeJson(MESSAGES_FILE, remainingMessages);
+
+      return sendJson(res, 200, { ok: true });
+    }
     if (p === "/api/admin/chat-config") {
       if (req.method === "GET") {
         if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
@@ -1829,6 +1872,20 @@ export async function handleChatRequest(req, res, url) {
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
+    }
+
+    // Manual cache-bust for the Levels sheet (coach/admin) — fetchAllLevels()
+    // caches for 10 minutes and only self-invalidates when the APP writes an
+    // update (updateLevelsRow); an edit made directly in the spreadsheet
+    // (e.g. deleting a duplicate row) doesn't touch that cache at all, so it
+    // can keep serving stale data — including the duplicate rows a coach
+    // just went and fixed — for up to 10 minutes with no visible reason why.
+    // This just nulls the cache; the next /api/chat/levels or
+    // /api/chat/users-map call re-fetches fresh from Sheets on its own.
+    if (p === "/api/chat/levels/refresh" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      levelsCache = null;
+      return sendJson(res, 200, { ok: true });
     }
 
     // Own levels, read-only — matched by the logged-in user's own name.
