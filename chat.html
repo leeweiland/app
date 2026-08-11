@@ -155,6 +155,17 @@
   .gif-search { width: 100%; margin-bottom: 8px; }
   .gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; }
+  .template-search { width: 100%; margin-bottom: 8px; }
+  .template-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; cursor: pointer; }
+  .template-item:hover { background: rgba(255,255,255,0.05); }
+  .template-item-body { flex: 1; min-width: 0; }
+  .template-item-title { font-weight: 700; font-size: .82rem; }
+  .template-item-text { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .template-delete-btn { flex-shrink: 0; background: none; border: none; color: #ff5c5c; cursor: pointer; font-size: .9rem; padding: 2px 4px; }
+  .template-delete-btn:hover { opacity: .7; }
+  .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 8px; padding-top: 8px; }
+  .template-add-form input, .template-add-form textarea { width: 100%; margin-bottom: 6px; }
+  .template-add-form textarea { resize: vertical; min-height: 50px; font-family: inherit; }
 
   /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
@@ -310,6 +321,7 @@
         <div class="composer">
           <button class="icon-btn" id="emojiBtn">😊</button>
           <button class="icon-btn" id="gifBtn">GIF</button>
+          <button class="icon-btn" id="templatesBtn" title="Saved message templates" style="display:none">📋</button>
           <button class="icon-btn" id="attachBtn">📎</button>
           <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           <input type="text" id="textInput" class="pra-input" placeholder="Type a message…"/>
@@ -322,6 +334,15 @@
           <div class="pra-panel picker-panel" id="gifPanel">
             <input class="pra-input gif-search" id="gifSearchInput" placeholder="Search GIFs…"/>
             <div class="gif-grid" id="gifGrid"></div>
+          </div>
+          <div class="pra-panel picker-panel" id="templatesPanel">
+            <input class="pra-input template-search" id="templateSearchInput" placeholder="Search templates…"/>
+            <div id="templateList"></div>
+            <div class="template-add-form" id="templateAddForm" style="display:none">
+              <input class="pra-input" id="templateAddTitle" placeholder="Template title"/>
+              <textarea class="pra-input" id="templateAddText" placeholder="Message text"></textarea>
+              <button class="pra-btn" id="templateAddBtn" style="width:100%">Save Template</button>
+            </div>
           </div>
         </div>
       </div>
@@ -420,8 +441,8 @@
     <div class="pra-panel modal-box">
       <div class="pra-h2" id="scheduleModalName" style="margin-bottom:14px">Schedule Session</div>
       <div class="field" id="scheduleCoachField" style="display:none">
-        <label class="pra-label">Coach (event goes on their calendar)</label>
-        <select class="pra-select" id="scheduleCoach" style="width:100%"></select>
+        <label class="pra-label">Coach(es) — event goes on their calendar(s)</label>
+        <div id="scheduleCoachList" style="max-height:140px;overflow-y:auto;border:1px solid var(--pra-border);border-radius:8px;padding:6px"></div>
       </div>
       <div class="field">
         <label class="pra-label">Date</label>
@@ -629,6 +650,8 @@ async function init() {
   if (me.role === 'coach' || me.role === 'admin') {
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
+    document.getElementById('templatesBtn').style.display = '';
+    document.getElementById('templateAddForm').style.display = me.role === 'admin' ? '' : 'none';
     await loadFavorites();
   }
 
@@ -898,13 +921,19 @@ async function openScheduleModal() {
   // on Megan's calendar instead. Only worth showing when there's actually
   // another coach/admin to pick.
   const coachField = document.getElementById('scheduleCoachField');
-  const coachSelect = document.getElementById('scheduleCoach');
+  const coachList = document.getElementById('scheduleCoachList');
   try {
     const r = await fetch('/api/chat/contacts');
     const d = await r.json();
     const staff = (d.contacts || []).filter(u => u.role === 'coach' || u.role === 'admin');
     if (!staff.some(u => u.id === me.id)) staff.unshift(me);
-    coachSelect.innerHTML = staff.map(u => `<option value="${u.id}" ${u.id === me.id ? 'selected' : ''}>${escapeHtml(u.first)} ${escapeHtml(u.last)}${u.id === me.id ? ' (you)' : ''}</option>`).join('');
+    coachList.innerHTML = staff.map(u => `
+      <div class="contact-row">
+        <div class="pra-avatar">${avatarHtml(u)}</div>
+        <div>${escapeHtml(u.first)} ${escapeHtml(u.last)}${u.id === me.id ? ' (you)' : ''}</div>
+        <input type="checkbox" value="${u.id}" ${u.id === me.id ? 'checked' : ''}/>
+      </div>
+    `).join('');
     coachField.style.display = staff.length > 1 ? '' : 'none';
   } catch { coachField.style.display = 'none'; }
 
@@ -917,7 +946,7 @@ async function submitSchedule() {
   const durationMinutes = Number(document.getElementById('scheduleDuration').value);
   if (!date || !time || !scheduleModalRecipients.length) return;
   const startISO = new Date(date + 'T' + time + ':00').toISOString();
-  const coachId = document.getElementById('scheduleCoach').value || me.id;
+  const coachIds = Array.from(document.querySelectorAll('#scheduleCoachList input:checked')).map(el => el.value);
 
   const saveBtn = document.getElementById('scheduleSaveBtn');
   saveBtn.disabled = true; saveBtn.textContent = 'Scheduling…';
@@ -925,7 +954,7 @@ async function submitSchedule() {
 
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/schedule', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ startISO, durationMinutes, coachId }),
+    body: JSON.stringify({ startISO, durationMinutes, coachIds }),
   });
   const d = await r.json();
   if (!r.ok) {
@@ -1343,10 +1372,12 @@ function setupComposer() {
   const sendBtn = document.getElementById('sendBtn');
   const emojiBtn = document.getElementById('emojiBtn');
   const gifBtn = document.getElementById('gifBtn');
+  const templatesBtn = document.getElementById('templatesBtn');
   const attachBtn = document.getElementById('attachBtn');
   const fileInput = document.getElementById('fileInput');
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
+  const templatesPanel = document.getElementById('templatesPanel');
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by the .react-trigger handler above) decides which one a pick means.
@@ -1363,13 +1394,15 @@ function setupComposer() {
   });
 
   emojiBtn.onclick = () => toggleEmojiPanel(emojiBtn, null);
-  gifBtn.onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadGifs(''); };
+  gifBtn.onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); templatesPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadGifs(''); };
+  templatesBtn.onclick = () => { templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
   document.addEventListener('click', (e) => {
     if (!emojiPanel.contains(e.target) && e.target !== emojiBtn && !e.target.closest('.react-trigger')) {
       emojiPanel.classList.remove('show');
       reactingMessageId = null;
     }
     if (!gifPanel.contains(e.target) && e.target !== gifBtn) gifPanel.classList.remove('show');
+    if (!templatesPanel.contains(e.target) && e.target !== templatesBtn) templatesPanel.classList.remove('show');
   });
 
   let gifSearchTimer;
@@ -1377,6 +1410,13 @@ function setupComposer() {
     clearTimeout(gifSearchTimer);
     gifSearchTimer = setTimeout(() => loadGifs(e.target.value || ''), 350);
   });
+
+  let templateSearchTimer;
+  document.getElementById('templateSearchInput').addEventListener('input', (e) => {
+    clearTimeout(templateSearchTimer);
+    templateSearchTimer = setTimeout(() => loadTemplates(e.target.value || ''), 250);
+  });
+  document.getElementById('templateAddBtn').onclick = submitNewTemplate;
 
   attachBtn.onclick = () => fileInput.click();
   fileInput.addEventListener('change', async () => {
@@ -1432,6 +1472,58 @@ async function sendGif(url) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gifUrl: url })
   });
   refreshThread(true);
+}
+
+async function loadTemplates(q) {
+  const list = document.getElementById('templateList');
+  list.innerHTML = '<div class="pra-muted">Loading…</div>';
+  const r = await fetch('/api/chat/message-templates?q=' + encodeURIComponent(q));
+  const d = await r.json();
+  const templates = d.templates || [];
+  if (!templates.length) { list.innerHTML = '<div class="pra-muted">No templates found.</div>'; return; }
+  const isAdmin = me.role === 'admin';
+  list.innerHTML = templates.map(t => `
+    <div class="template-item" data-id="${t.id}">
+      <div class="template-item-body">
+        <div class="template-item-title">${escapeHtml(t.title)}</div>
+        <div class="template-item-text">${escapeHtml(t.text)}</div>
+      </div>
+      ${isAdmin ? `<button class="template-delete-btn" title="Delete template">🗑</button>` : ''}
+    </div>
+  `).join('');
+  list.querySelectorAll('.template-item').forEach(row => {
+    const t = templates.find(x => x.id === row.dataset.id);
+    row.querySelector('.template-item-body').onclick = () => sendTemplate(t.text);
+    const delBtn = row.querySelector('.template-delete-btn');
+    if (delBtn) delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete the "${t.title}" template?`)) return;
+      await fetch('/api/chat/message-templates/' + t.id, { method: 'DELETE' });
+      loadTemplates(document.getElementById('templateSearchInput').value || '');
+    };
+  });
+}
+
+async function sendTemplate(text) {
+  document.getElementById('templatesPanel').classList.remove('show');
+  if (!activeConvoId) return;
+  await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+  });
+  refreshThread(true);
+}
+
+async function submitNewTemplate() {
+  const title = document.getElementById('templateAddTitle').value.trim();
+  const text = document.getElementById('templateAddText').value.trim();
+  if (!title || !text) { alert('Title and message text are required.'); return; }
+  const r = await fetch('/api/chat/message-templates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, text })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
+  document.getElementById('templateAddTitle').value = '';
+  document.getElementById('templateAddText').value = '';
+  loadTemplates(document.getElementById('templateSearchInput').value || '');
 }
 
 async function sendReaction(messageId, emoji) {

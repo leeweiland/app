@@ -45,6 +45,16 @@
   .video-result-name { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .upload-video-link { display: block; text-align: center; margin-top: 12px; font-size: .82rem; color: var(--pra-blue); cursor: pointer; }
   .upload-video-link:hover { text-decoration: underline; }
+  .template-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; cursor: pointer; }
+  .template-item:hover { background: rgba(255,255,255,0.05); }
+  .template-item-body { flex: 1; min-width: 0; }
+  .template-item-title { font-weight: 700; font-size: .85rem; }
+  .template-item-text { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .template-delete-btn { flex-shrink: 0; background: none; border: none; color: #ff5c5c; cursor: pointer; font-size: .95rem; padding: 2px 4px; }
+  .template-delete-btn:hover { opacity: .7; }
+  .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 10px; padding-top: 10px; }
+  .template-add-form input, .template-add-form textarea { width: 100%; margin-bottom: 6px; }
+  .template-add-form textarea { resize: vertical; min-height: 60px; font-family: inherit; }
 </style>
 </head>
 <body>
@@ -73,6 +83,7 @@
         <div class="type-choice" id="chooseUploadVideo"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="7" width="17" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 7 7.8 4.5M15 7l1.6-2.5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M12 10.5v5M9.5 12.5l2.5-2.5 2.5 2.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Video</div>
         <div class="type-choice" id="chooseImage"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.4" fill="#009bff"/><path d="M5 16l3.2-3.5 2.3 2.3 2.2-2.6L17 16" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/><path d="M19.5 3.5v6M16.8 6.2l2.7-2.7 2.7 2.7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Image</div>
         <div class="type-choice" id="chooseText"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>Text</div>
+        <div class="type-choice" id="chooseTemplate"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 14.5l3 3M18.5 14.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Saved Text</div>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('chooseTypeModal')">Cancel</button>
     </div>
@@ -115,6 +126,21 @@
       </div>
     </div>
   </div>
+
+  <!-- Saved text templates — admin-authored, coach-searchable -->
+  <div class="modal-backdrop" id="templateModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Saved Text</div>
+      <input class="pra-input" id="templateSearchInput" placeholder="Search saved text…" style="margin-bottom:12px"/>
+      <div id="templateResults"></div>
+      <div class="template-add-form" id="templateAddForm" style="display:none">
+        <input class="pra-input" id="templateAddTitle" placeholder="Title"/>
+        <textarea class="pra-input" id="templateAddText" placeholder="Step text"></textarea>
+        <button class="pra-btn" id="templateAddBtn" style="width:100%">Save Template</button>
+      </div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('templateModal')">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -139,6 +165,7 @@ async function init() {
 
   canEdit = me.role === 'coach' || me.role === 'admin';
   document.getElementById('addStepRow').style.display = canEdit ? 'block' : 'none';
+  document.getElementById('templateAddForm').style.display = me.role === 'admin' ? '' : 'none';
 
   await loadSteps();
   wireModals();
@@ -216,6 +243,19 @@ function wireModals() {
     document.getElementById('textStepInput').value = '';
     openModal('textModal');
   };
+  document.getElementById('chooseTemplate').onclick = () => {
+    closeModal('chooseTypeModal');
+    document.getElementById('templateSearchInput').value = '';
+    openModal('templateModal');
+    searchTemplates('');
+  };
+
+  let templateSearchTimer;
+  document.getElementById('templateSearchInput').addEventListener('input', (e) => {
+    clearTimeout(templateSearchTimer);
+    templateSearchTimer = setTimeout(() => searchTemplates(e.target.value), 250);
+  });
+  document.getElementById('templateAddBtn').onclick = submitNewTemplate;
 
   let searchTimer;
   document.getElementById('videoSearchInput').addEventListener('input', (e) => {
@@ -290,6 +330,54 @@ async function searchVideos(q) {
       closeModal('videoModal');
     };
   });
+}
+
+async function searchTemplates(q) {
+  const box = document.getElementById('templateResults');
+  box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Searching…</div>';
+  const r = await fetch('/api/chat/protocol-step-templates?q=' + encodeURIComponent(q));
+  const d = await r.json();
+  const templates = d.templates || [];
+  if (!templates.length) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">No saved text found.</div>'; return; }
+  const isAdmin = me.role === 'admin';
+  box.innerHTML = templates.map(t => `
+    <div class="template-item" data-id="${t.id}">
+      <div class="template-item-body">
+        <div class="template-item-title">${escapeHtml(t.title)}</div>
+        <div class="template-item-text">${escapeHtml(t.text)}</div>
+      </div>
+      ${isAdmin ? `<button class="template-delete-btn" title="Delete template">🗑</button>` : ''}
+    </div>
+  `).join('');
+  box.querySelectorAll('.template-item').forEach(row => {
+    const t = templates.find(x => x.id === row.dataset.id);
+    row.querySelector('.template-item-body').onclick = async () => {
+      steps.push({ type: 'text', content: t.text });
+      render();
+      await saveSteps();
+      closeModal('templateModal');
+    };
+    const delBtn = row.querySelector('.template-delete-btn');
+    if (delBtn) delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete the "${t.title}" saved text?`)) return;
+      await fetch('/api/chat/protocol-step-templates/' + t.id, { method: 'DELETE' });
+      searchTemplates(document.getElementById('templateSearchInput').value || '');
+    };
+  });
+}
+
+async function submitNewTemplate() {
+  const title = document.getElementById('templateAddTitle').value.trim();
+  const text = document.getElementById('templateAddText').value.trim();
+  if (!title || !text) { alert('Title and text are required.'); return; }
+  const r = await fetch('/api/chat/protocol-step-templates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, text })
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
+  document.getElementById('templateAddTitle').value = '';
+  document.getElementById('templateAddText').value = '';
+  searchTemplates(document.getElementById('templateSearchInput').value || '');
 }
 
 init();

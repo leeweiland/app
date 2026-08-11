@@ -27,6 +27,8 @@ const RESETS_FILE = "chat_password_resets.json";
 const UPLOAD_COUNTERS_FILE = "chat_upload_counters.json";
 const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
 const FAVORITES_FILE = "chat_favorites.json";
+const MESSAGE_TEMPLATES_FILE = "chat_message_templates.json";
+const PROTOCOL_STEP_TEMPLATES_FILE = "chat_protocol_step_templates.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
 const APP_SHEET_TAB = "APP";
@@ -64,7 +66,7 @@ function migrateDataFile(file) {
   "chat_users.json", "chat_sessions.json", "chat_conversations.json", "chat_messages.json",
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
-  "chat_appointments.json",
+  "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
 ].forEach(migrateDataFile);
 
 function readJson(file, fallback) {
@@ -2141,6 +2143,64 @@ export async function handleChatRequest(req, res, url) {
       }
     }
 
+    // ─── Saved message templates (admin-authored, coach-sendable) ─────────
+    if (p === "/api/chat/message-templates" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      let templates = readJson(MESSAGE_TEMPLATES_FILE, []);
+      if (q) templates = templates.filter(t => t.title.toLowerCase().includes(q) || t.text.toLowerCase().includes(q));
+      templates.sort((a, b) => a.title.localeCompare(b.title));
+      return sendJson(res, 200, { templates });
+    }
+    if (p === "/api/chat/message-templates" && req.method === "POST") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const { title, text } = await readJsonBody(req);
+      if (!String(title || "").trim() || !String(text || "").trim()) return sendJson(res, 400, { error: "Title and text are required" });
+      const templates = readJson(MESSAGE_TEMPLATES_FILE, []);
+      const template = { id: randomUUID(), title: title.trim(), text: text.trim(), createdAt: new Date().toISOString() };
+      templates.push(template);
+      writeJson(MESSAGE_TEMPLATES_FILE, templates);
+      return sendJson(res, 200, { template });
+    }
+    const deleteTemplateMatch = p.match(/^\/api\/chat\/message-templates\/([^/]+)$/);
+    if (deleteTemplateMatch && req.method === "DELETE") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const templates = readJson(MESSAGE_TEMPLATES_FILE, []);
+      const next = templates.filter(t => t.id !== deleteTemplateMatch[1]);
+      if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
+      writeJson(MESSAGE_TEMPLATES_FILE, next);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ─── Saved training-protocol step text (admin-authored, coach-addable) ─
+    if (p === "/api/chat/protocol-step-templates" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      let templates = readJson(PROTOCOL_STEP_TEMPLATES_FILE, []);
+      if (q) templates = templates.filter(t => t.title.toLowerCase().includes(q) || t.text.toLowerCase().includes(q));
+      templates.sort((a, b) => a.title.localeCompare(b.title));
+      return sendJson(res, 200, { templates });
+    }
+    if (p === "/api/chat/protocol-step-templates" && req.method === "POST") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const { title, text } = await readJsonBody(req);
+      if (!String(title || "").trim() || !String(text || "").trim()) return sendJson(res, 400, { error: "Title and text are required" });
+      const templates = readJson(PROTOCOL_STEP_TEMPLATES_FILE, []);
+      const template = { id: randomUUID(), title: title.trim(), text: text.trim(), createdAt: new Date().toISOString() };
+      templates.push(template);
+      writeJson(PROTOCOL_STEP_TEMPLATES_FILE, templates);
+      return sendJson(res, 200, { template });
+    }
+    const deleteProtocolTemplateMatch = p.match(/^\/api\/chat\/protocol-step-templates\/([^/]+)$/);
+    if (deleteProtocolTemplateMatch && req.method === "DELETE") {
+      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      const templates = readJson(PROTOCOL_STEP_TEMPLATES_FILE, []);
+      const next = templates.filter(t => t.id !== deleteProtocolTemplateMatch[1]);
+      if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
+      writeJson(PROTOCOL_STEP_TEMPLATES_FILE, next);
+      return sendJson(res, 200, { ok: true });
+    }
+
     // ─── Push subscribe ────────────────────────────────────────────────
     if (p === "/api/chat/push-subscribe" && req.method === "POST") {
       const { subscription } = await readJsonBody(req);
@@ -2441,7 +2501,7 @@ export async function handleChatRequest(req, res, url) {
       // own (e.g. Alexis scheduling a student onto Megan's calendar).
       if (sub === "/schedule" && req.method === "POST") {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Only coaches can schedule appointments" });
-        const { startISO, durationMinutes: reqDuration, coachId } = await readJsonBody(req);
+        const { startISO, durationMinutes: reqDuration, coachId, coachIds: reqCoachIds } = await readJsonBody(req);
         if (!startISO) return sendJson(res, 400, { error: "startISO required" });
         const users = readJson(USERS_FILE, []);
 
@@ -2457,12 +2517,19 @@ export async function handleChatRequest(req, res, url) {
           return sendJson(res, 400, { error: "Scheduling is only available in 1:1 or group chats" });
         }
 
-        let coach = user;
-        if (coachId && coachId !== user.id) {
-          const selected = users.find(u => u.id === coachId);
+        // One or several coaches — the event goes on every selected coach's
+        // own calendar (a separate event each, since Google Calendar has no
+        // single-event-on-multiple-owners concept without a shared resource
+        // calendar) so each of them sees it on their own schedule.
+        const requestedCoachIds = (reqCoachIds && reqCoachIds.length) ? reqCoachIds : (coachId ? [coachId] : [user.id]);
+        const coaches = [];
+        for (const id of Array.from(new Set(requestedCoachIds))) {
+          if (id === user.id) { coaches.push(user); continue; }
+          const selected = users.find(u => u.id === id);
           if (!selected || !isStaff(selected)) return sendJson(res, 400, { error: "Selected coach not found" });
-          coach = selected;
+          coaches.push(selected);
         }
+        if (!coaches.length) coaches.push(user);
 
         const cfg = getConfig();
         const apptCfg = cfg.appointments;
@@ -2470,25 +2537,30 @@ export async function handleChatRequest(req, res, url) {
         const start = new Date(startISO);
         const end = new Date(start.getTime() + durationMinutes * 60000);
         const msgId = randomUUID();
-        const coachName = `${coach.first} ${coach.last}`;
+        const coachName = coaches.map(c => `${c.first} ${c.last}`).join(" & ");
         const recipientNames = recipients.map(r => `${r.first} ${r.last}`).join(", ");
         const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: apptCfg.timezone });
         const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: apptCfg.timezone });
 
         const status = { calendar: null, email: null, sms: null };
-        let googleEventId = null, googleEventLink = null;
-
-        try {
-          const ev = await createCalendarEvent({
-            summary: `Training session — ${coachName} & ${recipientNames}`,
-            description: `Scheduled from PRA Chat.`,
-            startISO, durationMinutes,
-            attendees: recipients.map(r => ({ email: r.email, name: `${r.first} ${r.last}` })),
-            timezone: apptCfg.timezone, calendarId: coach.calendarEmail || coach.email,
-          });
-          googleEventId = ev.id; googleEventLink = ev.htmlLink;
-          status.calendar = { ok: true };
-        } catch (e) { status.calendar = { ok: false, error: e.message }; }
+        const googleEventIds = [], googleEventLinks = [];
+        const calendarResults = [];
+        for (const coach of coaches) {
+          try {
+            const ev = await createCalendarEvent({
+              summary: `Training session — ${coachName} & ${recipientNames}`,
+              description: `Scheduled from PRA Chat.`,
+              startISO, durationMinutes,
+              attendees: recipients.map(r => ({ email: r.email, name: `${r.first} ${r.last}` })),
+              timezone: apptCfg.timezone, calendarId: coach.calendarEmail || coach.email,
+            });
+            googleEventIds.push(ev.id); googleEventLinks.push(ev.htmlLink);
+            calendarResults.push({ ok: true });
+          } catch (e) { calendarResults.push({ ok: false, error: e.message }); }
+        }
+        status.calendar = calendarResults.length === 1 ? calendarResults[0]
+          : calendarResults.every(r => r.ok) ? { ok: true }
+          : { ok: false, error: `${calendarResults.filter(r => !r.ok).length}/${calendarResults.length} failed` };
 
         // Email/SMS/calendar-description all address each recipient by their
         // own name — sent per-recipient rather than one shared message.
@@ -2532,14 +2604,21 @@ export async function handleChatRequest(req, res, url) {
         const messages = readJson(MESSAGES_FILE, []);
         const msg = {
           id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
-          startISO, durationMinutes, timezone: apptCfg.timezone, googleEventId, googleEventLink,
+          startISO, durationMinutes, timezone: apptCfg.timezone,
+          googleEventId: googleEventIds[0] || null, googleEventLink: googleEventLinks[0] || null,
+          googleEventIds, googleEventLinks,
           createdAt: new Date().toISOString(),
         };
         messages.push(msg);
         writeJson(MESSAGES_FILE, messages);
 
         const appointments = readJson("chat_appointments.json", []);
-        appointments.push({ id: msg.id, conversationId: convoId, coachId: coach.id, clientIds: recipients.map(r => r.id), startISO, durationMinutes, googleEventId, status, createdAt: msg.createdAt });
+        appointments.push({
+          id: msg.id, conversationId: convoId,
+          coachId: coaches[0].id, coachIds: coaches.map(c => c.id),
+          clientIds: recipients.map(r => r.id), startISO, durationMinutes,
+          googleEventId: googleEventIds[0] || null, googleEventIds, status, createdAt: msg.createdAt,
+        });
         writeJson("chat_appointments.json", appointments);
 
         notifyParticipants(convoId, user.id, { title: coachName, body: `📅 Session scheduled: ${dateStr} at ${timeStr}`, conversationId: convoId }).catch(() => {});
@@ -2606,12 +2685,20 @@ export async function handleChatRequest(req, res, url) {
             }
 
             const users = readJson(USERS_FILE, []);
-            const coach = users.find(u => u.id === (appt?.coachId || deleted.senderId));
+            const coachIds = appt?.coachIds || (appt?.coachId ? [appt.coachId] : (deleted.senderId ? [deleted.senderId] : []));
+            const coaches = coachIds.map(id => users.find(u => u.id === id)).filter(Boolean);
+            const coach = coaches[0] || null;
 
-            if (deleted.googleEventId) {
-              deleteCalendarEvent({ eventId: deleted.googleEventId, calendarId: coach?.calendarEmail || coach?.email })
+            // One event per coach (see the scheduling code's comment) — same
+            // number of events as coaches, in the same order, so pair them
+            // up by index; falls back to the single legacy googleEventId for
+            // appointments booked before multi-coach scheduling existed.
+            const eventIds = deleted.googleEventIds?.length ? deleted.googleEventIds : (deleted.googleEventId ? [deleted.googleEventId] : []);
+            eventIds.forEach((eventId, i) => {
+              const evCoach = coaches[i] || coach;
+              deleteCalendarEvent({ eventId, calendarId: evCoach?.calendarEmail || evCoach?.email })
                 .catch(e => console.error("[appt cancel] calendar delete failed", e.message));
-            }
+            });
 
             // Best-effort SMS notice, same channel bookings already use --
             // the calendar cancellation above already emails clients on its
@@ -2622,7 +2709,7 @@ export async function handleChatRequest(req, res, url) {
               const start = new Date(appt.startISO);
               const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: apptCfg.timezone });
               const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: apptCfg.timezone });
-              const coachName = coach ? `${coach.first} ${coach.last}` : "your coach";
+              const coachName = coaches.length ? coaches.map(c => `${c.first} ${c.last}`).join(" & ") : "your coach";
               if (apptCfg.smsEnabled) {
                 (appt.clientIds || []).forEach(clientId => {
                   const client = users.find(u => u.id === clientId);
