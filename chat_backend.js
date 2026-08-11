@@ -971,6 +971,22 @@ async function createCalendarEvent({ summary, description, startISO, durationMin
   return { id: d.id, htmlLink: d.htmlLink };
 }
 
+// sendUpdates=all makes Google email every attendee a cancellation notice
+// itself — same mechanism createCalendarEvent relies on for the original
+// invite, so cancelling gets that same built-in notification for free.
+async function deleteCalendarEvent({ eventId, calendarId }) {
+  const accessToken = await getCalendarAccessToken();
+  const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId || "primary")}/events/${eventId}?sendUpdates=all`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  // 410 Gone means it's already deleted/cancelled — treat as success, not an error.
+  if (!r.ok && r.status !== 404 && r.status !== 410) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error("Calendar event deletion failed: " + JSON.stringify(d));
+  }
+}
+
 // ── SMS via Close CRM (same account already used for the YT law SMS
 // sequences). Close's one-off /activity/sms/ send needs a lead_id, so we
 // look the client up by email first — if they're not a Close lead (e.g. a
@@ -2576,8 +2592,48 @@ export async function handleChatRequest(req, res, url) {
         const msgIdx = messages.findIndex(m => m.id === messageId && m.conversationId === convoId);
         if (msgIdx < 0) return sendJson(res, 404, { error: "Message not found" });
         if (req.method === "DELETE") {
+          const deleted = messages[msgIdx];
           messages.splice(msgIdx, 1);
           writeJson(MESSAGES_FILE, messages);
+
+          if (deleted.type === "appointment") {
+            const appointments = readJson("chat_appointments.json", []);
+            const apptIdx = appointments.findIndex(a => a.id === deleted.id);
+            const appt = apptIdx >= 0 ? appointments[apptIdx] : null;
+            if (apptIdx >= 0) {
+              appointments.splice(apptIdx, 1);
+              writeJson("chat_appointments.json", appointments);
+            }
+
+            const users = readJson(USERS_FILE, []);
+            const coach = users.find(u => u.id === (appt?.coachId || deleted.senderId));
+
+            if (deleted.googleEventId) {
+              deleteCalendarEvent({ eventId: deleted.googleEventId, calendarId: coach?.calendarEmail || coach?.email })
+                .catch(e => console.error("[appt cancel] calendar delete failed", e.message));
+            }
+
+            // Best-effort SMS notice, same channel bookings already use --
+            // the calendar cancellation above already emails clients on its
+            // own via sendUpdates=all.
+            if (appt) {
+              const cfg = getConfig();
+              const apptCfg = cfg.appointments;
+              const start = new Date(appt.startISO);
+              const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: apptCfg.timezone });
+              const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: apptCfg.timezone });
+              const coachName = coach ? `${coach.first} ${coach.last}` : "your coach";
+              if (apptCfg.smsEnabled) {
+                (appt.clientIds || []).forEach(clientId => {
+                  const client = users.find(u => u.id === clientId);
+                  if (!client) return;
+                  sendApptSms(client.email, client.phone, `Hi ${client.first}, your session with ${coachName} on ${dateStr} at ${timeStr} has been cancelled.`)
+                    .catch(e => console.error("[appt cancel] SMS failed", e.message));
+                });
+              }
+            }
+          }
+
           return sendJson(res, 200, { ok: true });
         }
         // PATCH — edit text
