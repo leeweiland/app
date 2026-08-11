@@ -700,6 +700,16 @@ async function init() {
 
   await loadContacts();
   await loadConversations();
+  // Deep link from the Training Protocol page's Back button — reopens
+  // whichever conversation sent the coach/admin there. Cache-Control:
+  // no-store on this page (needed to stop stale JS sticking around after a
+  // deploy) also defeats the browser's bfcache, so a plain history.back()
+  // would reload chat.html from scratch with nothing open — this URL param
+  // is what actually gets them back to the right thread.
+  const deepLinkConvoId = new URLSearchParams(location.search).get('convo');
+  if (deepLinkConvoId && conversations.some(c => c.id === deepLinkConvoId)) {
+    openConvo(deepLinkConvoId);
+  }
   setupComposer();
   setupPush();
   setupSearchClearButtons();
@@ -959,7 +969,7 @@ async function openConvo(id) {
     : convo.type === 'group' ? convo.participants.find(p => p.role === 'student')
     : null;
   if (protocolStudent && isStaffMe()) {
-    protocolLink.href = '/chat-app/training-protocol.html?userId=' + protocolStudent.id;
+    protocolLink.href = '/chat-app/training-protocol.html?userId=' + protocolStudent.id + '&convo=' + convo.id;
     protocolLink.style.display = 'block';
   } else {
     protocolLink.style.display = 'none';

@@ -156,6 +156,7 @@
 <script>
 const params = new URLSearchParams(location.search);
 const targetUserId = params.get('userId');
+const sourceConvoId = params.get('convo');
 let me = null, canEdit = false, steps = [];
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
@@ -390,17 +391,16 @@ async function submitNewTemplate() {
   searchTemplates(document.getElementById('templateSearchInput').value || '');
 }
 
-// Getting here is always a click on a chat conversation's "Current Training
-// Protocol" link, so a normal browser back-navigation lands right back on
-// that same conversation, scroll position and all. document.referrer is the
-// fallback for anyone who lands here with no history (a fresh tab, a
-// bookmark) — going to chat.html generically instead of leaving Back inert.
+// Explicit deep link back to the exact conversation this page was opened
+// from (passed as ?convo= by chat.html's protocol link), not history.back()
+// — chat.html is served with Cache-Control: no-store (needed to stop stale
+// JS sticking around after a deploy), which also defeats the browser's
+// bfcache, so a plain back-navigation would reload chat.html from scratch
+// with nothing open rather than landing back on the right thread.
 document.getElementById('backBtn').onclick = () => {
-  if (document.referrer && new URL(document.referrer).origin === location.origin) {
-    history.back();
-  } else {
-    location.href = '/chat-app/chat.html';
-  }
+  location.href = sourceConvoId
+    ? '/chat-app/chat.html?convo=' + encodeURIComponent(sourceConvoId)
+    : '/chat-app/chat.html';
 };
 
 init();
