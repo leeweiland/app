@@ -241,6 +241,7 @@
           <option value="student">Student</option>
           <option value="coach">Coach</option>
           <option value="admin">Admin</option>
+          <option value="admin2">Admin 2 (no panel access)</option>
         </select>
       </div>
       <div class="save-msg" id="addUserMsg"></div>
@@ -379,22 +380,23 @@ function renderUsers() {
           <option value="student" ${u.role === 'student' ? 'selected' : ''}>Student</option>
           <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>
           <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+          <option value="admin2" ${u.role === 'admin2' ? 'selected' : ''}>Admin 2 (no panel access)</option>
         </select>
       </td>
       <td>
-        ${u.role === 'coach' || u.role === 'admin' ? `
+        ${u.role === 'coach' || u.role === 'admin' || u.role === 'admin2' ? `
           <input class="pra-input zoom-link-input" data-id="${u.id}" placeholder="https://zoom.us/j/..." value="${u.zoomLink || ''}" title="${u.zoomLink || ''}"/>
         ` : '—'}
       </td>
       <td>
-        ${u.role === 'admin' ? '—' : `
+        ${u.role === 'admin' || u.role === 'admin2' ? '—' : `
           <button class="pra-btn pra-btn-ghost archive-btn" data-id="${u.id}" data-archived="${!!u.archived}" style="padding:5px 12px;font-size:.75rem">
             ${u.archived ? 'Unarchive' : 'Archive'}
           </button>
         `}
       </td>
       <td>
-        ${u.role === 'admin' ? '—' : `
+        ${u.role === 'admin' || u.role === 'admin2' ? '—' : `
           <button class="pra-btn pra-btn-ghost delete-user-btn" data-id="${u.id}" data-name="${escapeAttr(u.first + ' ' + u.last)}" style="padding:5px 12px;font-size:.75rem;border-color:#ff5c5c;color:#ff5c5c">
             Delete
           </button>

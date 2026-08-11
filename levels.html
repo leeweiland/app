@@ -172,7 +172,7 @@ async function initStaffFeatures() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) return;
   const me = (await meRes.json()).user;
-  isStaffUser = me.role === 'coach' || me.role === 'admin';
+  isStaffUser = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   if (!isStaffUser) return;
   const btn = document.getElementById('refreshBtn');
   btn.style.display = '';

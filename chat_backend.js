@@ -1323,7 +1323,12 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
 }
 
 // ── Access rules ─────────────────────────────────────────────────────────
-function isStaff(user) { return user.role === "coach" || user.role === "admin"; }
+// admin2 has every admin capability except the Admin Panel page itself
+// (that page's own access gate stays hardcoded to "admin" — see
+// admin-panel.html's init()). Every other admin-only check in this file
+// goes through isAdmin() so admin2 gets full parity everywhere else.
+function isAdmin(user) { return user.role === "admin" || user.role === "admin2"; }
+function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 
 function canCreateDm(creator, otherUser) {
   // Either side being staff is enough — students can only ever reach a
@@ -1552,6 +1557,49 @@ export async function handleChatRequest(req, res, url) {
     return sendJson(res, 200, { user: publicUser(target) });
   }
 
+  // Quick actions from the chat Levels modal — coaches (not just admins) can
+  // flip a client between student/user or archive/unarchive them right from
+  // the chat, without needing Admin Panel access. Deliberately narrower than
+  // the admin panel's own role/archive endpoints: only allows the
+  // student<->user swap (never promoting to coach/admin/admin2) and only
+  // targets someone who's currently a student or user, so a coach can never
+  // touch a staff account through this path.
+  const quickRoleMatch = p.match(/^\/api\/chat\/users\/([^/]+)\/role$/);
+  if (quickRoleMatch && req.method === "POST") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    const { role } = await readJsonBody(req);
+    if (!["student", "user"].includes(role)) return sendJson(res, 400, { error: "role must be 'student' or 'user'" });
+    const users = readJson(USERS_FILE, []);
+    const target = users.find(u => u.id === quickRoleMatch[1]);
+    if (!target) return sendJson(res, 404, { error: "User not found" });
+    if (!["student", "user"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between student and user this way" });
+    target.role = role;
+    writeJson(USERS_FILE, users);
+    return sendJson(res, 200, { ok: true, user: publicUser(target) });
+  }
+
+  const quickArchiveMatch = p.match(/^\/api\/chat\/users\/([^/]+)\/archived$/);
+  if (quickArchiveMatch && req.method === "POST") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    const { archived } = await readJsonBody(req);
+    const users = readJson(USERS_FILE, []);
+    const target = users.find(u => u.id === quickArchiveMatch[1]);
+    if (!target) return sendJson(res, 404, { error: "User not found" });
+    if (!["student", "user"].includes(target.role)) return sendJson(res, 400, { error: "Can only archive a student or user this way" });
+    target.archived = !!archived;
+    writeJson(USERS_FILE, users);
+    if (target.archived) {
+      const sessions = readJson(SESSIONS_FILE, {});
+      Object.keys(sessions).forEach(token => { if (sessions[token].userId === target.id) delete sessions[token]; });
+      writeJson(SESSIONS_FILE, sessions);
+    }
+    return sendJson(res, 200, { ok: true, user: publicUser(target) });
+  }
+
   // ─── Media streaming proxy (Range-aware) ─────────────────────────────────
   // Handled before the generic /api/chat/ prefix guard below, since that
   // guard's own catch-all 404 would otherwise swallow this route first.
@@ -1625,16 +1673,16 @@ export async function handleChatRequest(req, res, url) {
     // ─── Admin ────────────────────────────────────────────────────────────
     if (p === "/api/admin/users") {
       if (req.method === "GET") {
-        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const users = readJson(USERS_FILE, []);
         await syncStudentRoles(users);
         return sendJson(res, 200, { users: users.map(publicUser) });
       }
       if (req.method === "POST") {
-        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { first, last, email, phone, password, role } = await readJsonBody(req);
         if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
-        if (!["user", "student", "coach", "admin"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', or 'admin'" });
+        if (!["user", "student", "coach", "admin", "admin2"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', 'admin', or 'admin2'" });
         const users = readJson(USERS_FILE, []);
         if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
           return sendJson(res, 409, { error: "An account with that email already exists" });
@@ -1658,17 +1706,17 @@ export async function handleChatRequest(req, res, url) {
     }
     const roleMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/role$/);
     if (roleMatch && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { role } = await readJsonBody(req);
-      if (!["user", "student", "coach", "admin"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', or 'admin'" });
+      if (!["user", "student", "coach", "admin", "admin2"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'student', 'coach', 'admin', or 'admin2'" });
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === roleMatch[1]);
       if (!target) return sendJson(res, 404, { error: "User not found" });
-      // The only guard left: an admin can't demote themselves out of the
-      // role they need to keep managing this panel — locking themselves out
-      // is unrecoverable without going into the file by hand. Demoting/
-      // promoting anyone else, including other admins, is otherwise allowed.
-      if (target.id === user.id && role !== "admin") return sendJson(res, 400, { error: "Can't remove your own admin role" });
+      // The only guard left: an admin can't demote themselves out of
+      // admin-level access — locking themselves out is unrecoverable
+      // without going into the file by hand. Demoting/promoting anyone
+      // else, including other admins, is otherwise allowed.
+      if (target.id === user.id && !isAdmin({ role })) return sendJson(res, 400, { error: "Can't remove your own admin access" });
       target.role = role;
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
@@ -1680,7 +1728,7 @@ export async function handleChatRequest(req, res, url) {
     // since it's still the login identifier.
     const profileMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/profile$/);
     if (profileMatch && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { first, last, email, phone } = await readJsonBody(req);
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === profileMatch[1]);
@@ -1707,7 +1755,7 @@ export async function handleChatRequest(req, res, url) {
     }
     const zoomLinkMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/zoom-link$/);
     if (zoomLinkMatch && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { zoomLink } = await readJsonBody(req);
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === zoomLinkMatch[1]);
@@ -1718,7 +1766,7 @@ export async function handleChatRequest(req, res, url) {
     }
     const setPasswordMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/password$/);
     if (setPasswordMatch && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { password } = await readJsonBody(req);
       if (!password || password.length < 8) return sendJson(res, 400, { error: "Password must be at least 8 characters" });
       const users = readJson(USERS_FILE, []);
@@ -1732,12 +1780,12 @@ export async function handleChatRequest(req, res, url) {
     }
     const archiveMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/archived$/);
     if (archiveMatch && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { archived } = await readJsonBody(req);
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === archiveMatch[1]);
       if (!target) return sendJson(res, 404, { error: "User not found" });
-      if (target.role === "admin") return sendJson(res, 400, { error: "Can't archive the admin" });
+      if (isAdmin(target)) return sendJson(res, 400, { error: "Can't archive an admin" });
       target.archived = !!archived;
       writeJson(USERS_FILE, users);
       // Archiving should boot them out right away, not just block future logins.
@@ -1750,12 +1798,12 @@ export async function handleChatRequest(req, res, url) {
     }
     const hardDeleteMatch = p.match(/^\/api\/admin\/users\/([^/]+)$/);
     if (hardDeleteMatch && req.method === "DELETE") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const targetId = hardDeleteMatch[1];
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === targetId);
       if (!target) return sendJson(res, 404, { error: "User not found" });
-      if (target.role === "admin") return sendJson(res, 400, { error: "Can't delete an admin" });
+      if (isAdmin(target)) return sendJson(res, 400, { error: "Can't delete an admin" });
 
       writeJson(USERS_FILE, users.filter(u => u.id !== targetId));
 
@@ -1793,13 +1841,13 @@ export async function handleChatRequest(req, res, url) {
     }
     if (p === "/api/admin/chat-config") {
       if (req.method === "GET") {
-        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const cfg = ensureVapidKeys();
         const { vapidPrivateKey, ...safe } = cfg;
         return sendJson(res, 200, safe);
       }
       if (req.method === "POST") {
-        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
@@ -1818,7 +1866,7 @@ export async function handleChatRequest(req, res, url) {
 
     // ─── Appointments: Google Calendar connection status ───────────────────
     if (p === "/api/admin/appointments-calendar-status" && req.method === "GET") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       if (!process.env.GOOGLE_REFRESH_TOKEN_PRA_CALENDAR) {
         return sendJson(res, 200, { connected: false });
       }
@@ -2153,7 +2201,7 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { templates });
     }
     if (p === "/api/chat/message-templates" && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { title, text } = await readJsonBody(req);
       if (!String(title || "").trim() || !String(text || "").trim()) return sendJson(res, 400, { error: "Title and text are required" });
       const templates = readJson(MESSAGE_TEMPLATES_FILE, []);
@@ -2164,7 +2212,7 @@ export async function handleChatRequest(req, res, url) {
     }
     const deleteTemplateMatch = p.match(/^\/api\/chat\/message-templates\/([^/]+)$/);
     if (deleteTemplateMatch && req.method === "DELETE") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const templates = readJson(MESSAGE_TEMPLATES_FILE, []);
       const next = templates.filter(t => t.id !== deleteTemplateMatch[1]);
       if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
@@ -2182,7 +2230,7 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { templates });
     }
     if (p === "/api/chat/protocol-step-templates" && req.method === "POST") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { title, text } = await readJsonBody(req);
       if (!String(title || "").trim() || !String(text || "").trim()) return sendJson(res, 400, { error: "Title and text are required" });
       const templates = readJson(PROTOCOL_STEP_TEMPLATES_FILE, []);
@@ -2193,7 +2241,7 @@ export async function handleChatRequest(req, res, url) {
     }
     const deleteProtocolTemplateMatch = p.match(/^\/api\/chat\/protocol-step-templates\/([^/]+)$/);
     if (deleteProtocolTemplateMatch && req.method === "DELETE") {
-      if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const templates = readJson(PROTOCOL_STEP_TEMPLATES_FILE, []);
       const next = templates.filter(t => t.id !== deleteProtocolTemplateMatch[1]);
       if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
@@ -2351,7 +2399,7 @@ export async function handleChatRequest(req, res, url) {
 
       if (sub === "/channel" && req.method === "POST") {
         if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be marked as a channel" });
-        if (user.role !== "admin") return sendJson(res, 403, { error: "Admins only" });
+        if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { isChannel } = await readJsonBody(req);
         convo.isChannel = !!isChannel;
         writeJson(CONVOS_FILE, convos);

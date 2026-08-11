@@ -84,6 +84,8 @@
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .thread-head-name { font-weight: 700; font-size: .95rem; overflow-wrap: break-word; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
+  .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
+  .group-member-link:hover { opacity: .75; }
   .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: none; }
   .thread-protocol-link:hover { text-decoration: underline; }
   .thread-appt-row { display: none; font-family: var(--font-secondary); font-size: .66rem; color: #39ff14; margin-top: 3px; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -432,6 +434,7 @@
   <div class="modal-backdrop" id="levelsModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" id="levelsModalName" style="margin-bottom:14px">Levels</div>
+      <div class="btn-row" id="levelsAccountActions" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"></div>
       <div class="field"><label class="pra-label">Program</label>
         <select class="pra-select" id="levelsProgram" style="width:100%">
           <option value="Gym">Gym</option>
@@ -633,9 +636,12 @@ function initials(u) { return ((u?.first?.[0]||'') + (u?.last?.[0]||'')).toUpper
 function avatarHtml(u) {
   return u?.profilePictureFileId ? '<img src="/api/chat/media/' + u.profilePictureFileId + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>' : initials(u);
 }
-function avatarRoleClass(u) { return u?.role ? ' role-' + u.role : ''; }
+// admin2 gets the same visual treatment as admin everywhere (no separate
+// glow color/badge) — the only thing that differs is Admin Panel access.
+function avatarRoleClass(u) { return u?.role ? ' role-' + (u.role === 'admin2' ? 'admin' : u.role) : ''; }
 function roleBadgeHtml(u) {
   if (u?.role === 'admin') return '<span class="role-tag role-tag-admin">Admin</span>';
+  if (u?.role === 'admin2') return '<span class="role-tag role-tag-admin">Admin</span>';
   if (u?.role === 'coach') return '<span class="role-tag role-tag-coach">Coach</span>';
   if (u?.role === 'student') return '<span class="role-tag role-tag-student">Student</span>';
   if (u?.role === 'user') return '<span class="role-tag role-tag-user">User</span>';
@@ -656,7 +662,7 @@ function convoAvatarUser(convo) {
   if (convo.type !== 'group') return otherParticipant(convo);
   const student = convo.participants.find(p => p.role === 'student');
   const plainUser = convo.participants.find(p => p.role === 'user');
-  const coach = convo.participants.find(p => p.role === 'coach' || p.role === 'admin');
+  const coach = convo.participants.find(p => p.role === 'coach' || p.role === 'admin' || p.role === 'admin2');
   const role = student ? 'student' : plainUser ? 'user' : coach ? 'coach' : 'group';
   return { first: convo.name, last: '', role };
 }
@@ -665,11 +671,11 @@ async function init() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
-  if (me.role === 'coach' || me.role === 'admin') {
+  if (isStaffMe()) {
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
     document.getElementById('templatesBtn').style.display = '';
-    document.getElementById('templateAddForm').style.display = me.role === 'admin' ? '' : 'none';
+    document.getElementById('templateAddForm').style.display = isAdminMe() ? '' : 'none';
     await loadFavorites();
   }
 
@@ -888,7 +894,15 @@ async function openConvo(id) {
   document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
-    groupMembersEl.textContent = convo.participants.map(p => p.id === me.id ? 'You' : `${p.first} ${p.last}`).join(', ');
+    groupMembersEl.innerHTML = convo.participants.map(p => {
+      const label = p.id === me.id ? 'You' : `${p.first} ${p.last}`;
+      // Only students, and only for a coach/admin viewing — matches the same
+      // "click a name to see levels" behavior a DM header already has.
+      if (p.id !== me.id && p.role === 'student' && isStaffMe()) {
+        return `<span class="group-member-link" data-uid="${p.id}">${escapeHtml(label)}</span>`;
+      }
+      return escapeHtml(label);
+    }).join(', ');
     groupMembersEl.style.display = '';
   } else {
     groupMembersEl.style.display = 'none';
@@ -927,7 +941,8 @@ async function openConvo(id) {
   await refreshThread(true);
 }
 
-function isStaffMe() { return !!me && (me.role === 'coach' || me.role === 'admin'); }
+function isAdminMe() { return !!me && (me.role === 'admin' || me.role === 'admin2'); }
+function isStaffMe() { return !!me && (me.role === 'coach' || isAdminMe()); }
 function maybeOpenLevelsModal() {
   const convo = conversations.find(c => c.id === activeConvoId);
   if (!isStaffMe() || !convo || convo.type !== 'dm') return;
@@ -936,6 +951,13 @@ function maybeOpenLevelsModal() {
 }
 document.getElementById('threadAvatar').addEventListener('click', maybeOpenLevelsModal);
 document.getElementById('threadName').addEventListener('click', maybeOpenLevelsModal);
+document.getElementById('threadGroupMembers').addEventListener('click', (e) => {
+  const link = e.target.closest('.group-member-link');
+  if (!link) return;
+  const convo = conversations.find(c => c.id === activeConvoId);
+  const member = convo?.participants.find(p => p.id === link.dataset.uid);
+  if (member) openLevelsModal(member);
+});
 
 // ── Schedule appointment (coach/admin only) ──────────────────────────────
 // DMs always have exactly one recipient (the other participant). Groups can
@@ -988,7 +1010,7 @@ async function openScheduleModal() {
   try {
     const r = await fetch('/api/chat/contacts');
     const d = await r.json();
-    const staff = (d.contacts || []).filter(u => u.role === 'coach' || u.role === 'admin');
+    const staff = (d.contacts || []).filter(u => u.role === 'coach' || u.role === 'admin' || u.role === 'admin2');
     if (!staff.some(u => u.id === me.id)) staff.unshift(me);
     coachList.innerHTML = staff.map(u => `
       <div class="contact-row">
@@ -1055,10 +1077,47 @@ function levelsIsChecked(v) { return ['x', 'yes'].includes(String(v || '').trim(
 let levelsModalUser = null;
 let levelsModalEntries = [];
 
+// Quick account actions right from the Levels modal — a coach/admin
+// switching a client between student/user or archiving them without a trip
+// to the Admin Panel. Only shown for student/user targets (matches the
+// narrower quick-action endpoints' own restriction).
+function renderLevelsAccountActions(otherUser) {
+  const wrap = document.getElementById('levelsAccountActions');
+  if (!['student', 'user'].includes(otherUser.role)) { wrap.innerHTML = ''; return; }
+  const otherLabel = otherUser.role === 'student' ? 'user' : 'student';
+  wrap.innerHTML = `
+    <button class="pra-btn pra-btn-ghost" id="levelsRoleToggleBtn" style="flex:1;font-size:.78rem">Make ${otherLabel === 'user' ? 'a User' : 'a Student'}</button>
+    <button class="pra-btn pra-btn-ghost" id="levelsArchiveToggleBtn" style="flex:1;font-size:.78rem${otherUser.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${otherUser.archived ? 'Unarchive' : 'Archive'}</button>
+  `;
+  document.getElementById('levelsRoleToggleBtn').onclick = async () => {
+    const r = await fetch(`/api/chat/users/${otherUser.id}/role`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: otherLabel })
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change role.'); return; }
+    const d = await r.json();
+    otherUser.role = d.user.role;
+    levelsModalUser = otherUser;
+    renderLevelsAccountActions(otherUser);
+    await loadConversations();
+  };
+  document.getElementById('levelsArchiveToggleBtn').onclick = async () => {
+    const nextArchived = !otherUser.archived;
+    if (nextArchived && !confirm(`Archive ${otherUser.first} ${otherUser.last}? They'll be logged out and unable to sign back in until unarchived.`)) return;
+    const r = await fetch(`/api/chat/users/${otherUser.id}/archived`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: nextArchived })
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update.'); return; }
+    const d = await r.json();
+    otherUser.archived = d.user.archived;
+    renderLevelsAccountActions(otherUser);
+  };
+}
+
 async function openLevelsModal(otherUser) {
   levelsModalUser = otherUser;
   document.getElementById('levelsModalName').textContent = otherUser.first + ' ' + otherUser.last + ' — Levels';
   document.getElementById('levelsMsg').textContent = '';
+  renderLevelsAccountActions(otherUser);
   document.getElementById('levelsCatFields').innerHTML = LEVELS_NUMERIC_CATS.map(cat =>
     `<div class="field"><label class="pra-label">${catLabel(cat)} <span class="current-level-tag" data-cat="${cat}" style="color:var(--pra-dim);font-weight:400;text-transform:none;letter-spacing:0">(current: 0)</span></label><input class="pra-input levels-cat-input" type="number" min="0" placeholder="0" data-cat="${cat}"/></div>`
   ).join('');
@@ -1544,7 +1603,7 @@ async function loadTemplates(q) {
   const d = await r.json();
   const templates = d.templates || [];
   if (!templates.length) { list.innerHTML = '<div class="pra-muted">No templates found.</div>'; return; }
-  const isAdmin = me.role === 'admin';
+  const isAdmin = isAdminMe();
   list.innerHTML = templates.map(t => `
     <div class="template-item" data-id="${t.id}">
       <div class="template-item-body">
@@ -1692,7 +1751,7 @@ async function renderGroupInfoModal() {
     : '<div class="pra-muted" style="font-size:.78rem">Everyone you can message is already in this group.</div>';
 
   const channelBtn = document.getElementById('groupInfoChannelBtn');
-  if (me.role === 'admin') {
+  if (isAdminMe()) {
     channelBtn.style.display = '';
     channelBtn.textContent = convo.isChannel ? 'Remove from Channels' : 'Mark as Channel';
   } else {

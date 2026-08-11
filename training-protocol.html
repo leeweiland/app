@@ -164,9 +164,9 @@ async function init() {
   const client = uRes.ok ? (await uRes.json()).user : null;
   document.getElementById('clientName').textContent = client ? `${client.first} ${client.last}` : 'Unknown client';
 
-  canEdit = me.role === 'coach' || me.role === 'admin';
+  canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   document.getElementById('addStepRow').style.display = canEdit ? 'block' : 'none';
-  document.getElementById('templateAddForm').style.display = me.role === 'admin' ? '' : 'none';
+  document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
 
   await loadSteps();
   wireModals();
@@ -340,7 +340,7 @@ async function searchTemplates(q) {
   const d = await r.json();
   const templates = d.templates || [];
   if (!templates.length) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">No saved text found.</div>'; return; }
-  const isAdmin = me.role === 'admin';
+  const isAdmin = me.role === 'admin' || me.role === 'admin2';
   box.innerHTML = templates.map(t => `
     <div class="template-item" data-id="${t.id}">
       <div class="template-item-body">
