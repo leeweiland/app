@@ -245,6 +245,10 @@
 .role-tag-online { background: rgba(57,255,20,0.15); color: #39ff14; }
 .role-tag-gym { background: rgba(57,255,20,0.15); color: #39ff14; }
 .role-tag-user { background: rgba(255,255,255,0.12); color: #fff; }
+/* The Strength Ninjas map popup uses the App Sheet's own TYPE vocabulary
+   (Admin/Coach/Student/User), not the chat app's online/gym roles — same
+   green as role-tag-online/gym. */
+.role-tag-student { background: rgba(57,255,20,0.15); color: #39ff14; }
 
 /* ── Scrollbars ── */
 .pra-root ::-webkit-scrollbar { width: 8px; height: 8px; }
