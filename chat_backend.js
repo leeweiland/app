@@ -2169,6 +2169,27 @@ export async function handleChatRequest(req, res, url) {
       if (!convo) return sendJson(res, 404, { error: "Conversation not found" });
       if (!convo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not a participant" });
 
+      // Delete the whole group — DMs aren't deletable this way since there's
+      // no "everyone else" left to keep it around for.
+      if (sub === "" && req.method === "DELETE") {
+        if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be deleted" });
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        writeJson(CONVOS_FILE, convos.filter(c => c.id !== convoId));
+        writeJson(MESSAGES_FILE, readJson(MESSAGES_FILE, []).filter(m => m.conversationId !== convoId));
+        return sendJson(res, 200, { ok: true });
+      }
+
+      const removeParticipantMatch = sub.match(/^\/participants\/([^/]+)$/);
+      if (removeParticipantMatch && req.method === "DELETE") {
+        if (convo.type !== "group") return sendJson(res, 400, { error: "Can only remove members from a group" });
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        const targetId = removeParticipantMatch[1];
+        if (!convo.participantIds.includes(targetId)) return sendJson(res, 404, { error: "Not a member of this group" });
+        convo.participantIds = convo.participantIds.filter(id => id !== targetId);
+        writeJson(CONVOS_FILE, convos);
+        return sendJson(res, 200, { ok: true, conversation: convo });
+      }
+
       if (sub === "/messages" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit")) || 50;
         const before = url.searchParams.get("before");
