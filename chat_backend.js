@@ -64,6 +64,7 @@ function migrateDataFile(file) {
   "chat_users.json", "chat_sessions.json", "chat_conversations.json", "chat_messages.json",
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
+  "chat_appointments.json",
 ].forEach(migrateDataFile);
 
 function readJson(file, fallback) {
@@ -72,6 +73,18 @@ function readJson(file, fallback) {
 }
 function writeJson(file, data) {
   writeFileSync(join(DATA_DIR, file), JSON.stringify(data, null, 2), "utf8");
+}
+
+// Static, bundled-with-code content (not user data) — always read from the
+// app's own directory, never the Volume. personality-quiz/config.json and
+// leads.json aren't in the migrated data-file list and this server has no
+// write path for either of them (that lives on a separate deployment), so
+// routing them through DATA_DIR just meant they silently resolved to a
+// path that never existed on the Volume, every archetype lookup failing
+// and quietly falling back to the generic handstand silhouette.
+function readAppJson(file, fallback) {
+  const p = join(__dirname, file);
+  try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
 }
 
 // Admin settings fields for a Drive folder are documented as "the ID", but
@@ -445,7 +458,7 @@ async function geocodeLocationTextCached(text) {
 // on each new submission (newest first), so the first match is the latest.
 function getLatestArchetypeImage(email) {
   if (!email) return null;
-  const leads = readJson(join("personality-quiz", "leads.json"), []);
+  const leads = readAppJson(join("personality-quiz", "leads.json"), []);
   const lead = leads.find(l => (l.email || "").toLowerCase() === email.toLowerCase());
   return lead?.image || null;
 }
@@ -453,7 +466,7 @@ function getLatestArchetypeImage(email) {
 // Build lookups from MBTI code, PRA title, and 16P standard name → {male, female} image URLs.
 // All keys are normalized for case-insensitive matching.
 function buildArchetypeImageMaps() {
-  const cfg = readJson(join("personality-quiz", "config.json"), {});
+  const cfg = readAppJson(join("personality-quiz", "config.json"), {});
   const byCode = {}, byTitle = {}, byStandard = {};
   for (const [code, arch] of Object.entries(cfg.archetypes || {})) {
     if (!arch.images) continue;
