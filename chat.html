@@ -37,6 +37,7 @@
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
   .convo-name { font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .convo-unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pra-blue); box-shadow: 0 0 6px 1px rgba(0,155,255,.7); margin-right: 6px; vertical-align: middle; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
   .convo-preview { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -48,6 +49,8 @@
   .convo-fav-toggle { flex-shrink: 0; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; font-weight: 700; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
   .convo-fav-toggle:hover { color: #ffd54a; border-color: #ffd54a; }
   .convo-fav-toggle.on { color: #0a0a0d; background: #ffd54a; border-color: #ffd54a; }
+  #unreadViewToggle:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
+  #unreadViewToggle.on { color: #fff; background: var(--pra-blue); border-color: var(--pra-blue); }
   .convo-fav-btn { flex-shrink: 0; align-self: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .5; transition: opacity .15s, color .15s; }
   .convo-fav-btn:hover { opacity: 1; color: #ffd54a; }
   .convo-fav-btn.on { opacity: 1; color: #ffd54a; }
@@ -253,6 +256,7 @@
         <div style="display:flex;align-items:center;gap:10px;min-width:0">
           <div class="pra-h2 pra-glow">CHATS</div>
           <button class="convo-fav-toggle" id="favoritesViewToggle" title="Show only favorites">★ FAVORITES</button>
+          <button class="convo-fav-toggle" id="unreadViewToggle" title="Show only unread">● UNREAD</button>
         </div>
         <div class="sidebar-actions">
           <button class="icon-btn" id="newGroupBtn" title="New group" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
@@ -636,6 +640,11 @@ async function init() {
     document.getElementById('favoritesViewToggle').classList.toggle('on', favoritesOnlyView);
     renderConvoList();
   });
+  document.getElementById('unreadViewToggle').addEventListener('click', () => {
+    unreadOnlyView = !unreadOnlyView;
+    document.getElementById('unreadViewToggle').classList.toggle('on', unreadOnlyView);
+    renderConvoList();
+  });
   pollTimer = setInterval(loadConversations, 3000);
 }
 
@@ -643,6 +652,13 @@ async function loadConversations() {
   const r = await fetch('/api/chat/conversations');
   const d = await r.json();
   conversations = d.conversations;
+  // Whatever's currently open is being read right now — don't let a poll
+  // that lands mid-view flip it back to "unread" under the user.
+  const active = conversations.find(c => c.id === activeConvoId);
+  if (active?.unread) {
+    active.unread = false;
+    fetch(`/api/chat/conversations/${activeConvoId}/read`, { method: 'POST' }).catch(() => {});
+  }
   renderConvoList();
   if (activeConvoId) refreshThread(false);
 }
@@ -658,6 +674,7 @@ function buildDirectory() {
     preview: previewText(c.lastMessage),
     timestamp: c.lastMessage?.createdAt || c.createdAt,
     favorite: !!c.favorite,
+    unread: !!c.unread,
   }));
   const dmContactIds = new Set(
     conversations.filter(c => c.type === 'dm').map(c => otherParticipant(c)?.id)
@@ -684,11 +701,12 @@ function convoItemHtml(i) {
   // Virtual rows (a contact with no conversation yet) can't be favorited —
   // there's no conversation id to favorite until the first message exists.
   const favBtn = i.virtual ? '' : `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
+  const unreadDot = i.unread ? '<span class="convo-unread-dot" title="Unread"></span>' : '';
   return `
-    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''}" data-key="${i.key}">
+    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''}" data-key="${i.key}">
       <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${unreadDot}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       ${favBtn}
@@ -719,15 +737,19 @@ function wireConvoItems(wrap, items) {
 }
 
 let favoritesOnlyView = false;
+let unreadOnlyView = false;
 
 function renderConvoList() {
   const wrap = document.getElementById('convoList');
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
   let items = buildDirectory();
   if (favoritesOnlyView) items = items.filter(i => i.favorite);
+  if (unreadOnlyView) items = items.filter(i => i.unread);
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
   if (!items.length) {
-    const msg = favoritesOnlyView
+    const msg = unreadOnlyView
+      ? (q ? 'No unread chats match your search.' : "You're all caught up — no unread chats.")
+      : favoritesOnlyView
       ? (q ? 'No favorites match your search.' : 'No favorites yet — tap the star on any chat to add it.')
       : (q ? 'No matches.' : 'No one to chat with yet.');
     wrap.innerHTML = `<div class="empty-hint">${msg}</div>`;
@@ -805,6 +827,11 @@ async function openConvo(id) {
   document.getElementById('scheduleBtn').style.display = canScheduleIn(convo) ? '' : 'none';
   const apptInfo = document.getElementById('threadApptInfo');
   if (apptInfo) apptInfo.style.display = 'none';
+
+  if (convo.unread) {
+    convo.unread = false;
+    fetch(`/api/chat/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+  }
 
   renderConvoList();
   await refreshThread(true);

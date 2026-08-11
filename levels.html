@@ -20,6 +20,9 @@
   .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; max-width: 280px; }
   .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
   .level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
+  .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
+  .chip-val-input { width: 40px; font-size: .8rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 24px; }
 </style>
 </head>
@@ -80,18 +83,82 @@ function effectiveLevel(p, cat) {
 }
 function superLevel(p) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + effectiveLevel(p, cat), 0); }
 
-function renderLevelChips(p) {
+let isStaffUser = false;
+
+function renderLevelChips(p, idx) {
   const foundationSet = levelIsChecked(p.levels['FOUNDATION']);
   const inProgress = String(p.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress';
-  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${foundationSet ? '✓' : (inProgress ? 'In Progress' : '0')}</span></div>`];
+  const editCls = isStaffUser ? ' editable' : '';
+  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : (inProgress ? 'In Progress' : '0')}</span></div>`];
   LEVELS_NUMERIC_CATS.forEach(cat => {
     const n = effectiveLevel(p, cat);
-    rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
+    rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
   });
   if (p.program === 'Gym') {
-    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${p.team ? '✓' : '0'}</span></div>`);
+    rows.push(`<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="TEAM" style="color:#fff">${p.team ? '✓' : '0'}</span></div>`);
   }
   return `<div class="levels-col">${rows.join('')}</div>`;
+}
+
+// Coach/admin only — clicking a level's number or a checkmark edits it right
+// on the card, matching in Google Sheets by first+last name the same way
+// chat.html's per-conversation Levels editor does (see /api/chat/levels/
+// lookup + /update — this reuses that same update endpoint).
+async function saveLevelField(p, cat, value) {
+  const levels = { ...p.levels };
+  if (cat === 'TEAM') {
+    p.team = value;
+  } else {
+    levels[cat] = value;
+  }
+  const r = await fetch('/api/chat/levels/update', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first: p.first, last: p.last, program: p.program, levels, team: p.team }),
+  });
+  if (!r.ok) { alert('Could not save — try again.'); return false; }
+  p.levels = levels;
+  return true;
+}
+
+function attachChipHandlers() {
+  document.querySelectorAll('.chip-val.editable').forEach(el => {
+    el.addEventListener('click', async () => {
+      const idx = Number(el.dataset.idx);
+      const cat = el.dataset.cat;
+      const p = currentFiltered[idx];
+      if (!p) return;
+
+      if (cat === 'FOUNDATION' || cat === 'TEAM') {
+        const current = cat === 'TEAM' ? !!p.team : levelIsChecked(p.levels['FOUNDATION']);
+        const next = cat === 'TEAM' ? !current : (current ? '' : (p.program === 'Online' ? 'Yes' : 'X'));
+        el.style.opacity = '.5';
+        const ok = await saveLevelField(p, cat, next);
+        el.style.opacity = '';
+        if (ok) applyFilters();
+        return;
+      }
+
+      // Numeric category — swap the chip for a small inline input.
+      const current = effectiveLevel(p, cat);
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = '0'; input.max = '10';
+      input.value = current;
+      input.className = 'chip-val-input';
+      el.replaceWith(input);
+      input.focus(); input.select();
+
+      const commit = async () => {
+        const val = Math.max(0, Math.min(10, Number(input.value) || 0));
+        await saveLevelField(p, cat, String(val));
+        applyFilters();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.removeEventListener('blur', commit); applyFilters(); }
+      });
+    });
+  });
 }
 
 async function load() {
@@ -101,11 +168,12 @@ async function load() {
   applyFilters();
 }
 
-async function initRefreshButton() {
+async function initStaffFeatures() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) return;
   const me = (await meRes.json()).user;
-  if (me.role !== 'coach' && me.role !== 'admin') return;
+  isStaffUser = me.role === 'coach' || me.role === 'admin';
+  if (!isStaffUser) return;
   const btn = document.getElementById('refreshBtn');
   btn.style.display = '';
   btn.addEventListener('click', async () => {
@@ -124,15 +192,16 @@ async function initRefreshButton() {
 function render(people) {
   const list = document.getElementById('list');
   document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
-  list.innerHTML = people.map(p => `
+  list.innerHTML = people.map((p, idx) => `
     <div class="pra-panel person-card">
       <div class="person-head">
         <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last)}</div>
         <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
       </div>
-      ${renderLevelChips(p)}
+      ${renderLevelChips(p, idx)}
     </div>
   `).join('');
+  if (isStaffUser) attachChipHandlers();
 }
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
@@ -154,12 +223,15 @@ const SORTERS = {
   last:          (a, b) => a.last.localeCompare(b.last),
 };
 
+let currentFiltered = [];
+
 function applyFilters() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const sort = document.getElementById('sortSelect').value;
   let filtered = allPeople;
   if (q) filtered = filtered.filter(p => (p.first + ' ' + p.last).toLowerCase().includes(q));
   filtered = [...filtered].sort(SORTERS[sort] || SORTERS.superLevel);
+  currentFiltered = filtered;
   render(filtered);
 }
 
@@ -171,8 +243,7 @@ document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
   btn.onclick = () => { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); };
 });
 
-load();
-initRefreshButton();
+initStaffFeatures().then(load);
 </script>
 </body>
 </html>

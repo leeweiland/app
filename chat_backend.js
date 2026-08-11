@@ -1304,6 +1304,12 @@ function canCreateDm(creator, otherUser) {
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
 
+  // TEMP — confirms the Railway Volume is actually being used before relying
+  // on it for real data. Remove once verified.
+  if (p === "/api/_debug/data-dir") {
+    return sendJson(res, 200, { dataDir: DATA_DIR, dirname: __dirname, usingVolume: DATA_DIR !== __dirname });
+  }
+
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {
     const ct = req.headers["content-type"] || "";
@@ -2128,14 +2134,18 @@ export async function handleChatRequest(req, res, url) {
       const messages = readJson(MESSAGES_FILE, []);
       const users = readJson(USERS_FILE, []);
       const favoriteIds = new Set(user.favoriteConvoIds || []);
+      const readState = user.readState || {};
       const enriched = convos.map(c => {
         const convoMsgs = messages.filter(m => m.conversationId === c.id);
         const last = convoMsgs[convoMsgs.length - 1];
+        const lastReadAt = readState[c.id];
+        const unread = !!last && last.senderId !== user.id && (!lastReadAt || new Date(last.createdAt) > new Date(lastReadAt));
         return {
           ...c,
           participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean),
           lastMessage: last ? { type: last.type, text: last.text || "", senderId: last.senderId, createdAt: last.createdAt, startISO: last.startISO, durationMinutes: last.durationMinutes, timezone: last.timezone } : null,
           favorite: favoriteIds.has(c.id),
+          unread,
         };
       }).sort((a, b) => new Date(b.lastMessage?.createdAt || b.createdAt) - new Date(a.lastMessage?.createdAt || a.createdAt));
       return sendJson(res, 200, { conversations: enriched });
@@ -2162,6 +2172,21 @@ export async function handleChatRequest(req, res, url) {
       if (!favorite && idx !== -1) target.favoriteConvoIds.splice(idx, 1);
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true, favorite: !!favorite });
+    }
+
+    const readMatch = p.match(/^\/api\/chat\/conversations\/([^/]+)\/read$/);
+    if (readMatch && req.method === "POST") {
+      const convoId = readMatch[1];
+      const convos = readJson(CONVOS_FILE, []);
+      if (!convos.find(c => c.id === convoId && c.participantIds.includes(user.id))) {
+        return sendJson(res, 404, { error: "Conversation not found" });
+      }
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === user.id);
+      target.readState = target.readState || {};
+      target.readState[convoId] = new Date().toISOString();
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true });
     }
 
     if (p === "/api/chat/conversations" && req.method === "POST") {
