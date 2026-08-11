@@ -36,6 +36,14 @@
   .user-dot-ring { fill: none; stroke: var(--pra-blue); stroke-width: 1.5; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 14px; }
 
+  .map-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 0 16px; }
+  .map-loading-label { font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+  .map-loading-dots { display: flex; gap: 5px; }
+  .map-loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--pra-blue); animation: map-loading-bounce 1.1s ease-in-out infinite; }
+  .map-loading-dots span:nth-child(2) { animation-delay: .15s; }
+  .map-loading-dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes map-loading-bounce { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+
   /* ── Upcoming Retreats — tactical HUD-style map callouts ── */
   .retreat-hud { cursor: pointer; }
   .retreat-hud-leader { stroke: #009bff; stroke-dasharray: 2 2; opacity: .85; }
@@ -72,8 +80,12 @@
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Strength Ninjas World Map</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap">
-      <div class="pra-muted" style="font-size:.85rem">Every dot is someone in the community — tap one to see who.</div>
+      <div class="pra-muted" style="font-size:.85rem">Every dot is a Strength Ninja of the Pacific Rim Athletics Universe somewhere in the world. Tap one to see who...</div>
       <button class="pra-btn pra-btn-ghost" id="refreshLevelsBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Re-fetch levels straight from the sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh Levels</button>
+    </div>
+    <div class="map-loading" id="mapLoading">
+      <span class="map-loading-label">Loading</span>
+      <span class="map-loading-dots"><span></span><span></span><span></span></span>
     </div>
     <div class="map-box pra-panel" id="mapBox" style="padding:6px">
       <svg id="mapSvg" viewBox="0 0 800 800"></svg>
@@ -726,8 +738,10 @@ async function drawUsers() {
       // applyDotSize, not here — see roleGlowFilter's comment.
       clickTarget.addEventListener("click", () => openPopup(u));
 
-      const imageUrl = u.archetypeImage || "/chat-app/assets/handstand.jpg";
-      const isFallback = !u.archetypeImage;
+      // A real uploaded profile picture wins over the archetype illustration
+      // — it's who they actually are, not a stand-in for their quiz result.
+      const imageUrl = (u.profilePictureFileId ? "/api/chat/media/" + u.profilePictureFileId : null) || u.archetypeImage || "/chat-app/assets/handstand.jpg";
+      const isFallback = !u.profilePictureFileId && !u.archetypeImage;
 
       const clipId = "archetype-clip-" + (i++);
       const defs = document.createElementNS(NS, "defs");
@@ -807,13 +821,27 @@ function openPopup(u) {
   document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
   document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
 
+  // Training personality is a per-person attribute, not per-program, so it
+  // only needs rendering once — placed directly above Foundation on
+  // whichever program card ends up first.
+  const personalityRow = u.archetypeTitle ? `
+    <div class="popup-level-chip">
+      <span class="cat">Training Personality</span>
+      <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
+        ${u.archetypeTitle}
+        ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
+      </span>
+    </div>
+  ` : '';
+
   // Levels ship pre-matched from the server (see /api/chat/users-map) —
   // never a last name here, just whatever levels (if any) matched.
   const entries = u.levels || [];
-  document.getElementById("popupLevels").innerHTML = entries.map(e => `
+  document.getElementById("popupLevels").innerHTML = entries.map((e, i) => `
     <div class="popup-levels-program">
       <div class="popup-super-level">Super Level <span class="num">${superLevel(e)}</span></div>
       <div class="popup-levels-col">
+        ${i === 0 ? personalityRow : ''}
         <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${levelsIsChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
         ${LEVELS_NUMERIC_CATS.map(cat => {
           const n = effectiveLevel(e, cat);
@@ -1049,6 +1077,7 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
   await drawContinents();
   await drawUsers();
   await drawRetreats();
+  document.getElementById("mapLoading").style.display = "none";
   // Opening on the full world (not computeClusterFraming()) for now — auto-
   // framing on the cluster pushes the pole off-center, which made it much
   // harder to sanity-check the map against a reference (the pole location

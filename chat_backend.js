@@ -472,7 +472,7 @@ function buildArchetypeImageMaps() {
   const byCode = {}, byTitle = {}, byStandard = {};
   for (const [code, arch] of Object.entries(cfg.archetypes || {})) {
     if (!arch.images) continue;
-    const entry = { male: arch.images.male || null, female: arch.images.female || arch.images.male || null };
+    const entry = { title: arch.title || null, male: arch.images.male || null, female: arch.images.female || arch.images.male || null };
     byCode[code.toUpperCase()] = entry;
     const t = (arch.title || "").toLowerCase();
     const s = (arch.standard || "").toLowerCase();
@@ -514,12 +514,13 @@ async function fetchUsersMapPoints() {
     // then "male" as a last resort when neither is known.
     const gender = localUser?.gender || (sheetGender || "").toLowerCase() || "male";
     const pick = entry => entry ? (entry[gender] || entry.male || null) : null;
-    const archetypeImage =
-      pick(archetypeMaps.byTitle[(praPersona || "").toLowerCase()]) ||
-      pick(archetypeMaps.byCode[(mbtiCode || "").toUpperCase()]) ||
-      pick(archetypeMaps.byStandard[(sheetPersona16p || "").toLowerCase()]) ||
-      getLatestArchetypeImage(email) ||
+    const matchedArchetype =
+      archetypeMaps.byTitle[(praPersona || "").toLowerCase()] ||
+      archetypeMaps.byCode[(mbtiCode || "").toUpperCase()] ||
+      archetypeMaps.byStandard[(sheetPersona16p || "").toLowerCase()] ||
       null;
+    const archetypeImage = pick(matchedArchetype) || getLatestArchetypeImage(email) || null;
+    const archetypeTitle = matchedArchetype?.title || null;
 
     // The sheet's own TYPE column (Admin/Coach/Student/User) is authoritative
     // for the map — every point here already comes from a matched sheet row
@@ -539,6 +540,7 @@ async function fetchUsersMapPoints() {
       first,
       profilePictureFileId: localUser?.profilePictureFileId || null,
       archetypeImage,
+      archetypeTitle,
       role: sheetRole || "user",
       lat: geo.lat, lng: geo.lng,
       city: geo.city, region: geo.region, country: geo.country,

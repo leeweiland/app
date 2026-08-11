@@ -391,6 +391,13 @@ async function submitNewTemplate() {
   searchTemplates(document.getElementById('templateSearchInput').value || '');
 }
 
+// Only meaningful when this page was reached from a specific chat (the
+// "Current Training Protocol" link, which passes ?convo=) — the other entry
+// point is the persistent header's own "My Training Protocol" icon, which
+// has no conversation to go back to and would otherwise land on chat.html's
+// blank "Select a chat" screen instead of anywhere useful.
+if (!sourceConvoId) document.getElementById('backBtn').style.display = 'none';
+
 // Explicit deep link back to the exact conversation this page was opened
 // from (passed as ?convo= by chat.html's protocol link), not history.back()
 // — chat.html is served with Cache-Control: no-store (needed to stop stale
