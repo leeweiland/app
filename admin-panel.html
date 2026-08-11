@@ -472,8 +472,7 @@ function renderUsers() {
   document.querySelectorAll('.delete-user-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const name = btn.dataset.name;
-      if (!confirm(`Permanently delete ${name}? This removes their account, DMs, sessions, favorites, and training protocol for good — this cannot be undone. Type-check: click OK only if you're sure.`)) return;
-      if (!confirm(`Really delete ${name}? Last chance to cancel.`)) return;
+      if (!confirm(`Permanently delete ${name}? This removes their account, DMs, sessions, favorites, and training protocol for good — this cannot be undone.`)) return;
       const r = await fetch('/api/admin/users/' + btn.dataset.id, { method: 'DELETE' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Delete failed'); return; }
       loadUsers();
