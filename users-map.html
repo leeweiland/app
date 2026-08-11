@@ -834,14 +834,16 @@ function openPopup(u) {
     </div>
   ` : '';
 
-  // Levels ship pre-matched from the server (see /api/chat/users-map) —
-  // never a last name here, just whatever levels (if any) matched.
+  // Levels ship pre-matched from the server (see /api/chat/users-map), but
+  // only for a staff viewer — a client/user viewer's response has no
+  // `levels` field at all (stripped server-side), so entries is always
+  // empty for them and only the personality row (rendered separately,
+  // below) shows. Never a last name here, just whatever levels matched.
   const entries = u.levels || [];
-  document.getElementById("popupLevels").innerHTML = entries.map((e, i) => `
+  const levelsHtml = entries.map(e => `
     <div class="popup-levels-program">
       <div class="popup-super-level">Super Level <span class="num">${superLevel(e)}</span></div>
       <div class="popup-levels-col">
-        ${i === 0 ? personalityRow : ''}
         <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${levelsIsChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
         ${LEVELS_NUMERIC_CATS.map(cat => {
           const n = effectiveLevel(e, cat);
@@ -851,6 +853,10 @@ function openPopup(u) {
       </div>
     </div>
   `).join('');
+  document.getElementById("popupLevels").innerHTML = `
+    <div class="popup-levels-col">${personalityRow}</div>
+    ${levelsHtml}
+  `;
 
   document.getElementById("popup").classList.add("show");
 }

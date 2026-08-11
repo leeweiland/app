@@ -65,6 +65,7 @@
     </div>
     <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
     <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
+    <div class="empty-hint" id="staffOnlyHint" style="display:none">Levels are visible to coaches and admins only.</div>
   </div>
 </div>
 
@@ -191,7 +192,15 @@ async function initStaffFeatures() {
   if (!meRes.ok) return;
   const me = (await meRes.json()).user;
   isStaffUser = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
-  if (!isStaffUser) return;
+  // Skill levels are internal — coaches/admins can see everyone's (including
+  // each other's), but a plain user/online/gym client never sees anyone's
+  // levels, not even their own, through this page.
+  if (!isStaffUser) {
+    document.querySelector('.controls').style.display = 'none';
+    document.getElementById('list').style.display = 'none';
+    document.getElementById('staffOnlyHint').style.display = 'block';
+    return;
+  }
   const btn = document.getElementById('refreshBtn');
   btn.style.display = '';
   btn.addEventListener('click', async () => {
@@ -261,7 +270,7 @@ document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
   btn.onclick = () => { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); };
 });
 
-initStaffFeatures().then(load);
+initStaffFeatures().then(() => { if (isStaffUser) load(); });
 </script>
 </body>
 </html>

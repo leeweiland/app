@@ -450,6 +450,22 @@
     </div>
   </div>
 
+  <!-- Read-only profile popup — a non-staff viewer clicking anyone in the
+       sidebar directory they don't already have a real conversation with
+       lands here instead of a chat thread. Same visual language as the
+       Strength Ninjas map popup, minus Super Level/skill chips (levels stay
+       internal to staff — see /api/chat/profile in chat_backend.js). -->
+  <div class="modal-backdrop" id="profileModal">
+    <div class="pra-panel modal-box" style="max-width:340px;text-align:center">
+      <div class="pra-avatar" id="profileAvatar" style="width:88px;height:88px;font-size:1.8rem;margin:0 auto 14px"></div>
+      <div class="pra-h2" id="profileName" style="margin-bottom:6px"></div>
+      <div id="profileRoleBadge" style="margin-bottom:10px"></div>
+      <div class="pra-muted" id="profileLocation" style="font-size:.85rem;margin-bottom:12px"></div>
+      <div id="profilePersonality" style="margin-bottom:6px"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('profileModal')">Close</button>
+    </div>
+  </div>
+
   <!-- Levels modal (coach/admin only) — click a DM contact's name/avatar -->
   <div class="modal-backdrop" id="levelsModal">
     <div class="pra-panel modal-box">
@@ -885,7 +901,12 @@ function wireConvoItems(wrap, items) {
     if (!item) return;
     el.onclick = (e) => {
       if (e.target.closest('.convo-fav-btn, .convo-pin-btn, .convo-channel-btn')) return; // handled separately below
-      if (item.virtual) startConvo(item.contactId);
+      // A non-staff viewer can see everyone in the directory now, but a new
+      // DM only ever reaches staff for them (canCreateDm on the backend) —
+      // clicking anyone they don't already have a real conversation with
+      // just shows a read-only profile instead of attempting (and failing)
+      // to start a chat.
+      if (item.virtual) { if (isStaffMe()) startConvo(item.contactId); else openContactProfile(item.contactId); }
       else openConvo(item.convoId);
     };
   });
@@ -957,6 +978,26 @@ async function startConvo(otherUserId) {
   const d = await r.json();
   await loadConversations();
   if (d.conversation) openConvo(d.conversation.id);
+}
+
+async function openContactProfile(userId) {
+  const r = await fetch('/api/chat/profile/' + userId);
+  if (!r.ok) return;
+  const p = (await r.json()).profile;
+  document.getElementById('profileAvatar').className = 'pra-avatar' + avatarRoleClass(p);
+  document.getElementById('profileAvatar').innerHTML = avatarHtml(p);
+  document.getElementById('profileName').textContent = p.first + ' ' + p.last;
+  document.getElementById('profileRoleBadge').innerHTML = roleBadgeHtml(p);
+  const loc = p.location ? [p.location.city, p.location.region, p.location.country].filter(Boolean).join(', ') : '';
+  document.getElementById('profileLocation').textContent = loc;
+  document.getElementById('profilePersonality').innerHTML = p.archetypeTitle ? `
+    <div class="pra-label" style="margin-bottom:6px">Training Personality</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+      ${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0"/>` : ''}
+      <span style="color:#fff;font-weight:700">${p.archetypeTitle}</span>
+    </div>
+  ` : '';
+  document.getElementById('profileModal').classList.add('show');
 }
 
 function previewText(m) {

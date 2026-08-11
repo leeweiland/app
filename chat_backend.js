@@ -568,6 +568,51 @@ async function fetchUsersMapPoints() {
   return points;
 }
 
+// Same App-sheet row matching as fetchUsersMapPoints() above, but for one
+// specific chat account by name instead of every geolocatable sheet row —
+// used by the chat sidebar's read-only profile popup. Deliberately never
+// includes levels (that stays internal to staff, unlike the map/levels
+// endpoints which gate it per-viewer) and doesn't require a geo match to
+// succeed — a person with no location on the sheet still gets a profile
+// card, just without a location line.
+async function fetchUserProfileCard(targetUser) {
+  const card = {
+    first: targetUser.first, last: targetUser.last, role: targetUser.role,
+    profilePictureFileId: targetUser.profilePictureFileId || null,
+    location: null, archetypeImage: null, archetypeTitle: null,
+  };
+  const accessToken = await getGoogleAccessToken();
+  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const data = await r.json();
+  const rows = (data.values || []).slice(1);
+  const row = rows.find(row =>
+    (row[0] || "").trim().toLowerCase() === targetUser.first.trim().toLowerCase() &&
+    (row[1] || "").trim().toLowerCase() === targetUser.last.trim().toLowerCase()
+  );
+  if (!row) return card;
+  const [, , email, , ip, location, mbtiCode, sheetPersona16p, praPersona, , sheetGender] = row;
+
+  let geo = ip ? await geolocateIpCached(ip) : null;
+  if (!geo && location) geo = await geocodeLocationTextCached(location);
+  if (geo) card.location = { city: geo.city, region: geo.region, country: geo.country };
+
+  const archetypeMaps = buildArchetypeImageMaps();
+  const gender = targetUser.gender || (sheetGender || "").toLowerCase() || "male";
+  const pick = entry => entry ? (entry[gender] || entry.male || null) : null;
+  const matchedArchetype =
+    archetypeMaps.byTitle[(praPersona || "").toLowerCase()] ||
+    archetypeMaps.byCode[(mbtiCode || "").toUpperCase()] ||
+    archetypeMaps.byStandard[(sheetPersona16p || "").toLowerCase()] ||
+    null;
+  card.archetypeImage = pick(matchedArchetype) || getLatestArchetypeImage(email) || null;
+  card.archetypeTitle = matchedArchetype?.title || null;
+  return card;
+}
+
 let levelsCache = null; // { at, people } — 10-minute cache, same idea as the geo caches below
 async function fetchLevelsTab(tabName, program) {
   const accessToken = await getGoogleAccessToken();
@@ -2051,14 +2096,16 @@ export async function handleChatRequest(req, res, url) {
 
     // ─── Contacts (coach-only visibility for regular users) ───────────────
     if (p === "/api/chat/contacts" && req.method === "GET") {
-      // A plain user/online/gym account gets no directory at all -- they
-      // can't see or start a chat with anyone; the shared group (auto-
-      // membership, see syncDefaultGroups) plus whatever an admin starts
-      // with them directly are the only conversations they'll ever have.
-      if (!isStaff(user)) return sendJson(res, 200, { contacts: [] });
+      // Everyone shows up in everyone's directory now — visibility here is
+      // just "who exists," not "who can be messaged." canCreateDm() is the
+      // actual gate on starting a new DM: a plain user/online/gym viewer
+      // can still only reach admin/admin2 that way. Clicking any other
+      // contact from this list instead opens a read-only profile popup
+      // (see openContactProfile() in chat.html) — the shared auto-group
+      // (syncDefaultGroups) plus whatever an admin starts with them
+      // directly remain the only real conversations a client ever has.
       const users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
-      const visible = isStaff(user) ? users : users.filter(isStaff);
-      return sendJson(res, 200, { contacts: visible.map(publicUser) });
+      return sendJson(res, 200, { contacts: users.map(publicUser) });
     }
 
     // ─── Users map ──────────────────────────────────────────────────────
@@ -2070,7 +2117,31 @@ export async function handleChatRequest(req, res, url) {
       res.setHeader("Cache-Control", "no-store");
       try {
         const points = await fetchUsersMapPoints();
-        return sendJson(res, 200, { points });
+        // Levels are internal to staff — a client/user viewer gets every
+        // other field (avatar, role, location, training personality) but
+        // never level data, even about themselves, matching the /levels*
+        // endpoints and levels.html.
+        const visible = isStaff(user) ? points : points.map(({ levels, ...rest }) => rest);
+        return sendJson(res, 200, { points: visible });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
+    // ─── Single-person profile (chat sidebar → profile popup) ─────────────
+    // A plain user/online/gym viewer can see everyone in the contacts
+    // directory now, but clicking someone just shows this read-only card —
+    // avatar, role, location, training personality — never levels (that
+    // stays internal, see /api/chat/levels* and /api/chat/users-map above).
+    // Any logged-in user may look up any other non-archived account.
+    const chatProfileMatch = p.match(/^\/api\/chat\/profile\/([^/]+)$/);
+    if (chatProfileMatch && req.method === "GET") {
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === chatProfileMatch[1] && !u.archived);
+      if (!target) return sendJson(res, 404, { error: "Not found" });
+      try {
+        const profile = await fetchUserProfileCard(target);
+        return sendJson(res, 200, { profile });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
@@ -2157,7 +2228,11 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // ─── Gym + Online skill levels (combined, searchable) ─────────────────
+    // Internal to staff — coaches/admins can see everyone's levels
+    // (including each other's), but a client should never see levels data,
+    // not even their own, through this endpoint.
     if (p === "/api/chat/levels" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         return sendJson(res, 200, { people, categories: LEVELS_CATEGORIES });
@@ -2181,7 +2256,9 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // Own levels, read-only — matched by the logged-in user's own name.
+    // Internal to staff, same as /api/chat/levels above.
     if (p === "/api/chat/levels/me" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         const entries = findLevelsEntries(people, user.first, user.last);
@@ -2191,11 +2268,12 @@ export async function handleChatRequest(req, res, url) {
       }
     }
 
-    // Lookup by arbitrary name — used by the Users Map popup and by coaches
-    // prefilling the edit-levels panel from chat. Any logged-in user can
-    // call this (the map already shows first names + rough location to
-    // everyone; this is no more sensitive than that).
+    // Lookup by arbitrary name — used by the Users Map popup (staff viewers
+    // only — see openPopup() in users-map.html) and by coaches prefilling
+    // the edit-levels panel from chat. Levels are internal, so this is
+    // staff-only like the rest of the /levels surface.
     if (p === "/api/chat/levels/lookup" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         const entries = findLevelsEntries(people, url.searchParams.get("first"), url.searchParams.get("last"));
@@ -2792,14 +2870,27 @@ export async function handleChatRequest(req, res, url) {
 
         const cfg = getConfig();
         const apptCfg = cfg.appointments;
+        // Gym clients train on the shared Gym 90 Minute Training Block
+        // calendar, never on an individual coach's own calendar — a group
+        // whose clients are all Gym role must book there too, even when
+        // scheduled through this generic flow instead of the dedicated Gym
+        // slot picker, or the event lands on the wrong calendar (and later
+        // cancellation can't find it there either — see deleteCalendarEvent
+        // call below in the DELETE handler).
+        const isGymBooking = recipients.length > 0 && recipients.every(r => r.role === "gym");
+        if (isGymBooking && !apptCfg.gymCalendarId) {
+          return sendJson(res, 400, { error: "Ask an admin to set the Gym 90 Minute Training Block calendar ID in Admin Settings first." });
+        }
+        const ANCHORAGE = "America/Anchorage";
+        const eventTimezone = isGymBooking ? ANCHORAGE : apptCfg.timezone;
         const durationMinutes = reqDuration || apptCfg.defaultDurationMinutes || 15;
         const start = new Date(startISO);
         const end = new Date(start.getTime() + durationMinutes * 60000);
         const msgId = randomUUID();
         const coachName = coaches.map(c => `${c.first} ${c.last}`).join(" & ");
         const recipientNames = recipients.map(r => `${r.first} ${r.last}`).join(", ");
-        const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: apptCfg.timezone });
-        const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: apptCfg.timezone });
+        const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: eventTimezone });
+        const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: eventTimezone });
 
         const status = { calendar: null, email: null, sms: null };
         const googleEventIds = [], googleEventLinks = [];
@@ -2811,11 +2902,12 @@ export async function handleChatRequest(req, res, url) {
               description: `Scheduled from PRA Chat.`,
               startISO, durationMinutes,
               attendees: recipients.map(r => ({ email: r.email, name: `${r.first} ${r.last}` })),
-              timezone: apptCfg.timezone, calendarId: coach.calendarEmail || coach.email,
+              timezone: eventTimezone, calendarId: isGymBooking ? apptCfg.gymCalendarId : (coach.calendarEmail || coach.email),
             });
             googleEventIds.push(ev.id); googleEventLinks.push(ev.htmlLink);
             calendarResults.push({ ok: true });
           } catch (e) { calendarResults.push({ ok: false, error: e.message }); }
+          if (isGymBooking) break; // one shared calendar — one event, not one per coach
         }
         status.calendar = calendarResults.length === 1 ? calendarResults[0]
           : calendarResults.every(r => r.ok) ? { ok: true }
@@ -2831,7 +2923,7 @@ export async function handleChatRequest(req, res, url) {
         const evDescription = "Scheduled from PRA Chat.";
         const emailResults = [], smsResults = [];
         for (const client of recipients) {
-          const clientTz = client.timezone || apptCfg.timezone;
+          const clientTz = isGymBooking ? ANCHORAGE : (client.timezone || apptCfg.timezone);
           const clientDateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: clientTz });
           const clientTimeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: clientTz });
           const vars = { coachName, firstName: client.first, lastName: client.last, date: clientDateStr, time: clientTimeStr, duration: durationMinutes };
@@ -2871,10 +2963,12 @@ export async function handleChatRequest(req, res, url) {
         const msg = {
           id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
           startISO, durationMinutes,
-          // No forced timezone — the chat header/bubble render this in
-          // whichever viewer's own local device time, per-person, instead of
-          // one fixed zone for everyone.
-          timezone: null,
+          // No forced timezone for a normal session — the chat header/bubble
+          // render it in whichever viewer's own local device time, per
+          // person. Gym slots are always shown as Anchorage time instead,
+          // same as the dedicated Gym slot picker.
+          timezone: isGymBooking ? ANCHORAGE : null,
+          isGym: isGymBooking,
           clientIds: recipients.map(r => r.id),
           googleEventId: googleEventIds[0] || null, googleEventLink: googleEventLinks[0] || null,
           googleEventIds, googleEventLinks,
@@ -2887,7 +2981,7 @@ export async function handleChatRequest(req, res, url) {
         appointments.push({
           id: msg.id, conversationId: convoId,
           coachId: coaches[0].id, coachIds: coaches.map(c => c.id),
-          clientIds: recipients.map(r => r.id), startISO, durationMinutes,
+          clientIds: recipients.map(r => r.id), startISO, durationMinutes, isGym: isGymBooking,
           googleEventId: googleEventIds[0] || null, googleEventIds, status, createdAt: msg.createdAt,
         });
         writeJson("chat_appointments.json", appointments);
@@ -3080,11 +3174,24 @@ export async function handleChatRequest(req, res, url) {
             // up by index; falls back to the single legacy googleEventId for
             // appointments booked before multi-coach scheduling existed.
             const eventIds = deleted.googleEventIds?.length ? deleted.googleEventIds : (deleted.googleEventId ? [deleted.googleEventId] : []);
-            eventIds.forEach((eventId, i) => {
-              const evCoach = coaches[i] || coach;
-              deleteCalendarEvent({ eventId, calendarId: evCoach?.calendarEmail || evCoach?.email })
-                .catch(e => console.error("[appt cancel] calendar delete failed", e.message));
-            });
+            if (deleted.isGym) {
+              // Gym events are always created on the shared gym calendar
+              // (apptCfg.gymCalendarId), never on an individual coach's
+              // calendar — deleting must target the same calendar it was
+              // created on, or the delete call 404s against the wrong
+              // calendar and the event silently survives.
+              const gymCalendarId = getConfig().appointments.gymCalendarId;
+              eventIds.forEach(eventId => {
+                deleteCalendarEvent({ eventId, calendarId: gymCalendarId })
+                  .catch(e => console.error("[appt cancel] gym calendar delete failed", e.message));
+              });
+            } else {
+              eventIds.forEach((eventId, i) => {
+                const evCoach = coaches[i] || coach;
+                deleteCalendarEvent({ eventId, calendarId: evCoach?.calendarEmail || evCoach?.email })
+                  .catch(e => console.error("[appt cancel] calendar delete failed", e.message));
+              });
+            }
 
             // Best-effort SMS notice, same channel bookings already use --
             // the calendar cancellation above already emails clients on its

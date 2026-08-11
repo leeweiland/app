@@ -233,7 +233,7 @@
   const BOTTOM_ICONS = [
     { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
-    { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
+    { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels', staffOnly: true },
     // Retreats icon (plane) temporarily pulled from the bottom bar — page
     // itself is untouched, just not linked from here for now.
     { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
@@ -401,6 +401,9 @@
       // signed up for anything yet — hidden for students (already enrolled),
       // coaches, and admins.
       if (item.plainUserOnly && myRole !== 'user') return;
+      // Skill levels are internal — coaches/admins only, same gate as the
+      // /api/chat/levels* endpoints and levels.html itself.
+      if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       const a = document.createElement('a');
       a.className = 'cah-bottom-item' + (item.label ? ' cah-bottom-label' : '') + (!item.external && path === item.href ? ' active' : '');
       a.href = item.href;
