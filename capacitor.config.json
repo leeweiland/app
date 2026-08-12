@@ -11,5 +11,8 @@
       "resize": "native",
       "resizeOnFullScreen": true
     }
+  },
+  "ios": {
+    "scrollEnabled": false
   }
 }
