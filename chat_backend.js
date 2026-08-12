@@ -2996,19 +2996,45 @@ export async function handleChatRequest(req, res, url) {
             });
             writeJson(MESSAGES_FILE, messages);
           });
+        } else if (req.headers["content-type"]?.includes("application/json") === false) {
+          return sendJson(res, 400, { error: "text or gifUrl required" });
         } else {
           const body = await readJsonBody(req);
-          if (!body.text && !body.gifUrl) return sendJson(res, 400, { error: "text or gifUrl required" });
           const messages = readJson(MESSAGES_FILE, []);
-          const msg = {
-            id: randomUUID(), conversationId: convoId, senderId: user.id,
-            type: body.gifUrl ? "gif" : "text",
-            text: body.gifUrl || body.text,
-            createdAt: new Date().toISOString(),
-          };
-          messages.push(msg);
-          writeJson(MESSAGES_FILE, messages);
-          created.push(msg);
+          if (body.forwardMessageId) {
+            // Forwarding just clones the source message's content fields into
+            // this conversation — the sender must be a participant of
+            // wherever the original lives, same access rule as any other
+            // read, so this can't be used to pull a message out of a thread
+            // you're not actually in.
+            const src = messages.find(m => m.id === body.forwardMessageId);
+            if (!src) return sendJson(res, 404, { error: "Original message not found" });
+            const srcConvo = convos.find(c => c.id === src.conversationId);
+            if (!srcConvo || !srcConvo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not allowed to forward this message" });
+            if (src.type === "appointment") return sendJson(res, 400, { error: "Appointments can't be forwarded" });
+            const msg = {
+              id: randomUUID(), conversationId: convoId, senderId: user.id,
+              type: src.type, text: src.text,
+              driveFileId: src.driveFileId, mimeType: src.mimeType, name: src.name, driveFileName: src.driveFileName,
+              forwarded: true,
+              createdAt: new Date().toISOString(),
+            };
+            messages.push(msg);
+            writeJson(MESSAGES_FILE, messages);
+            created.push(msg);
+          } else {
+            if (!body.text && !body.gifUrl) return sendJson(res, 400, { error: "text or gifUrl required" });
+            const msg = {
+              id: randomUUID(), conversationId: convoId, senderId: user.id,
+              type: body.gifUrl ? "gif" : "text",
+              text: body.gifUrl || body.text,
+              replyToId: body.replyToId || undefined,
+              createdAt: new Date().toISOString(),
+            };
+            messages.push(msg);
+            writeJson(MESSAGES_FILE, messages);
+            created.push(msg);
+          }
         }
 
         // Fire-and-forget push notification to the other participant(s).

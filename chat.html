@@ -12,7 +12,7 @@
      scroll to reach it) whenever the ads nav bar above it, or the logo/bar
      height itself, changed. Flex sizing means chat-shell always gets
      exactly the remaining space, however tall the bars above it end up. */
-  html, body { margin: 0; height: 100%; overflow: hidden; }
+  html, body { margin: 0; height: 100%; height: 100dvh; overflow: hidden; }
   body { display: flex; flex-direction: column; }
   .pra-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .chat-shell { display: flex; flex: 1; min-height: 0; }
@@ -175,6 +175,46 @@
   .msg-action-btn:hover { color: var(--pra-text); background: rgba(255,255,255,0.06); }
   .msg-action-btn.delete { color: #c0392b; }
   .msg-action-btn.delete:hover { color: #e74c3c; }
+  /* Reply/forward: a "⋯" in the same hover-revealed row as edit/delete opens
+     a small dropdown on desktop (click, not hover — a hover-only dropdown
+     inside an already-hover-revealed row is a coordination nightmare to
+     keep open while moving the mouse into it). Touch has no hover at all,
+     so a long-press instead marks the row .touch-selected, which forces
+     this whole row visible via CSS and hands reply/forward off to the
+     header buttons instead of this menu (see #replyHeaderBtn). */
+  .bubble-row.touch-selected .msg-actions, .bubble-row.touch-selected .react-trigger, .bubble-row.touch-selected .fav-star-btn, .bubble-row.touch-selected .media-forward-btn { opacity: 1; display: flex; }
+  .msg-more-menu { display: none; position: fixed; z-index: 30; min-width: 120px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+  .msg-more-menu.show { display: block; }
+  .msg-more-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 7px 10px; font-size: .8rem; color: var(--pra-text); border-radius: 5px; }
+  .msg-more-menu-item:hover { background: rgba(255,255,255,0.06); }
+  /* Persistent forward icon on media bubbles — WhatsApp shows this next to
+     photos/videos without needing a hover/long-press first. */
+  .media-forward-btn {
+    position: absolute; bottom: 9px; right: 9px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.5); cursor: pointer;
+  }
+  .media-forward-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); }
+  .media-forward-btn svg { width: 14px; height: 14px; }
+  /* Quoted-message block shown above a reply's own content, and the small
+     "Forwarded" label shown above a forwarded message's content. */
+  .bubble-reply-quote { border-left: 3px solid var(--pra-blue); background: rgba(255,255,255,0.06); border-radius: 4px; padding: 4px 8px; margin-bottom: 5px; font-size: .78rem; opacity: .85; }
+  .bubble-row.mine .bubble-reply-quote { background: rgba(0,0,0,0.15); border-left-color: rgba(255,255,255,0.7); }
+  .bubble-reply-quote-sender { font-weight: 700; color: var(--pra-blue); }
+  .bubble-row.mine .bubble-reply-quote-sender { color: #fff; }
+  .bubble-reply-quote-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bubble-forwarded-label { font-size: .68rem; font-style: italic; color: var(--pra-dim); margin-bottom: 3px; }
+  .bubble-row.mine .bubble-forwarded-label { color: rgba(255,255,255,0.75); }
+  /* Reply-preview strip above the composer — same floating-above pattern as
+     the paste-preview strip, with an X to cancel out of replying. */
+  .reply-preview { position: absolute; bottom: 62px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-left: 3px solid var(--pra-blue); border-radius: 10px; z-index: 20; }
+  .reply-preview-body { flex: 1; min-width: 0; }
+  .reply-preview-sender { font-weight: 700; font-size: .76rem; color: var(--pra-blue); }
+  .reply-preview-text { font-size: .78rem; color: var(--pra-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reply-preview-cancel { flex-shrink: 0; background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: 1rem; padding: 2px 6px; }
+  .reply-preview-cancel:hover { color: var(--pra-text); }
+  .forward-convo-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
+  .forward-convo-row:hover { background: rgba(255,255,255,0.04); }
   .msg-edited { font-size: .7em; color: var(--pra-dim); margin-left: 4px; }
   .bubble-edit-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
   .bubble-edit-textarea { font-size: .88rem; line-height: 1.4; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--pra-blue); background: rgba(0,0,0,0.3); color: var(--pra-text); resize: vertical; width: 100%; box-sizing: border-box; font-family: inherit; }
@@ -192,7 +232,12 @@
      Send lives outside it as its own round button. */
   .composer-pill { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 22px; padding: 4px 6px; }
   .composer-icon { width: 32px; height: 32px; border-radius: 50%; border: none; flex-shrink: 0; }
-  .composer-textarea { flex: 1; min-width: 0; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
+  /* iOS Safari sizes a <textarea> by its `cols` attribute (default 20)
+     rather than its flex-basis when wrapping text, so long words/lines ran
+     past the pill's right edge instead of wrapping — an explicit width
+     (not just flex:1 + min-width:0, which is enough everywhere else)
+     forces it to actually wrap at the pill's real width. */
+  .composer-textarea { flex: 1; min-width: 0; width: 100%; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
   .composer-textarea:focus { outline: none; }
   .composer-send { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, transform .1s; }
   .composer-send svg { width: 17px; height: 17px; }
@@ -390,6 +435,13 @@
             </div>
           </div>
           <div class="thread-head-icons">
+            <!-- Mobile only — a long-press on a bubble "selects" it (no
+                 hover to reveal inline icons on touch), and these two take
+                 over the header's icon row for as long as it's selected,
+                 same slot the calendar/media/favorites icons normally live
+                 in. Hidden the rest of the time. -->
+            <button class="icon-btn" id="replyHeaderBtn" title="Reply" style="display:none"></button>
+            <button class="icon-btn" id="forwardHeaderBtn" title="Forward" style="display:none"></button>
             <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
@@ -404,7 +456,12 @@
           <div id="searchResults" style="margin-top:8px;font-size:.8rem"></div>
         </div>
         <div class="thread-body" id="threadBody"></div>
+        <div class="msg-more-menu" id="msgMoreMenu">
+          <button class="msg-more-menu-item" id="msgMoreReplyBtn">Reply</button>
+          <button class="msg-more-menu-item" id="msgMoreForwardBtn">Forward</button>
+        </div>
         <div class="composer">
+          <div class="reply-preview" id="replyPreview" style="display:none"></div>
           <div class="paste-preview" id="pastePreview" style="display:none"></div>
           <div class="composer-pill">
             <button class="icon-btn composer-icon" id="emojiBtn">😊</button>
@@ -473,6 +530,16 @@
       <div class="pra-h2" style="margin-bottom:14px">Shared Media</div>
       <div class="media-grid" id="mediaGrid"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('mediaModal')">Close</button>
+    </div>
+  </div>
+
+  <!-- Forward-to modal — opened from a message's forward action, lists every
+       conversation you're in so you can pick where the copy lands. -->
+  <div class="modal-backdrop" id="forwardModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Forward Message</div>
+      <div id="forwardConvoList"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('forwardModal')">Cancel</button>
     </div>
   </div>
 
@@ -1403,6 +1470,8 @@ document.getElementById('gymScheduleSaveBtn').addEventListener('click', async ()
   setTimeout(() => closeModal('gymScheduleModal'), 1600);
 });
 
+document.getElementById('replyHeaderBtn').innerHTML = svgReply();
+document.getElementById('forwardHeaderBtn').innerHTML = svgForward();
 document.getElementById('scheduleBtn').innerHTML = svgCalendar();
 document.getElementById('scheduleBtn').addEventListener('click', () => {
   const convo = conversations.find(c => c.id === activeConvoId);
@@ -1622,10 +1691,16 @@ async function refreshThread(scrollDown) {
   renderMessages(d.messages, scrollDown);
 }
 
+// Referenced by replyQuoteHtml() to look up the original message a reply
+// is quoting — set here so every render has the current thread's full list
+// without threading it through renderBubble's own call signature.
+let currentThreadMessages = [];
+
 function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
   const convo = conversations.find(c => c.id === activeConvoId);
+  currentThreadMessages = messages;
   body.innerHTML = messages.map(m => renderBubble(m, convo)).join('');
   if (forceScrollDown || wasAtBottom) scrollThreadToBottom(body);
   updateThreadApptHeader(messages, convo);
@@ -1708,16 +1783,59 @@ function readReceiptTicksHtml(m, mine) {
   return `<span class="bubble-ticks" title="${status[0].toUpperCase() + status.slice(1)}">${svg}</span>`;
 }
 
+function svgReply() {
+  return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 6L4 12l6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12h9.5a6 6 0 0 1 6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function svgForward() {
+  return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 6L20 12l-6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12h-9.5a6 6 0 0 0-6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+// Reply/forward's compact one-line summary of a message — same "Photo" /
+// "Video" / "GIF" shorthand previewText() uses for the sidebar, just
+// escaped for text (previewText leaves it raw since its only caller today
+// is already-trusted sidebar markup; this one lands inside a new context
+// so it escapes rather than assuming that stays true).
+function replySnippet(m) {
+  if (!m) return 'Original message';
+  if (m.type === 'text') return escapeHtml(m.text);
+  if (m.type === 'gif') return 'GIF';
+  if (m.type === 'image') return 'Photo';
+  if (m.type === 'video') return 'Video';
+  return 'Message';
+}
+
+function replyQuoteHtml(m, convo) {
+  if (!m.replyToId) return '';
+  const original = currentThreadMessages.find(x => x.id === m.replyToId);
+  const sender = original ? convo?.participants.find(p => p.id === original.senderId) : null;
+  const senderName = original && sender ? (original.senderId === me.id ? 'You' : sender.first) : '';
+  return `<div class="bubble-reply-quote">${senderName ? `<div class="bubble-reply-quote-sender">${escapeHtml(senderName)}</div>` : ''}<div class="bubble-reply-quote-text">${replySnippet(original)}</div></div>`;
+}
+
+// Reply/forward are available to any user on any real message (not just
+// staff, and not on appointment/system bubbles) — the "⋯" always renders
+// when canReplyForward is true, edit/delete are additionally gated by
+// canAct so a client sees only "⋯" while a staff member sees the full row.
+function msgActionsHtml(mid, canAct, canReplyForward, extraButtons) {
+  if (!extraButtons && !canReplyForward) return '';
+  const more = canReplyForward ? `<button class="msg-action-btn msg-more-btn" data-mid="${mid}" title="More">⋯</button>` : '';
+  return `<div class="msg-actions">${extraButtons || ''}${more}</div>`;
+}
+
 function renderBubble(m, convo) {
   const mine = m.senderId === me.id;
   const sender = convo?.participants.find(p => p.id === m.senderId);
   const senderLabel = (!mine && convo?.type === 'group' && sender) ? `<div class="bubble-sender">${sender.first}</div>` : '';
   const canAct = isStaffMe() && mine;
+  const canReplyForward = m.type !== 'appointment';
+  const forwardedLabel = m.forwarded ? `<div class="bubble-forwarded-label">➦ Forwarded</div>` : '';
+  const replyQuote = canReplyForward ? replyQuoteHtml(m, convo) : '';
   let content;
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
-    const actions = canAct ? `<div class="msg-actions"><button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button></div>` : '';
-    content = `<div class="bubble" data-text="${escapeHtml(m.text)}">${senderLabel}${escapeHtml(m.text)}${edited}</div>`;
+    const editDelete = canAct ? `<button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
+    const actions = msgActionsHtml(m.id, canAct, canReplyForward, editDelete);
+    content = `<div class="bubble" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${escapeHtml(m.text)}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
         <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
@@ -1726,16 +1844,18 @@ function renderBubble(m, convo) {
       </div>
     </div>`;
   }
-  if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}<img src="${m.text}"/></div>`;
-  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}<video src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
+  const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
+  if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
+  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
-  const mediaDeleteBtn = (canAct && m.type !== 'appointment') ? `<div class="msg-actions"><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button></div>` : '';
+  const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
+  const mediaActions = msgActionsHtml(m.id, canAct, canReplyForward, deleteBtn);
   const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
     <div>
-      <div class="bubble-wrap">${mediaDeleteBtn}${content}<button class="react-trigger" title="React">😊</button></div>
+      <div class="bubble-wrap">${mediaActions}${content}<button class="react-trigger" title="React">😊</button></div>
       ${renderReactionChips(m)}
       <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}${readReceiptTicksHtml(m, mine)}</div>
     </div>
@@ -1903,8 +2023,33 @@ function escapeHtml(s) {
     if (e.target.closest('.bubble-edit-cancel')) {
       editingMessageId = null;
       refreshThread(false);
+      return;
     }
+    const moreBtn = e.target.closest('.msg-more-btn');
+    if (moreBtn) { openMsgMoreMenu(moreBtn, moreBtn.dataset.mid); return; }
+    const forwardBtn = e.target.closest('.media-forward-btn');
+    if (forwardBtn) { openForwardModal(forwardBtn.dataset.mid); return; }
   });
+
+  // Long-press (touch only — desktop already gets hover) selects a bubble:
+  // forces its emoji/star/delete row visible via .touch-selected (see CSS —
+  // there's no hover state to reveal it on a touchscreen) and hands reply/
+  // forward off to the header buttons instead of the inline dropdown, since
+  // a dropdown menu is a much smaller target on a phone than dedicated
+  // header icons.
+  let longPressTimer = null;
+  let longPressRow = null;
+  const threadBodyEl = document.getElementById('threadBody');
+  threadBodyEl.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('.bubble-row');
+    if (!row) return;
+    longPressRow = row;
+    longPressTimer = setTimeout(() => { selectMessageForTouch(row); longPressTimer = null; }, 450);
+  }, { passive: true });
+  const cancelLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } longPressRow = null; };
+  threadBodyEl.addEventListener('touchmove', cancelLongPress, { passive: true });
+  threadBodyEl.addEventListener('touchend', cancelLongPress);
+  threadBodyEl.addEventListener('touchcancel', cancelLongPress);
 
   // Desktop: ctrl+wheel to zoom (also how trackpad pinch is reported in Chrome/Firefox)
   backdrop.addEventListener('wheel', (e) => {
@@ -2108,8 +2253,10 @@ async function sendText() {
     await sendFiles(files);
   }
   if (text) {
+    const replyToId = replyingToId;
+    cancelReply();
     await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, replyToId })
     });
     refreshThread(true);
   }
@@ -2196,6 +2343,108 @@ async function deleteMessage(mid) {
   if (!activeConvoId || !mid) return;
   await fetch(`/api/chat/conversations/${activeConvoId}/messages/${mid}`, { method: 'DELETE' });
   refreshThread(false);
+}
+
+// ── Reply / Forward ──────────────────────────────────────────────────────
+let replyingToId = null;
+let moreMenuMessageId = null;
+let touchSelectedRow = null;
+
+function openMsgMoreMenu(anchorEl, mid) {
+  moreMenuMessageId = mid;
+  const menu = document.getElementById('msgMoreMenu');
+  positionPickerNear(menu, anchorEl);
+  menu.classList.add('show');
+}
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('msgMoreMenu');
+  if (!menu.contains(e.target) && !e.target.closest('.msg-more-btn')) menu.classList.remove('show');
+});
+document.getElementById('msgMoreReplyBtn').onclick = () => {
+  document.getElementById('msgMoreMenu').classList.remove('show');
+  if (moreMenuMessageId) startReply(moreMenuMessageId);
+};
+document.getElementById('msgMoreForwardBtn').onclick = () => {
+  document.getElementById('msgMoreMenu').classList.remove('show');
+  if (moreMenuMessageId) openForwardModal(moreMenuMessageId);
+};
+
+function clearTouchSelection() {
+  if (touchSelectedRow) touchSelectedRow.classList.remove('touch-selected');
+  touchSelectedRow = null;
+  document.getElementById('replyHeaderBtn').style.display = 'none';
+  document.getElementById('forwardHeaderBtn').style.display = 'none';
+}
+function selectMessageForTouch(row) {
+  clearTouchSelection();
+  touchSelectedRow = row;
+  row.classList.add('touch-selected');
+  const mid = row.dataset.mid;
+  const replyBtn = document.getElementById('replyHeaderBtn');
+  const forwardBtn = document.getElementById('forwardHeaderBtn');
+  replyBtn.style.display = '';
+  forwardBtn.style.display = '';
+  replyBtn.onclick = () => { clearTouchSelection(); startReply(mid); };
+  forwardBtn.onclick = () => { clearTouchSelection(); openForwardModal(mid); };
+}
+// Tapping anywhere else in the thread (not another long-press-in-progress)
+// drops the current selection, same as WhatsApp's tap-away-to-deselect.
+document.getElementById('threadBody').addEventListener('click', (e) => {
+  if (touchSelectedRow && !e.target.closest('.bubble-row')?.isSameNode(touchSelectedRow)) clearTouchSelection();
+});
+
+function startReply(mid) {
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m) return;
+  replyingToId = mid;
+  const convo = conversations.find(c => c.id === activeConvoId);
+  const sender = convo?.participants.find(p => p.id === m.senderId);
+  const senderName = m.senderId === me.id ? 'You' : (sender?.first || 'Unknown');
+  const preview = document.getElementById('replyPreview');
+  preview.innerHTML = `
+    <div class="reply-preview-body">
+      <div class="reply-preview-sender">${escapeHtml(senderName)}</div>
+      <div class="reply-preview-text">${replySnippet(m)}</div>
+    </div>
+    <button class="reply-preview-cancel" id="replyPreviewCancelBtn" title="Cancel reply">✕</button>`;
+  preview.style.display = 'flex';
+  document.getElementById('replyPreviewCancelBtn').onclick = cancelReply;
+  document.getElementById('textInput').focus();
+}
+function cancelReply() {
+  replyingToId = null;
+  const preview = document.getElementById('replyPreview');
+  preview.style.display = 'none';
+  preview.innerHTML = '';
+}
+
+async function openForwardModal(mid) {
+  moreMenuMessageId = null;
+  forwardMessageId = mid;
+  const list = document.getElementById('forwardConvoList');
+  list.innerHTML = conversations.map(c => {
+    const other = c.type === 'group' ? null : c.participants.find(p => p.id !== me.id);
+    const name = c.type === 'group' ? (c.name || 'Group') : (other ? `${other.first} ${other.last}` : 'Unknown');
+    const avatarUser = c.type === 'group' ? convoAvatarUser(c) : other;
+    return `<div class="forward-convo-row" data-convo-id="${c.id}">
+      <div class="pra-avatar${avatarUser ? avatarRoleClass(avatarUser) : ''}">${avatarUser ? avatarHtml(avatarUser) : '#'}</div>
+      <div>${escapeHtml(name)}</div>
+    </div>`;
+  }).join('') || '<div class="empty-hint">No conversations to forward to.</div>';
+  list.querySelectorAll('.forward-convo-row').forEach(row => {
+    row.onclick = () => submitForward(row.dataset.convoId);
+  });
+  openModal('forwardModal');
+}
+let forwardMessageId = null;
+async function submitForward(targetConvoId) {
+  if (!forwardMessageId || !targetConvoId) return;
+  closeModal('forwardModal');
+  await fetch(`/api/chat/conversations/${targetConvoId}/messages`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forwardMessageId })
+  });
+  forwardMessageId = null;
+  if (targetConvoId === activeConvoId) refreshThread(true);
 }
 
 function startEditMessage(mid) {
@@ -2487,6 +2736,23 @@ async function subscribePush() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub })
     });
   } catch (e) { console.warn('push setup failed', e); }
+}
+
+// Keep the app's own height pinned to the actual visible area instead of
+// the full layout viewport (`100%`/`100dvh` on html/body) — on the Android
+// WebView this app ships in, opening the on-screen keyboard doesn't
+// reliably shrink either of those, so the flex column keeps its full
+// pre-keyboard height and the composer at its bottom ends up positioned
+// behind the keyboard with no way to scroll to it. visualViewport DOES
+// track the keyboard, so mirroring its height onto body directly is what
+// actually keeps the composer pinned just above the keyboard as it opens.
+if (window.visualViewport) {
+  const syncViewportHeight = () => {
+    document.body.style.height = window.visualViewport.height + 'px';
+    window.scrollTo(0, 0);
+  };
+  window.visualViewport.addEventListener('resize', syncViewportHeight);
+  syncViewportHeight();
 }
 
 init();
