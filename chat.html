@@ -1746,21 +1746,42 @@ const chatVideoLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { root: document.getElementById('threadBody'), rootMargin: '400px' });
 
+// Per-message diffing instead of a wholesale innerHTML rebuild. The 3s poll
+// re-renders on ANY change to the thread — including a delivered/read
+// receipt updating on some other, older message, which happens routinely
+// in an active conversation and has nothing to do with what you're
+// currently looking at. Blowing away and recreating every bubble on every
+// one of those ticks was both resetting scroll position (band-aided
+// earlier tonight) and interrupting any video mid-load or mid-playback
+// (the actual cause of videos "never" loading, not the lazy-load change
+// itself) — a bubble whose message didn't change now keeps its exact DOM
+// node, so an in-progress video load, an open reaction picker, scroll
+// position, all just survive untouched. replaceChildren with the same
+// node references present just reorders them in place; a real browser
+// does not restart a <video>'s load for that.
 function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
-  // The 3s poll (loadConversations -> refreshThread) rebuilds this list's
-  // innerHTML wholesale even when nothing changed, which resets scrollTop
-  // to 0 same as the sidebar's equivalent poll did — if you're not at the
-  // bottom already (reading older history), restore exactly where you
-  // were instead of letting the browser default back to the top.
-  const prevScrollTop = body.scrollTop;
   const convo = conversations.find(c => c.id === activeConvoId);
   currentThreadMessages = messages;
-  body.innerHTML = messages.map(m => renderBubble(m, convo)).join('');
+
+  const existingByMid = new Map();
+  body.querySelectorAll(':scope > .bubble-row[data-mid]').forEach(row => existingByMid.set(row.dataset.mid, row));
+
+  const finalRows = messages.map(m => {
+    const json = JSON.stringify(m);
+    const existing = existingByMid.get(m.id);
+    if (existing && existing.dataset.json === json) return existing;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderBubble(m, convo);
+    const row = wrap.firstElementChild;
+    row.dataset.json = json;
+    return row;
+  });
+  body.replaceChildren(...finalRows);
+
   body.querySelectorAll('video[data-src]').forEach(v => chatVideoLazyObserver.observe(v));
   if (forceScrollDown || wasAtBottom) scrollThreadToBottom(body);
-  else body.scrollTop = prevScrollTop;
   updateThreadApptHeader(messages, convo);
 }
 
