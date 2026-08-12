@@ -1196,6 +1196,7 @@ function previewText(m) {
 
 async function openConvo(id) {
   activeConvoId = id;
+  lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
   document.getElementById('noConvo').style.display = 'none';
   document.getElementById('threadWrap').classList.add('show');
   document.getElementById('searchInput').value = '';
@@ -1700,11 +1701,22 @@ function closeConvo() {
 }
 document.getElementById('backBtn').onclick = closeConvo;
 
+// Set by refreshThread, compared against on the next poll tick — lets it
+// skip re-rendering entirely when the fetch comes back identical (the
+// overwhelmingly common case, since most 3s poll ticks land with nothing
+// new). Rebuilding threadBody's innerHTML for no reason was tearing down
+// and recreating every <video> in view each time, which is why a video
+// mid-playback looked like it kept "bouncing"/reloading on its own even
+// when no one had sent anything.
+let lastRenderedMessagesJson = null;
 async function refreshThread(scrollDown) {
   if (!activeConvoId) return;
   if (editingMessageId) return;
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages?limit=100');
   const d = await r.json();
+  const json = JSON.stringify(d.messages);
+  if (json === lastRenderedMessagesJson && !scrollDown) return;
+  lastRenderedMessagesJson = json;
   renderMessages(d.messages, scrollDown);
 }
 
