@@ -450,6 +450,37 @@
     if (navWrapEl) new MutationObserver(reflow).observe(navWrapEl, { childList: true, attributes: true });
     new ResizeObserver(reflow).observe(bar);
     new ResizeObserver(reflow).observe(bottomBar);
+
+    // Hide the fixed bottom bar (and reclaim its reserved space) while a
+    // text field is focused. It's `position: fixed; bottom: 0` — on mobile,
+    // opening the keyboard pulls it up to sit right above the keys same as
+    // any other fixed-to-bottom element, which lands it right on top of a
+    // composer that's grown tall with multiple lines of typed text. A short
+    // debounce on hiding it back in absorbs a click that briefly blurs the
+    // field (e.g. an emoji/attach button) without a visible flash.
+    let bottomBarShowTimer = null;
+    function showBottomBar() {
+      bottomBar.style.display = '';
+      if (bottomBarSpacer) bottomBarSpacer.style.height = bottomBar.getBoundingClientRect().height + 'px';
+    }
+    function hideBottomBar() {
+      bottomBar.style.display = 'none';
+      if (bottomBarSpacer) bottomBarSpacer.style.height = '0';
+    }
+    document.addEventListener('focusin', (e) => {
+      if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') return;
+      clearTimeout(bottomBarShowTimer);
+      hideBottomBar();
+    });
+    document.addEventListener('focusout', (e) => {
+      if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') return;
+      clearTimeout(bottomBarShowTimer);
+      bottomBarShowTimer = setTimeout(() => {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+        showBottomBar();
+      }, 120);
+    });
   }
 
   document.addEventListener('DOMContentLoaded', build);
