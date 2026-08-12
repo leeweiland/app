@@ -248,7 +248,13 @@
      max-width (a ceiling, not a preferred size) avoids that fight while
      still capping the runaway intrinsic width; overflow-wrap covers actual
      unbroken long words/URLs that word-wrap alone won't break. */
-  .composer-textarea { flex: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
+  /* iOS auto-zooms the whole page in on focus when a text field's font is
+     under 16px, "to make it readable" — that's the enlarge-and-go-too-wide
+     effect on tapping in, and why it resets clean on navigating away (a
+     fresh page load carries no zoom). 16px flat (not the .92rem/~14.7px
+     used elsewhere) sits right at the threshold that keeps iOS from
+     triggering it at all. */
+  .composer-textarea { flex: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: 16px; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
   .composer-textarea:focus { outline: none; }
   .composer-send { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, transform .1s; }
   .composer-send svg { width: 17px; height: 17px; }
