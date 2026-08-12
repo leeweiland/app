@@ -2579,12 +2579,17 @@ export async function handleChatRequest(req, res, url) {
         const folderIds = await getAllDescendantFolderIds(cfg.trainingProtocolVideoLibraryFolderId, accessToken);
         const parentsClause = folderIds.map(id => `'${id}' in parents`).join(" or ");
         const driveQuery = `(${parentsClause}) and mimeType contains 'video/' and trashed = false${nameFilter}`;
+        // Small page size + pageToken pass-through — the picker loads more
+        // as you scroll instead of this endpoint dumping a fixed 50-result
+        // cap that just quietly ran out with no way to see anything past it.
+        const pageToken = url.searchParams.get("pageToken") || "";
+        const pageTokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
         const r = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(driveQuery)}&fields=files(id,name)&pageSize=50`,
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(driveQuery)}&fields=nextPageToken,files(id,name)&pageSize=18${pageTokenParam}`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         const d = await r.json();
-        return sendJson(res, 200, { files: d.files || [] });
+        return sendJson(res, 200, { files: d.files || [], nextPageToken: d.nextPageToken || null });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }

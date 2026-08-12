@@ -41,12 +41,20 @@
   .type-choice:hover { border-color: var(--pra-blue); }
   .type-choice svg { width: 26px; height: 26px; display: block; margin: 0 auto 8px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); }
   .type-choice:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
-  .video-result { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; cursor: pointer; }
-  .video-result:hover { background: rgba(255,255,255,0.05); }
-  .video-result svg { width: 18px; height: 18px; flex-shrink: 0; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); }
-  .video-result-thumb { position: relative; width: 56px; height: 36px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: #000; }
+  /* Grid of bigger cards (matching Powerbatics Training Videos' look) —
+     ~2 per row inside the modal's 420px width lands close to 6 visible
+     before scrolling, same as moves-dictionary.html's move-thumb. Each
+     thumb only gets its real `src` once scrolled into view (see
+     wireLazyThumbs in the script below) instead of every result on the
+     page trying to load its video at once. */
+  .video-results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .video-result { cursor: pointer; border-radius: 8px; overflow: hidden; }
+  .video-result-thumb { position: relative; width: 100%; aspect-ratio: 16/10; background: #000; border-radius: 8px; overflow: hidden; }
   .video-result-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-  .video-result-name { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .video-result-thumb .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--pra-blue); filter: drop-shadow(0 0 6px var(--pra-blue-glow)); pointer-events: none; }
+  .video-result-name { font-size: .78rem; padding: 6px 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .video-results-sentinel { grid-column: 1 / -1; height: 1px; }
+  .video-results-loading { grid-column: 1 / -1; text-align: center; font-size: .8rem; padding: 6px 0; }
   .upload-video-link { display: block; text-align: center; margin-top: 12px; font-size: .82rem; color: var(--pra-blue); cursor: pointer; }
   .upload-video-link:hover { text-decoration: underline; }
   #templateResults { max-height: 240px; overflow-y: auto; margin-bottom: 4px; }
@@ -320,20 +328,40 @@ function wireModals() {
   };
 }
 
-async function searchVideos(q) {
-  const box = document.getElementById('videoResults');
-  box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Searching…</div>';
-  const r = await fetch('/api/chat/training-protocol/search-videos?q=' + encodeURIComponent(q));
-  const d = await r.json();
-  if (d.needsConfig) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Ask an admin to set the Training Protocol Videos folder in Admin Settings.</div>'; return; }
-  if (!d.files || !d.files.length) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">No videos found.</div>'; return; }
-  box.innerHTML = d.files.map(f => `
+// Lazy-loads each thumbnail's actual video only once it scrolls into view
+// (rootMargin gives it a 150px head start) instead of every result on the
+// page — could be dozens — all trying to fetch metadata simultaneously the
+// moment a search returns. One shared observer for the whole modal;
+// unobserve right after loading since a thumbnail only ever needs this once.
+const videoThumbObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const video = entry.target;
+    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+    videoThumbObserver.unobserve(video);
+  });
+}, { rootMargin: '150px' });
+
+let videoNextPageToken = null;
+let videoCurrentQuery = '';
+let videoLoadingMore = false;
+let videoSentinelObserver = null;
+
+function videoResultCardHtml(f) {
+  return `
     <div class="video-result" data-id="${f.id}" data-name="${escapeHtml(f.name)}">
-      <div class="video-result-thumb"><video src="/api/chat/media/${f.id}#t=0.5" preload="metadata" muted playsinline></video></div>
+      <div class="video-result-thumb">
+        <video data-src="/api/chat/media/${f.id}#t=0.5" preload="none" muted playsinline></video>
+        <div class="play-icon">▶</div>
+      </div>
       <div class="video-result-name">${escapeHtml(f.name)}</div>
-    </div>
-  `).join('');
+    </div>`;
+}
+
+function wireVideoResultCards(box) {
   box.querySelectorAll('.video-result').forEach(el => {
+    if (el.dataset.wired) return;
+    el.dataset.wired = '1';
     el.onclick = async () => {
       steps.push({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
       render();
@@ -341,6 +369,54 @@ async function searchVideos(q) {
       closeModal('videoModal');
     };
   });
+  box.querySelectorAll('.video-result-thumb video[data-src]').forEach(v => videoThumbObserver.observe(v));
+}
+
+// Grid of cards (Choose a Video) instead of a thin list, sized to land
+// close to 6 visible before scrolling — same visual language as
+// Powerbatics Training Videos' big thumbnails. Scrolling to the bottom
+// loads more via the Drive API's own pageToken instead of the previous
+// flat 50-result cap that just silently ran out.
+async function searchVideos(q) {
+  const box = document.getElementById('videoResults');
+  box.className = '';
+  videoCurrentQuery = q;
+  videoNextPageToken = null;
+  if (videoSentinelObserver) { videoSentinelObserver.disconnect(); videoSentinelObserver = null; }
+  box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Searching…</div>';
+  const r = await fetch('/api/chat/training-protocol/search-videos?q=' + encodeURIComponent(q));
+  const d = await r.json();
+  if (d.needsConfig) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Ask an admin to set the Training Protocol Videos folder in Admin Settings.</div>'; return; }
+  if (!d.files || !d.files.length) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">No videos found.</div>'; return; }
+  videoNextPageToken = d.nextPageToken;
+  box.className = 'video-results-grid';
+  box.innerHTML = d.files.map(videoResultCardHtml).join('') + '<div class="video-results-sentinel" id="videoResultsSentinel"></div>';
+  wireVideoResultCards(box);
+  const sentinel = document.getElementById('videoResultsSentinel');
+  videoSentinelObserver = new IntersectionObserver((entries) => {
+    if (entries.some(e => e.isIntersecting)) loadMoreVideos();
+  });
+  videoSentinelObserver.observe(sentinel);
+}
+
+async function loadMoreVideos() {
+  if (!videoNextPageToken || videoLoadingMore) return;
+  videoLoadingMore = true;
+  const sentinel = document.getElementById('videoResultsSentinel');
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'video-results-loading';
+  loadingEl.textContent = 'Loading more…';
+  sentinel?.before(loadingEl);
+  const r = await fetch('/api/chat/training-protocol/search-videos?q=' + encodeURIComponent(videoCurrentQuery) + '&pageToken=' + encodeURIComponent(videoNextPageToken));
+  const d = await r.json();
+  loadingEl.remove();
+  videoNextPageToken = d.nextPageToken;
+  if (d.files && d.files.length) {
+    sentinel?.insertAdjacentHTML('beforebegin', d.files.map(videoResultCardHtml).join(''));
+    wireVideoResultCards(document.getElementById('videoResults'));
+  }
+  if (!videoNextPageToken && videoSentinelObserver) videoSentinelObserver.disconnect();
+  videoLoadingMore = false;
 }
 
 async function searchTemplates(q) {
