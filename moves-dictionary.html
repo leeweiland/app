@@ -66,12 +66,24 @@ async function load() {
   render(allMoves);
 }
 
+// The full catalog renders at once (no pagination here), so a broad/empty
+// search could mean dozens of thumbnails all trying to load simultaneously
+// — lazy-loads via data-src instead, same pattern as the video picker.
+const moveThumbObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const video = entry.target;
+    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+    moveThumbObserver.unobserve(video);
+  });
+}, { rootMargin: '400px' });
+
 function render(moves) {
   const grid = document.getElementById('grid');
   grid.innerHTML = moves.map(m => `
     <div class="pra-card move-card" data-id="${m.id}">
       <div class="move-thumb">
-        <video src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="metadata" muted playsinline></video>
+        <video data-src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="none" muted playsinline></video>
         <div class="play-icon">▶</div>
       </div>
       <div class="move-info">
@@ -82,6 +94,7 @@ function render(moves) {
     </div>
   `).join('') || '<div class="pra-muted">No moves match.</div>';
   grid.querySelectorAll('.move-card').forEach(el => el.onclick = () => openPlayer(el.dataset.id));
+  grid.querySelectorAll('video[data-src]').forEach(v => moveThumbObserver.observe(v));
 }
 
 function openPlayer(id) {

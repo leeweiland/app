@@ -1732,6 +1732,20 @@ async function refreshThread(scrollDown) {
 // without threading it through renderBubble's own call signature.
 let currentThreadMessages = [];
 
+// Video bubbles carry data-src, not src (see renderBubble) — a long
+// conversation full of videos was starting every single one loading the
+// moment it rendered, all competing for bandwidth/connections at once.
+// One shared observer per page load; unobserved right after a video gets
+// its real src since it only needs to load once.
+const chatVideoLazyObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const video = entry.target;
+    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+    chatVideoLazyObserver.unobserve(video);
+  });
+}, { root: document.getElementById('threadBody'), rootMargin: '400px' });
+
 function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
@@ -1744,6 +1758,7 @@ function renderMessages(messages, forceScrollDown) {
   const convo = conversations.find(c => c.id === activeConvoId);
   currentThreadMessages = messages;
   body.innerHTML = messages.map(m => renderBubble(m, convo)).join('');
+  body.querySelectorAll('video[data-src]').forEach(v => chatVideoLazyObserver.observe(v));
   if (forceScrollDown || wasAtBottom) scrollThreadToBottom(body);
   else body.scrollTop = prevScrollTop;
   updateThreadApptHeader(messages, convo);
@@ -1890,7 +1905,7 @@ function renderBubble(m, convo) {
   const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}" controls preload="none" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
   const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
@@ -2021,7 +2036,13 @@ function escapeHtml(s) {
     // dedicated expand button opens the lightbox, so clicking play doesn't
     // fight with clicking to go full-frame.
     if (e.target.tagName === 'IMG') openImage(e.target.src);
-    else if (e.target.classList.contains('expand-video-btn')) openVideo(e.target.previousElementSibling.src);
+    else if (e.target.classList.contains('expand-video-btn')) {
+      const vid = e.target.previousElementSibling;
+      // Lazy-loaded (see chatVideoLazyObserver) — normally already resolved
+      // by the time this is tappable, but fall back to data-src in case the
+      // observer hasn't fired yet (e.g. rootMargin threshold not yet hit).
+      openVideo(vid.src || vid.dataset.src);
+    }
   });
   document.getElementById('lightboxClose').onclick = close;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });

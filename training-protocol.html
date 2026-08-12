@@ -205,6 +205,18 @@ async function saveSteps() {
   });
 }
 
+// A protocol full of video steps was loading every single one the moment
+// the page rendered, same issue as the picker — lazy-loads via data-src
+// instead (see renderStepContent).
+const stepVideoLazyObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const video = entry.target;
+    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+    stepVideoLazyObserver.unobserve(video);
+  });
+}, { rootMargin: '400px' });
+
 function render() {
   const list = document.getElementById('stepsList');
   document.getElementById('emptyHint').style.display = steps.length ? 'none' : 'block';
@@ -224,11 +236,12 @@ function render() {
       await saveSteps();
     };
   });
+  list.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
 }
 
 function renderStepContent(s) {
   if (s.type === 'video') {
-    return `<video src="/api/chat/media/${s.driveFileId}" controls preload="metadata" playsinline></video>`;
+    return `<video data-src="/api/chat/media/${s.driveFileId}" controls preload="none" playsinline></video>`;
   }
   if (s.type === 'image') {
     return `<div class="step-type">Image</div><img src="/api/chat/media/${s.driveFileId}"/>`;
