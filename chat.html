@@ -2738,23 +2738,6 @@ async function subscribePush() {
   } catch (e) { console.warn('push setup failed', e); }
 }
 
-// Keep the app's own height pinned to the actual visible area instead of
-// the full layout viewport (`100%`/`100dvh` on html/body) — on the Android
-// WebView this app ships in, opening the on-screen keyboard doesn't
-// reliably shrink either of those, so the flex column keeps its full
-// pre-keyboard height and the composer at its bottom ends up positioned
-// behind the keyboard with no way to scroll to it. visualViewport DOES
-// track the keyboard, so mirroring its height onto body directly is what
-// actually keeps the composer pinned just above the keyboard as it opens.
-if (window.visualViewport) {
-  const syncViewportHeight = () => {
-    document.body.style.height = window.visualViewport.height + 'px';
-    window.scrollTo(0, 0);
-  };
-  window.visualViewport.addEventListener('resize', syncViewportHeight);
-  syncViewportHeight();
-}
-
 init();
 </script>
 </body>
