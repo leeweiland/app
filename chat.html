@@ -141,6 +141,13 @@
   .bubble.media { padding: 5px; position: relative; }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; }
+  /* Inline-block (not inline) so vertical-align actually applies — a plain
+     inline element ignores it, which left the tick SVG sitting a couple
+     pixels lower than the timestamp text's baseline. text-align:right on
+     the parent .bubble-time still right-aligns this together with the
+     timestamp text as a single inline run, no flex needed. */
+  .bubble-ticks { display: inline-block; vertical-align: -1px; margin-left: 4px; }
+  .bubble-ticks svg { display: block; }
 
   /* ── Reactions ── */
   .bubble-wrap { position: relative; display: inline-block; max-width: 100%; }
@@ -1610,6 +1617,30 @@ function scrollThreadToBottom(body) {
   });
 }
 
+// WhatsApp-style read receipts: one grey check (sent, i.e. saved server-
+// side but not yet fetched by every recipient), two grey checks (delivered
+// — every recipient's client has fetched it), two blue checks (read —
+// every recipient's own last-read-at is at or after this message). Status
+// is computed server-side (see computeMessageStatus in chat_backend.js)
+// and only ever present on messages this user sent themselves — WhatsApp
+// doesn't show ticks on messages you received either, so `mine` gates this
+// before `m.status` is even consulted.
+function svgTick(double, color) {
+  const check = `M1 5.3L4.6 9L14.5 0.8`;
+  if (!double) {
+    return `<svg viewBox="0 0 16 10" width="14" height="9" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="${check}" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  return `<svg viewBox="0 0 20 10" width="17" height="9" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="${check}" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="${check}" transform="translate(5,0)" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function readReceiptTicksHtml(m, mine) {
+  if (!mine) return '';
+  const status = m.status || 'sent';
+  const svg = status === 'sent' ? svgTick(false, 'var(--pra-dim)')
+    : status === 'delivered' ? svgTick(true, 'var(--pra-dim)')
+    : svgTick(true, '#009bff');
+  return `<span class="bubble-ticks" title="${status[0].toUpperCase() + status.slice(1)}">${svg}</span>`;
+}
+
 function renderBubble(m, convo) {
   const mine = m.senderId === me.id;
   const sender = convo?.participants.find(p => p.id === m.senderId);
@@ -1624,7 +1655,7 @@ function renderBubble(m, convo) {
       <div>
         <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
         ${renderReactionChips(m)}
-        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
       </div>
     </div>`;
   }
@@ -1639,7 +1670,7 @@ function renderBubble(m, convo) {
     <div>
       <div class="bubble-wrap">${mediaDeleteBtn}${content}<button class="react-trigger" title="React">😊</button></div>
       ${renderReactionChips(m)}
-      <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}</div>
+      <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}${readReceiptTicksHtml(m, mine)}</div>
     </div>
   </div>`;
 }

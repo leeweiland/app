@@ -1633,6 +1633,35 @@ function canCreateDm(creator, otherUser) {
 // next signup/role-change to trigger it.
 syncDefaultGroups();
 
+// ── Read receipts (WhatsApp-style: sent / delivered / read) ────────────────
+// "Delivered" is set the moment a recipient's own client actually fetches
+// this message (see the GET /messages handler below, which stamps every
+// non-mine message it returns) — not just when it lands in MESSAGES_FILE,
+// since this is a poll-based app with no push-to-device signal of its own.
+// "Read" reuses the readState timestamp conversations already track for
+// unread-badge counting: a message is read by someone once their own
+// last-read-at for this conversation is at or after the message's
+// createdAt. A group only shows "read" once EVERY other participant has
+// read it (matches the common simplified-group convention rather than
+// per-person granularity, which the UI has no way to surface here anyway).
+// deliveredTo defaults to [] via `m.deliveredTo || []` rather than being
+// set at creation time in each of the several message-creation call
+// sites — one read-side default is simpler than keeping all of them in
+// sync, and functionally identical (nothing reads it before the first
+// GET stamps it anyway).
+function computeMessageStatus(m, convo, users) {
+  const recipients = convo.participantIds.filter(id => id !== m.senderId);
+  if (!recipients.length) return "sent";
+  const delivered = recipients.every(id => (m.deliveredTo || []).includes(id));
+  if (!delivered) return "sent";
+  const read = recipients.every(id => {
+    const u = users.find(x => x.id === id);
+    const lastReadAt = u?.readState?.[convo.id];
+    return lastReadAt && new Date(lastReadAt) >= new Date(m.createdAt);
+  });
+  return read ? "read" : "delivered";
+}
+
 // ── Route handler ────────────────────────────────────────────────────────
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
@@ -2827,9 +2856,32 @@ export async function handleChatRequest(req, res, url) {
       if (sub === "/messages" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit")) || 50;
         const before = url.searchParams.get("before");
-        let msgs = readJson(MESSAGES_FILE, []).filter(m => m.conversationId === convoId);
+        const allMessages = readJson(MESSAGES_FILE, []);
+        let msgs = allMessages.filter(m => m.conversationId === convoId);
         if (before) msgs = msgs.filter(m => new Date(m.createdAt) < new Date(before));
         msgs = msgs.slice(-limit);
+
+        // Read receipts, "delivered" half: this requester's client just
+        // fetched these messages, so anything not their own just reached
+        // them — stamp it. `msgs` holds the SAME object references as
+        // allMessages (filter/slice don't clone), so mutating here and
+        // writing allMessages back persists it correctly.
+        let deliveryChanged = false;
+        msgs.forEach(m => {
+          if (m.senderId === user.id) return;
+          m.deliveredTo = m.deliveredTo || [];
+          if (!m.deliveredTo.includes(user.id)) { m.deliveredTo.push(user.id); deliveryChanged = true; }
+        });
+        if (deliveryChanged) writeJson(MESSAGES_FILE, allMessages);
+
+        // "read" half + the sent/delivered/read status ticks show on your
+        // OWN messages — computed here so the client just renders whatever
+        // this says, rather than re-deriving it from raw deliveredTo/
+        // readState data it would otherwise need every other participant's
+        // user record for.
+        const users = readJson(USERS_FILE, []);
+        msgs = msgs.map(m => m.senderId === user.id ? { ...m, status: computeMessageStatus(m, convo, users) } : m);
+
         return sendJson(res, 200, { messages: msgs });
       }
 
