@@ -241,10 +241,14 @@
   .composer-icon { width: 32px; height: 32px; border-radius: 50%; border: none; flex-shrink: 0; }
   /* iOS Safari sizes a <textarea> by its `cols` attribute (default 20)
      rather than its flex-basis when wrapping text, so long words/lines ran
-     past the pill's right edge instead of wrapping — an explicit width
-     (not just flex:1 + min-width:0, which is enough everywhere else)
-     forces it to actually wrap at the pill's real width. */
-  .composer-textarea { flex: 1; min-width: 0; width: 100%; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
+     past the pill's right edge instead of wrapping. `width: 100%` "fixed"
+     that in testing but, paired with flex:1, made Safari size the whole
+     element by that 100% instead of its actual flexed share — pushing the
+     pill (and the send button after it) past the right edge instead.
+     max-width (a ceiling, not a preferred size) avoids that fight while
+     still capping the runaway intrinsic width; overflow-wrap covers actual
+     unbroken long words/URLs that word-wrap alone won't break. */
+  .composer-textarea { flex: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
   .composer-textarea:focus { outline: none; }
   .composer-send { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, transform .1s; }
   .composer-send svg { width: 17px; height: 17px; }
