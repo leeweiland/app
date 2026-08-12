@@ -18,6 +18,20 @@ workflows:
           npx cap add ios
       - name: Capacitor sync
         script: npx cap sync ios
+      - name: Add Firebase config for push notifications
+        script: |
+          cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
+          gem install xcodeproj --no-document
+          ruby -e "
+            require 'xcodeproj'
+            project_path = 'ios/App/App.xcodeproj'
+            project = Xcodeproj::Project.open(project_path)
+            target = project.targets.first
+            group = project.main_group.find_subpath('App', true)
+            file_ref = group.new_reference('GoogleService-Info.plist')
+            target.add_resources([file_ref])
+            project.save
+          "
       - name: Initialize keychain
         script: keychain initialize
       - name: Fetch signing files
