@@ -297,7 +297,16 @@ function sendJson(res, status, obj) {
 }
 
 // ── Google OAuth (Drive read/write) ─────────────────────────────────────
+// Cached (Google's own expires_in, minus a 5-minute safety margin) instead
+// of exchanging a fresh token on every single call — this token also backs
+// the Range-aware video/image streaming proxy, where a single video being
+// watched or scrubbed triggers many separate requests in quick succession.
+// Without caching, EACH of those paid for a full token-exchange round trip
+// before the actual Drive fetch even started, which is exactly what showed
+// up as a video that looks like it's perpetually loading/re-buffering.
+let driveTokenCache = null; // { token, expiresAt }
 async function getDriveAccessToken() {
+  if (driveTokenCache && driveTokenCache.expiresAt > Date.now()) return driveTokenCache.token;
   const r = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -310,6 +319,8 @@ async function getDriveAccessToken() {
   });
   const d = await r.json();
   if (!d.access_token) throw new Error("Google token refresh failed: " + JSON.stringify(d));
+  const ttlMs = ((d.expires_in || 3600) - 300) * 1000; // 5-minute safety margin
+  driveTokenCache = { token: d.access_token, expiresAt: Date.now() + ttlMs };
   return d.access_token;
 }
 // Same token also covers Sheets + Gmail scopes — reused for both below.
