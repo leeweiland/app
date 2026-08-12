@@ -1716,10 +1716,17 @@ let currentThreadMessages = [];
 function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
+  // The 3s poll (loadConversations -> refreshThread) rebuilds this list's
+  // innerHTML wholesale even when nothing changed, which resets scrollTop
+  // to 0 same as the sidebar's equivalent poll did — if you're not at the
+  // bottom already (reading older history), restore exactly where you
+  // were instead of letting the browser default back to the top.
+  const prevScrollTop = body.scrollTop;
   const convo = conversations.find(c => c.id === activeConvoId);
   currentThreadMessages = messages;
   body.innerHTML = messages.map(m => renderBubble(m, convo)).join('');
   if (forceScrollDown || wasAtBottom) scrollThreadToBottom(body);
+  else body.scrollTop = prevScrollTop;
   updateThreadApptHeader(messages, convo);
 }
 
