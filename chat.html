@@ -1833,7 +1833,17 @@ function scrollThreadToBottom(body) {
     const loaded = el.tagName === 'IMG' ? el.complete : el.readyState >= 1;
     if (loaded) return;
     el.addEventListener(el.tagName === 'IMG' ? 'load' : 'loadedmetadata', () => {
-      body.scrollTop = body.scrollHeight;
+      // Fires whenever ANY not-yet-loaded media in the thread finishes
+      // loading its size — which, now that videos only lazy-load once
+      // actually scrolled into view, could happen long after this call
+      // and long after the user has since scrolled away to read older
+      // history. Only re-snap if they're still sitting at the bottom right
+      // now; otherwise this was yanking them back to the newest message
+      // the moment some video they scrolled past finished loading its
+      // preview frame. Wider margin than the usual 40px "at bottom" check
+      // since the media's own height just changed from a placeholder size.
+      const stillAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 200;
+      if (stillAtBottom) body.scrollTop = body.scrollHeight;
     }, { once: true });
   });
 }
