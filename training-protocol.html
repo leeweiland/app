@@ -241,7 +241,7 @@ function render() {
 
 function renderStepContent(s) {
   if (s.type === 'video') {
-    return `<video data-src="/api/chat/media/${s.driveFileId}" controls preload="metadata" playsinline></video>`;
+    return `<video data-src="/api/chat/media/${s.driveFileId}#t=0.5" controls preload="metadata" playsinline></video>`;
   }
   if (s.type === 'image') {
     return `<div class="step-type">Image</div><img src="/api/chat/media/${s.driveFileId}"/>`;

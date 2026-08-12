@@ -1926,7 +1926,7 @@ function renderBubble(m, convo) {
   const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
   const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
