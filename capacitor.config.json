@@ -5,5 +5,11 @@
   "server": {
     "url": "https://app-production-3c6a1.up.railway.app",
     "cleartext": false
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "resizeOnFullScreen": true
+    }
   }
 }
