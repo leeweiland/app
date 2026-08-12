@@ -83,7 +83,7 @@ function render(moves) {
   grid.innerHTML = moves.map(m => `
     <div class="pra-card move-card" data-id="${m.id}">
       <div class="move-thumb">
-        <video data-src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="none" muted playsinline></video>
+        <video data-src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="metadata" muted playsinline></video>
         <div class="play-icon">▶</div>
       </div>
       <div class="move-info">
