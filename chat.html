@@ -46,6 +46,11 @@
   .convo-actions-row { display: flex; align-items: center; gap: 2px; }
   .convo-unread-badge { background: #39ff14; color: #0a0a0d; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
   .convo-unread-badge.empty { visibility: hidden; }
+  /* A read-receipt tick standing in for the count once there's nothing to
+     count — same slot, but it's not a count, so the green pill background
+     has to go or it'd look like an unread badge that just failed to show
+     a number. */
+  .convo-unread-badge.ticks-only { background: transparent; padding: 0; min-width: 0; height: auto; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
   .convo-preview { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
@@ -180,12 +185,33 @@
   .reaction-chip { font-size: .72rem; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; padding: 1px 7px; cursor: pointer; }
   .reaction-chip.mine { border-color: var(--pra-blue); background: var(--pra-blue-dim); }
 
-  .composer { border-top: 1px solid var(--pra-border); padding: 12px 16px; display: flex; align-items: center; gap: 8px; position: relative; }
-  .composer input[type=text] { flex: 1; }
+  .composer { border-top: 1px solid var(--pra-border); padding: 8px 12px; display: flex; align-items: flex-end; gap: 8px; position: relative; }
   #fileInput { display: none; }
+
+  /* WhatsApp-style pill: icons + growing textarea share one rounded bar,
+     Send lives outside it as its own round button. */
+  .composer-pill { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 22px; padding: 4px 6px; }
+  .composer-icon { width: 32px; height: 32px; border-radius: 50%; border: none; flex-shrink: 0; }
+  .composer-textarea { flex: 1; min-width: 0; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-size: .92rem; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
+  .composer-textarea:focus { outline: none; }
+  .composer-send { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, transform .1s; }
+  .composer-send svg { width: 17px; height: 17px; }
+  .composer-send:hover { background: #0c8ae0; }
+  .composer-send:active { transform: scale(.92); }
 
   /* ── Pickers ── */
   .picker-panel { position: absolute; bottom: 62px; left: 16px; width: 320px; max-height: 340px; overflow-y: auto; z-index: 20; padding: 12px; display: none; }
+  /* Pasted-image staging strip — same floating-above-the-composer approach
+     as the emoji/GIF panels, so pasting doesn't need to restructure the
+     composer's own flex row. Send picks these up alongside (or instead of)
+     typed text; nothing uploads until Send/Enter, matching how Slack/
+     Discord/iMessage handle an image paste rather than firing the upload
+     the instant you paste. */
+  .paste-preview { position: absolute; bottom: 62px; left: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; padding: 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 10px; z-index: 20; }
+  .paste-preview-item { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: #000; flex-shrink: 0; }
+  .paste-preview-item img, .paste-preview-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .paste-preview-remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .paste-preview-remove:hover { background: var(--pra-blue); }
   .picker-panel.show { display: block; }
   .emoji-tabs { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--pra-border); }
   .emoji-tab { flex-shrink: 0; font-size: 1.15rem; padding: 3px 7px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
@@ -379,13 +405,16 @@
         </div>
         <div class="thread-body" id="threadBody"></div>
         <div class="composer">
-          <button class="icon-btn" id="emojiBtn">😊</button>
-          <button class="icon-btn" id="gifBtn">GIF</button>
-          <button class="icon-btn" id="templatesBtn" title="Saved message templates" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 3.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v.5" stroke="#fff" stroke-width="1.6"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn" id="attachBtn">📎</button>
-          <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
-          <input type="text" id="textInput" class="pra-input" placeholder="Type a message…"/>
-          <button class="pra-btn" id="sendBtn">Send</button>
+          <div class="paste-preview" id="pastePreview" style="display:none"></div>
+          <div class="composer-pill">
+            <button class="icon-btn composer-icon" id="emojiBtn">😊</button>
+            <button class="icon-btn composer-icon" id="gifBtn">GIF</button>
+            <button class="icon-btn composer-icon" id="templatesBtn" title="Saved message templates" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 3.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v.5" stroke="#fff" stroke-width="1.6"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <textarea id="textInput" class="composer-textarea" placeholder="Type a message…" rows="1"></textarea>
+            <button class="icon-btn composer-icon" id="attachBtn">📎</button>
+            <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
+          </div>
+          <button class="composer-send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.4 20.4l17.45-8.4a.6.6 0 0 0 0-1.08L3.4 2.52a.6.6 0 0 0-.85.66l2.17 7.02a.6.6 0 0 0 .49.42l8.9 1.3-8.9 1.3a.6.6 0 0 0-.49.42l-2.17 7.1a.6.6 0 0 0 .85.66z" fill="#fff"/></svg></button>
 
           <div class="pra-panel picker-panel" id="emojiPanel">
             <div class="emoji-tabs" id="emojiTabs"></div>
@@ -604,6 +633,11 @@ let favoritedFileIds = new Set();
 let conversations = [];
 let activeConvoId = null;
 let editingMessageId = null;
+// Files pasted (Ctrl+V) into the composer — staged here, not uploaded
+// immediately, so Send/Enter is what actually sends them (matching Slack/
+// Discord/iMessage's paste-then-send convention rather than firing the
+// upload the instant something's pasted).
+let pendingPasteFiles = [];
 let contacts = [];
 let lastPollTime = new Date(0).toISOString();
 let pollTimer = null;
@@ -614,17 +648,35 @@ let reactingMessageId = null;
 // instead of always anchoring to one fixed spot.
 function positionPickerNear(panel, anchorEl) {
   const rect = anchorEl.getBoundingClientRect();
-  const width = 320, height = 340, margin = 8;
-  let left = rect.left;
-  let top = rect.bottom + 6;
-  if (top + height > window.innerHeight - margin) top = Math.max(margin, rect.top - height - 6);
-  left = Math.min(left, window.innerWidth - width - margin);
-  left = Math.max(margin, left);
+  const margin = 8;
+  // visualViewport tracks the keyboard-safe visible area on mobile webviews —
+  // window.innerHeight doesn't shrink when the keyboard opens, so using it
+  // let the panel get positioned (and clipped) behind the keyboard.
+  const vv = window.visualViewport;
+  const vw = vv ? vv.width : window.innerWidth;
+  const vh = vv ? vv.height : window.innerHeight;
+  const vLeft = vv ? vv.offsetLeft : 0;
+  const vTop = vv ? vv.offsetTop : 0;
   panel.style.position = 'fixed';
-  panel.style.top = top + 'px';
-  panel.style.left = left + 'px';
   panel.style.bottom = 'auto';
   panel.style.right = 'auto';
+  panel.style.left = '0px';
+  panel.style.top = '0px';
+  // Measure the panel's actual rendered size instead of assuming a fixed
+  // 320x340 — CSS shrinks it to the container width on narrow screens, and
+  // the stale hardcoded guess is what let it render past the visible edge.
+  panel.style.visibility = 'hidden';
+  panel.classList.add('show');
+  const width = panel.offsetWidth || 320;
+  const height = panel.offsetHeight || 340;
+  panel.style.visibility = '';
+  let left = rect.left - vLeft;
+  let top = rect.bottom - vTop + 6;
+  if (top + height > vTop + vh - margin) top = Math.max(margin, rect.top - vTop - height - 6);
+  left = Math.min(left, vw - width - margin);
+  left = Math.max(margin, left);
+  panel.style.top = top + 'px';
+  panel.style.left = left + 'px';
 }
 
 // Clicking the same trigger that's already open closes it again instead of
@@ -846,6 +898,10 @@ function buildDirectory() {
     hasClient: c.type === 'group' && c.participants.some(p => isClientRole(p.role)),
     unread: !!c.unread,
     unreadCount: c.unreadCount || 0,
+    // Only ever set when the last message was mine (see the backend's
+    // lastMessage.status) — used to show a read-receipt tick in the
+    // unread-count badge's slot once there's nothing left to count.
+    lastMessageStatus: c.lastMessage?.status,
   }));
   const dmContactIds = new Set(
     conversations.filter(c => c.type === 'dm').map(c => otherParticipant(c)?.id)
@@ -892,7 +948,16 @@ function convoItemHtml(i) {
   const channelBtn = `<button class="convo-channel-btn ${i.isChannel ? 'on' : ''}" data-channel-id="${i.convoId || ''}" data-channel-on="${i.isChannel ? '0' : '1'}" title="${i.isChannel ? 'Remove from channels' : 'Mark as channel'}" style="${canToggleChannel ? '' : 'visibility:hidden'}">#</button>`;
   const pinBtn = `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId || ''}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}" style="${i.virtual ? 'visibility:hidden' : ''}">${PIN_ICON}</button>`;
   const favBtn = `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId || ''}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}" style="${i.virtual ? 'visibility:hidden' : ''}">${STAR_ICON}</button>`;
-  const unreadBadge = `<div class="convo-unread-badge${i.unreadCount > 0 ? '' : ' empty'}">${i.unreadCount > 99 ? '99+' : (i.unreadCount || '')}</div>`;
+  // Once there's nothing left to count (you've read everything, or you
+  // sent the last message yourself), the badge's slot doesn't just go
+  // empty — if YOUR last message has a status, its read-receipt tick
+  // takes over that same slot, so "did they read it" is visible at a
+  // glance from the sidebar without opening the thread.
+  const showReceiptTick = i.unreadCount === 0 && i.lastMessageStatus;
+  const unreadBadgeContent = i.unreadCount > 0
+    ? (i.unreadCount > 99 ? '99+' : i.unreadCount)
+    : (showReceiptTick ? readReceiptTicksHtml({ status: i.lastMessageStatus }, true) : '');
+  const unreadBadge = `<div class="convo-unread-badge${(i.unreadCount > 0 || showReceiptTick) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
   const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
   return `
@@ -987,7 +1052,9 @@ function renderConvoList() {
     wrap.innerHTML = `<div class="empty-hint">${msg}</div>`;
     return;
   }
+  const prevScrollTop = wrap.scrollTop;
   wrap.innerHTML = items.map(convoItemHtml).join('');
+  wrap.scrollTop = prevScrollTop;
   wireConvoItems(wrap, items);
 }
 
@@ -1949,8 +2016,41 @@ function setupComposer() {
     fileInput.value = '';
   });
 
+  // Ctrl+V into the message box — an image (a screenshot, a copied photo)
+  // in the clipboard stages it in the preview strip above instead of the
+  // browser's default of dumping raw image data into the text field. Plain
+  // text paste is untouched (no clipboard items with kind:'file' to catch,
+  // so this just returns and the native paste proceeds normally).
+  textInput.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (!files.length) return;
+    e.preventDefault();
+    pendingPasteFiles.push(...files);
+    renderPastePreview();
+  });
+
+  document.getElementById('pastePreview').addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.paste-preview-remove');
+    if (!removeBtn) return;
+    pendingPasteFiles.splice(Number(removeBtn.dataset.index), 1);
+    renderPastePreview();
+  });
+
   sendBtn.onclick = sendText;
-  textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
+  // Enter is a plain newline now (matches the phone keyboard's own return
+  // key on both iOS/Android) — sending only happens via the Send button.
+  textInput.addEventListener('input', () => {
+    textInput.style.height = 'auto';
+    textInput.style.height = textInput.scrollHeight + 'px';
+  });
 
   document.getElementById('searchInput').addEventListener('input', async (e) => {
     const q = e.target.value.trim();
@@ -1979,15 +2079,40 @@ async function loadGifs(q) {
   grid.querySelectorAll('img').forEach(img => img.onclick = () => sendGif(img.dataset.full));
 }
 
+function renderPastePreview() {
+  const el = document.getElementById('pastePreview');
+  if (!pendingPasteFiles.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = pendingPasteFiles.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    const isVideo = f.type.startsWith('video/');
+    const media = isVideo ? `<video src="${url}" muted></video>` : `<img src="${url}"/>`;
+    return `<div class="paste-preview-item">${media}<button class="paste-preview-remove" data-index="${i}" title="Remove">✕</button></div>`;
+  }).join('');
+}
+
 async function sendText() {
   const input = document.getElementById('textInput');
   const text = input.value.trim();
-  if (!text || !activeConvoId) return;
+  if (!activeConvoId || (!text && !pendingPasteFiles.length)) return;
   input.value = '';
-  await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
-  });
-  refreshThread(true);
+  input.style.height = 'auto';
+  // Files first, then the caption as its own message — the multipart
+  // upload path (sendFiles) has no field for accompanying text, so a typed
+  // caption alongside a pasted image just becomes a follow-up text message
+  // instead, same as pasting an image then typing and hitting Enter twice.
+  if (pendingPasteFiles.length) {
+    const files = pendingPasteFiles.slice();
+    pendingPasteFiles = [];
+    renderPastePreview();
+    await sendFiles(files);
+  }
+  if (text) {
+    await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+    });
+    refreshThread(true);
+  }
 }
 
 async function sendGif(url) {

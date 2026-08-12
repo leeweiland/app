@@ -2702,7 +2702,11 @@ export async function handleChatRequest(req, res, url) {
         return {
           ...c,
           participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean),
-          lastMessage: last ? { type: last.type, text: last.text || "", senderId: last.senderId, createdAt: last.createdAt, startISO: last.startISO, durationMinutes: last.durationMinutes, timezone: last.timezone } : null,
+          // status mirrors what the per-thread /messages endpoint attaches
+          // (see computeMessageStatus) — needed here too so the sidebar can
+          // show a read-receipt tick in the unread-count badge's slot for
+          // your own last message, without a separate round-trip per convo.
+          lastMessage: last ? { type: last.type, text: last.text || "", senderId: last.senderId, createdAt: last.createdAt, startISO: last.startISO, durationMinutes: last.durationMinutes, timezone: last.timezone, status: last.senderId === user.id ? computeMessageStatus(last, c, users) : undefined } : null,
           favorite: favoriteIds.has(c.id),
           pinned: pinnedIds.has(c.id),
           unreadCount,
