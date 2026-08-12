@@ -107,6 +107,13 @@
      room to spare. Icons now sit on their own row underneath, so the name
      row gets the full header width. */
   .thread-head { padding: 12px 20px; border-bottom: 1px solid var(--pra-border); display: flex; flex-direction: column; gap: 8px; }
+  /* chat-header.js flips this on <html> whenever any text field is
+     focused, to free up vertical room for the actual conversation while
+     typing — it doesn't know about this bar (it's chat.html's own, not
+     shared chrome), just gives every page a hook to opt into the same
+     behavior. A normal-flow flex child, not position:fixed, so hiding it
+     just lets .thread-body's flex:1 reclaim the space on its own. */
+  html.cah-composing .thread-head { display: none; }
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
