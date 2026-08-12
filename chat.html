@@ -2797,7 +2797,37 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// Native push (Capacitor's PushNotifications plugin, backed by FCM/APNs) —
+// tried first since it's what actually delivers background notifications
+// on iOS/Android; the web-push flow below barely works inside the native
+// app shells (WKWebView in particular doesn't support the Push API the way
+// Safari does) and is really only meant for someone using this page in an
+// actual desktop/mobile browser tab. Capacitor injects `window.Capacitor`
+// into every page it loads — including this one, even though it's fetched
+// live from Railway rather than bundled — so this works with no build step
+// on the web side; only the plugin itself needs the native project synced.
+async function setupNativePush() {
+  if (!window.Capacitor || !Capacitor.isNativePlatform()) return false;
+  const { PushNotifications } = Capacitor.Plugins;
+  if (!PushNotifications) return false;
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'prompt') perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== 'granted') return true; // asked and declined — don't also fall back to the web flow
+    PushNotifications.addListener('registration', (token) => {
+      fetch('/api/chat/push-subscribe-native', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token.value, platform: Capacitor.getPlatform() }),
+      }).catch(() => {});
+    });
+    PushNotifications.addListener('registrationError', (err) => console.warn('native push registration failed', err));
+    await PushNotifications.register();
+  } catch (e) { console.warn('native push setup failed', e); }
+  return true;
+}
+
 async function setupPush() {
+  if (await setupNativePush()) return;
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   // Without an actual registered service worker on this origin, the Push
   // API has nothing to deliver a push event to — navigator.serviceWorker

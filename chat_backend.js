@@ -13,6 +13,7 @@ import { execFileSync } from "child_process";
 import { Readable } from "stream";
 import Busboy from "busboy";
 import webPush from "web-push";
+import admin from "firebase-admin";
 import { JSDOM } from "jsdom";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1545,6 +1546,29 @@ async function getAllDescendantFolderIds(rootId, accessToken) {
 }
 
 // ── Push notifications ──────────────────────────────────────────────────
+// Two kinds of target share PUSH_FILE: `subscription` (browser Web Push,
+// see /push-subscribe) and `nativeToken` (FCM/APNs via Capacitor's
+// PushNotifications plugin, see /push-subscribe-native) — a target only
+// ever has one or the other, dispatched accordingly below.
+
+// Lazy + cached: `undefined` means "haven't tried yet", `null` means "tried
+// and there's no service account configured" (native push silently no-ops
+// rather than erroring every send) — a real app is only ever built once
+// credentials exist.
+let firebaseApp;
+function getFirebaseApp() {
+  if (firebaseApp !== undefined) return firebaseApp;
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) { firebaseApp = null; return null; }
+  try {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  } catch (e) {
+    console.error("[firebase] init failed:", e.message);
+    firebaseApp = null;
+  }
+  return firebaseApp;
+}
+
 async function notifyParticipants(conversationId, excludeUserId, payload) {
   const convos = readJson(CONVOS_FILE, []);
   const convo = convos.find(c => c.id === conversationId);
@@ -1552,13 +1576,25 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
   const subs = readJson(PUSH_FILE, []);
   const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId);
   ensureVapidKeys();
+  const fbApp = getFirebaseApp();
   for (const target of targets) {
     try {
-      await webPush.sendNotification(target.subscription, JSON.stringify(payload));
+      if (target.subscription) {
+        await webPush.sendNotification(target.subscription, JSON.stringify(payload));
+      } else if (target.nativeToken && fbApp) {
+        await admin.messaging(fbApp).send({
+          token: target.nativeToken.token,
+          notification: { title: payload.title, body: payload.body },
+          data: { conversationId: String(payload.conversationId || "") },
+        });
+      }
     } catch (e) {
-      // Subscription likely expired/revoked — drop it silently.
-      if (e.statusCode === 404 || e.statusCode === 410) {
-        const remaining = readJson(PUSH_FILE, []).filter(s => s.subscription.endpoint !== target.subscription.endpoint);
+      // Subscription/token likely expired/revoked — drop it silently.
+      if (target.subscription && (e.statusCode === 404 || e.statusCode === 410)) {
+        const remaining = readJson(PUSH_FILE, []).filter(s => s.subscription?.endpoint !== target.subscription.endpoint);
+        writeJson(PUSH_FILE, remaining);
+      } else if (target.nativeToken && e.code === "messaging/registration-token-not-registered") {
+        const remaining = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== target.nativeToken.token);
         writeJson(PUSH_FILE, remaining);
       }
     }
@@ -2685,8 +2721,20 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/push-subscribe" && req.method === "POST") {
       const { subscription } = await readJsonBody(req);
       if (!subscription) return sendJson(res, 400, { error: "subscription required" });
-      const subs = readJson(PUSH_FILE, []).filter(s => s.subscription.endpoint !== subscription.endpoint);
+      const subs = readJson(PUSH_FILE, []).filter(s => s.subscription?.endpoint !== subscription.endpoint);
       subs.push({ userId: user.id, subscription, createdAt: new Date().toISOString() });
+      writeJson(PUSH_FILE, subs);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // Native push (Capacitor PushNotifications -> FCM/APNs) — same file,
+    // distinguished from a browser Web Push subscription by shape (see
+    // notifyParticipants).
+    if (p === "/api/chat/push-subscribe-native" && req.method === "POST") {
+      const { token, platform } = await readJsonBody(req);
+      if (!token) return sendJson(res, 400, { error: "token required" });
+      const subs = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== token);
+      subs.push({ userId: user.id, nativeToken: { token, platform }, createdAt: new Date().toISOString() });
       writeJson(PUSH_FILE, subs);
       return sendJson(res, 200, { ok: true });
     }

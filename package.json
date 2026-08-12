@@ -18,8 +18,10 @@
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
     "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/push-notifications": "^8.1.2",
     "busboy": "^1.6.0",
     "dotenv": "^17.4.2",
+    "firebase-admin": "^14.2.0",
     "googleapis": "^174.0.1",
     "jsdom": "^29.1.1",
     "web-push": "^3.6.7"
