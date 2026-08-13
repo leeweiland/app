@@ -25,6 +25,14 @@ workflows:
           cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
           cp ios-config/App.entitlements ios/App/App/App.entitlements
           gem install xcodeproj --no-document
+          # A real Unix timestamp instead of $CM_BUILD_NUMBER — that
+          # variable came out empty when this ran (confirmed by the
+          # uploaded build's CFBundleVersion coming out blank, which
+          # altool then rejected outright), so it's either not the right
+          # variable name or not populated at this point in the build.
+          # A timestamp needs no Codemagic-specific variable to exist at
+          # all, and is guaranteed to keep increasing build over build.
+          BUILD_NUMBER=$(date +%s)
           ruby -e "
             require 'xcodeproj'
             project_path = 'ios/App/App.xcodeproj'
@@ -40,10 +48,8 @@ workflows:
               # template every build, which always hardcodes the build
               # number back to 1 — colliding with whatever was uploaded to
               # App Store Connect last time, since Apple requires every
-              # upload to strictly increase. CM_BUILD_NUMBER is Codemagic's
-              # own counter that increments every real build, so using it
-              # here guarantees each upload is actually higher than the last.
-              config.build_settings['CURRENT_PROJECT_VERSION'] = ENV['CM_BUILD_NUMBER']
+              # upload to strictly increase.
+              config.build_settings['CURRENT_PROJECT_VERSION'] = '$BUILD_NUMBER'
             end
             project.save
           "
