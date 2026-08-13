@@ -107,13 +107,6 @@
      room to spare. Icons now sit on their own row underneath, so the name
      row gets the full header width. */
   .thread-head { padding: 12px 20px; border-bottom: 1px solid var(--pra-border); display: flex; flex-direction: column; gap: 8px; }
-  /* chat-header.js flips this on <html> whenever any text field is
-     focused, to free up vertical room for the actual conversation while
-     typing — it doesn't know about this bar (it's chat.html's own, not
-     shared chrome), just gives every page a hook to opt into the same
-     behavior. A normal-flow flex child, not position:fixed, so hiding it
-     just lets .thread-body's flex:1 reclaim the space on its own. */
-  html.cah-composing .thread-head, html.cah-composing #searchBar { display: none; }
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -2285,8 +2278,20 @@ function setupComposer() {
   });
 
   sendBtn.onclick = sendText;
-  // Enter is a plain newline now (matches the phone keyboard's own return
-  // key on both iOS/Android) — sending only happens via the Send button.
+  // Desktop: Enter sends, Shift+Enter inserts a newline (standard chat-app
+  // convention). Mobile keeps its own behavior untouched — Enter/return is
+  // a plain newline there, only the Send button sends — since a phone's
+  // on-screen keyboard has no convenient way to hold Shift while tapping
+  // return. `pointer: coarse` is the standard touch-vs-desktop signal.
+  const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+  if (!isTouchDevice) {
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendText();
+      }
+    });
+  }
   textInput.addEventListener('input', () => {
     textInput.style.height = 'auto';
     textInput.style.height = textInput.scrollHeight + 'px';

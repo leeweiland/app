@@ -450,46 +450,6 @@
     if (navWrapEl) new MutationObserver(reflow).observe(navWrapEl, { childList: true, attributes: true });
     new ResizeObserver(reflow).observe(bar);
     new ResizeObserver(reflow).observe(bottomBar);
-
-    // Hide both fixed bars (and reclaim their reserved space) while a text
-    // field is focused — same behavior iOS ends up with anyway (if a bit
-    // accidentally) once the keyboard pulls a fixed-to-edge bar up over
-    // whatever's being typed, except deliberate here: freeing that space
-    // shows more of the actual conversation while typing, on every
-    // platform. A short debounce on hiding it back in absorbs a click that
-    // briefly blurs the field (e.g. an emoji/attach button) without a
-    // visible flash. Also flips a class on <html> so a page's own chrome
-    // (chat.html's thread-head — name/icons/search bar, not owned by this
-    // shared script) can hide itself the same way via CSS.
-    let barsShowTimer = null;
-    function showBars() {
-      bar.style.display = '';
-      bottomBar.style.display = '';
-      headerSpacer.style.height = bar.getBoundingClientRect().height + 'px';
-      if (bottomBarSpacer) bottomBarSpacer.style.height = bottomBar.getBoundingClientRect().height + 'px';
-      document.documentElement.classList.remove('cah-composing');
-    }
-    function hideBars() {
-      bar.style.display = 'none';
-      bottomBar.style.display = 'none';
-      headerSpacer.style.height = '0';
-      if (bottomBarSpacer) bottomBarSpacer.style.height = '0';
-      document.documentElement.classList.add('cah-composing');
-    }
-    document.addEventListener('focusin', (e) => {
-      if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') return;
-      clearTimeout(barsShowTimer);
-      hideBars();
-    });
-    document.addEventListener('focusout', (e) => {
-      if (e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') return;
-      clearTimeout(barsShowTimer);
-      barsShowTimer = setTimeout(() => {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
-        showBars();
-      }, 120);
-    });
   }
 
   document.addEventListener('DOMContentLoaded', build);
