@@ -6,6 +6,8 @@ workflows:
     integrations:
       app_store_connect: app
     environment:
+      groups:
+        - ios-signing
       node: 22
       xcode: latest
     scripts:
