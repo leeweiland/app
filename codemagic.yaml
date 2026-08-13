@@ -49,14 +49,30 @@ workflows:
         script: keychain initialize
       - name: Fetch signing files
         script: |
-          openssl genrsa -out /tmp/cert_key.pem 2048
-          echo "=== SAVE THIS TO CERTIFICATE_PRIVATE_KEY ENV VAR ==="
-          cat /tmp/cert_key.pem
-          echo "=== END KEY ==="
+          # This used to generate a brand-new key and pass --create on
+          # EVERY build — works exactly once (when no Distribution
+          # certificate exists yet), then fails every build after that with
+          # "you already have a current Distribution certificate", since
+          # Apple only allows one active at a time and a fresh key each run
+          # can never match whichever one already exists. Reusing the same
+          # saved key (once CERTIFICATE_PRIVATE_KEY exists as a Codemagic
+          # env var) lets it fetch that same certificate instead of trying
+          # to create a new one every time.
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "No CERTIFICATE_PRIVATE_KEY set — generating one now (first-time setup only)."
+            openssl genrsa -out /tmp/cert_key.pem 2048
+            echo "=== SAVE THIS TO CERTIFICATE_PRIVATE_KEY ENV VAR IN CODEMAGIC, THEN EVERY FUTURE BUILD REUSES IT ==="
+            cat /tmp/cert_key.pem
+            echo "=== END KEY ==="
+            CREATE_FLAG="--create"
+          else
+            echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
+            CREATE_FLAG=""
+          fi
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
             --certificate-key @file:/tmp/cert_key.pem \
-            --create
+            $CREATE_FLAG
       - name: Add certificates to keychain
         script: keychain add-certificates
       - name: Set up code signing
