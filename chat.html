@@ -20,7 +20,7 @@
      don't scroll with it. A position:fixed body can't be scrolled by
      anything, forcing iOS to rely purely on the 100dvh resize below (which
      already correctly clears the keyboard on its own) instead. */
-  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; height: var(--app-vh, 100dvh); overflow: hidden; display: flex; flex-direction: column; }
   .pra-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .chat-shell { display: flex; flex: 1; min-height: 0; }
   .back-btn { display: none; }
@@ -708,6 +708,23 @@ const EMOJI_CATEGORIES = {
   Travel: ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍️','🛺','🚲','🛴','🚨','🚔','🚍','🚘','🚖','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','🗺️','🧭','🏔️','⛰️','🌋','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🧱','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🕍','🛕','🕋'],
   Objects: ['💪','🎯','🏆','🥇','⚡','🔥','💯','✅','❌','⭐','🌟','✨','💥','💦','💧','🎉','🎊','🎈','🎁','🏅','🎗️','🔔','🔕','📣','📢','💬','🗯️','💭','💤','🕐','📅','📌','📍','🔍','🔎','🔒','🔓','🔑','🛡️','⚔️','🏹','🎪','🎭','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻'],
 };
+
+// Android's WebView doesn't reliably shrink `100dvh` when the on-screen
+// keyboard opens (iOS's WKWebView does) — the composer stayed sized for the
+// full pre-keyboard height and ended up covered by the keyboard/bottom nav.
+// visualViewport.height IS reliably keyboard-aware on both platforms, so
+// mirroring it into a custom property `body` can size off gives Android the
+// same correct behavior iOS already gets from `dvh`, without touching iOS's
+// working path at all (the dvh fallback below only matters before this JS
+// has run, or if visualViewport is ever unsupported).
+(function setupViewportHeightFix() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const apply = () => document.documentElement.style.setProperty('--app-vh', vv.height + 'px');
+  apply();
+  vv.addEventListener('resize', apply);
+  vv.addEventListener('scroll', apply);
+})();
 
 let me = null;
 // originalFileId of every message driveFileId this coach has already
