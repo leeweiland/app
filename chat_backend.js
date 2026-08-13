@@ -1577,6 +1577,15 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
   const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId);
   ensureVapidKeys();
   const fbApp = getFirebaseApp();
+  // This whole path used to fail completely silently — no log for a
+  // misconfigured/missing Firebase credential, none for a send that threw
+  // for a reason other than the two "token is dead, drop it" cases below.
+  // A native push just not arriving looked identical whether the token
+  // never got sent, Firebase rejected it, or it genuinely delivered — this
+  // makes each of those distinguishable from Railway's logs.
+  if (targets.some(t => t.nativeToken) && !fbApp) {
+    console.error("[push] native target(s) present but Firebase isn't configured — check FIREBASE_SERVICE_ACCOUNT_JSON");
+  }
   for (const target of targets) {
     try {
       if (target.subscription) {
@@ -1596,6 +1605,8 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
       } else if (target.nativeToken && e.code === "messaging/registration-token-not-registered") {
         const remaining = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== target.nativeToken.token);
         writeJson(PUSH_FILE, remaining);
+      } else {
+        console.error("[push] send failed for user", target.userId, target.nativeToken ? "(native)" : "(web)", e.code || e.statusCode || e.message);
       }
     }
   }
