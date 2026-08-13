@@ -60,16 +60,26 @@ workflows:
           # saved key (once CERTIFICATE_PRIVATE_KEY exists as a Codemagic
           # env var) lets it fetch that same certificate instead of trying
           # to create a new one every time.
-          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
-            echo "No CERTIFICATE_PRIVATE_KEY set — generating one now (first-time setup only)."
+          if [ -n "$CERTIFICATE_PRIVATE_KEY_B64" ]; then
+            # Base64-encoded is the reliable format here — the plain
+            # CERTIFICATE_PRIVATE_KEY variable's newlines got mangled at
+            # some point (pasting multi-line PEM content into a single-line
+            # env var field is a classic way that happens), which is why
+            # "app-store-connect: error: Not a valid certificate private
+            # key" showed up despite the variable clearly being set.
+            # Base64 has no newlines to lose in the first place.
+            echo "$CERTIFICATE_PRIVATE_KEY_B64" | openssl base64 -d -A -out /tmp/cert_key.pem
+            CREATE_FLAG=""
+          elif [ -n "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
+            CREATE_FLAG=""
+          else
+            echo "No certificate key set — generating one now (first-time setup only)."
             openssl genrsa -out /tmp/cert_key.pem 2048
             echo "=== SAVE THIS TO CERTIFICATE_PRIVATE_KEY ENV VAR IN CODEMAGIC, THEN EVERY FUTURE BUILD REUSES IT ==="
             cat /tmp/cert_key.pem
             echo "=== END KEY ==="
             CREATE_FLAG="--create"
-          else
-            echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
-            CREATE_FLAG=""
           fi
           app-store-connect fetch-signing-files com.pacificrimathleticsapp.app \
             --type IOS_APP_STORE \
