@@ -7,30 +7,35 @@
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
-  .wrap { max-width: 700px; margin: 0 auto; padding: 32px 20px 60px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
   .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .protocol-head { display: flex; align-items: center; gap: 12px; }
   .protocol-head-titles { flex: 1; min-width: 0; }
   .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
-  .steps { position: relative; margin-top: 28px; }
-  .step { position: relative; padding-left: 42px; padding-bottom: 28px; }
-  .step:last-child { padding-bottom: 0; }
-  .step::before { content: ''; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--pra-border); }
-  .step:last-child::before { display: none; }
-  .step-num {
-    position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%;
-    background: var(--pra-blue-dim); border: 1.5px solid var(--pra-blue); color: var(--pra-blue);
-    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .8rem;
-  }
-  .step-card { padding: 16px 18px; position: relative; }
+  /* Node-graph canvas — a main horizontal chain of steps (left to right),
+     with branches (started below any media step) hanging on their own row
+     below the branch point and flowing right with their own steps, same as
+     the trunk. Pan/zoom works the same way users-map.html's world does:
+     wheel/pinch to zoom toward the cursor/pinch midpoint, drag to pan —
+     just implemented as a plain CSS transform on .protocol-world instead of
+     an SVG viewBox crop, since the content here is HTML step cards (video/
+     image/text), not raw SVG shapes. */
+  .protocol-canvas { position: relative; overflow: hidden; touch-action: none; border-radius: 14px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.015); height: calc(100vh - 230px); min-height: 440px; margin-top: 24px; cursor: grab; }
+  .protocol-canvas.dragging { cursor: grabbing; }
+  .protocol-world, .protocol-connectors { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+  .protocol-connectors { overflow: visible; pointer-events: none; }
+  .step-node { position: absolute; width: 260px; }
+  .step-card { padding: 14px 16px; position: relative; }
   .step-type { font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 8px; }
   .step-card video, .step-card img { width: 100%; border-radius: 8px; display: block; background: #000; }
-  .step-card .step-text { font-size: .92rem; line-height: 1.5; white-space: pre-wrap; }
-  .step-delete { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; font-size: 13px; }
+  .step-card .step-text { font-size: .88rem; line-height: 1.5; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+  .step-delete { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
-  .add-step-row { margin-top: 24px; text-align: center; }
-  .add-step-btn { width: 48px; height: 48px; border-radius: 50%; font-size: 1.4rem; line-height: 1; }
+  .step-plus { position: absolute; width: 30px; height: 30px; border-radius: 50%; border: 1.5px dashed var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: border-color .15s, color .15s; }
+  .step-plus:hover { border-color: var(--pra-blue); color: var(--pra-blue); border-style: solid; }
+  .step-plus-right { top: 50%; left: 100%; margin-left: 16px; transform: translateY(-50%); }
+  .step-plus-below { top: 100%; left: 50%; margin-top: 16px; transform: translateX(-50%); }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .88rem; margin-top: 30px; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -84,12 +89,15 @@
       </div>
     </div>
 
-    <div class="steps" id="stepsList"></div>
-    <div class="empty-hint" id="emptyHint" style="display:none">No steps yet.</div>
-    <div class="add-step-row" id="addStepRow" style="display:none">
-      <button class="pra-btn add-step-btn" id="addStepBtn" title="Add a step">+</button>
-      <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
+    <div class="empty-hint" id="emptyHint" style="display:none">
+      No steps yet.
+      <div style="margin-top:14px"><button class="pra-btn" id="addFirstStepBtn" style="display:none">+ Add First Step</button></div>
     </div>
+    <div class="protocol-canvas" id="protocolCanvas" style="display:none">
+      <svg class="protocol-connectors" id="protocolConnectors"></svg>
+      <div class="protocol-world" id="protocolWorld"></div>
+    </div>
+    <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
   </div>
 
   <!-- Step type chooser -->
@@ -166,10 +174,17 @@ const params = new URLSearchParams(location.search);
 const targetUserId = params.get('userId');
 const sourceConvoId = params.get('convo');
 let me = null, canEdit = false, steps = [];
+// Which step (and whether it's a branch) the currently-open "Add a Step"
+// modal will attach the next step to — set right before opening it (see
+// openAddStepModal), consumed once the type-chooser flow actually commits
+// a new step (see commitNewStep).
+let pendingStepTarget = null;
+let canvasInitialized = false;
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function newId() { return 'step_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
 
 async function init() {
   const meRes = await fetch('/api/auth/me');
@@ -183,18 +198,34 @@ async function init() {
   document.getElementById('clientName').textContent = client ? `${client.first} ${client.last}` : 'Unknown client';
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
-  document.getElementById('addStepRow').style.display = canEdit ? 'block' : 'none';
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
 
+  setupCanvasPanZoom();
   await loadSteps();
   wireModals();
+}
+
+// Older protocols were saved as a flat ordered array with no id/parentId —
+// migrate those in place into a single straight chain (no branches) the
+// first time they're loaded, so every existing protocol keeps working
+// exactly as it looked before, just now expressed in the graph shape the
+// rest of this page expects.
+function migrateSteps(raw) {
+  let prevId = null;
+  return raw.map(s => {
+    if (s.id) return s;
+    const id = newId();
+    const migrated = { ...s, id, parentId: prevId, isBranchRoot: false };
+    prevId = id;
+    return migrated;
+  });
 }
 
 async function loadSteps() {
   const r = await fetch('/api/chat/training-protocol/' + targetUserId);
   if (!r.ok) { document.getElementById('emptyHint').textContent = "You don't have access to this."; document.getElementById('emptyHint').style.display = 'block'; return; }
   const d = await r.json();
-  steps = d.steps || [];
+  steps = migrateSteps(d.steps || []);
   render();
 }
 
@@ -217,26 +248,238 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { rootMargin: '400px' });
 
+// One node per box on the trunk/branch grid: `col` is how many steps deep
+// into ITS OWN chain a step is (trunk or branch, each restarts at 0), `row`
+// is which horizontal lane it's drawn on — 0 for the trunk, then a fresh
+// never-reused row number handed out the moment a branch is first
+// encountered walking the trunk (and recursively for any branch-of-a-
+// branch), so nothing on two different chains ever lands on the same row.
+const COL_W = 300, ROW_H = 210;
+function computeLayout(list) {
+  const childrenOf = pid => list.filter(s => s.parentId === pid);
+  const roots = list.filter(s => !s.parentId);
+  const pos = new Map();
+  let nextRow = 0;
+  function walkChain(node, col, row) {
+    let cur = node, c = col;
+    while (cur) {
+      pos.set(cur.id, { col: c, row });
+      const kids = childrenOf(cur.id);
+      const branches = kids.filter(k => k.isBranchRoot);
+      const primary = kids.find(k => !k.isBranchRoot) || null;
+      branches.forEach(b => { nextRow += 1; walkChain(b, c + 1, nextRow); });
+      cur = primary;
+      c++;
+    }
+  }
+  roots.forEach(r => { walkChain(r, 0, nextRow); nextRow += 1; });
+  return pos;
+}
+
+function collectDescendants(id) {
+  const direct = steps.filter(s => s.parentId === id);
+  return direct.flatMap(s => [s, ...collectDescendants(s.id)]);
+}
+
+function openAddStepModal(target) {
+  pendingStepTarget = target;
+  openModal('chooseTypeModal');
+}
+
+async function commitNewStep(fields) {
+  const step = { id: newId(), parentId: pendingStepTarget?.parentId ?? null, isBranchRoot: !!pendingStepTarget?.isBranchRoot, ...fields };
+  steps.push(step);
+  render();
+  await saveSteps();
+  return step;
+}
+
 function render() {
-  const list = document.getElementById('stepsList');
-  document.getElementById('emptyHint').style.display = steps.length ? 'none' : 'block';
-  list.innerHTML = steps.map((s, i) => `
-    <div class="step">
-      <div class="step-num">${i + 1}</div>
-      <div class="pra-panel step-card">
-        ${canEdit ? `<button class="step-delete" data-idx="${i}" title="Remove step">✕</button>` : ''}
-        ${renderStepContent(s)}
+  const emptyHint = document.getElementById('emptyHint');
+  const canvas = document.getElementById('protocolCanvas');
+  const firstBtn = document.getElementById('addFirstStepBtn');
+  firstBtn.style.display = canEdit ? '' : 'none';
+  firstBtn.onclick = () => openAddStepModal({ parentId: null, isBranchRoot: false });
+
+  if (!steps.length) {
+    emptyHint.style.display = 'block';
+    canvas.style.display = 'none';
+    return;
+  }
+  emptyHint.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const world = document.getElementById('protocolWorld');
+  const svg = document.getElementById('protocolConnectors');
+  const pos = computeLayout(steps);
+  let maxCol = 0, maxRow = 0;
+  pos.forEach(p => { maxCol = Math.max(maxCol, p.col); maxRow = Math.max(maxRow, p.row); });
+  const worldW = (maxCol + 1) * COL_W + 60, worldH = (maxRow + 1) * ROW_H + 60;
+  world.style.width = worldW + 'px';
+  world.style.height = worldH + 'px';
+  svg.setAttribute('width', worldW);
+  svg.setAttribute('height', worldH);
+
+  world.innerHTML = steps.map(s => {
+    const p = pos.get(s.id);
+    const left = p.col * COL_W + 20, top = p.row * ROW_H + 20;
+    const isMedia = s.type === 'video' || s.type === 'image';
+    const hasPrimary = steps.some(c => c.parentId === s.id && !c.isBranchRoot);
+    return `
+      <div class="step-node" data-id="${s.id}" style="left:${left}px;top:${top}px">
+        <div class="pra-panel step-card">
+          ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
+          ${renderStepContent(s)}
+        </div>
+        ${canEdit && !hasPrimary ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-branch="0" title="Add next step">+</button>` : ''}
+        ${canEdit && isMedia ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-branch="1" title="Add a branch">+</button>` : ''}
       </div>
-    </div>
-  `).join('');
-  list.querySelectorAll('.step-delete').forEach(btn => {
+    `;
+  }).join('');
+
+  // Real card heights vary with content (a long text step vs. a video) —
+  // connectors are drawn a frame later, once those heights actually exist
+  // in the DOM to measure, instead of guessing one fixed height for every
+  // card and having lines land on the wrong edge.
+  requestAnimationFrame(() => drawConnectors());
+
+  world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
-      steps.splice(Number(btn.dataset.idx), 1);
+      const id = btn.dataset.id;
+      const descendants = collectDescendants(id);
+      if (descendants.length && !confirm(`This step has ${descendants.length} step(s) after it (including any branches). Delete those too?`)) return;
+      const toRemove = new Set([id, ...descendants.map(d => d.id)]);
+      steps = steps.filter(s => !toRemove.has(s.id));
       render();
       await saveSteps();
     };
   });
-  list.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+  world.querySelectorAll('.step-plus').forEach(btn => {
+    btn.onclick = () => openAddStepModal({ parentId: btn.dataset.parent, isBranchRoot: btn.dataset.branch === '1' });
+  });
+  world.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+
+  if (!canvasInitialized) { canvasInitialized = true; fitCanvasToView(); }
+}
+
+function drawConnectors() {
+  const svg = document.getElementById('protocolConnectors');
+  const world = document.getElementById('protocolWorld');
+  const nodeEls = new Map();
+  world.querySelectorAll('.step-node').forEach(el => nodeEls.set(el.dataset.id, el));
+  let paths = '';
+  steps.forEach(s => {
+    const parentEl = nodeEls.get(s.id);
+    if (!parentEl) return;
+    const pLeft = parentEl.offsetLeft, pTop = parentEl.offsetTop, pW = parentEl.offsetWidth, pH = parentEl.offsetHeight;
+    steps.filter(c => c.parentId === s.id).forEach(k => {
+      const childEl = nodeEls.get(k.id);
+      if (!childEl) return;
+      const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop, cH = childEl.offsetHeight;
+      if (k.isBranchRoot) {
+        const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft, y2 = cTop + cH / 2;
+        paths += `<path d="M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
+      } else {
+        const x1 = pLeft + pW, y1 = pTop + pH / 2, x2 = cLeft, y2 = cTop + cH / 2;
+        paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
+      }
+    });
+  });
+  svg.innerHTML = paths;
+}
+
+// Pan (drag/single-finger touch) and zoom (wheel/pinch), same interaction
+// language as users-map.html's world — implemented as a plain CSS
+// translate+scale here instead of an SVG viewBox crop, since this canvas
+// holds real HTML step cards (video/image/text), not SVG shapes.
+let canvasScale = 1, canvasX = 0, canvasY = 0;
+function clampCanvasScale(s) { return Math.min(2.5, Math.max(0.25, s)); }
+function applyCanvasTransform() {
+  const t = `translate(${canvasX}px, ${canvasY}px) scale(${canvasScale})`;
+  document.getElementById('protocolWorld').style.transform = t;
+  document.getElementById('protocolConnectors').style.transform = t;
+}
+function fitCanvasToView() {
+  const canvasEl = document.getElementById('protocolCanvas');
+  const world = document.getElementById('protocolWorld');
+  const rect = canvasEl.getBoundingClientRect();
+  const w = parseFloat(world.style.width) || 1, h = parseFloat(world.style.height) || 1;
+  canvasScale = clampCanvasScale(Math.min(rect.width / w, rect.height / h, 1));
+  canvasX = Math.max(0, (rect.width - w * canvasScale) / 2);
+  canvasY = 24;
+  applyCanvasTransform();
+}
+function setupCanvasPanZoom() {
+  const canvasEl = document.getElementById('protocolCanvas');
+
+  canvasEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvasEl.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const worldX = (mx - canvasX) / canvasScale, worldY = (my - canvasY) / canvasScale;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    canvasScale = clampCanvasScale(canvasScale * factor);
+    canvasX = mx - worldX * canvasScale;
+    canvasY = my - worldY * canvasScale;
+    applyCanvasTransform();
+  }, { passive: false });
+
+  let dragging = false, dragStartX = 0, dragStartY = 0, startCanvasX = 0, startCanvasY = 0;
+  canvasEl.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.step-node')) return; // clicks/drags inside a card behave normally
+    dragging = true;
+    canvasEl.classList.add('dragging');
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    startCanvasX = canvasX; startCanvasY = canvasY;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    canvasX = startCanvasX + (e.clientX - dragStartX);
+    canvasY = startCanvasY + (e.clientY - dragStartY);
+    applyCanvasTransform();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; canvasEl.classList.remove('dragging'); });
+
+  let pinchStartDist = 0, pinchStartScale = 1, touchStartX = 0, touchStartY = 0, touchStartCanvasX = 0, touchStartCanvasY = 0;
+  function touchDist(touches) {
+    return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  }
+  canvasEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      pinchStartDist = touchDist(e.touches); pinchStartScale = canvasScale;
+    } else if (e.touches.length === 1 && !e.target.closest('.step-node')) {
+      touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+      touchStartCanvasX = canvasX; touchStartCanvasY = canvasY;
+    }
+  }, { passive: true });
+  canvasEl.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && pinchStartDist) {
+      e.preventDefault();
+      const rect = canvasEl.getBoundingClientRect();
+      const dist = touchDist(e.touches);
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      const worldX = (midX - canvasX) / canvasScale, worldY = (midY - canvasY) / canvasScale;
+      canvasScale = clampCanvasScale(pinchStartScale * (dist / pinchStartDist));
+      canvasX = midX - worldX * canvasScale;
+      canvasY = midY - worldY * canvasScale;
+      applyCanvasTransform();
+    } else if (e.touches.length === 1 && touchStartX) {
+      e.preventDefault();
+      canvasX = touchStartCanvasX + (e.touches[0].clientX - touchStartX);
+      canvasY = touchStartCanvasY + (e.touches[0].clientY - touchStartY);
+      applyCanvasTransform();
+    }
+  }, { passive: false });
+  canvasEl.addEventListener('touchend', (e) => {
+    pinchStartDist = 0;
+    if (e.touches.length === 0) touchStartX = 0;
+  });
+
+  canvasEl.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.step-node')) return;
+    fitCanvasToView();
+  });
 }
 
 function renderStepContent(s) {
@@ -250,8 +493,6 @@ function renderStepContent(s) {
 }
 
 function wireModals() {
-  document.getElementById('addStepBtn').onclick = () => openModal('chooseTypeModal');
-
   document.getElementById('chooseVideo').onclick = () => {
     closeModal('chooseTypeModal');
     document.getElementById('videoSearchInput').value = '';
@@ -306,9 +547,7 @@ function wireModals() {
       const r = await fetch('/api/chat/training-protocol/upload-video', { method: 'POST', body: fd });
       const d = await r.json();
       if (!r.ok) { msg.textContent = d.error || 'Upload failed.'; return; }
-      steps.push({ type: 'video', driveFileId: d.driveFileId, name: d.name });
-      render();
-      await saveSteps();
+      await commitNewStep({ type: 'video', driveFileId: d.driveFileId, name: d.name });
       msg.textContent = '';
     } catch {
       msg.textContent = 'Upload failed.';
@@ -325,18 +564,14 @@ function wireModals() {
     const r = await fetch('/api/chat/training-protocol/upload-image', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { msg.textContent = d.error || 'Upload failed.'; return; }
-    steps.push({ type: 'image', driveFileId: d.driveFileId });
-    render();
-    await saveSteps();
+    await commitNewStep({ type: 'image', driveFileId: d.driveFileId });
     closeModal('imageModal');
   };
 
   document.getElementById('textStepSaveBtn').onclick = async () => {
     const content = document.getElementById('textStepInput').value.trim();
     if (!content) return;
-    steps.push({ type: 'text', content });
-    render();
-    await saveSteps();
+    await commitNewStep({ type: 'text', content });
     closeModal('textModal');
   };
 }
@@ -376,9 +611,7 @@ function wireVideoResultCards(box) {
     if (el.dataset.wired) return;
     el.dataset.wired = '1';
     el.onclick = async () => {
-      steps.push({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
-      render();
-      await saveSteps();
+      await commitNewStep({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
       closeModal('videoModal');
     };
   });
@@ -452,9 +685,7 @@ async function searchTemplates(q) {
   box.querySelectorAll('.template-item').forEach(row => {
     const t = templates.find(x => x.id === row.dataset.id);
     row.querySelector('.template-item-body').onclick = async () => {
-      steps.push({ type: 'text', content: t.text });
-      render();
-      await saveSteps();
+      await commitNewStep({ type: 'text', content: t.text });
       closeModal('templateModal');
     };
     const delBtn = row.querySelector('.template-delete-btn');
