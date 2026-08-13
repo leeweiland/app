@@ -24,6 +24,11 @@ workflows:
         script: |
           cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
           cp ios-config/App.entitlements ios/App/App/App.entitlements
+          # Declares the app as export-compliance-exempt (standard HTTPS/TLS
+          # only, no custom encryption) so App Store Connect stops flagging
+          # every uploaded build "Missing Compliance" and requiring someone
+          # to manually answer the encryption questionnaire each time.
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
           gem install xcodeproj --no-document
           # A real Unix timestamp instead of $CM_BUILD_NUMBER — that
           # variable came out empty when this ran (confirmed by the
