@@ -104,6 +104,7 @@
       <div class="pra-h2" id="popupName"></div>
       <div id="popupRoleBadge" style="margin-top:4px"></div>
       <div class="pra-muted" id="popupLocation" style="margin-top:6px;font-size:.85rem"></div>
+      <div id="popupEditLink" style="margin-top:6px"></div>
       <div id="popupLevels" style="margin-top:14px;text-align:left"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closePopup()">Close</button>
     </div>
@@ -805,6 +806,7 @@ async function drawUsers() {
 }
 
 let isStaffUser = false;
+let currentUser = null;
 const LEVELS_NUMERIC_CATS = ["NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
 const LEVEL_NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
 function catLabel(c) { return c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase()); }
@@ -831,6 +833,14 @@ function openPopup(u) {
   document.getElementById("popupName").textContent = u.first;
   document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
   document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
+  // Matched by name, same convention findLevelsEntries/nameKey use
+  // server-side — this popup's `u` is a sheet row, not a chat account, so
+  // there's no id to compare against directly.
+  const isSelf = currentUser && u.first?.trim().toLowerCase() === currentUser.first?.trim().toLowerCase()
+    && u.last?.trim().toLowerCase() === currentUser.last?.trim().toLowerCase();
+  document.getElementById("popupEditLink").innerHTML = isSelf
+    ? '<a class="pra-link" href="/chat-app/profile.html" style="font-size:.8rem">Edit my location & profile →</a>'
+    : '';
   renderPopupLevels();
   document.getElementById("popup").classList.add("show");
 }
@@ -1140,6 +1150,7 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
   const meRes = await fetch("/api/auth/me");
   if (!meRes.ok) { location.href = "/chat-app/login.html?next=" + encodeURIComponent(location.pathname); return; }
   const me = (await meRes.json()).user;
+  currentUser = me;
   isStaffUser = me.role === "coach" || me.role === "admin" || me.role === "admin2";
   if (isStaffUser) {
     const refreshBtn = document.getElementById("refreshLevelsBtn");

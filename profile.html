@@ -49,7 +49,18 @@ async function load() {
     const r = await fetch('/api/chat/users/' + viewUserId);
     if (r.ok) viewingUser = (await r.json()).user;
   }
-  render(viewingUser || me, !viewingUser);
+  const target = viewingUser || me;
+  // Location + training personality live on the sheet-backed profile card,
+  // not the local account record — layer them onto whichever user we're
+  // rendering (self or someone else).
+  const cardRes = await fetch('/api/chat/profile/' + target.id);
+  if (cardRes.ok) {
+    const { profile } = await cardRes.json();
+    target.location = profile.location;
+    target.archetypeImage = profile.archetypeImage;
+    target.archetypeTitle = profile.archetypeTitle;
+  }
+  render(target, !viewingUser);
 }
 
 function initials(u) { return ((u.first?.[0]||'') + (u.last?.[0]||'')).toUpperCase(); }
@@ -59,6 +70,10 @@ function avatarHtml(u) {
     : initials(u);
 }
 
+function locationText(u) {
+  return u.location ? [u.location.city, u.location.region, u.location.country].filter(Boolean).join(', ') : '';
+}
+
 function render(u, editable) {
   const card = document.getElementById('profileCard');
   card.innerHTML = `
@@ -66,7 +81,15 @@ function render(u, editable) {
     <div class="pra-h1">${u.first} ${u.last}</div>
     <div class="pra-badge role-badge">${u.role}</div>
 
-    <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">My Levels</div>
+    ${u.archetypeTitle ? `
+    <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">Training Personality</div>
+    <div class="level-chip" style="max-width:none">
+      <span class="cat" style="flex:none">${u.archetypeTitle}</span>
+      ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:32px;height:32px;border-radius:7px;object-fit:cover;margin-left:auto"/>` : ''}
+    </div>
+    ` : ''}
+
+    <div class="section-title" style="${u.archetypeTitle ? '' : 'border-top:none;padding-top:0;'}margin-top:20px">My Levels</div>
     <div id="levelsSection"><div class="pra-muted" style="font-size:.82rem;text-align:left">Loading…</div></div>
 
     <div class="fields">
@@ -78,6 +101,8 @@ function render(u, editable) {
         <input class="pra-input" id="fLast" value="${u.last}" ${editable ? '' : 'disabled'}/></div>
       <div class="field"><label class="pra-label">Phone</label>
         <input class="pra-input" id="fPhone" value="${u.phone||''}" ${editable ? '' : 'disabled'}/></div>
+      <div class="field"><label class="pra-label">Location</label>
+        <input class="pra-input" id="fLocation" placeholder="City, State/Region, Country" value="${locationText(u)}" ${editable ? '' : 'disabled'}/></div>
       ${u.role !== 'user' ? `
       <div class="field"><label class="pra-label">Zoom Link</label>
         <input class="pra-input" id="fZoomLink" placeholder="https://zoom.us/j/..." value="${u.zoomLink||''}" ${editable ? '' : 'disabled'}/></div>
@@ -87,6 +112,7 @@ function render(u, editable) {
         <input type="file" id="picInput" accept="image/*" style="display:none"/>
       ` : ''}
     </div>
+    ${editable ? '<div class="save-msg" id="locationMsg"></div>' : ''}
     ${editable ? `
       <div class="btn-row">
         <button class="pra-btn" id="saveBtn" style="flex:1">SAVE CHANGES</button>
@@ -169,12 +195,22 @@ async function save() {
   fd.append('first', document.getElementById('fFirst').value);
   fd.append('last', document.getElementById('fLast').value);
   fd.append('phone', document.getElementById('fPhone').value);
+  fd.append('location', document.getElementById('fLocation').value);
   const zoomLinkEl = document.getElementById('fZoomLink');
   if (zoomLinkEl) fd.append('zoomLink', zoomLinkEl.value);
   const pic = document.getElementById('picInput').files[0];
   if (pic) fd.append('profilePicture', pic);
   const r = await fetch('/api/auth/update-profile', { method: 'POST', body: fd });
-  if (r.ok) { const d = await r.json(); render(d.user, true); }
+  if (!r.ok) return;
+  const d = await r.json();
+  // update-profile returns the bare account record, not the sheet-derived
+  // location/archetype card — re-run load() so a saved location re-geocodes
+  // and shows immediately instead of reverting to the pre-save value.
+  await load();
+  if (d.locationError) {
+    const msg = document.getElementById('locationMsg');
+    if (msg) msg.textContent = d.locationError;
+  }
 }
 
 load();

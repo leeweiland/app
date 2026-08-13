@@ -600,7 +600,7 @@ async function fetchUsersMapPoints() {
     if (!first) continue;
     const localUser = localUsers.find(u => u.email.toLowerCase() === (email || "").toLowerCase());
     if (localUser?.archived) continue;
-    let geo = ip ? await geolocateIpCached(ip) : null;
+    let geo = localUser?.locationOverride || (ip ? await geolocateIpCached(ip) : null);
     if (!geo && location) geo = await geocodeLocationTextCached(location);
     if (!geo) continue;
 
@@ -685,7 +685,7 @@ async function fetchUserProfileCard(targetUser) {
   if (!row) return card;
   const [, , email, , ip, location, mbtiCode, sheetPersona16p, praPersona, , sheetGender] = row;
 
-  let geo = ip ? await geolocateIpCached(ip) : null;
+  let geo = targetUser.locationOverride || (ip ? await geolocateIpCached(ip) : null);
   if (!geo && location) geo = await geocodeLocationTextCached(location);
   if (geo) card.location = { city: geo.city, region: geo.region, country: geo.country };
 
@@ -739,7 +739,7 @@ async function enrichLevelsPeople(people) {
     };
     if (!row) return enriched;
     const [, , email, , ip, location, mbtiCode, sheetPersona16p, praPersona, , sheetGender] = row;
-    let geo = ip ? await geolocateIpCached(ip) : null;
+    let geo = localUser?.locationOverride || (ip ? await geolocateIpCached(ip) : null);
     if (!geo && location) geo = await geocodeLocationTextCached(location);
     if (geo) enriched.location = { city: geo.city, region: geo.region, country: geo.country };
     const gender = localUser?.gender || (sheetGender || "").toLowerCase() || "male";
@@ -1651,8 +1651,10 @@ function syncDefaultGroups() {
     }
   }
   active.forEach(u => {
-    if (u.role === "user") ensurePersonalGroup(u, "user", adminIds);
-    else if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
+    // Plain "user" accounts (a free/unpaid signup) get no group at all —
+    // only actually becoming an online/gym client creates one, including
+    // every admin/admin2/coach.
+    if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
   });
   writeJson(CONVOS_FILE, convos);
 }
@@ -1917,8 +1919,25 @@ export async function handleChatRequest(req, res, url) {
     if (fields.phone !== undefined) target.phone = fields.phone;
     if (fields.zoomLink !== undefined) target.zoomLink = fields.zoomLink;
     if (newProfilePictureFileId) target.profilePictureFileId = newProfilePictureFileId;
+    // A self-reported location overrides the sheet's IP/text-based geocoding
+    // everywhere it's read (map dot, profile card) — lets someone fix a
+    // wrong auto-detected city, or set one at all if their sheet row has
+    // neither an IP nor a location string. Clearing the field (empty
+    // string) drops back to the automatic sheet-derived location instead
+    // of leaving a stale override in place.
+    let locationError;
+    if (fields.location !== undefined) {
+      const text = fields.location.trim();
+      if (!text) {
+        delete target.locationOverride;
+      } else {
+        const geo = await geocodeLocationTextCached(text);
+        if (geo) target.locationOverride = { text, ...geo };
+        else locationError = "Couldn't find that location — try a city and state/country.";
+      }
+    }
     writeJson(USERS_FILE, users);
-    return sendJson(res, 200, { ok: true, user: publicUser(target) });
+    return sendJson(res, 200, { ok: true, user: publicUser(target), locationError });
   }
 
   // Self-reported IANA timezone (e.g. "America/Denver"), detected client-side
@@ -2331,10 +2350,17 @@ export async function handleChatRequest(req, res, url) {
       try {
         const points = await fetchUsersMapPoints();
         // Levels are internal to staff — a client/user viewer gets every
-        // other field (avatar, role, location, training personality) but
-        // never level data, even about themselves, matching the /levels*
-        // endpoints and levels.html.
-        const visible = isStaff(user) ? points : points.map(({ levels, last, ...rest }) => rest);
+        // other field (avatar, role, location, training personality) for
+        // everyone else, but never someone else's level data. Their own
+        // dot is the one exception: they see their own levels same as an
+        // admin/coach would, matching the self-lookup carve-out on
+        // /api/chat/levels/lookup above.
+        const visible = isStaff(user) ? points : points.map(pt => {
+          const isSelf = nameKey(pt.first, pt.last) === nameKey(user.first, user.last);
+          if (isSelf) return pt;
+          const { levels, last, ...rest } = pt;
+          return rest;
+        });
         return sendJson(res, 200, { points: visible });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
@@ -2482,15 +2508,19 @@ export async function handleChatRequest(req, res, url) {
       }
     }
 
-    // Lookup by arbitrary name — used by the Users Map popup (staff viewers
-    // only — see openPopup() in users-map.html) and by coaches prefilling
-    // the edit-levels panel from chat. Levels are internal, so this is
-    // staff-only like the rest of the /levels surface.
+    // Lookup by arbitrary name — used by the Users Map popup and by coaches
+    // prefilling the edit-levels panel from chat (staff, any name), and by
+    // profile.html's "My Levels" section (any signed-in viewer, own name
+    // only — everyone gets to see their own levels, just never anyone
+    // else's unless they're staff).
     if (p === "/api/chat/levels/lookup" && req.method === "GET") {
-      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const qFirst = url.searchParams.get("first");
+      const qLast = url.searchParams.get("last");
+      const isSelf = nameKey(qFirst, qLast) === nameKey(user.first, user.last);
+      if (!isStaff(user) && !isSelf) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
-        const entries = findLevelsEntries(people, url.searchParams.get("first"), url.searchParams.get("last"));
+        const entries = findLevelsEntries(people, qFirst, qLast);
         return sendJson(res, 200, { entries, categories: LEVELS_CATEGORIES });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
