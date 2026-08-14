@@ -261,6 +261,17 @@
   .composer-send:hover { background: #0c8ae0; }
   .composer-send:active { transform: scale(.92); }
 
+  /* A push notification that arrives while the app is already open never
+     triggers a system notification banner on iOS/Android — that's normal
+     mobile OS behavior, delivered silently to the app's own JS instead —
+     so this is the only visible sign of it without a native rebuild (a
+     real system banner needs @capacitor/local-notifications, a new
+     native dependency). Tapping it jumps straight to that conversation. */
+  .push-toast { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%) translateY(-140%); z-index: 2000; max-width: min(360px, calc(100vw - 24px)); padding: 12px 16px; border-radius: 12px; background: rgba(20,20,26,0.96); border: 1px solid var(--pra-border); box-shadow: 0 8px 24px rgba(0,0,0,0.4); cursor: pointer; transition: transform .25s ease; }
+  .push-toast.show { transform: translateX(-50%) translateY(0); }
+  .push-toast-title { font-weight: 700; font-size: .85rem; margin-bottom: 2px; }
+  .push-toast-body { font-size: .8rem; color: var(--pra-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* ── Pickers ── */
   .picker-panel { position: absolute; bottom: 62px; left: 16px; width: 320px; max-height: 340px; overflow-y: auto; z-index: 20; padding: 12px; display: none; }
   /* Pasted-image staging strip — same floating-above-the-composer approach
@@ -409,6 +420,10 @@
   <script src="/chat-app/chat-header.js"></script>
 
   <div id="pushBanner" class="push-banner" style="display:none">🔔 Turn on notifications for new messages</div>
+  <div id="pushToast" class="push-toast">
+    <div class="push-toast-title" id="pushToastTitle"></div>
+    <div class="push-toast-body" id="pushToastBody"></div>
+  </div>
 
   <div class="chat-shell">
     <div class="sidebar pra-panel" style="border-radius:0">
@@ -2885,9 +2900,36 @@ async function setupNativePush() {
       }).catch(() => {});
     });
     PushNotifications.addListener('registrationError', (err) => console.warn('native push registration failed', err));
+    // Only fires while the app is actually open (foreground) — a
+    // backgrounded/closed app gets the system's own notification banner
+    // automatically from the payload's `notification` block, no JS
+    // involved. This is what makes an in-app arrival visible at all.
+    PushNotifications.addListener('pushNotificationReceived', (n) => {
+      const conversationId = n.data?.conversationId;
+      if (conversationId && conversationId === activeConvoId) {
+        refreshThread(); // already looking at it — just pull the new message in, no toast needed
+      } else {
+        showPushToast(n.title || 'New message', n.body || '', conversationId);
+      }
+      loadConversations();
+    });
     await PushNotifications.register();
   } catch (e) { console.warn('native push setup failed', e); }
   return true;
+}
+
+let pushToastTimer = null;
+function showPushToast(title, body, conversationId) {
+  const toast = document.getElementById('pushToast');
+  document.getElementById('pushToastTitle').textContent = title;
+  document.getElementById('pushToastBody').textContent = body;
+  toast.onclick = () => {
+    toast.classList.remove('show');
+    if (conversationId) openConvo(conversationId);
+  };
+  toast.classList.add('show');
+  clearTimeout(pushToastTimer);
+  pushToastTimer = setTimeout(() => toast.classList.remove('show'), 5000);
 }
 
 async function setupPush() {
