@@ -24,6 +24,14 @@ workflows:
         script: |
           cp ios-config/GoogleService-Info.plist ios/App/App/GoogleService-Info.plist
           cp ios-config/App.entitlements ios/App/App/App.entitlements
+          # npx cap add ios regenerates AppDelegate.swift from Capacitor's
+          # bare template every build, which is missing the two methods
+          # that relay APNs' didRegisterForRemoteNotificationsWithDeviceToken/
+          # didFailToRegisterForRemoteNotificationsWithError callbacks into
+          # Capacitor's NotificationCenter bridge — without them,
+          # PushNotifications.register() resolves but no token/error ever
+          # reaches JS. This copy restores the version with those methods.
+          cp ios-config/AppDelegate.swift ios/App/App/AppDelegate.swift
           # Declares the app as export-compliance-exempt (standard HTTPS/TLS
           # only, no custom encryption) so App Store Connect stops flagging
           # every uploaded build "Missing Compliance" and requiring someone
