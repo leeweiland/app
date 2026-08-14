@@ -70,7 +70,7 @@
       }
       #chat-app-bottom-bar {
         position: fixed;
-        bottom: 0; left: 0; right: 0;
+        bottom: var(--keyboard-inset, 0px); left: 0; right: 0;
         z-index: 500;
         display: flex;
         align-items: center;
@@ -222,7 +222,6 @@
   const ICONS = [
     { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat' },
     { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol' },
-    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body & Move Scan' },
     { href: '/chat-app/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
     { href: '/chat-app/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
     { href: '/chat-app/profile.html', icon: ICON_SVG.profile, title: 'My profile' },
@@ -240,8 +239,29 @@
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
 
+  // On-screen keyboards shrink the VISUAL viewport, but `position: fixed`
+  // elements anchor to the real (layout) viewport unless something tells
+  // them otherwise — on some Android WebView versions #chat-app-bottom-bar
+  // stayed pinned to the true screen bottom while chat.html's composer
+  // (sized off visualViewport directly, see its own --app-vh) correctly
+  // moved up above the keyboard, landing the composer underneath this bar
+  // instead of above it. Driving this bar's `bottom` off the same
+  // visualViewport source keeps both in the same coordinate space.
+  function setupKeyboardInsetTracking() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--keyboard-inset', inset + 'px');
+    };
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+  }
+
   async function build() {
     injectStyles();
+    setupKeyboardInsetTracking();
     const path = location.pathname;
     const bar = document.createElement('div');
     bar.id = 'chat-app-header';
