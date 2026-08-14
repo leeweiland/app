@@ -1611,7 +1611,7 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
           // Android channel ID that doesn't actually exist on the device
           // silently drops the notification entirely, which is worse than
           // omitting it and letting the plugin's own default channel apply.
-          android: { priority: "high", notification: { sound: "default", visibility: "public" } },
+          android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
           apns: { payload: { aps: { sound: "default" } } },
         });
       }
@@ -2840,7 +2840,7 @@ export async function handleChatRequest(req, res, url) {
             token: sub.nativeToken.token,
             notification: { title: "Test push", body: "If you see this, native push works." },
             data: { conversationId: "" },
-            android: { priority: "high", notification: { sound: "default", visibility: "public" } },
+            android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
             apns: { payload: { aps: { sound: "default" } } },
           });
           results.push({ platform: sub.nativeToken.platform, ok: true, messageId: id });
