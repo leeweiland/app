@@ -150,7 +150,25 @@
   .schedule-status-ok { color: #3fb950; }
   .schedule-status-fail { color: #ff3b3b; }
   .gym-slot-btn.on { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  .thread-body-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
   .thread-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; }
+
+  /* Floating "jump to bottom" pill — positioned within .thread-body-wrap
+     rather than .thread-body itself, since an absolutely positioned
+     descendant of the scrolling element would still need scroll-position
+     math to stay put; anchoring to the non-scrolling wrapper instead pins
+     it to the visible bottom-right corner regardless of scroll position or
+     composer height, no JS measurement needed. */
+  .new-msg-pill { position: absolute; bottom: 12px; right: 16px; z-index: 5; display: none; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: none; background: var(--pra-blue); color: #fff; font-size: .8rem; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,0.35); cursor: pointer; }
+  .new-msg-pill.show { display: flex; }
+  .new-msg-pill-arrow { display: inline-block; animation: newMsgPulse 1.1s ease-in-out infinite; }
+  @keyframes newMsgPulse { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+  .typing-bubble { display: flex; align-items: center; gap: 4px; padding: 11px 14px; }
+  .typing-bubble span { width: 6px; height: 6px; border-radius: 50%; background: var(--pra-dim); display: inline-block; animation: typingBounce 1.2s infinite ease-in-out; }
+  .typing-bubble span:nth-child(2) { animation-delay: .15s; }
+  .typing-bubble span:nth-child(3) { animation-delay: .3s; }
+  @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
   .bubble-row { display: flex; gap: 8px; max-width: 62%; }
   .bubble-row.mine { align-self: flex-end; flex-direction: row-reverse; }
   .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; line-height: 1.4; word-break: break-word; }
@@ -491,7 +509,12 @@
           </div>
         </div>
         <div id="searchResults" style="display:none;padding:8px 20px;font-size:.8rem;border-bottom:1px solid var(--pra-border)"></div>
-        <div class="thread-body" id="threadBody"></div>
+        <div class="thread-body-wrap">
+          <div class="thread-body" id="threadBody"></div>
+          <button type="button" class="new-msg-pill" id="newMsgPill">
+            <span class="new-msg-pill-arrow">↓</span> New message
+          </button>
+        </div>
         <div class="msg-more-menu" id="msgMoreMenu">
           <button class="msg-more-menu-item" id="msgMoreReplyBtn">Reply</button>
           <button class="msg-more-menu-item" id="msgMoreForwardBtn">Forward</button>
@@ -1249,6 +1272,8 @@ async function openConvo(id) {
   activeConvoId = id;
   reportActiveConversation();
   lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
+  hideNewMsgPill();
+  document.getElementById('typingIndicatorRow')?.remove(); // belonged to whatever conversation was open before
   document.getElementById('noConvo').style.display = 'none';
   document.getElementById('threadWrap').classList.add('show');
   document.getElementById('searchInput').value = '';
@@ -1796,9 +1821,16 @@ async function refreshThread(scrollDown) {
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages?limit=100');
   const d = await r.json();
   const json = JSON.stringify(d.messages);
-  if (json === lastRenderedMessagesJson && !scrollDown) return;
-  lastRenderedMessagesJson = json;
-  renderMessages(d.messages, scrollDown);
+  if (json !== lastRenderedMessagesJson || scrollDown) {
+    lastRenderedMessagesJson = json;
+    renderMessages(d.messages, scrollDown);
+  }
+  // Independent of the message-diff skip above — the messages list can be
+  // byte-identical between two poll ticks while typing status changes (or
+  // vice versa), and renderMessages's replaceChildren would wipe a
+  // separately-tracked typing row anyway, so this just re-applies fresh
+  // every single tick regardless of what else did or didn't change.
+  renderTypingIndicator(d.typingUserIds || []);
 }
 
 // Referenced by replyQuoteHtml() to look up the original message a reply
@@ -1837,6 +1869,7 @@ function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
   const convo = conversations.find(c => c.id === activeConvoId);
+  const prevLastMessage = currentThreadMessages[currentThreadMessages.length - 1];
   currentThreadMessages = messages;
 
   const existingByMid = new Map();
@@ -1855,9 +1888,60 @@ function renderMessages(messages, forceScrollDown) {
   body.replaceChildren(...finalRows);
 
   body.querySelectorAll('video[data-src]').forEach(v => chatVideoLazyObserver.observe(v));
-  if (forceScrollDown || wasAtBottom) scrollThreadToBottom(body);
+  const newLastMessage = messages[messages.length - 1];
+  if (forceScrollDown || wasAtBottom) {
+    scrollThreadToBottom(body);
+    hideNewMsgPill();
+  } else if (newLastMessage && newLastMessage.id !== prevLastMessage?.id && newLastMessage.senderId !== me.id) {
+    showNewMsgPill();
+  }
   updateThreadApptHeader(messages, convo);
 }
+
+function showNewMsgPill() { document.getElementById('newMsgPill').classList.add('show'); }
+function hideNewMsgPill() { document.getElementById('newMsgPill').classList.remove('show'); }
+document.getElementById('newMsgPill').addEventListener('click', () => {
+  scrollThreadToBottom(document.getElementById('threadBody'));
+  hideNewMsgPill();
+});
+// Also dismiss it if the user scrolls to the bottom themselves rather than
+// tapping the pill.
+document.getElementById('threadBody').addEventListener('scroll', () => {
+  const body = document.getElementById('threadBody');
+  if (body.scrollTop + body.clientHeight >= body.scrollHeight - 40) hideNewMsgPill();
+});
+
+// Rendered as a bare bubble-row (no data-mid, so renderMessages's diffing
+// never touches it) appended fresh as the last child every refreshThread
+// tick — cheap and idempotent, and survives renderMessages's replaceChildren
+// wiping it out on ticks where the message list also changed.
+function renderTypingIndicator(typingUserIds) {
+  const body = document.getElementById('threadBody');
+  const existing = document.getElementById('typingIndicatorRow');
+  if (!typingUserIds.length) { existing?.remove(); return; }
+  const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
+  existing?.remove();
+  const row = document.createElement('div');
+  row.id = 'typingIndicatorRow';
+  row.className = 'bubble-row';
+  row.innerHTML = '<div class="bubble typing-bubble"><span></span><span></span><span></span></div>';
+  body.appendChild(row);
+  if (wasAtBottom) body.scrollTop = body.scrollHeight;
+}
+
+// Pings the server on keystrokes so the other participant(s) see the
+// typing indicator — throttled since the server-side flag self-expires
+// after a few seconds anyway (see TYPING_TTL_MS in chat_backend.js), no
+// need to send one per keystroke.
+let lastTypingPingAt = 0;
+function pingTyping() {
+  if (!activeConvoId) return;
+  const now = Date.now();
+  if (now - lastTypingPingAt < 2000) return;
+  lastTypingPingAt = now;
+  fetch(`/api/chat/conversations/${activeConvoId}/typing`, { method: 'POST' }).catch(() => {});
+}
+document.getElementById('textInput').addEventListener('input', pingTyping);
 
 function updateThreadApptHeader(messages, convo) {
   const el = document.getElementById('threadApptInfo');

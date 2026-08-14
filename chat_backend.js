@@ -1595,6 +1595,25 @@ function isViewingConversation(userId, conversationId) {
   return !!entry && entry.conversationId === conversationId && (Date.now() - entry.updatedAt) < ACTIVE_CONVO_TTL_MS;
 }
 
+// conversationId -> Map<userId, updatedAt> of who's currently typing there.
+// Same self-expiring shape as activeConversations, for the same reason: the
+// client just pings this on keystrokes rather than needing a reliable
+// "stopped typing" event (blur, send, backgrounding — any of which could
+// get missed), and a stale flag can't outlive TYPING_TTL_MS regardless.
+const TYPING_TTL_MS = 4000;
+const typingUsers = new Map();
+function getTypingUserIds(conversationId, excludeUserId) {
+  const entries = typingUsers.get(conversationId);
+  if (!entries) return [];
+  const now = Date.now();
+  const ids = [];
+  for (const [userId, updatedAt] of entries) {
+    if (userId === excludeUserId) continue;
+    if (now - updatedAt < TYPING_TTL_MS) ids.push(userId);
+  }
+  return ids;
+}
+
 async function notifyParticipants(conversationId, excludeUserId, payload) {
   const convos = readJson(CONVOS_FILE, []);
   const convo = convos.find(c => c.id === conversationId);
@@ -3081,6 +3100,12 @@ export async function handleChatRequest(req, res, url) {
         return sendJson(res, 200, { ok: true, conversation: convo });
       }
 
+      if (sub === "/typing" && req.method === "POST") {
+        if (!typingUsers.has(convoId)) typingUsers.set(convoId, new Map());
+        typingUsers.get(convoId).set(user.id, Date.now());
+        return sendJson(res, 200, { ok: true });
+      }
+
       if (sub === "/messages" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit")) || 50;
         const before = url.searchParams.get("before");
@@ -3110,7 +3135,7 @@ export async function handleChatRequest(req, res, url) {
         const users = readJson(USERS_FILE, []);
         msgs = msgs.map(m => m.senderId === user.id ? { ...m, status: computeMessageStatus(m, convo, users) } : m);
 
-        return sendJson(res, 200, { messages: msgs });
+        return sendJson(res, 200, { messages: msgs, typingUserIds: getTypingUserIds(convoId, user.id) });
       }
 
       if (sub === "/messages" && req.method === "POST") {
