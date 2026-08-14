@@ -232,7 +232,14 @@
   .reaction-chip { font-size: .72rem; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; padding: 1px 7px; cursor: pointer; }
   .reaction-chip.mine { border-color: var(--pra-blue); background: var(--pra-blue-dim); }
 
-  .composer { border-top: 1px solid var(--pra-border); padding: 8px 12px; display: flex; align-items: flex-end; gap: 8px; position: relative; }
+  /* The composer used to sit right above #chat-app-bottom-bar, which
+     already had its own safe-area-inset-bottom padding — that gave it a
+     free pass on clearing the home indicator (iOS) / gesture nav bar
+     (Android) without needing any of its own. Now that the bottom bar
+     hides while a conversation is open (see updateHeaderForThreadView),
+     the composer is exposed directly to the raw bottom edge with nothing
+     accounting for that inset anymore — it needs its own now. */
+  .composer { border-top: 1px solid var(--pra-border); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 8px; position: relative; }
   #fileInput { display: none; }
 
   /* WhatsApp-style pill: icons + growing textarea share one rounded bar,
@@ -2949,7 +2956,9 @@ async function setupNativePush() {
       }
       loadConversations();
     });
+    pushDebugToast('Calling register()…');
     await PushNotifications.register();
+    pushDebugToast('register() resolved — waiting on OS/APNs for a token now');
   } catch (e) {
     console.warn('native push setup failed', e);
     pushDebugToast('Setup threw: ' + e.message);

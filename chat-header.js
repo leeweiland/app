@@ -42,8 +42,12 @@
           padding: 10px 12px;
           /* Only phones have a front-camera housing to clear (reported on
              both iOS and Android) — desktop/tablet widths never hit this
-             query, so they stay at the normal 10px padding above. */
-          padding-top: 48px;
+             query, so they stay at the normal 10px padding above. 48px is
+             a reasonable floor for phones with a small/no cutout;
+             env(safe-area-inset-top) takes over and pushes it further on
+             phones with a bigger notch/punch-hole/Dynamic Island than
+             that guess accounts for. */
+          padding-top: max(48px, env(safe-area-inset-top));
         }
         #chat-app-header .cah-label { align-self: center; }
         #chat-app-header .cah-logo { width: 100px; }
