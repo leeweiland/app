@@ -451,7 +451,7 @@
               <div class="thread-appt-row" id="threadApptInfo"></div>
             </div>
           </div>
-          <div class="thread-head-icons">
+          <div class="thread-head-icons" id="threadHeadIconsRow">
             <!-- Mobile only — a long-press on a bubble "selects" it (no
                  hover to reveal inline icons on touch), and these two take
                  over the header's icon row for as long as it's selected,
@@ -463,15 +463,21 @@
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="favoritesBtn" title="My Favorites" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="17.5" cy="6.5" r="1.3" fill="#009bff"/></svg></button>
+            <button class="icon-btn" id="chatSearchToggleBtn" title="Search in this chat"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#fff" stroke-width="1.6"/><path d="M19.5 19.5 15 15" stroke="#009bff" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          </div>
+          <!-- Takes over this same row (instead of a separate always-there
+               search bar underneath) — saves a full row of vertical space,
+               which matters most exactly when it's tightest: a multi-line
+               composer with the on-screen keyboard open. -->
+          <div class="thread-head-icons" id="threadHeadSearchRow" style="display:none">
+            <button class="icon-btn" id="threadSearchCloseBtn" title="Close search">←</button>
+            <div class="search-clear-wrap" style="flex:1">
+              <input class="pra-input" id="searchInput" placeholder="Search in this chat…"/>
+              <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
+            </div>
           </div>
         </div>
-        <div id="searchBar" style="padding:10px 20px;border-bottom:1px solid var(--pra-border)">
-          <div class="search-clear-wrap">
-            <input class="pra-input" id="searchInput" placeholder="Search in this chat…"/>
-            <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
-          </div>
-          <div id="searchResults" style="margin-top:8px;font-size:.8rem"></div>
-        </div>
+        <div id="searchResults" style="display:none;padding:8px 20px;font-size:.8rem;border-bottom:1px solid var(--pra-border)"></div>
         <div class="thread-body" id="threadBody"></div>
         <div class="msg-more-menu" id="msgMoreMenu">
           <button class="msg-more-menu-item" id="msgMoreReplyBtn">Reply</button>
@@ -1201,6 +1207,30 @@ function previewText(m) {
   return m.type === 'video' ? 'Video' : 'Photo';
 }
 
+// A conversation open on a phone-width screen leaves very little vertical
+// room once the keyboard is up too — the persistent app header/bottom nav
+// (logo, map/quiz/levels/shop icons) were eating a real chunk of that,
+// with nowhere for the composer to grow into but behind them. Hides both
+// (WhatsApp-style) while a thread is open specifically on mobile — the
+// conversation's own header already has a back button, so the app-level
+// chrome isn't needed there anyway. Desktop is untouched (plenty of room).
+function updateHeaderForThreadView() {
+  const header = document.getElementById('chat-app-header');
+  const bottomBar = document.getElementById('chat-app-bottom-bar');
+  const headerSpacer = document.getElementById('chat-app-header-spacer');
+  const bottomBarSpacer = document.getElementById('chat-app-bottom-bar-spacer');
+  const root = document.querySelector('.pra-root');
+  if (!header || !bottomBar || !root) return; // chat-header.js hasn't finished injecting yet
+  const isMobile = root.getBoundingClientRect().width <= 768;
+  const threadOpen = document.querySelector('.chat-shell').classList.contains('thread-open');
+  const hide = isMobile && threadOpen;
+  header.style.display = hide ? 'none' : '';
+  bottomBar.style.display = hide ? 'none' : '';
+  if (headerSpacer) headerSpacer.style.display = hide ? 'none' : '';
+  if (bottomBarSpacer) bottomBarSpacer.style.display = hide ? 'none' : '';
+}
+window.addEventListener('resize', updateHeaderForThreadView);
+
 async function openConvo(id) {
   activeConvoId = id;
   lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
@@ -1208,7 +1238,11 @@ async function openConvo(id) {
   document.getElementById('threadWrap').classList.add('show');
   document.getElementById('searchInput').value = '';
   document.getElementById('searchResults').innerHTML = '';
+  document.getElementById('searchResults').style.display = 'none';
+  document.getElementById('threadHeadSearchRow').style.display = 'none';
+  document.getElementById('threadHeadIconsRow').style.display = 'flex';
   document.querySelector('.chat-shell').classList.add('thread-open'); // mobile: swap to the thread panel
+  updateHeaderForThreadView();
   const convo = conversations.find(c => c.id === id);
   const threadAvatarEl = document.getElementById('threadAvatar');
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
@@ -1705,6 +1739,7 @@ function closeConvo() {
   document.querySelector('.chat-shell').classList.remove('thread-open'); // mobile: back to the chat list
   document.getElementById('threadWrap').classList.remove('show');
   document.getElementById('noConvo').style.display = 'flex';
+  updateHeaderForThreadView();
 }
 document.getElementById('backBtn').onclick = closeConvo;
 
@@ -2307,13 +2342,33 @@ function setupComposer() {
   document.getElementById('searchInput').addEventListener('input', async (e) => {
     const q = e.target.value.trim();
     const resultsEl = document.getElementById('searchResults');
-    if (!q) { resultsEl.innerHTML = ''; return; }
+    if (!q) { resultsEl.innerHTML = ''; resultsEl.style.display = 'none'; return; }
+    resultsEl.style.display = 'block';
     const r = await fetch('/api/chat/conversations/' + activeConvoId + '/search?q=' + encodeURIComponent(q));
     const d = await r.json();
     resultsEl.innerHTML = d.messages.length
       ? d.messages.map(m => `<div class="pra-muted" style="padding:4px 0">${escapeHtml(m.text)}</div>`).join('')
       : '<div class="pra-muted">No matches</div>';
   });
+
+  // The search icon takes over the icon row itself (see the HTML comment
+  // by #threadHeadSearchRow) instead of a separate always-visible search
+  // bar — closing it clears whatever was typed/found so reopening always
+  // starts fresh, same as the old bar closing did implicitly by just
+  // scrolling out of view.
+  document.getElementById('chatSearchToggleBtn').onclick = () => {
+    document.getElementById('threadHeadIconsRow').style.display = 'none';
+    document.getElementById('threadHeadSearchRow').style.display = 'flex';
+    document.getElementById('searchInput').focus();
+  };
+  document.getElementById('threadSearchCloseBtn').onclick = () => {
+    document.getElementById('threadHeadSearchRow').style.display = 'none';
+    document.getElementById('threadHeadIconsRow').style.display = 'flex';
+    document.getElementById('searchInput').value = '';
+    const resultsEl = document.getElementById('searchResults');
+    resultsEl.innerHTML = '';
+    resultsEl.style.display = 'none';
+  };
 
   document.getElementById('mediaGalleryBtn').onclick = openMediaGallery;
   document.getElementById('favoritesBtn').onclick = openFavoritesGallery;
@@ -2668,10 +2723,7 @@ document.getElementById('deleteGroupBtn').onclick = async () => {
   const r = await fetch(`/api/chat/conversations/${activeConvoId}`, { method: 'DELETE' });
   if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not delete group.'); return; }
   closeModal('groupInfoModal');
-  activeConvoId = null;
-  document.getElementById('threadWrap').classList.remove('show');
-  document.getElementById('noConvo').style.display = '';
-  document.querySelector('.chat-shell').classList.remove('thread-open');
+  closeConvo();
   await loadConversations();
 };
 
