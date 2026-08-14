@@ -670,8 +670,18 @@ function setupCanvasPanZoom() {
   function touchDist(touches) {
     return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
   }
+  // Real fingers rarely land in the exact same instant — one touches down
+  // first (setting up single-finger pan, since it doesn't yet know a
+  // second is coming), then the second lands a beat later to start the
+  // pinch. If that first finger drifted even a pixel in between, a pan
+  // update could slip in and shift canvasX/Y right before the pinch
+  // anchor gets computed from it — landing the anchor on the wrong point.
+  // Clearing the pan state the moment a 2nd touch appears, and refusing
+  // to apply pan updates once a pinch is active, makes the two paths
+  // mutually exclusive so that race can't happen.
   canvasEl.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
+    if (e.touches.length >= 2) {
+      touchStartX = 0; // a pinch is starting — any pending single-finger pan is void
       pinchStartDist = touchDist(e.touches); pinchStartScale = canvasScale;
       const rect = canvasEl.getBoundingClientRect();
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
@@ -684,7 +694,7 @@ function setupCanvasPanZoom() {
     }
   }, { passive: true });
   canvasEl.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 2 && pinchStartDist) {
+    if (e.touches.length >= 2 && pinchStartDist) {
       e.preventDefault();
       const rect = canvasEl.getBoundingClientRect();
       const dist = touchDist(e.touches);
@@ -694,7 +704,7 @@ function setupCanvasPanZoom() {
       canvasX = midX - pinchAnchorWorldX * canvasScale;
       canvasY = midY - pinchAnchorWorldY * canvasScale;
       applyCanvasTransform();
-    } else if (e.touches.length === 1 && touchStartX) {
+    } else if (e.touches.length === 1 && touchStartX && !pinchStartDist) {
       e.preventDefault();
       canvasX = touchStartCanvasX + (e.touches[0].clientX - touchStartX);
       canvasY = touchStartCanvasY + (e.touches[0].clientY - touchStartY);
