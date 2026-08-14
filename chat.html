@@ -107,6 +107,12 @@
      room to spare. Icons now sit on their own row underneath, so the name
      row gets the full header width. */
   .thread-head { padding: 12px 20px; border-bottom: 1px solid var(--pra-border); display: flex; flex-direction: column; gap: 8px; }
+  /* The app-level header (with its own safe-area-top padding) is hidden
+     while a conversation is open on mobile — see updateHeaderForThreadView
+     — which means THIS becomes the top-most bar on screen at that point,
+     flush against the status bar/camera cutout with no clearance of its
+     own unless it gets the same treatment directly. */
+  .thread-head.no-app-header { padding-top: max(12px, env(safe-area-inset-top)); }
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -1250,6 +1256,7 @@ function updateHeaderForThreadView() {
   bottomBar.style.display = hide ? 'none' : '';
   if (headerSpacer) headerSpacer.style.display = hide ? 'none' : '';
   if (bottomBarSpacer) bottomBarSpacer.style.display = hide ? 'none' : '';
+  document.querySelector('.thread-head')?.classList.toggle('no-app-header', hide);
 }
 window.addEventListener('resize', updateHeaderForThreadView);
 
@@ -2902,24 +2909,12 @@ function urlBase64ToUint8Array(base64String) {
 // PushNotifications.register() resolving doesn't mean the 'registration'
 // event has fired yet (that's a separate, later, real APNs/FCM round
 // trip) — no way to know in advance how long that gap will be.
+// Was an on-screen panel during push-registration debugging (iOS's
+// register() resolving but never getting a token back was confirmed this
+// way) — now that that's answered, console-only so it stops interrupting
+// every launch with something to manually close.
 function pushDebugToast(msg) {
-  if (!isStaffMe()) return;
-  let log = document.getElementById('pushDebugLog');
-  if (!log) {
-    log = document.createElement('div');
-    log.id = 'pushDebugLog';
-    log.style.cssText = 'position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;right:12px;z-index:2000;max-height:60vh;overflow-y:auto;background:rgba(20,20,26,0.96);border:1px solid var(--pra-border);border-radius:12px;padding:10px 12px;font-size:.72rem;font-family:monospace;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.4)';
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ close';
-    closeBtn.style.cssText = 'display:block;margin-bottom:6px;background:none;border:1px solid var(--pra-border);border-radius:6px;color:#fff;font-size:.68rem;padding:2px 8px;cursor:pointer';
-    closeBtn.onclick = () => log.remove();
-    log.appendChild(closeBtn);
-    document.body.appendChild(log);
-  }
-  const line = document.createElement('div');
-  line.style.cssText = 'padding:3px 0;border-top:1px solid rgba(255,255,255,0.08)';
-  line.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
-  log.appendChild(line);
+  console.log('[push debug]', msg);
 }
 
 async function setupNativePush() {
