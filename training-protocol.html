@@ -519,10 +519,10 @@ function drawConnectors() {
         // Drop straight down from the parent's actual bottom edge, then
         // bend once — a clean right-angle elbow, never a diagonal.
         const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft;
-        paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
+        paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="#fff" stroke-width="2"/>`;
       } else {
         const x1 = pLeft + pW, y1 = pTop + CONNECTOR_ANCHOR_Y, x2 = cLeft, y2 = cAnchorY;
-        paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
+        paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="#fff" stroke-width="2"/>`;
       }
     });
   });
