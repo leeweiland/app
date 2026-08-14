@@ -2889,10 +2889,30 @@ function urlBase64ToUint8Array(base64String) {
 // visible without plugging the phone into a computer for remote
 // debugging — iOS has never once saved a token to the backend despite
 // showing the permission prompt, and there's no way to see why without
-// this actually being visible on the device itself.
+// this actually being visible on the device itself. A stacking, manually-
+// dismissed log instead of a self-dismissing toast — the earlier version
+// could replace/hide a later message before it got seen, especially since
+// PushNotifications.register() resolving doesn't mean the 'registration'
+// event has fired yet (that's a separate, later, real APNs/FCM round
+// trip) — no way to know in advance how long that gap will be.
 function pushDebugToast(msg) {
   if (!isStaffMe()) return;
-  showPushToast('Push debug', msg, null);
+  let log = document.getElementById('pushDebugLog');
+  if (!log) {
+    log = document.createElement('div');
+    log.id = 'pushDebugLog';
+    log.style.cssText = 'position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;right:12px;z-index:2000;max-height:60vh;overflow-y:auto;background:rgba(20,20,26,0.96);border:1px solid var(--pra-border);border-radius:12px;padding:10px 12px;font-size:.72rem;font-family:monospace;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.4)';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ close';
+    closeBtn.style.cssText = 'display:block;margin-bottom:6px;background:none;border:1px solid var(--pra-border);border-radius:6px;color:#fff;font-size:.68rem;padding:2px 8px;cursor:pointer';
+    closeBtn.onclick = () => log.remove();
+    log.appendChild(closeBtn);
+    document.body.appendChild(log);
+  }
+  const line = document.createElement('div');
+  line.style.cssText = 'padding:3px 0;border-top:1px solid rgba(255,255,255,0.08)';
+  line.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+  log.appendChild(line);
 }
 
 async function setupNativePush() {
