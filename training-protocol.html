@@ -642,11 +642,15 @@ function setupCanvasPanZoom() {
     applyCanvasTransform();
   }, { passive: false });
 
-  // Only the card's actual interactive controls (buttons, video) need to
-  // keep their own native behavior — everything else on a step card (its
-  // body, text, thumbnail) should still let a drag pan the canvas, so
-  // panning isn't limited to hunting for blank space between nodes.
-  const isInteractiveTarget = (target) => !!target.closest('video, button, input, textarea, select, a');
+  // Only the card's actual interactive controls need to keep their own
+  // native behavior — everything else on a step card (its body, text,
+  // thumbnail, and the video itself) should still let a drag pan the
+  // canvas, so panning isn't limited to hunting for blank space between
+  // nodes. Video is deliberately NOT excluded here: its native play/scrub
+  // controls only appear as an overlay when tapped, so a drag starting
+  // anywhere on the video element itself should pan like the rest of the
+  // card.
+  const isInteractiveTarget = (target) => !!target.closest('button, input, textarea, select, a');
 
   let dragging = false, dragStartX = 0, dragStartY = 0, startCanvasX = 0, startCanvasY = 0;
   canvasEl.addEventListener('mousedown', (e) => {
