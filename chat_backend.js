@@ -1556,6 +1556,7 @@ async function getAllDescendantFolderIds(rootId, accessToken) {
 // rather than erroring every send) — a real app is only ever built once
 // credentials exist.
 let firebaseApp;
+let firebaseInitError = null; // surfaced by /api/chat/push-debug so this doesn't need Railway log access to diagnose
 function getFirebaseApp() {
   if (firebaseApp !== undefined) return firebaseApp;
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) { firebaseApp = null; return null; }
@@ -1564,6 +1565,7 @@ function getFirebaseApp() {
     firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
   } catch (e) {
     console.error("[firebase] init failed:", e.message);
+    firebaseInitError = e.message;
     firebaseApp = null;
   }
   return firebaseApp;
@@ -2790,9 +2792,11 @@ export async function handleChatRequest(req, res, url) {
       const native = subs.filter(s => s.nativeToken);
       const web = subs.filter(s => s.subscription);
       const users = readJson(USERS_FILE, []);
+      const app = getFirebaseApp();
       return sendJson(res, 200, {
-        firebaseConfigured: !!getFirebaseApp(),
+        firebaseConfigured: !!app,
         firebaseServiceAccountEnvVarSet: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        firebaseInitError: app ? null : firebaseInitError,
         totalSubscriptions: subs.length,
         nativeSubscriptions: native.map(s => ({
           user: users.find(u => u.id === s.userId)?.email || s.userId,
