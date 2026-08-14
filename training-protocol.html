@@ -642,9 +642,15 @@ function setupCanvasPanZoom() {
     applyCanvasTransform();
   }, { passive: false });
 
+  // Only the card's actual interactive controls (buttons, video) need to
+  // keep their own native behavior — everything else on a step card (its
+  // body, text, thumbnail) should still let a drag pan the canvas, so
+  // panning isn't limited to hunting for blank space between nodes.
+  const isInteractiveTarget = (target) => !!target.closest('video, button, input, textarea, select, a');
+
   let dragging = false, dragStartX = 0, dragStartY = 0, startCanvasX = 0, startCanvasY = 0;
   canvasEl.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.step-node')) return; // clicks/drags inside a card behave normally
+    if (isInteractiveTarget(e.target)) return; // clicks/drags on card controls behave normally
     dragging = true;
     canvasEl.classList.add('dragging');
     dragStartX = e.clientX; dragStartY = e.clientY;
@@ -688,7 +694,7 @@ function setupCanvasPanZoom() {
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
       pinchAnchorWorldX = (midX - canvasX) / canvasScale;
       pinchAnchorWorldY = (midY - canvasY) / canvasScale;
-    } else if (e.touches.length === 1 && !e.target.closest('.step-node')) {
+    } else if (e.touches.length === 1 && !isInteractiveTarget(e.target)) {
       touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
       touchStartCanvasX = canvasX; touchStartCanvasY = canvasY;
     }
