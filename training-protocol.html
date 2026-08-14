@@ -23,8 +23,12 @@
      image/text), not raw SVG shapes. */
   .protocol-canvas { position: relative; overflow: hidden; touch-action: none; border-radius: 14px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.015); height: calc(100vh - 230px); min-height: 440px; margin-top: 24px; cursor: grab; }
   .protocol-canvas.dragging { cursor: grabbing; }
-  .protocol-world, .protocol-connectors { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
-  .protocol-connectors { overflow: visible; pointer-events: none; }
+  .protocol-world, .protocol-connectors, .protocol-insert-layer { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+  .protocol-connectors, .protocol-insert-layer { overflow: visible; pointer-events: none; }
+  /* Sits on a connector line's midpoint — inserts a new step spliced
+     between the two steps that line already connects. */
+  .step-insert-plus { position: absolute; pointer-events: auto; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; border: 1.5px dashed var(--pra-border); background: rgba(16,16,20,0.85); color: var(--pra-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: .8rem; line-height: 1; transition: border-color .15s, color .15s; }
+  .step-insert-plus:hover { border-color: var(--pra-blue); color: var(--pra-blue); border-style: solid; }
   .step-node { position: absolute; width: 260px; }
   .step-card { padding: 14px 16px; position: relative; }
   .step-type { font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 8px; }
@@ -103,6 +107,7 @@
     <div class="protocol-canvas" id="protocolCanvas" style="display:none">
       <svg class="protocol-connectors" id="protocolConnectors"></svg>
       <div class="protocol-world" id="protocolWorld"></div>
+      <div class="protocol-insert-layer" id="protocolInsertLayer"></div>
     </div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
   </div>
@@ -377,7 +382,26 @@ async function commitBranchStep(parentId) {
   await saveSteps();
 }
 
+// Splices a new step into an existing connector — the new step takes over
+// the old child's exact relationship to the parent (straight continuation
+// or branch-root elbow, whichever the clicked line was), and the old
+// child becomes the new step's own plain continuation, since past the
+// insertion point it's just carrying on the same chain either way.
+async function insertStepBetween(parentId, childId, fields) {
+  const child = steps.find(s => s.id === childId);
+  const step = { id: newId(), parentId, isBranchRoot: child.isBranchRoot, ...fields };
+  child.parentId = step.id;
+  child.isBranchRoot = false;
+  steps.push(step);
+  render();
+  await saveSteps();
+  return step;
+}
+
 async function commitNewStep(fields) {
+  if (pendingStepTarget?.mode === 'insert') {
+    return await insertStepBetween(pendingStepTarget.parentId, pendingStepTarget.childId, fields);
+  }
   // Filling a placeholder branch slot replaces it in place — same
   // parentId/isBranchRoot the empty slot already had — rather than
   // leaving the placeholder behind next to the newly-filled step.
@@ -503,9 +527,10 @@ const CONNECTOR_ANCHOR_Y = 30;
 function drawConnectors() {
   const svg = document.getElementById('protocolConnectors');
   const world = document.getElementById('protocolWorld');
+  const insertLayer = document.getElementById('protocolInsertLayer');
   const nodeEls = new Map();
   world.querySelectorAll('.step-node').forEach(el => nodeEls.set(el.dataset.id, el));
-  let paths = '';
+  let paths = '', inserts = '';
   steps.forEach(s => {
     const parentEl = nodeEls.get(s.id);
     if (!parentEl) return;
@@ -513,6 +538,10 @@ function drawConnectors() {
     steps.filter(c => c.parentId === s.id).forEach(k => {
       const childEl = nodeEls.get(k.id);
       if (!childEl) return;
+      // A step can only be spliced into a real (non-placeholder) chain
+      // link — a placeholder isn't real content yet, and there's nothing
+      // meaningful to insert "before" an empty branch slot.
+      const canInsert = canEdit && k.type !== 'placeholder';
       const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop;
       const cAnchorY = cTop + CONNECTOR_ANCHOR_Y;
       if (k.isBranchRoot) {
@@ -520,13 +549,19 @@ function drawConnectors() {
         // bend once — a clean right-angle elbow, never a diagonal.
         const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft;
         paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="#fff" stroke-width="2"/>`;
+        if (canInsert) inserts += `<button class="step-insert-plus" data-parent="${s.id}" data-child="${k.id}" style="left:${(x1 + x2) / 2}px;top:${cAnchorY}px" title="Insert a step">+</button>`;
       } else {
         const x1 = pLeft + pW, y1 = pTop + CONNECTOR_ANCHOR_Y, x2 = cLeft, y2 = cAnchorY;
         paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="#fff" stroke-width="2"/>`;
+        if (canInsert) inserts += `<button class="step-insert-plus" data-parent="${s.id}" data-child="${k.id}" style="left:${(x1 + x2) / 2}px;top:${y1}px" title="Insert a step">+</button>`;
       }
     });
   });
   svg.innerHTML = paths;
+  insertLayer.innerHTML = inserts;
+  insertLayer.querySelectorAll('.step-insert-plus').forEach(btn => {
+    btn.onclick = () => openAddStepModal({ parentId: btn.dataset.parent, childId: btn.dataset.child, mode: 'insert' });
+  });
 }
 
 // Pan (drag/single-finger touch) and zoom (wheel/pinch), same interaction
@@ -539,6 +574,7 @@ function applyCanvasTransform() {
   const t = `translate(${canvasX}px, ${canvasY}px) scale(${canvasScale})`;
   document.getElementById('protocolWorld').style.transform = t;
   document.getElementById('protocolConnectors').style.transform = t;
+  document.getElementById('protocolInsertLayer').style.transform = t;
 }
 function fitCanvasToView() {
   const canvasEl = document.getElementById('protocolCanvas');
