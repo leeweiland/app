@@ -491,6 +491,15 @@ function render() {
   if (!canvasInitialized) { canvasInitialized = true; fitCanvasToView(); }
 }
 
+// A fixed Y-offset from each row's top, used for every horizontal
+// connector endpoint instead of each card's own vertical center — cards on
+// the same row already share the same top (see render()), but their
+// heights vary a lot (a text note vs. a video), so center-to-center lines
+// went visibly diagonal between two different-height cards on one row.
+// Anchoring to the same offset for everyone on a row keeps every
+// same-row connection perfectly horizontal, and top-alignment is
+// untouched (still just each card's own top).
+const CONNECTOR_ANCHOR_Y = 30;
 function drawConnectors() {
   const svg = document.getElementById('protocolConnectors');
   const world = document.getElementById('protocolWorld');
@@ -504,12 +513,15 @@ function drawConnectors() {
     steps.filter(c => c.parentId === s.id).forEach(k => {
       const childEl = nodeEls.get(k.id);
       if (!childEl) return;
-      const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop, cH = childEl.offsetHeight;
+      const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop;
+      const cAnchorY = cTop + CONNECTOR_ANCHOR_Y;
       if (k.isBranchRoot) {
-        const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft, y2 = cTop + cH / 2;
-        paths += `<path d="M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
+        // Drop straight down from the parent's actual bottom edge, then
+        // bend once — a clean right-angle elbow, never a diagonal.
+        const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft;
+        paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
       } else {
-        const x1 = pLeft + pW, y1 = pTop + pH / 2, x2 = cLeft, y2 = cTop + cH / 2;
+        const x1 = pLeft + pW, y1 = pTop + CONNECTOR_ANCHOR_Y, x2 = cLeft, y2 = cAnchorY;
         paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="var(--pra-border)" stroke-width="2"/>`;
       }
     });
