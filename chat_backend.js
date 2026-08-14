@@ -2780,6 +2780,28 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { ok: true });
     }
 
+    // Staff-only diagnostic — reports whether Firebase is configured and
+    // what's actually saved in PUSH_FILE, without needing Railway log
+    // access at all. Nothing here is sensitive beyond ordinary staff view
+    // (no raw tokens returned, just counts/platform/age).
+    if (p === "/api/chat/push-debug" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
+      const subs = readJson(PUSH_FILE, []);
+      const native = subs.filter(s => s.nativeToken);
+      const web = subs.filter(s => s.subscription);
+      const users = readJson(USERS_FILE, []);
+      return sendJson(res, 200, {
+        firebaseConfigured: !!getFirebaseApp(),
+        firebaseServiceAccountEnvVarSet: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+        totalSubscriptions: subs.length,
+        nativeSubscriptions: native.map(s => ({
+          user: users.find(u => u.id === s.userId)?.email || s.userId,
+          platform: s.nativeToken.platform, createdAt: s.createdAt,
+        })),
+        webSubscriptionCount: web.length,
+      });
+    }
+
     // ─── Conversations ─────────────────────────────────────────────────
     if (p === "/api/chat/conversations" && req.method === "GET") {
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id));
