@@ -347,7 +347,6 @@ function findOwningBranchRoot(step) {
   return null;
 }
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
-function hasBranchChildren(step) { return steps.some(c => c.parentId === step.id && c.isBranchRoot); }
 
 // mode: 'continue' (right-+ on a plain tip) | 'branch-init' (below-+, no
 // branches here yet — offers only "Branch") | 'branch-add' (right-+ on a
@@ -466,7 +465,7 @@ function render() {
           ${renderStepContent(s)}
         </div>
         ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-mode="${rightMode}" data-origin="${owningBranch ? owningBranch.parentId : ''}" title="Add next step">+</button>` : ''}
-        ${canEdit && !hasBranchChildren(s) ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
+        ${canEdit ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
       </div>
     `;
   }).join('');
@@ -660,12 +659,25 @@ function setupCanvasPanZoom() {
   window.addEventListener('mouseup', () => { dragging = false; canvasEl.classList.remove('dragging'); });
 
   let pinchStartDist = 0, pinchStartScale = 1, touchStartX = 0, touchStartY = 0, touchStartCanvasX = 0, touchStartCanvasY = 0;
+  // The world point under the pinch's starting midpoint — fixed once at
+  // gesture start, not recomputed from the live midpoint every touchmove.
+  // Recomputing it every frame (using that frame's own just-updated
+  // canvasX/Y as input to the next) let tiny per-frame rounding compound
+  // over a whole gesture, and any drift in the two fingers' midpoint
+  // shifted which world point was "anchored" mid-gesture — both read as
+  // the view jumping away from wherever the pinch actually started.
+  let pinchAnchorWorldX = 0, pinchAnchorWorldY = 0;
   function touchDist(touches) {
     return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
   }
   canvasEl.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2) {
       pinchStartDist = touchDist(e.touches); pinchStartScale = canvasScale;
+      const rect = canvasEl.getBoundingClientRect();
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      pinchAnchorWorldX = (midX - canvasX) / canvasScale;
+      pinchAnchorWorldY = (midY - canvasY) / canvasScale;
     } else if (e.touches.length === 1 && !e.target.closest('.step-node')) {
       touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
       touchStartCanvasX = canvasX; touchStartCanvasY = canvasY;
@@ -678,10 +690,9 @@ function setupCanvasPanZoom() {
       const dist = touchDist(e.touches);
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-      const worldX = (midX - canvasX) / canvasScale, worldY = (midY - canvasY) / canvasScale;
       canvasScale = clampCanvasScale(pinchStartScale * (dist / pinchStartDist));
-      canvasX = midX - worldX * canvasScale;
-      canvasY = midY - worldY * canvasScale;
+      canvasX = midX - pinchAnchorWorldX * canvasScale;
+      canvasY = midY - pinchAnchorWorldY * canvasScale;
       applyCanvasTransform();
     } else if (e.touches.length === 1 && touchStartX) {
       e.preventDefault();
