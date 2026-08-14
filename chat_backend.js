@@ -1577,22 +1577,30 @@ function getFirebaseApp() {
   return firebaseApp;
 }
 
-// userId -> conversationId currently open on that user's screen (or absent
-// if none/backgrounded). In-memory only — reported live by the client via
-// /api/chat/active-conversation, so it resets harmlessly on a redeploy
-// (worst case: one extra push arrives for a conversation someone's already
-// looking at, until their next report). Lets notifyParticipants skip a
-// push for the one thread a recipient is actually staring at right now,
-// same as WhatsApp/Slack, without suppressing pushes for every other
-// conversation just because the app happens to be open.
+// userId -> {conversationId, updatedAt} for whatever conversation is
+// currently open on that user's screen. In-memory only — reported live by
+// the client via /api/chat/active-conversation, so it resets harmlessly on
+// a redeploy. Entries expire after ACTIVE_CONVO_TTL_MS rather than only
+// clearing on an explicit "closed"/"backgrounded" report — iOS doesn't
+// reliably fire the visibilitychange event a backgrounding app depends on
+// to send that report (confirmed: a real backgrounding left this stuck
+// pointing at a conversation someone was no longer looking at, which
+// silently ate a push that should have gone through). The client also
+// re-reports on an interval while a conversation stays open, so a real,
+// still-open conversation never actually goes stale mid-suppression.
+const ACTIVE_CONVO_TTL_MS = 20000;
 const activeConversations = new Map();
+function isViewingConversation(userId, conversationId) {
+  const entry = activeConversations.get(userId);
+  return !!entry && entry.conversationId === conversationId && (Date.now() - entry.updatedAt) < ACTIVE_CONVO_TTL_MS;
+}
 
 async function notifyParticipants(conversationId, excludeUserId, payload) {
   const convos = readJson(CONVOS_FILE, []);
   const convo = convos.find(c => c.id === conversationId);
   if (!convo) return;
   const subs = readJson(PUSH_FILE, []);
-  const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId && activeConversations.get(s.userId) !== conversationId);
+  const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId && !isViewingConversation(s.userId, conversationId));
   ensureVapidKeys();
   const fbApp = getFirebaseApp();
   // This whole path used to fail completely silently — no log for a
@@ -2827,7 +2835,7 @@ export async function handleChatRequest(req, res, url) {
     // foregrounds) — see activeConversations/notifyParticipants above.
     if (p === "/api/chat/active-conversation" && req.method === "POST") {
       const { conversationId } = await readJsonBody(req);
-      if (conversationId) activeConversations.set(user.id, conversationId);
+      if (conversationId) activeConversations.set(user.id, { conversationId, updatedAt: Date.now() });
       else activeConversations.delete(user.id);
       return sendJson(res, 200, { ok: true });
     }

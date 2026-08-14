@@ -1774,6 +1774,13 @@ function reportActiveConversation() {
   }).catch(() => {});
 }
 document.addEventListener('visibilitychange', reportActiveConversation);
+// The server expires its record of "what you're looking at" after 20s
+// (see ACTIVE_CONVO_TTL_MS) rather than relying only on an explicit
+// close/background report, since iOS doesn't reliably fire
+// visibilitychange when the app backgrounds. This keeps a genuinely
+// still-open conversation's record fresh so that TTL never lapses while
+// you're actually still looking at it.
+setInterval(reportActiveConversation, 10000);
 
 // Set by refreshThread, compared against on the next poll tick — lets it
 // skip re-rendering entirely when the fetch comes back identical (the
