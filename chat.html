@@ -1247,6 +1247,7 @@ window.addEventListener('resize', updateHeaderForThreadView);
 
 async function openConvo(id) {
   activeConvoId = id;
+  reportActiveConversation();
   lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
   document.getElementById('noConvo').style.display = 'none';
   document.getElementById('threadWrap').classList.add('show');
@@ -1750,12 +1751,29 @@ function attachLevelsChipHandlers() {
 
 function closeConvo() {
   activeConvoId = null;
+  reportActiveConversation();
   document.querySelector('.chat-shell').classList.remove('thread-open'); // mobile: back to the chat list
   document.getElementById('threadWrap').classList.remove('show');
   document.getElementById('noConvo').style.display = 'flex';
   updateHeaderForThreadView();
 }
 document.getElementById('backBtn').onclick = closeConvo;
+
+// Tells the server which conversation (if any) is actually on-screen right
+// now, so it can skip push for that one thread without suppressing push
+// for every other conversation just because the app is open (see
+// activeConversations/notifyParticipants in chat_backend.js). Backgrounding
+// counts as "not looking at it" even if a conversation is still technically
+// open in the DOM — matches WhatsApp/Slack, where you still get pushed for
+// a chat you were in if you've switched away from the app entirely.
+function reportActiveConversation() {
+  const effective = (!document.hidden && activeConvoId) ? activeConvoId : null;
+  fetch('/api/chat/active-conversation', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversationId: effective }),
+  }).catch(() => {});
+}
+document.addEventListener('visibilitychange', reportActiveConversation);
 
 // Set by refreshThread, compared against on the next poll tick — lets it
 // skip re-rendering entirely when the fetch comes back identical (the

@@ -1577,12 +1577,22 @@ function getFirebaseApp() {
   return firebaseApp;
 }
 
+// userId -> conversationId currently open on that user's screen (or absent
+// if none/backgrounded). In-memory only — reported live by the client via
+// /api/chat/active-conversation, so it resets harmlessly on a redeploy
+// (worst case: one extra push arrives for a conversation someone's already
+// looking at, until their next report). Lets notifyParticipants skip a
+// push for the one thread a recipient is actually staring at right now,
+// same as WhatsApp/Slack, without suppressing pushes for every other
+// conversation just because the app happens to be open.
+const activeConversations = new Map();
+
 async function notifyParticipants(conversationId, excludeUserId, payload) {
   const convos = readJson(CONVOS_FILE, []);
   const convo = convos.find(c => c.id === conversationId);
   if (!convo) return;
   const subs = readJson(PUSH_FILE, []);
-  const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId);
+  const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId && activeConversations.get(s.userId) !== conversationId);
   ensureVapidKeys();
   const fbApp = getFirebaseApp();
   // This whole path used to fail completely silently — no log for a
@@ -2809,6 +2819,16 @@ export async function handleChatRequest(req, res, url) {
       const subs = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== token);
       subs.push({ userId: user.id, nativeToken: { token, platform }, createdAt: new Date().toISOString() });
       writeJson(PUSH_FILE, subs);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // Reported by the client whenever the conversation it's actively
+    // showing changes (opened, closed, or the app itself backgrounds/
+    // foregrounds) — see activeConversations/notifyParticipants above.
+    if (p === "/api/chat/active-conversation" && req.method === "POST") {
+      const { conversationId } = await readJsonBody(req);
+      if (conversationId) activeConversations.set(user.id, conversationId);
+      else activeConversations.delete(user.id);
       return sendJson(res, 200, { ok: true });
     }
 
