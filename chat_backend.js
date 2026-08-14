@@ -1602,6 +1602,17 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
           token: target.nativeToken.token,
           notification: { title: payload.title, body: payload.body },
           data: { conversationId: String(payload.conversationId || "") },
+          // FCM defaults to "normal" priority with no explicit sound —
+          // Android can silently defer/suppress a normal-priority message
+          // for a backgrounded app (Doze mode, battery optimization), and
+          // no sound field means it may not audibly alert even when shown.
+          // Both are well-documented "server accepted it, device never
+          // surfaced it" causes. Not setting a custom channelId here — an
+          // Android channel ID that doesn't actually exist on the device
+          // silently drops the notification entirely, which is worse than
+          // omitting it and letting the plugin's own default channel apply.
+          android: { priority: "high", notification: { sound: "default", visibility: "public" } },
+          apns: { payload: { aps: { sound: "default" } } },
         });
       }
     } catch (e) {
@@ -2829,6 +2840,8 @@ export async function handleChatRequest(req, res, url) {
             token: sub.nativeToken.token,
             notification: { title: "Test push", body: "If you see this, native push works." },
             data: { conversationId: "" },
+            android: { priority: "high", notification: { sound: "default", visibility: "public" } },
+            apns: { payload: { aps: { sound: "default" } } },
           });
           results.push({ platform: sub.nativeToken.platform, ok: true, messageId: id });
         } catch (e) {

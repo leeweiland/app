@@ -2885,21 +2885,37 @@ function urlBase64ToUint8Array(base64String) {
 // into every page it loads — including this one, even though it's fetched
 // live from Railway rather than bundled — so this works with no build step
 // on the web side; only the plugin itself needs the native project synced.
+// Staff-only, on-screen (not just console.log) so registration outcome is
+// visible without plugging the phone into a computer for remote
+// debugging — iOS has never once saved a token to the backend despite
+// showing the permission prompt, and there's no way to see why without
+// this actually being visible on the device itself.
+function pushDebugToast(msg) {
+  if (!isStaffMe()) return;
+  showPushToast('Push debug', msg, null);
+}
+
 async function setupNativePush() {
   if (!window.Capacitor || !Capacitor.isNativePlatform()) return false;
   const { PushNotifications } = Capacitor.Plugins;
-  if (!PushNotifications) return false;
+  if (!PushNotifications) { pushDebugToast('PushNotifications plugin not found on this build'); return false; }
   try {
     let perm = await PushNotifications.checkPermissions();
     if (perm.receive === 'prompt') perm = await PushNotifications.requestPermissions();
+    pushDebugToast('Permission: ' + perm.receive);
     if (perm.receive !== 'granted') return true; // asked and declined — don't also fall back to the web flow
     PushNotifications.addListener('registration', (token) => {
+      pushDebugToast('Registered, token len ' + (token.value?.length || 0) + ' — posting to server…');
       fetch('/api/chat/push-subscribe-native', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: token.value, platform: Capacitor.getPlatform() }),
-      }).catch(() => {});
+      }).then(r => pushDebugToast(r.ok ? 'Token saved to server ✓' : 'Server rejected token: ' + r.status))
+        .catch(e => pushDebugToast('Failed to POST token: ' + e.message));
     });
-    PushNotifications.addListener('registrationError', (err) => console.warn('native push registration failed', err));
+    PushNotifications.addListener('registrationError', (err) => {
+      console.warn('native push registration failed', err);
+      pushDebugToast('Registration error: ' + (err?.error || JSON.stringify(err)));
+    });
     // Only fires while the app is actually open (foreground) — a
     // backgrounded/closed app gets the system's own notification banner
     // automatically from the payload's `notification` block, no JS
@@ -2914,7 +2930,10 @@ async function setupNativePush() {
       loadConversations();
     });
     await PushNotifications.register();
-  } catch (e) { console.warn('native push setup failed', e); }
+  } catch (e) {
+    console.warn('native push setup failed', e);
+    pushDebugToast('Setup threw: ' + e.message);
+  }
   return true;
 }
 
