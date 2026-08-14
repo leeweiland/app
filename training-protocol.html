@@ -36,6 +36,13 @@
   .step-plus:hover { border-color: var(--pra-blue); color: var(--pra-blue); border-style: solid; }
   .step-plus-right { top: 50%; left: 100%; margin-left: 16px; transform: translateY(-50%); }
   .step-plus-below { top: 100%; left: 50%; margin-top: 16px; transform: translateX(-50%); }
+  /* An empty, not-yet-filled branch slot — just a + in its reserved spot,
+     centered under whichever step it branches off of, no card chrome. */
+  .step-node-placeholder { width: 44px; }
+  .step-placeholder { width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--pra-border); background: rgba(16,16,20,0.4); color: var(--pra-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; transition: border-color .15s, color .15s; }
+  .step-placeholder:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .step-placeholder-delete { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.9); color: var(--pra-dim); font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .step-placeholder-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .88rem; margin-top: 30px; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -110,6 +117,8 @@
         <div class="type-choice" id="chooseImage"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.4" fill="#009bff"/><path d="M5 16l3.2-3.5 2.3 2.3 2.2-2.6L17 16" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/><path d="M19.5 3.5v6M16.8 6.2l2.7-2.7 2.7 2.7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Image</div>
         <div class="type-choice" id="chooseText"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>Text</div>
         <div class="type-choice" id="chooseTemplate"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 14.5l3 3M18.5 14.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Saved Text</div>
+        <div class="type-choice branch-choice" id="chooseBranch" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="6" cy="18" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="18" cy="12" r="2.2" stroke="#009bff" stroke-width="1.6"/><path d="M8 6.6C11 6.6 12 8 12 12s1 5.4 4 5.4M8 6.6h0" stroke="#009bff" stroke-width="1.5"/><path d="M8 17.4C11 17.4 12 16 12 12" stroke="#009bff" stroke-width="1.5"/></svg>Branch</div>
+        <div class="type-choice branch-choice" id="chooseAddBranchStep" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="6" cy="18" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="18" cy="12" r="2.2" stroke="#fff" stroke-width="1.6"/><path d="M8 6.6C11 6.6 12 8 12 12s1 5.4 4 5.4M8 17.4C11 17.4 12 16 12 12" stroke="#fff" stroke-width="1.5"/><path d="M18 8v-3.5M16.3 6.3h3.4" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg>Add Branch Step</div>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('chooseTypeModal')">Cancel</button>
     </div>
@@ -248,31 +257,72 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { rootMargin: '400px' });
 
-// One node per box on the trunk/branch grid: `col` is how many steps deep
-// into ITS OWN chain a step is (trunk or branch, each restarts at 0), `row`
-// is which horizontal lane it's drawn on — 0 for the trunk, then a fresh
-// never-reused row number handed out the moment a branch is first
-// encountered walking the trunk (and recursively for any branch-of-a-
-// branch), so nothing on two different chains ever lands on the same row.
-const COL_W = 300, ROW_H = 210;
+// A branch fan-out needs to reserve real horizontal room, centered under
+// its parent, and every step downstream on the main line has to slide
+// right to clear it — not a fixed integer grid column. Two passes:
+//
+// 1. nodeReach/chainWidth (bottom-up, memoized): how many column-units
+//    wide a node's own branch fan is (or 1, if it has none/is narrower
+//    than one column), and the total width of a node's own chain (itself
+//    plus everything after it via its primary-next link).
+// 2. assignPositions (top-down): walks each chain left to right handing
+//    out `x += nodeReach(node)` per step (so a wide branch fan under an
+//    earlier step pushes every later step on that same line right), and
+//    for any node with branches, centers the whole fan under that node's
+//    own x and recurses into each branch as its own mini chain.
+const COL_W = 300, ROW_H = 210, BRANCH_GAP = 0.25;
+function childrenOf(list, pid) { return list.filter(s => s.parentId === pid); }
+function primaryChildOf(list, node) { return childrenOf(list, node.id).find(k => !k.isBranchRoot) || null; }
+function branchChildrenOf(list, node) { return childrenOf(list, node.id).filter(k => k.isBranchRoot); }
+
 function computeLayout(list) {
-  const childrenOf = pid => list.filter(s => s.parentId === pid);
-  const roots = list.filter(s => !s.parentId);
+  const reachCache = new Map(), widthCache = new Map();
+  function nodeReach(node) {
+    if (reachCache.has(node.id)) return reachCache.get(node.id);
+    const branches = branchChildrenOf(list, node);
+    let reach = 1;
+    if (branches.length) {
+      const total = branches.reduce((sum, b) => sum + chainWidth(b), 0) + (branches.length - 1) * BRANCH_GAP;
+      reach = Math.max(1, total);
+    }
+    reachCache.set(node.id, reach);
+    return reach;
+  }
+  function chainWidth(node) {
+    if (widthCache.has(node.id)) return widthCache.get(node.id);
+    let total = 0, cur = node;
+    while (cur) { total += nodeReach(cur); cur = primaryChildOf(list, cur); }
+    widthCache.set(node.id, total);
+    return total;
+  }
+
   const pos = new Map();
-  let nextRow = 0;
-  function walkChain(node, col, row) {
-    let cur = node, c = col;
+  // `row` is nesting depth, not a monotonic counter — every sibling branch
+  // off the same step shares one row (side by side: left/center/right),
+  // one level below their shared parent's own row. Two unrelated branch
+  // groups can land on the same row number without colliding since the
+  // width-reservation above already keeps their x-ranges apart.
+  function assignPositions(node, leftEdge, row) {
+    let cur = node, x = leftEdge;
     while (cur) {
-      pos.set(cur.id, { col: c, row });
-      const kids = childrenOf(cur.id);
-      const branches = kids.filter(k => k.isBranchRoot);
-      const primary = kids.find(k => !k.isBranchRoot) || null;
-      branches.forEach(b => { nextRow += 1; walkChain(b, c + 1, nextRow); });
-      cur = primary;
-      c++;
+      const r = nodeReach(cur);
+      const centerX = x + r / 2;
+      pos.set(cur.id, { x: centerX, row });
+      const branches = branchChildrenOf(list, cur);
+      if (branches.length) {
+        const widths = branches.map(b => chainWidth(b));
+        const totalW = widths.reduce((a, b) => a + b, 0) + (branches.length - 1) * BRANCH_GAP;
+        let bx = centerX - totalW / 2;
+        branches.forEach((b, i) => {
+          assignPositions(b, bx, row + 1);
+          bx += widths[i] + BRANCH_GAP;
+        });
+      }
+      x += r;
+      cur = primaryChildOf(list, cur);
     }
   }
-  roots.forEach(r => { walkChain(r, 0, nextRow); nextRow += 1; });
+  list.filter(s => !s.parentId).forEach(r => assignPositions(r, 0, 0));
   return pos;
 }
 
@@ -281,12 +331,58 @@ function collectDescendants(id) {
   return direct.flatMap(s => [s, ...collectDescendants(s.id)]);
 }
 
+// Walks up parentId links to find the branch-root ancestor a step belongs
+// to (null if it's never inside a branch — i.e. lives on the main trunk).
+function findOwningBranchRoot(step) {
+  let cur = step;
+  while (cur) {
+    if (cur.isBranchRoot) return cur;
+    cur = steps.find(s => s.id === cur.parentId) || null;
+  }
+  return null;
+}
+function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
+function hasBranchChildren(step) { return steps.some(c => c.parentId === step.id && c.isBranchRoot); }
+
+// mode: 'continue' (right-+ on a plain tip) | 'branch-init' (below-+, no
+// branches here yet — offers only "Branch") | 'branch-add' (right-+ on a
+// tip that's part of some branch — offers normal content types to extend
+// THIS chain, plus "Add Branch Step" to add a new sibling back at the
+// origin) | 'fill-placeholder' (clicking an empty branch slot — normal
+// content types only, replaces the placeholder in place).
 function openAddStepModal(target) {
   pendingStepTarget = target;
+  const contentIds = ['chooseVideo', 'chooseUploadVideo', 'chooseImage', 'chooseText', 'chooseTemplate'];
+  const showContent = target.mode !== 'branch-init';
+  contentIds.forEach(id => { document.getElementById(id).style.display = showContent ? '' : 'none'; });
+  document.getElementById('chooseBranch').style.display = target.mode === 'branch-init' ? '' : 'none';
+  document.getElementById('chooseAddBranchStep').style.display = target.mode === 'branch-add' ? '' : 'none';
   openModal('chooseTypeModal');
 }
 
+// "Branch" — the first time a step branches, it gets 2 empty placeholder
+// slots at once (just a + each, no content picker), centered under it.
+async function commitBranchPair(parentId) {
+  steps.push({ id: newId(), type: 'placeholder', parentId, isBranchRoot: true });
+  steps.push({ id: newId(), type: 'placeholder', parentId, isBranchRoot: true });
+  render();
+  await saveSteps();
+}
+// "Add Branch Step" — one more empty sibling slot added to an existing
+// branch fan (used once a branch point already has branches).
+async function commitBranchStep(parentId) {
+  steps.push({ id: newId(), type: 'placeholder', parentId, isBranchRoot: true });
+  render();
+  await saveSteps();
+}
+
 async function commitNewStep(fields) {
+  // Filling a placeholder branch slot replaces it in place — same
+  // parentId/isBranchRoot the empty slot already had — rather than
+  // leaving the placeholder behind next to the newly-filled step.
+  if (pendingStepTarget?.mode === 'fill-placeholder' && pendingStepTarget.placeholderId) {
+    steps = steps.filter(s => s.id !== pendingStepTarget.placeholderId);
+  }
   const step = { id: newId(), parentId: pendingStepTarget?.parentId ?? null, isBranchRoot: !!pendingStepTarget?.isBranchRoot, ...fields };
   steps.push(step);
   render();
@@ -299,7 +395,7 @@ function render() {
   const canvas = document.getElementById('protocolCanvas');
   const firstBtn = document.getElementById('addFirstStepBtn');
   firstBtn.style.display = canEdit ? '' : 'none';
-  firstBtn.onclick = () => openAddStepModal({ parentId: null, isBranchRoot: false });
+  firstBtn.onclick = () => openAddStepModal({ parentId: null, isBranchRoot: false, mode: 'continue' });
 
   if (!steps.length) {
     emptyHint.style.display = 'block';
@@ -312,9 +408,9 @@ function render() {
   const world = document.getElementById('protocolWorld');
   const svg = document.getElementById('protocolConnectors');
   const pos = computeLayout(steps);
-  let maxCol = 0, maxRow = 0;
-  pos.forEach(p => { maxCol = Math.max(maxCol, p.col); maxRow = Math.max(maxRow, p.row); });
-  const worldW = (maxCol + 1) * COL_W + 60, worldH = (maxRow + 1) * ROW_H + 60;
+  let maxX = 0, maxRow = 0;
+  pos.forEach(p => { maxX = Math.max(maxX, p.x); maxRow = Math.max(maxRow, p.row); });
+  const worldW = (maxX + 1) * COL_W + 60, worldH = (maxRow + 1) * ROW_H + 60;
   world.style.width = worldW + 'px';
   world.style.height = worldH + 'px';
   svg.setAttribute('width', worldW);
@@ -322,17 +418,30 @@ function render() {
 
   world.innerHTML = steps.map(s => {
     const p = pos.get(s.id);
-    const left = p.col * COL_W + 20, top = p.row * ROW_H + 20;
-    const isMedia = s.type === 'video' || s.type === 'image';
-    const hasPrimary = steps.some(c => c.parentId === s.id && !c.isBranchRoot);
+    const slotCenter = p.x * COL_W + 20, top = p.row * ROW_H + 20;
+    if (s.type === 'placeholder') {
+      // Bare + (no card chrome) sitting centered in its reserved slot —
+      // clicking it opens the normal content picker to fill it in.
+      const left = slotCenter - 22;
+      return `
+        <div class="step-node step-node-placeholder" data-id="${s.id}" style="left:${left}px;top:${top}px">
+          <button class="step-placeholder" data-id="${s.id}" title="Fill this branch step">+</button>
+          ${canEdit ? `<button class="step-placeholder-delete" data-id="${s.id}" title="Remove">✕</button>` : ''}
+        </div>
+      `;
+    }
+    const left = slotCenter - 130; // center the 260px card within its slot
+    const owningBranch = findOwningBranchRoot(s);
+    const isTip = !hasPrimaryChild(s);
+    const rightMode = owningBranch ? 'branch-add' : 'continue';
     return `
       <div class="step-node" data-id="${s.id}" style="left:${left}px;top:${top}px">
         <div class="pra-panel step-card">
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
           ${renderStepContent(s)}
         </div>
-        ${canEdit && !hasPrimary ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-branch="0" title="Add next step">+</button>` : ''}
-        ${canEdit && isMedia ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-branch="1" title="Add a branch">+</button>` : ''}
+        ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-mode="${rightMode}" data-origin="${owningBranch ? owningBranch.parentId : ''}" title="Add next step">+</button>` : ''}
+        ${canEdit && !hasBranchChildren(s) ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
       </div>
     `;
   }).join('');
@@ -355,7 +464,26 @@ function render() {
     };
   });
   world.querySelectorAll('.step-plus').forEach(btn => {
-    btn.onclick = () => openAddStepModal({ parentId: btn.dataset.parent, isBranchRoot: btn.dataset.branch === '1' });
+    btn.onclick = () => {
+      const mode = btn.dataset.mode, parentId = btn.dataset.parent;
+      if (mode === 'branch-init') openAddStepModal({ parentId, isBranchRoot: true, mode });
+      else if (mode === 'branch-add') openAddStepModal({ parentId, isBranchRoot: false, mode, originId: btn.dataset.origin });
+      else openAddStepModal({ parentId, isBranchRoot: false, mode: 'continue' });
+    };
+  });
+  world.querySelectorAll('.step-placeholder').forEach(btn => {
+    btn.onclick = () => {
+      const ph = steps.find(s => s.id === btn.dataset.id);
+      if (ph) openAddStepModal({ parentId: ph.parentId, isBranchRoot: true, mode: 'fill-placeholder', placeholderId: ph.id });
+    };
+  });
+  world.querySelectorAll('.step-placeholder-delete').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      steps = steps.filter(s => s.id !== btn.dataset.id);
+      render();
+      await saveSteps();
+    };
   });
   world.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
 
@@ -521,6 +649,14 @@ function wireModals() {
     document.getElementById('templateSearchInput').value = '';
     openModal('templateModal');
     searchTemplates('');
+  };
+  document.getElementById('chooseBranch').onclick = async () => {
+    closeModal('chooseTypeModal');
+    await commitBranchPair(pendingStepTarget.parentId);
+  };
+  document.getElementById('chooseAddBranchStep').onclick = async () => {
+    closeModal('chooseTypeModal');
+    await commitBranchStep(pendingStepTarget.originId);
   };
 
   let templateSearchTimer;
