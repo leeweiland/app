@@ -2811,6 +2811,33 @@ export async function handleChatRequest(req, res, url) {
       });
     }
 
+    // Sends a real push straight to every native token the CALLING user
+    // has registered and reports exactly what Firebase said for each —
+    // skips needing a second account, a real conversation, and Railway
+    // log access just to see why a send is failing.
+    if (p === "/api/chat/push-debug/test-send" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
+      const fbApp = getFirebaseApp();
+      if (!fbApp) return sendJson(res, 400, { error: "Firebase isn't configured", firebaseInitError });
+      const subs = readJson(PUSH_FILE, []);
+      const mine = subs.filter(s => s.userId === user.id && s.nativeToken);
+      if (!mine.length) return sendJson(res, 400, { error: "No native token registered for you — open the app and grant notification permission first" });
+      const results = [];
+      for (const sub of mine) {
+        try {
+          const id = await getMessaging(fbApp).send({
+            token: sub.nativeToken.token,
+            notification: { title: "Test push", body: "If you see this, native push works." },
+            data: { conversationId: "" },
+          });
+          results.push({ platform: sub.nativeToken.platform, ok: true, messageId: id });
+        } catch (e) {
+          results.push({ platform: sub.nativeToken.platform, ok: false, code: e.code, message: e.message });
+        }
+      }
+      return sendJson(res, 200, { results });
+    }
+
     // ─── Conversations ─────────────────────────────────────────────────
     if (p === "/api/chat/conversations" && req.method === "GET") {
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id));
