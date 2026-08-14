@@ -20,6 +20,7 @@ import webPush from "web-push";
 import admin from "firebase-admin";
 import { getMessaging } from "firebase-admin/messaging";
 import { JSDOM } from "jsdom";
+import { sendApnsPush, apnsConfigured } from "./apns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1590,13 +1591,24 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
   // A native push just not arriving looked identical whether the token
   // never got sent, Firebase rejected it, or it genuinely delivered — this
   // makes each of those distinguishable from Railway's logs.
-  if (targets.some(t => t.nativeToken) && !fbApp) {
-    console.error("[push] native target(s) present but Firebase isn't configured — check FIREBASE_SERVICE_ACCOUNT_JSON");
+  if (targets.some(t => t.nativeToken?.platform === "android") && !fbApp) {
+    console.error("[push] native Android target(s) present but Firebase isn't configured — check FIREBASE_SERVICE_ACCOUNT_JSON");
+  }
+  if (targets.some(t => t.nativeToken?.platform === "ios") && !apnsConfigured()) {
+    console.error("[push] native iOS target(s) present but APNs isn't configured — check APNS_KEY_ID / APNS_TEAM_ID / APNS_AUTH_KEY_B64");
   }
   for (const target of targets) {
     try {
       if (target.subscription) {
         await webPush.sendNotification(target.subscription, JSON.stringify(payload));
+      } else if (target.nativeToken?.platform === "ios") {
+        // @capacitor/push-notifications hands iOS the raw APNs device
+        // token, not an FCM registration token — this app has no Firebase
+        // iOS SDK to do that exchange, so it has to go straight to Apple's
+        // APNs API rather than through getMessaging().send(). See apns.js.
+        await sendApnsPush(target.nativeToken.token, {
+          title: payload.title, body: payload.body, conversationId: payload.conversationId,
+        });
       } else if (target.nativeToken && fbApp) {
         await getMessaging(fbApp).send({
           token: target.nativeToken.token,
@@ -1612,7 +1624,6 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
           // silently drops the notification entirely, which is worse than
           // omitting it and letting the plugin's own default channel apply.
           android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
-          apns: { payload: { aps: { sound: "default" } } },
         });
       }
     } catch (e) {
@@ -1620,11 +1631,14 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
       if (target.subscription && (e.statusCode === 404 || e.statusCode === 410)) {
         const remaining = readJson(PUSH_FILE, []).filter(s => s.subscription?.endpoint !== target.subscription.endpoint);
         writeJson(PUSH_FILE, remaining);
+      } else if (target.nativeToken?.platform === "ios" && (e.status === 400 || e.status === 410)) {
+        const remaining = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== target.nativeToken.token);
+        writeJson(PUSH_FILE, remaining);
       } else if (target.nativeToken && e.code === "messaging/registration-token-not-registered") {
         const remaining = readJson(PUSH_FILE, []).filter(s => s.nativeToken?.token !== target.nativeToken.token);
         writeJson(PUSH_FILE, remaining);
       } else {
-        console.error("[push] send failed for user", target.userId, target.nativeToken ? "(native)" : "(web)", e.code || e.statusCode || e.message);
+        console.error("[push] send failed for user", target.userId, target.nativeToken ? `(native/${target.nativeToken.platform})` : "(web)", e.code || e.status || e.statusCode || e.message);
       }
     }
   }
@@ -2813,6 +2827,7 @@ export async function handleChatRequest(req, res, url) {
         firebaseConfigured: !!app,
         firebaseServiceAccountEnvVarSet: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
         firebaseInitError: app ? null : firebaseInitError,
+        apnsConfigured: apnsConfigured(),
         totalSubscriptions: subs.length,
         nativeSubscriptions: native.map(s => ({
           user: users.find(u => u.id === s.userId)?.email || s.userId,
@@ -2829,23 +2844,28 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/push-debug/test-send" && req.method === "POST") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
       const fbApp = getFirebaseApp();
-      if (!fbApp) return sendJson(res, 400, { error: "Firebase isn't configured", firebaseInitError });
       const subs = readJson(PUSH_FILE, []);
       const mine = subs.filter(s => s.userId === user.id && s.nativeToken);
       if (!mine.length) return sendJson(res, 400, { error: "No native token registered for you — open the app and grant notification permission first" });
       const results = [];
       for (const sub of mine) {
         try {
-          const id = await getMessaging(fbApp).send({
-            token: sub.nativeToken.token,
-            notification: { title: "Test push", body: "If you see this, native push works." },
-            data: { conversationId: "" },
-            android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
-            apns: { payload: { aps: { sound: "default" } } },
-          });
-          results.push({ platform: sub.nativeToken.platform, ok: true, messageId: id });
+          if (sub.nativeToken.platform === "ios") {
+            if (!apnsConfigured()) throw Object.assign(new Error("APNs isn't configured — check APNS_KEY_ID / APNS_TEAM_ID / APNS_AUTH_KEY_B64"), { code: "apns-not-configured" });
+            await sendApnsPush(sub.nativeToken.token, { title: "Test push", body: "If you see this, native push works.", conversationId: "" });
+            results.push({ platform: "ios", ok: true });
+          } else {
+            if (!fbApp) throw Object.assign(new Error("Firebase isn't configured"), { code: firebaseInitError || "firebase-not-configured" });
+            const id = await getMessaging(fbApp).send({
+              token: sub.nativeToken.token,
+              notification: { title: "Test push", body: "If you see this, native push works." },
+              data: { conversationId: "" },
+              android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
+            });
+            results.push({ platform: sub.nativeToken.platform, ok: true, messageId: id });
+          }
         } catch (e) {
-          results.push({ platform: sub.nativeToken.platform, ok: false, code: e.code, message: e.message });
+          results.push({ platform: sub.nativeToken.platform, ok: false, code: e.code || e.status, message: e.message });
         }
       }
       return sendJson(res, 200, { results });
