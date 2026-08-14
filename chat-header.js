@@ -252,28 +252,45 @@
       document.documentElement.style.setProperty('--keyboard-inset', px + 'px');
       document.documentElement.style.setProperty('--app-vh', (window.innerHeight - px) + 'px');
     };
-    // Capacitor's Keyboard plugin (already installed/configured — see
-    // capacitor.config.json) fires real native show/hide events carrying
-    // the actual keyboard height, regardless of its `resize` mode —
-    // visualViewport turned out not to be reliably supported across
-    // Android WebView versions (composer/bottom bar could still land
-    // behind the keyboard despite tracking it), so this is now the
-    // primary source; visualViewport stays as a fallback for plain
-    // browser use, where this native plugin doesn't exist at all.
-    if (window.Capacitor?.isNativePlatform?.()) {
+    const platform = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.getPlatform() : null;
+    // iOS's WKWebView (with this project's `resize: "native"` Keyboard
+    // config) already natively resizes the view when the keyboard opens —
+    // that's why iOS was fine with zero JS involvement in the first place.
+    // Applying an inset on top of that double-compensates: the view
+    // shrinks natively AND gets shrunk again here, leaving a big blank gap
+    // where the composer ends up sitting well above the keyboard. Leave
+    // iOS alone entirely and trust its native behavior.
+    if (platform === 'ios') return;
+    // Android's native resize isn't reliably applying at all, so it needs
+    // a manual inset — but window.innerHeight there is inconsistent about
+    // whether it already reflects some partial native resize (varies by
+    // OEM WebView), which made trusting the plugin's own keyboardHeight
+    // value unreliable. visualViewport.height is a direct measurement of
+    // what's actually visible right now, sidestepping that ambiguity —
+    // used here as the source of truth on demand (not depending on its
+    // own resize/scroll events firing, which is what wasn't reliable
+    // about the visualViewport-only approach originally). The Keyboard
+    // plugin's events remain as the reliable trigger for *when* to
+    // recheck, since visualViewport's own events aren't trustworthy here.
+    const measureInset = (fallbackPx) => {
+      const vv = window.visualViewport;
+      if (vv) return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      return fallbackPx;
+    };
+    if (platform === 'android') {
       const Keyboard = window.Capacitor.Plugins?.Keyboard;
       if (Keyboard) {
-        Keyboard.addListener('keyboardWillShow', (info) => applyInset(info?.keyboardHeight || 0));
-        Keyboard.addListener('keyboardDidShow', (info) => applyInset(info?.keyboardHeight || 0));
+        const recheck = (info) => applyInset(measureInset(info?.keyboardHeight || 0));
+        Keyboard.addListener('keyboardWillShow', recheck);
+        Keyboard.addListener('keyboardDidShow', recheck);
         Keyboard.addListener('keyboardWillHide', () => applyInset(0));
         Keyboard.addListener('keyboardDidHide', () => applyInset(0));
         applyInset(0);
-        return;
       }
     }
     const vv = window.visualViewport;
     if (!vv) return;
-    const apply = () => applyInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    const apply = () => applyInset(measureInset(0));
     apply();
     vv.addEventListener('resize', apply);
     vv.addEventListener('scroll', apply);
