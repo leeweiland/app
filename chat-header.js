@@ -248,12 +248,32 @@
   // instead of above it. Driving this bar's `bottom` off the same
   // visualViewport source keeps both in the same coordinate space.
   function setupKeyboardInsetTracking() {
+    const applyInset = (px) => {
+      document.documentElement.style.setProperty('--keyboard-inset', px + 'px');
+      document.documentElement.style.setProperty('--app-vh', (window.innerHeight - px) + 'px');
+    };
+    // Capacitor's Keyboard plugin (already installed/configured — see
+    // capacitor.config.json) fires real native show/hide events carrying
+    // the actual keyboard height, regardless of its `resize` mode —
+    // visualViewport turned out not to be reliably supported across
+    // Android WebView versions (composer/bottom bar could still land
+    // behind the keyboard despite tracking it), so this is now the
+    // primary source; visualViewport stays as a fallback for plain
+    // browser use, where this native plugin doesn't exist at all.
+    if (window.Capacitor?.isNativePlatform?.()) {
+      const Keyboard = window.Capacitor.Plugins?.Keyboard;
+      if (Keyboard) {
+        Keyboard.addListener('keyboardWillShow', (info) => applyInset(info?.keyboardHeight || 0));
+        Keyboard.addListener('keyboardDidShow', (info) => applyInset(info?.keyboardHeight || 0));
+        Keyboard.addListener('keyboardWillHide', () => applyInset(0));
+        Keyboard.addListener('keyboardDidHide', () => applyInset(0));
+        applyInset(0);
+        return;
+      }
+    }
     const vv = window.visualViewport;
     if (!vv) return;
-    const apply = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      document.documentElement.style.setProperty('--keyboard-inset', inset + 'px');
-    };
+    const apply = () => applyInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
     apply();
     vv.addEventListener('resize', apply);
     vv.addEventListener('scroll', apply);

@@ -709,22 +709,12 @@ const EMOJI_CATEGORIES = {
   Objects: ['💪','🎯','🏆','🥇','⚡','🔥','💯','✅','❌','⭐','🌟','✨','💥','💦','💧','🎉','🎊','🎈','🎁','🏅','🎗️','🔔','🔕','📣','📢','💬','🗯️','💭','💤','🕐','📅','📌','📍','🔍','🔎','🔒','🔓','🔑','🛡️','⚔️','🏹','🎪','🎭','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻'],
 };
 
-// Android's WebView doesn't reliably shrink `100dvh` when the on-screen
-// keyboard opens (iOS's WKWebView does) — the composer stayed sized for the
-// full pre-keyboard height and ended up covered by the keyboard/bottom nav.
-// visualViewport.height IS reliably keyboard-aware on both platforms, so
-// mirroring it into a custom property `body` can size off gives Android the
-// same correct behavior iOS already gets from `dvh`, without touching iOS's
-// working path at all (the dvh fallback below only matters before this JS
-// has run, or if visualViewport is ever unsupported).
-(function setupViewportHeightFix() {
-  const vv = window.visualViewport;
-  if (!vv) return;
-  const apply = () => document.documentElement.style.setProperty('--app-vh', vv.height + 'px');
-  apply();
-  vv.addEventListener('resize', apply);
-  vv.addEventListener('scroll', apply);
-})();
+// `--app-vh` (used by body's height below) is now set centrally by
+// chat-header.js's setupKeyboardInsetTracking(), which every chat-app page
+// already loads — it prefers Capacitor's native Keyboard plugin events
+// (reliable on Android, where visualViewport turned out not to be) and
+// falls back to visualViewport only for plain browser use. Nothing to set
+// up here anymore; body just reads the shared variable.
 
 let me = null;
 // originalFileId of every message driveFileId this coach has already
