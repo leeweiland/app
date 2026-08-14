@@ -449,7 +449,7 @@ function render() {
       // clicking it opens the normal content picker to fill it in.
       const left = slotCenter - 22;
       return `
-        <div class="step-node step-node-placeholder" data-id="${s.id}" style="left:${left}px;top:${top}px">
+        <div class="step-node step-node-placeholder" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
           <button class="step-placeholder" data-id="${s.id}" title="Fill this branch step">+</button>
           ${canEdit ? `<button class="step-placeholder-delete" data-id="${s.id}" title="Remove">✕</button>` : ''}
         </div>
@@ -460,7 +460,7 @@ function render() {
     const isTip = !hasPrimaryChild(s);
     const rightMode = owningBranch ? 'branch-add' : 'continue';
     return `
-      <div class="step-node" data-id="${s.id}" style="left:${left}px;top:${top}px">
+      <div class="step-node" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
         <div class="pra-panel step-card">
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
           ${renderStepContent(s)}
@@ -471,11 +471,16 @@ function render() {
     `;
   }).join('');
 
-  // Real card heights vary with content (a long text step vs. a video) —
-  // connectors are drawn a frame later, once those heights actually exist
-  // in the DOM to measure, instead of guessing one fixed height for every
-  // card and having lines land on the wrong edge.
-  requestAnimationFrame(() => drawConnectors());
+  // ROW_H is only a starting estimate — a video card can render much
+  // taller than a text note, and a fixed row height let a tall card in
+  // one row visually collide with (or leave a huge/disconnected-looking
+  // gap before) whatever's on the row below it, breaking the connector
+  // math. Reading offsetHeight below forces a synchronous layout, so the
+  // real heights are already there to measure immediately — no need to
+  // wait a frame (and rAF doesn't reliably fire at all in a backgrounded/
+  // non-composited view, which made this silently never run).
+  layoutRowHeights();
+  drawConnectors();
 
   world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
@@ -511,8 +516,45 @@ function render() {
     };
   });
   world.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+  // A video's real height isn't known until its metadata actually loads
+  // (async, and lazy — see stepVideoLazyObserver above) — layoutRowHeights
+  // ran once already off whatever placeholder size the browser gave an
+  // unloaded <video>, so every card re-settles once each video reports
+  // its true size instead of leaving rows sized for the wrong guess.
+  world.querySelectorAll('.step-card video').forEach(v => {
+    v.addEventListener('loadedmetadata', () => { layoutRowHeights(); drawConnectors(); }, { once: true });
+  });
 
   if (!canvasInitialized) { canvasInitialized = true; fitCanvasToView(); }
+}
+
+// A gap between rows generous enough for a branch elbow's vertical drop
+// plus the below-+ button hanging under whatever's on the row above.
+const ROW_GAP = 110;
+// render() first lays every row out at a fixed guess (ROW_H) just to get
+// real elements into the DOM — a video card routinely renders much taller
+// than a text note, so that guess is often wrong. This pushes every row
+// down to actually clear the tallest card in the row above it, using each
+// node's real measured height instead of the guess.
+function layoutRowHeights() {
+  const world = document.getElementById('protocolWorld');
+  const svg = document.getElementById('protocolConnectors');
+  const nodes = [...world.querySelectorAll('.step-node')];
+  if (!nodes.length) return;
+  const maxHeightByRow = new Map();
+  nodes.forEach(el => {
+    const row = Number(el.dataset.row);
+    maxHeightByRow.set(row, Math.max(maxHeightByRow.get(row) || 0, el.offsetHeight));
+  });
+  const maxRow = Math.max(...maxHeightByRow.keys());
+  const rowTop = [20];
+  for (let r = 1; r <= maxRow; r++) {
+    rowTop[r] = rowTop[r - 1] + (maxHeightByRow.get(r - 1) || 0) + ROW_GAP;
+  }
+  nodes.forEach(el => { el.style.top = rowTop[Number(el.dataset.row)] + 'px'; });
+  const worldH = rowTop[maxRow] + (maxHeightByRow.get(maxRow) || 0) + 60;
+  world.style.height = worldH + 'px';
+  svg.setAttribute('height', worldH);
 }
 
 // A fixed Y-offset from each row's top, used for every horizontal
