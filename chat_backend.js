@@ -13,7 +13,12 @@ import { execFileSync } from "child_process";
 import { Readable } from "stream";
 import Busboy from "busboy";
 import webPush from "web-push";
+// firebase-admin v14 is fully modular now — no admin.credential.cert(...)
+// or admin.messaging(app) namespace like older versions/most tutorials
+// still show; cert/initializeApp live directly on the default export,
+// and messaging needs its own subpath import.
 import admin from "firebase-admin";
+import { getMessaging } from "firebase-admin/messaging";
 import { JSDOM } from "jsdom";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1562,7 +1567,7 @@ function getFirebaseApp() {
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) { firebaseApp = null; return null; }
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    firebaseApp = admin.initializeApp({ credential: admin.cert(serviceAccount) });
   } catch (e) {
     console.error("[firebase] init failed:", e.message);
     firebaseInitError = e.message;
@@ -1593,7 +1598,7 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
       if (target.subscription) {
         await webPush.sendNotification(target.subscription, JSON.stringify(payload));
       } else if (target.nativeToken && fbApp) {
-        await admin.messaging(fbApp).send({
+        await getMessaging(fbApp).send({
           token: target.nativeToken.token,
           notification: { title: payload.title, body: payload.body },
           data: { conversationId: String(payload.conversationId || "") },
