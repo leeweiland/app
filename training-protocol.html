@@ -352,9 +352,10 @@ function hasBranchChildren(step) { return steps.some(c => c.parentId === step.id
 // content types only, replaces the placeholder in place).
 function openAddStepModal(target) {
   pendingStepTarget = target;
-  const contentIds = ['chooseVideo', 'chooseUploadVideo', 'chooseImage', 'chooseText', 'chooseTemplate'];
-  const showContent = target.mode !== 'branch-init';
-  contentIds.forEach(id => { document.getElementById(id).style.display = showContent ? '' : 'none'; });
+  // The normal content types are always available — "Branch"/"Add Branch
+  // Step" are extra options alongside them, not a replacement. Only
+  // fill-placeholder hides them implicitly by never showing branch tiles
+  // at all (a placeholder is content-only, see the two lines below).
   document.getElementById('chooseBranch').style.display = target.mode === 'branch-init' ? '' : 'none';
   document.getElementById('chooseAddBranchStep').style.display = target.mode === 'branch-add' ? '' : 'none';
   openModal('chooseTypeModal');
