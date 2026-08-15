@@ -681,9 +681,18 @@ function drawConnectors() {
         // an unwarranted horizontal jog even in the simplest single-branch
         // case, and put the insert-+ dot (which sits at this segment's
         // midpoint) visibly off from where the line actually looked centered.
+        // Bends at the vertical midpoint of the actual gap between the
+        // parent's bottom edge and the child's top edge — not cAnchorY
+        // (30px INSIDE the child's card), which put both the bend and the
+        // insert-+ dot visibly overlapping the top of whatever card the
+        // branch dropped into instead of floating cleanly in the gap
+        // between them. For the common case of a lone branch with no
+        // sideways offset (x1 === x2), this collapses to one clean
+        // straight vertical line, not a dog-leg.
         const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft + cW / 2;
-        paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="#fff" stroke-width="2"/>`;
-        if (canInsert) inserts += `<button class="step-insert-plus" data-parent="${s.id}" data-child="${k.id}" style="left:${(x1 + x2) / 2}px;top:${cAnchorY}px" title="Insert a step"></button>`;
+        const bendY = (y1 + cTop) / 2;
+        paths += `<path d="M ${x1} ${y1} L ${x1} ${bendY} L ${x2} ${bendY} L ${x2} ${cTop}" fill="none" stroke="#fff" stroke-width="2"/>`;
+        if (canInsert) inserts += `<button class="step-insert-plus" data-parent="${s.id}" data-child="${k.id}" style="left:${(x1 + x2) / 2}px;top:${bendY}px" title="Insert a step"></button>`;
       } else {
         const x1 = pLeft + pW, y1 = pTop + CONNECTOR_ANCHOR_Y, x2 = cLeft, y2 = cAnchorY;
         paths += `<path d="M ${x1} ${y1} L ${x2} ${y2}" fill="none" stroke="#fff" stroke-width="2"/>`;
