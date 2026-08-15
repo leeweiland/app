@@ -445,14 +445,22 @@ async function commitNewStep(fields) {
   if (pendingStepTarget?.mode === 'insert') {
     return await insertStepBetween(pendingStepTarget.parentId, pendingStepTarget.childId, fields);
   }
-  // Filling a placeholder branch slot replaces it in place — same
-  // parentId/isBranchRoot the empty slot already had — rather than
-  // leaving the placeholder behind next to the newly-filled step.
-  if (pendingStepTarget?.mode === 'fill-placeholder' && pendingStepTarget.placeholderId) {
-    steps = steps.filter(s => s.id !== pendingStepTarget.placeholderId);
+  // Filling a placeholder slot replaces it in place — same parentId/
+  // isBranchRoot the empty slot already had — rather than leaving the
+  // placeholder behind next to the newly-filled step.
+  const fillingPlaceholderId = pendingStepTarget?.mode === 'fill-placeholder' ? pendingStepTarget.placeholderId : null;
+  if (fillingPlaceholderId) {
+    steps = steps.filter(s => s.id !== fillingPlaceholderId);
   }
   const step = { id: newId(), parentId: pendingStepTarget?.parentId ?? null, isBranchRoot: !!pendingStepTarget?.isBranchRoot, ...fields };
   steps.push(step);
+  // A placeholder created by deleting a step with descendants (see
+  // .step-delete) can have real children hanging off it — those need to
+  // move onto whatever just replaced it, or they'd be left pointing at a
+  // parentId that no longer exists.
+  if (fillingPlaceholderId) {
+    steps.forEach(s => { if (s.parentId === fillingPlaceholderId) s.parentId = step.id; });
+  }
   render();
   await saveSteps();
   return step;
@@ -529,10 +537,23 @@ function render() {
   world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.dataset.id;
-      const descendants = collectDescendants(id);
-      if (descendants.length && !confirm(`This step has ${descendants.length} step(s) after it (including any branches). Delete those too?`)) return;
-      const toRemove = new Set([id, ...descendants.map(d => d.id)]);
-      steps = steps.filter(s => !toRemove.has(s.id));
+      const target = steps.find(s => s.id === id);
+      const directChildren = childrenOf(steps, id);
+      if (!directChildren.length) {
+        // Nothing downstream depends on this slot — just remove it outright.
+        steps = steps.filter(s => s.id !== id);
+      } else {
+        // Deleting a step that other steps (including branches) hang off
+        // of used to force an all-or-nothing choice: keep the step, or
+        // cascade-delete everything after it. Replacing it with a
+        // placeholder in the exact same slot instead removes only what was
+        // actually clicked, and leaves everything downstream re-attached
+        // and intact, ready to be filled back in later.
+        const placeholder = { id: newId(), parentId: target.parentId, isBranchRoot: target.isBranchRoot, type: 'placeholder' };
+        steps = steps.filter(s => s.id !== id);
+        steps.push(placeholder);
+        directChildren.forEach(c => { c.parentId = placeholder.id; });
+      }
       render();
       await saveSteps();
     };
@@ -557,13 +578,25 @@ function render() {
   world.querySelectorAll('.step-placeholder').forEach(btn => {
     btn.onclick = () => {
       const ph = steps.find(s => s.id === btn.dataset.id);
-      if (ph) openAddStepModal({ parentId: ph.parentId, isBranchRoot: true, mode: 'fill-placeholder', placeholderId: ph.id });
+      // Placeholders aren't always branch slots any more — a deleted step
+      // with descendants leaves one behind in whatever slot it occupied,
+      // continuation or branch — so this has to carry the placeholder's
+      // own isBranchRoot through rather than assuming branch.
+      if (ph) openAddStepModal({ parentId: ph.parentId, isBranchRoot: ph.isBranchRoot, mode: 'fill-placeholder', placeholderId: ph.id });
     };
   });
   world.querySelectorAll('.step-placeholder-delete').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
-      steps = steps.filter(s => s.id !== btn.dataset.id);
+      const id = btn.dataset.id;
+      // A placeholder can now have real descendants hanging off it (see
+      // .step-delete above) — deleting an empty slot that still has
+      // downstream content needs the same cascade confirmation a real
+      // step's delete used to always require.
+      const descendants = collectDescendants(id);
+      if (descendants.length && !confirm(`This has ${descendants.length} step(s) after it (including any branches). Delete those too?`)) return;
+      const toRemove = new Set([id, ...descendants.map(d => d.id)]);
+      steps = steps.filter(s => !toRemove.has(s.id));
       render();
       await saveSteps();
     };
@@ -637,12 +670,18 @@ function drawConnectors() {
       // link — a placeholder isn't real content yet, and there's nothing
       // meaningful to insert "before" an empty branch slot.
       const canInsert = canEdit && k.type !== 'placeholder';
-      const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop;
+      const cLeft = childEl.offsetLeft, cTop = childEl.offsetTop, cW = childEl.offsetWidth;
       const cAnchorY = cTop + CONNECTOR_ANCHOR_Y;
       if (k.isBranchRoot) {
         // Drop straight down from the parent's actual bottom edge, then
-        // bend once — a clean right-angle elbow, never a diagonal.
-        const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft;
+        // bend once — a clean right-angle elbow, never a diagonal. Ends at
+        // the child's actual horizontal CENTER, not its left edge — a
+        // branch card's own position is rarely centered under its parent
+        // (only the whole branch subtree is), so ending at its edge left
+        // an unwarranted horizontal jog even in the simplest single-branch
+        // case, and put the insert-+ dot (which sits at this segment's
+        // midpoint) visibly off from where the line actually looked centered.
+        const x1 = pLeft + pW / 2, y1 = pTop + pH, x2 = cLeft + cW / 2;
         paths += `<path d="M ${x1} ${y1} L ${x1} ${cAnchorY} L ${x2} ${cAnchorY}" fill="none" stroke="#fff" stroke-width="2"/>`;
         if (canInsert) inserts += `<button class="step-insert-plus" data-parent="${s.id}" data-child="${k.id}" style="left:${(x1 + x2) / 2}px;top:${cAnchorY}px" title="Insert a step"></button>`;
       } else {
