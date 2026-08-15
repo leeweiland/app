@@ -58,8 +58,8 @@
   /* An empty, not-yet-filled branch slot — just a + in its reserved spot,
      centered under whichever step it branches off of, no card chrome. */
   .step-node-placeholder { width: 44px; }
-  .step-placeholder { width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--pra-border); background: rgba(16,16,20,0.4); color: var(--pra-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; transition: border-color .15s, color .15s; }
-  .step-placeholder:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .step-placeholder { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; transition: background .15s; }
+  .step-placeholder:hover { background: #0086dd; }
   .step-placeholder-delete { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.9); color: var(--pra-dim); font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .step-placeholder-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .88rem; margin-top: 30px; }
@@ -501,12 +501,13 @@ function render() {
     }
     const left = slotCenter - 130; // center the 260px card within its slot
     const isTip = !hasPrimaryChild(s);
-    // Below-+ ("start a branch") only makes sense before a step has any
-    // branches yet — once it does, adding MORE branch siblings happens via
-    // the branch group's own +/side buttons instead (renderBranchControls),
-    // which sit right at the fan itself rather than overlapping the single
-    // connector line below this card.
-    const hasBranches = branchChildrenOf(steps, s).length > 0;
+    // Below-+ ("add a branch") always stays in this same familiar spot,
+    // whether or not the step already has branches — hiding it once
+    // branches existed (relying on the branch fan's own +'s instead) meant
+    // a step you already knew had branches suddenly had no "add a branch"
+    // button anywhere near it at all, which read as broken/missing rather
+    // than "moved." Its own click handler below decides what "already has
+    // branches" means for it (skip the modal, just add one more sibling).
     return `
       <div class="step-node" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
         <div class="pra-panel step-card">
@@ -515,7 +516,7 @@ function render() {
           ${renderStepContent(s)}
         </div>
         ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-mode="continue" title="Add next step">+</button>` : ''}
-        ${canEdit && !hasBranches ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
+        ${canEdit ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
       </div>
     `;
   }).join('');
@@ -563,8 +564,16 @@ function render() {
   world.querySelectorAll('.step-plus').forEach(btn => {
     btn.onclick = () => {
       const mode = btn.dataset.mode, parentId = btn.dataset.parent;
-      if (mode === 'branch-init') openAddStepModal({ parentId, isBranchRoot: true, mode });
-      else openAddStepModal({ parentId, isBranchRoot: false, mode: 'continue' });
+      if (mode === 'branch-init') {
+        // Nothing to choose once branches already exist — a fresh branch
+        // point offers content types alongside "Branch" (its first two
+        // slots need real content or empty placeholders picked deliberately),
+        // but one more sibling here is always just another empty placeholder.
+        if (branchChildrenOf(steps, { id: parentId }).length > 0) addBranchSibling(parentId, null);
+        else openAddStepModal({ parentId, isBranchRoot: true, mode });
+      } else {
+        openAddStepModal({ parentId, isBranchRoot: false, mode: 'continue' });
+      }
     };
   });
   world.querySelectorAll('.step-placeholder').forEach(btn => {
@@ -697,10 +706,13 @@ function drawConnectors() {
 
 // Dedicated +'s for growing a branch fan that already has branches — one
 // flanking each end of the fan (add a sibling there) and one in each gap
-// between two existing siblings (insert one between them). Appended onto
-// the same insert layer drawConnectors just populated, not overwriting it
-// — these are a distinct set of buttons layered on top, not a replacement
-// for the mid-connector insert-+ dots.
+// between two existing siblings (insert one between them). Sits in its own
+// clear strip BELOW the branch row — vertically centered on the row (the
+// first version tried) put these at nearly the same height as a lone
+// sibling's own card-relative step-plus-right (a branch fan reduced to one
+// remaining child by a delete is an easy, common state to reach), landing
+// two different buttons almost exactly on top of each other. Below the row
+// entirely, there's nothing else at that height to collide with.
 function renderBranchControls() {
   if (!canEdit) return;
   const world = document.getElementById('protocolWorld');
@@ -713,15 +725,16 @@ function renderBranchControls() {
     const kids = branchChildrenOf(steps, { id: parentId });
     const kidEls = kids.map(k => nodeEls.get(k.id)).filter(Boolean);
     if (!kidEls.length) return;
-    const midY = kidEls[0].offsetTop + Math.max(...kidEls.map(el => el.offsetHeight)) / 2;
+    const rowBottom = kidEls[0].offsetTop + Math.max(...kidEls.map(el => el.offsetHeight));
+    const y = rowBottom + 18;
     const firstLeft = kidEls[0].offsetLeft;
     const last = kidEls[kidEls.length - 1];
     const lastRight = last.offsetLeft + last.offsetWidth;
-    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${firstLeft - 18}px;top:${midY}px" title="Add a branch here"></button>`;
-    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${lastRight + 18}px;top:${midY}px" title="Add a branch here"></button>`;
+    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${firstLeft - 18}px;top:${y}px" title="Add a branch here"></button>`;
+    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${lastRight + 18}px;top:${y}px" title="Add a branch here"></button>`;
     for (let i = 0; i < kidEls.length - 1; i++) {
       const gapCenter = (kidEls[i].offsetLeft + kidEls[i].offsetWidth + kidEls[i + 1].offsetLeft) / 2;
-      html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" data-before="${kids[i + 1].id}" style="left:${gapCenter}px;top:${midY}px" title="Add a branch here"></button>`;
+      html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" data-before="${kids[i + 1].id}" style="left:${gapCenter}px;top:${y}px" title="Add a branch here"></button>`;
     }
   });
   insertLayer.insertAdjacentHTML('beforeend', html);
