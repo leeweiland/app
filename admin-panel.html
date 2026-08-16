@@ -94,6 +94,14 @@
         <input class="pra-input" id="favoritesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
+        <label class="pra-label">Kickoff/Intake Forms Drive Folder ID (each submitted intake form gets its own new doc here)</label>
+        <input class="pra-input" id="intakeFormsFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Client Notes Drive Folder ID (one doc per client — coach notes are prepended to the top on every save)</label>
+        <input class="pra-input" id="clientNotesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -644,6 +652,8 @@ async function loadConfig() {
   document.getElementById('trainingProtocolVideoLibraryFolderId').value = d.trainingProtocolVideoLibraryFolderId || '';
   document.getElementById('powerbaticsVideosFolderId').value = d.powerbaticsVideosFolderId || '';
   document.getElementById('favoritesFolderId').value = d.favoritesFolderId || '';
+  document.getElementById('intakeFormsFolderId').value = d.intakeFormsFolderId || '';
+  document.getElementById('clientNotesFolderId').value = d.clientNotesFolderId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -761,6 +771,8 @@ async function saveConfig() {
       trainingProtocolVideoLibraryFolderId: document.getElementById('trainingProtocolVideoLibraryFolderId').value.trim(),
       powerbaticsVideosFolderId: document.getElementById('powerbaticsVideosFolderId').value.trim(),
       favoritesFolderId: document.getElementById('favoritesFolderId').value.trim(),
+      intakeFormsFolderId: document.getElementById('intakeFormsFolderId').value.trim(),
+      clientNotesFolderId: document.getElementById('clientNotesFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });

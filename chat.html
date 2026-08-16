@@ -349,6 +349,20 @@
      phone — dvh does, but isn't supported everywhere, hence both: browsers
      that don't understand the dvh line just ignore it and keep the vh one. */
   .modal-box { width: 100%; max-width: 420px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
+  .modal-box-wide { max-width: 620px; }
+  .intake-section-label { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-blue); margin: 18px 0 8px; }
+  .intake-section-label:first-child { margin-top: 0; }
+  .intake-field { margin-bottom: 10px; }
+  .intake-field label { display: block; font-size: .76rem; color: var(--pra-dim); margin-bottom: 4px; }
+  .intake-field input, .intake-field textarea, .intake-field select { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 8px 10px; font-family: inherit; font-size: .84rem; }
+  .intake-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .intake-field textarea { min-height: 64px; resize: vertical; }
+  .intake-field input:disabled, .intake-field textarea:disabled { opacity: .6; cursor: not-allowed; }
+  .intake-locked-banner { background: rgba(0,155,255,0.1); border: 1px solid var(--pra-border); border-radius: 8px; padding: 10px 12px; font-size: .78rem; color: var(--pra-dim); margin-bottom: 14px; }
+  .staff-note-entry { border-bottom: 1px solid rgba(255,255,255,0.05); padding: 10px 0; }
+  .staff-note-entry:last-child { border-bottom: none; }
+  .staff-note-entry-meta { font-size: .7rem; color: var(--pra-dim); margin-bottom: 3px; }
+  .staff-note-entry-text { font-size: .84rem; white-space: pre-wrap; }
   .contact-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
   .contact-row:hover { background: rgba(255,255,255,0.04); }
   .contact-row input[type=checkbox] { margin-left: auto; }
@@ -513,6 +527,8 @@
             <button class="icon-btn" id="forwardHeaderBtn" title="Forward" style="display:none"></button>
             <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
+            <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn" id="staffNotesBtn" title="Coach Notes" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="12" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M7.5 8h6M7.5 12h4M7.5 16h2.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M15.3 16.3l4.4-4.4a1.2 1.2 0 0 1 1.7 1.7l-4.4 4.4-2.2.5.5-2.2Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="favoritesBtn" title="My Favorites" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="17.5" cy="6.5" r="1.3" fill="#009bff"/></svg></button>
             <button class="icon-btn" id="chatSearchToggleBtn" title="Search in this chat"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#fff" stroke-width="1.6"/><path d="M19.5 19.5 15 15" stroke="#009bff" stroke-width="1.8" stroke-linecap="round"/></svg></button>
@@ -614,6 +630,41 @@
       <div class="pra-muted" id="bulkComposeStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
       <button class="pra-btn" style="margin-top:14px;width:100%" id="bulkComposeSendBtn">Send</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="bulkComposeCancelBtn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Kickoff / Intake Form modal — visible to staff and to the student
+       themselves. Submitting locks it for everyone (staff included) until
+       a coach/admin explicitly unlocks it via intakeFormUnlockBtn. -->
+  <div class="modal-backdrop" id="intakeFormModal">
+    <div class="pra-panel modal-box modal-box-wide">
+      <div class="pra-h2" style="margin-bottom:4px">Kickoff / Intake Form</div>
+      <div class="pra-muted" id="intakeFormSubtitle" style="font-size:.78rem;margin-bottom:12px"></div>
+      <div class="intake-locked-banner" id="intakeLockedBanner" style="display:none"></div>
+      <a class="pra-link" id="intakeFormDocLink" href="#" target="_blank" rel="noopener" style="display:none;font-size:.76rem;margin-bottom:12px">View in Google Docs →</a>
+      <div id="intakeFormFields"></div>
+      <div class="pra-muted" id="intakeFormStatus" style="font-size:.76rem;margin-top:10px;min-height:1em"></div>
+      <button class="pra-btn" style="margin-top:14px;width:100%" id="intakeFormSaveBtn">Submit</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;display:none" id="intakeFormUnlockBtn">Unlock for Editing</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('intakeFormModal')">Close</button>
+    </div>
+  </div>
+
+  <!-- Coach Notes modal — staff only, never shown to the client. Append-only
+       log: each Add Note posts one structured session entry (same fields as
+       the ZOOM session table in the source doc), never overwrites a prior
+       one, matching the paired Drive doc which prepends the same way. -->
+  <div class="modal-backdrop" id="staffNotesModal">
+    <div class="pra-panel modal-box modal-box-wide">
+      <div class="pra-h2" style="margin-bottom:4px">Coach Notes</div>
+      <div class="pra-muted" id="staffNotesSubtitle" style="font-size:.76rem;margin-bottom:6px"></div>
+      <a class="pra-link" id="staffNotesDocLink" href="#" target="_blank" rel="noopener" style="display:none;font-size:.76rem;margin-bottom:10px">View in Google Docs →</a>
+      <div id="staffNotesFormFields"></div>
+      <div class="pra-muted" id="staffNotesStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
+      <button class="pra-btn" style="margin-top:10px;width:100%" id="staffNotesSaveBtn">Add Note</button>
+      <div class="intake-section-label" style="margin-top:18px">Previous Notes</div>
+      <div id="staffNotesEntries"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('staffNotesModal')">Close</button>
     </div>
   </div>
 
@@ -1453,6 +1504,12 @@ async function openConvo(id) {
     protocolLink.style.display = 'none';
   }
 
+  // Same target resolution as the protocol link above — the intake form
+  // is client + staff visible, the notes button staff only.
+  currentThreadStudent = protocolStudent;
+  document.getElementById('intakeFormBtn').style.display = (protocolStudent && (isStaffMe() || me.id === protocolStudent.id)) ? '' : 'none';
+  document.getElementById('staffNotesBtn').style.display = (protocolStudent && isStaffMe()) ? '' : 'none';
+
   document.getElementById('groupInfoBtn').style.display = (convo.type === 'group' && isStaffMe()) ? '' : 'none';
   document.getElementById('scheduleBtn').style.display = (canScheduleIn(convo) || canScheduleGym(convo)) ? '' : 'none';
   const apptInfo = document.getElementById('threadApptInfo');
@@ -1485,6 +1542,211 @@ document.getElementById('threadGroupMembers').addEventListener('click', (e) => {
   const member = convo?.participants.find(p => p.id === link.dataset.uid);
   if (!member) return;
   if (isStaffMe()) openLevelsModal(member); else openContactProfile(member.id);
+});
+
+// ── Kickoff / Intake Form ─────────────────────────────────────────────────
+// One shared lock for the whole form (not just "the student can't edit") —
+// once anyone submits it, staff included need an explicit Unlock before
+// another edit, so there's always a clear record of who reopened it.
+let currentThreadStudent = null;
+
+const INTAKE_FIELDS = [
+  { section: 'Program Info', key: 'program', label: 'Program' },
+  { section: 'Program Info', key: 'timezone', label: 'Timezone' },
+  { section: 'Program Info', key: 'emailPhone', label: 'Email / Phone Number' },
+  { section: 'Program Info', key: 'goals', label: 'Goals', long: true },
+
+  { section: 'Basics', key: 'date', label: 'Kickoff Date' },
+  { section: 'Basics', key: 'age', label: 'Age' },
+  { section: 'Basics', key: 'height', label: 'Height' },
+  { section: 'Basics', key: 'weight', label: 'Weight' },
+  { section: 'Basics', key: 'mindset', label: 'Mindset' },
+  { section: 'Basics', key: 'frequencyWants', label: 'Frequency Wants/Needs' },
+  { section: 'Basics', key: 'timePerSession', label: 'Time per Session' },
+
+  { section: 'Scales', key: 'movementScale', label: 'Movement Scale' },
+  { section: 'Scales', key: 'flexibilityScale', label: 'Flexibility Scale' },
+  { section: 'Scales', key: 'commVsComprehension', label: 'Communication vs Comprehension' },
+  { section: 'Scales', key: 'sedentariness', label: 'Sedentariness (Standing/Sitting)' },
+  { section: 'Scales', key: 'painDescriptors', label: 'Pain Descriptors (if any)' },
+
+  { section: 'Background', key: 'intakeInfo', label: 'Intake Info (injury history, past events)', long: true },
+  { section: 'Background', key: 'whyPacRim', label: 'Why Pac Rim (goals & limitations)', long: true },
+  { section: 'Background', key: 'sportsBackground', label: 'Sports / Background / Hobbies / Profession', long: true },
+  { section: 'Background', key: 'tenMoveQuizNotes', label: '10-Move Quiz Notes', long: true },
+  { section: 'Background', key: 'additionalNotes', label: 'Additional Notes', long: true },
+  { section: 'Background', key: 'homework', label: 'Homework Before We Meet Again', long: true },
+
+  { section: 'Nutrition', key: 'allergiesRestrictions', label: 'Allergies & Restrictions', long: true },
+  { section: 'Nutrition', key: 'staplesDairy', label: 'Staple Foods — Dairy (examples)' },
+  { section: 'Nutrition', key: 'staplesProtein', label: 'Staple Foods — Protein (examples)' },
+  { section: 'Nutrition', key: 'staplesVeggies', label: 'Staple Foods — Veggies (examples)' },
+  { section: 'Nutrition', key: 'staplesFruitsNuts', label: 'Staple Foods — Fruits & Nuts (examples)' },
+  { section: 'Nutrition', key: 'staplesGrains', label: 'Staple Foods — Grains & Breads (examples)' },
+  { section: 'Nutrition', key: 'staplesMisc', label: 'Misc' },
+];
+
+function nameForUserId(id) {
+  if (!id) return 'Unknown';
+  if (id === me.id) return 'You';
+  const c = contacts.find(c => c.id === id);
+  return c ? `${c.first} ${c.last}` : 'Unknown';
+}
+
+function renderIntakeFields(values, disabled) {
+  const wrap = document.getElementById('intakeFormFields');
+  let html = '';
+  let lastSection = null;
+  INTAKE_FIELDS.forEach(f => {
+    if (f.section !== lastSection) { html += `<div class="intake-section-label">${f.section}</div>`; lastSection = f.section; }
+    const val = escapeHtml(values[f.key] || '');
+    html += `<div class="intake-field"><label>${f.label}</label>${
+      f.long ? `<textarea data-key="${f.key}" ${disabled ? 'disabled' : ''}>${val}</textarea>`
+             : `<input type="text" data-key="${f.key}" value="${val}" ${disabled ? 'disabled' : ''}/>`
+    }</div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+async function openIntakeFormModal() {
+  if (!currentThreadStudent) return;
+  document.getElementById('intakeFormSubtitle').textContent = 'For ' + currentThreadStudent.first + ' ' + currentThreadStudent.last;
+  document.getElementById('intakeFormStatus').textContent = 'Loading…';
+  document.getElementById('intakeFormDocLink').style.display = 'none';
+  renderIntakeFields({}, true);
+  openModal('intakeFormModal');
+
+  const r = await fetch('/api/chat/intake/' + currentThreadStudent.id);
+  const d = await r.json();
+  const form = d.form;
+  const locked = !!form?.locked;
+  const canEdit = !locked; // locked blocks everyone, staff included, until Unlock
+  renderIntakeFields(form?.fields || {}, !canEdit);
+
+  const banner = document.getElementById('intakeLockedBanner');
+  if (form) {
+    banner.style.display = '';
+    banner.textContent = locked
+      ? `Locked — submitted by ${nameForUserId(form.submittedBy)} on ${new Date(form.submittedAt).toLocaleString()}.`
+      : `Unlocked by ${nameForUserId(form.unlockedBy)} on ${new Date(form.unlockedAt).toLocaleString()} — editable again.`;
+  } else {
+    banner.style.display = 'none';
+  }
+  const docLink = document.getElementById('intakeFormDocLink');
+  if (form?.driveDocUrl) { docLink.href = form.driveDocUrl; docLink.style.display = ''; }
+  document.getElementById('intakeFormStatus').textContent = '';
+  document.getElementById('intakeFormSaveBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('intakeFormUnlockBtn').style.display = (locked && isStaffMe()) ? '' : 'none';
+}
+
+document.getElementById('intakeFormBtn').addEventListener('click', openIntakeFormModal);
+
+document.getElementById('intakeFormSaveBtn').addEventListener('click', async () => {
+  if (!currentThreadStudent) return;
+  const fields = {};
+  document.querySelectorAll('#intakeFormFields [data-key]').forEach(el => { fields[el.dataset.key] = el.value; });
+  const status = document.getElementById('intakeFormStatus');
+  status.textContent = 'Saving…';
+  const r = await fetch('/api/chat/intake/' + currentThreadStudent.id, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { status.textContent = d.error || 'Could not save.'; return; }
+  status.textContent = 'Submitted and locked.';
+  setTimeout(() => openIntakeFormModal(), 600);
+});
+
+document.getElementById('intakeFormUnlockBtn').addEventListener('click', async () => {
+  if (!currentThreadStudent) return;
+  const r = await fetch('/api/chat/intake/' + currentThreadStudent.id + '/unlock', { method: 'POST' });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not unlock.'); return; }
+  await openIntakeFormModal();
+});
+
+// ── Coach Notes (staff only) — append-only log of structured session
+// entries, same shape as the ZOOM session table in the source doc (not a
+// single freeform blob). Each Add Note posts one new entry; never
+// overwrites a prior one — matching the paired Drive doc, which prepends
+// the same way. ───────────────────────────────────────────────────────
+const NOTE_FIELDS = [
+  { key: 'zoomDate', label: 'Zoom Date' },
+  { key: 'oneOnOneType', label: '1:1 Type', select: ['Live Workout', 'Video Review'] },
+  { key: 'sentVids', label: 'Sent Vids', select: ['Yes', 'No'] },
+  { key: 'mindset', label: 'Mindset' },
+  { key: 'coach', label: 'Coach' },
+  { key: 'painDescriptors', label: 'Pain Descriptors (if injury assessment)' },
+  { key: 'trainingFrequency', label: 'Training Frequency for Prior Week' },
+  { key: 'progressionsRemove', label: 'Progressions Made/Exercises Changed — Remove', long: true },
+  { key: 'progressionsAdd', label: 'Progressions Made/Exercises Changed — Add', long: true },
+  { key: 'injuriesPainConcerns', label: 'Injuries / Pain / Concerns Notes', long: true },
+  { key: 'movesDoneLive', label: 'Moves Done Live', long: true },
+  { key: 'additionalNotes', label: 'Additional Notes', long: true },
+];
+
+function renderNoteFormFields() {
+  const wrap = document.getElementById('staffNotesFormFields');
+  const today = new Date().toLocaleDateString();
+  const defaults = { zoomDate: today, coach: me.first + ' ' + me.last };
+  wrap.innerHTML = NOTE_FIELDS.map(f => {
+    let control;
+    if (f.select) {
+      control = `<select data-key="${f.key}"><option value=""></option>${f.select.map(o => `<option value="${o}">${o}</option>`).join('')}</select>`;
+    } else if (f.long) {
+      control = `<textarea data-key="${f.key}"></textarea>`;
+    } else {
+      control = `<input type="text" data-key="${f.key}" value="${escapeHtml(defaults[f.key] || '')}"/>`;
+    }
+    return `<div class="intake-field"><label>${f.label}</label>${control}</div>`;
+  }).join('');
+}
+
+function renderStaffNotesEntries(entries) {
+  const wrap = document.getElementById('staffNotesEntries');
+  if (!entries.length) { wrap.innerHTML = '<div class="pra-muted" style="font-size:.78rem">No notes yet.</div>'; return; }
+  wrap.innerHTML = entries.map(e => `
+    <div class="staff-note-entry">
+      <div class="staff-note-entry-meta">${nameForUserId(e.authorId)} — ${new Date(e.createdAt).toLocaleString()}</div>
+      <div class="staff-note-entry-text">${NOTE_FIELDS.filter(f => e.fields[f.key]).map(f => `<b>${f.label}:</b> ${escapeHtml(e.fields[f.key])}`).join('<br/>') || '<i>(no fields filled in)</i>'}</div>
+    </div>
+  `).join('');
+}
+
+async function openStaffNotesModal() {
+  if (!currentThreadStudent) return;
+  document.getElementById('staffNotesSubtitle').textContent = 'For ' + currentThreadStudent.first + ' ' + currentThreadStudent.last;
+  document.getElementById('staffNotesStatus').textContent = 'Loading…';
+  renderNoteFormFields();
+  document.getElementById('staffNotesDocLink').style.display = 'none';
+  document.getElementById('staffNotesEntries').innerHTML = '';
+  openModal('staffNotesModal');
+
+  const r = await fetch('/api/chat/notes/' + currentThreadStudent.id);
+  const d = await r.json();
+  renderStaffNotesEntries(d.notes?.entries || []);
+  const docLink = document.getElementById('staffNotesDocLink');
+  if (d.notes?.driveDocUrl) { docLink.href = d.notes.driveDocUrl; docLink.style.display = ''; }
+  document.getElementById('staffNotesStatus').textContent = '';
+}
+
+document.getElementById('staffNotesBtn').addEventListener('click', openStaffNotesModal);
+
+document.getElementById('staffNotesSaveBtn').addEventListener('click', async () => {
+  if (!currentThreadStudent) return;
+  const fields = {};
+  document.querySelectorAll('#staffNotesFormFields [data-key]').forEach(el => { fields[el.dataset.key] = el.value; });
+  if (!Object.values(fields).some(v => v.trim())) return;
+  const status = document.getElementById('staffNotesStatus');
+  status.textContent = 'Saving…';
+  const r = await fetch('/api/chat/notes/' + currentThreadStudent.id, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { status.textContent = d.error || 'Could not save.'; return; }
+  renderNoteFormFields();
+  renderStaffNotesEntries(d.notes.entries);
+  const docLink = document.getElementById('staffNotesDocLink');
+  if (d.notes.driveDocUrl) { docLink.href = d.notes.driveDocUrl; docLink.style.display = ''; }
+  status.textContent = 'Added.';
 });
 
 // ── Schedule appointment (coach/admin only) ──────────────────────────────

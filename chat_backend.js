@@ -40,6 +40,13 @@ const PROTOCOL_STEP_TEMPLATES_FILE = "chat_protocol_step_templates.json";
 // any student — distinct from PROTOCOL_STEP_TEMPLATES_FILE above, which is
 // just individual saved text snippets for a single step.
 const PROTOCOL_TEMPLATES_FILE = "chat_protocol_templates.json";
+// Kickoff/intake form a client fills out once (locked immediately after);
+// only staff can unlock it for another round of edits. Keyed by target
+// user id, same shape as TRAINING_PROTOCOLS_FILE above.
+const INTAKE_FORMS_FILE = "chat_intake_forms.json";
+// Free-form coach/admin notes per client — never visible to the client,
+// separate from both the intake form and the chat history itself.
+const NOTES_FILE = "chat_notes.json";
 const GYM_BLOCKED_DATES_FILE = "chat_gym_blocked_dates.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
@@ -182,14 +189,22 @@ function getConfig() {
     // folder: ownership transfer to the coach only makes sense for a file
     // an individual account actually owns.
     favoritesFolderId: "",
+    // Each kickoff/intake submission gets its OWN new doc here (a locked
+    // snapshot in time); each client gets exactly ONE doc here that every
+    // note save prepends to (a running log) — see the intake/notes
+    // endpoints and createOrUpdateDriveDoc below.
+    intakeFormsFolderId: "1He6NLZU0g9YNiG87C8Vhn2AKfrT6Cz-j",
+    clientNotesFolderId: "1fOczxxstyKr9oaBnDvo4cDRhpgl_CWxG",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
-  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId"].forEach(k => {
+  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId"].forEach(k => {
     if (cfg[k]) cfg[k] = extractDriveFolderId(cfg[k]);
   });
   if (!cfg.trainingProtocolVideoLibraryFolderId) cfg.trainingProtocolVideoLibraryFolderId = "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX";
   if (!cfg.powerbaticsVideosFolderId) cfg.powerbaticsVideosFolderId = "1Es9fbvFRx7EuFiZu9t-X8pmZXGigf_wX";
+  if (!cfg.intakeFormsFolderId) cfg.intakeFormsFolderId = "1He6NLZU0g9YNiG87C8Vhn2AKfrT6Cz-j";
+  if (!cfg.clientNotesFolderId) cfg.clientNotesFolderId = "1fOczxxstyKr9oaBnDvo4cDRhpgl_CWxG";
   // No non-empty default to fall back to (unlike the two above) — just
   // ensures the key exists on configs saved before this feature existed, so
   // it isn't silently `undefined` and shows up as an empty field in the
@@ -1484,6 +1499,113 @@ function uploadStreamToDrive(fileStream, { name, mimeType, folderId, accessToken
   });
 }
 
+// Creates a new native Google Doc (fileId omitted) or overwrites an
+// existing one's content (fileId given) by uploading plain text with
+// mimeType left as "application/vnd.google-apps.document" in the file
+// metadata — Drive auto-converts the plain-text body into a real Doc on
+// import, same as pasting text into a blank Doc. Deliberately NOT reusing
+// uploadStreamToDrive above: that helper uploads the media as-is (fine for
+// images/video, where metadata.mimeType and the upload Content-Type are
+// the same value) — a Doc import needs metadata.mimeType to be the target
+// Workspace type while the actual upload Content-Type stays "text/plain",
+// which is a different enough shape to not force into that function.
+function createOrUpdateDriveDoc({ fileId, name, folderId, content, accessToken }) {
+  return new Promise((resolve, reject) => {
+    const isUpdate = !!fileId;
+    const metadata = isUpdate ? {} : { name, mimeType: "application/vnd.google-apps.document", parents: folderId ? [folderId] : undefined };
+    const initBody = JSON.stringify(metadata);
+    const initPath = isUpdate
+      ? `/upload/drive/v3/files/${fileId}?uploadType=resumable&fields=id,name,webViewLink`
+      : `/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink`;
+
+    const initReq = httpsRequest({
+      hostname: "www.googleapis.com",
+      path: initPath,
+      method: isUpdate ? "PATCH" : "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(initBody),
+        "X-Upload-Content-Type": "text/plain",
+      },
+    }, initRes => {
+      let d = ""; initRes.on("data", c => d += c);
+      initRes.on("end", () => {
+        const location = initRes.headers.location;
+        if (!location || initRes.statusCode >= 300) { reject(new Error(`Drive doc init failed: ${initRes.statusCode} ${d}`)); return; }
+        const loc = new URL(location);
+        const body = Buffer.from(content, "utf8");
+        const putReq = httpsRequest({
+          hostname: loc.hostname,
+          path: loc.pathname + loc.search,
+          method: "PUT",
+          headers: { "Content-Type": "text/plain; charset=UTF-8", "Content-Length": body.length },
+        }, putRes => {
+          let pd = ""; putRes.on("data", c => pd += c);
+          putRes.on("end", () => {
+            if (putRes.statusCode >= 300) { reject(new Error(`Drive doc upload failed: ${putRes.statusCode} ${pd}`)); return; }
+            try { resolve(JSON.parse(pd)); } catch (e) { reject(e); }
+          });
+        });
+        putReq.on("error", reject);
+        putReq.end(body);
+      });
+    });
+    initReq.on("error", reject);
+    initReq.write(initBody);
+    initReq.end();
+  });
+}
+
+// Mirrors chat.html's INTAKE_FIELDS — kept in sync by hand (same pattern
+// as the icon SVGs duplicated across this app's pages). Only used to give
+// the exported Doc real section headers/labels instead of raw JSON keys.
+const INTAKE_FIELD_LABELS = [
+  ["Program Info", [["program", "Program"], ["timezone", "Timezone"], ["emailPhone", "Email / Phone Number"], ["goals", "Goals"]]],
+  ["Basics", [["date", "Kickoff Date"], ["age", "Age"], ["height", "Height"], ["weight", "Weight"], ["mindset", "Mindset"], ["frequencyWants", "Frequency Wants/Needs"], ["timePerSession", "Time per Session"]]],
+  ["Scales", [["movementScale", "Movement Scale"], ["flexibilityScale", "Flexibility Scale"], ["commVsComprehension", "Communication vs Comprehension"], ["sedentariness", "Sedentariness (Standing/Sitting)"], ["painDescriptors", "Pain Descriptors (if any)"]]],
+  ["Background", [["intakeInfo", "Intake Info (injury history, past events)"], ["whyPacRim", "Why Pac Rim (goals & limitations)"], ["sportsBackground", "Sports / Background / Hobbies / Profession"], ["tenMoveQuizNotes", "10-Move Quiz Notes"], ["additionalNotes", "Additional Notes"], ["homework", "Homework Before We Meet Again"]]],
+  ["Nutrition", [["allergiesRestrictions", "Allergies & Restrictions"], ["staplesDairy", "Staple Foods — Dairy (examples)"], ["staplesProtein", "Staple Foods — Protein (examples)"], ["staplesVeggies", "Staple Foods — Veggies (examples)"], ["staplesFruitsNuts", "Staple Foods — Fruits & Nuts (examples)"], ["staplesGrains", "Staple Foods — Grains & Breads (examples)"], ["staplesMisc", "Misc"]]],
+];
+function formatIntakeDoc(fields, clientName, submitterName, submittedAt) {
+  let out = `${clientName} — Kickoff / Intake Form\nSubmitted by ${submitterName} on ${new Date(submittedAt).toLocaleString()}\n\n`;
+  INTAKE_FIELD_LABELS.forEach(([section, keys]) => {
+    out += `${section.toUpperCase()}\n`;
+    keys.forEach(([key, label]) => { out += `${label}: ${fields[key] || ""}\n`; });
+    out += "\n";
+  });
+  return out;
+}
+
+// Mirrors chat.html's NOTE_FIELDS — same "ZOOM session" table shape as the
+// source doc (Zoom Date, 1:1 Type, Sent Vids, Mindset, Coach, ...).
+const NOTE_FIELD_LABELS = [
+  ["zoomDate", "Zoom Date"], ["oneOnOneType", "1:1 Type"], ["sentVids", "Sent Vids"],
+  ["mindset", "Mindset"], ["coach", "Coach"], ["painDescriptors", "Pain Descriptors (if injury assessment)"],
+  ["trainingFrequency", "Training Frequency for Prior Week"],
+  ["progressionsRemove", "Progressions Made/Exercises Changed — Remove"],
+  ["progressionsAdd", "Progressions Made/Exercises Changed — Add"],
+  ["injuriesPainConcerns", "Injuries / Pain / Concerns Notes"],
+  ["movesDoneLive", "Moves Done Live"], ["additionalNotes", "Additional Notes"],
+];
+function formatNoteEntry(fields, authorName, createdAt) {
+  const heading = fields.zoomDate ? `ZOOM — ${fields.zoomDate}` : `ZOOM — ${new Date(createdAt).toLocaleDateString()}`;
+  let out = `${heading}\nLogged by ${authorName} on ${new Date(createdAt).toLocaleString()}\n\n`;
+  NOTE_FIELD_LABELS.forEach(([key, label]) => { out += `${label}: ${fields[key] || ""}\n`; });
+  out += `\n${"─".repeat(40)}\n\n`;
+  return out;
+}
+
+// Plain-text export of an existing Doc's current content — used to read a
+// client's notes doc before prepending a fresh entry to the top of it.
+async function exportDriveDocText(fileId, accessToken) {
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok) throw new Error(`Drive doc export failed: ${r.status}`);
+  return await r.text();
+}
+
 // Copies a chat media file into the configured favorites folder under a
 // coach-chosen name, then (best-effort) transfers ownership of that COPY to
 // the coach's own Google account. The app has exactly one Drive connection
@@ -2358,7 +2480,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2367,6 +2489,8 @@ export async function handleChatRequest(req, res, url) {
         if (trainingProtocolVideoLibraryFolderId !== undefined) cfg.trainingProtocolVideoLibraryFolderId = trainingProtocolVideoLibraryFolderId;
         if (powerbaticsVideosFolderId !== undefined) cfg.powerbaticsVideosFolderId = powerbaticsVideosFolderId;
         if (favoritesFolderId !== undefined) cfg.favoritesFolderId = favoritesFolderId;
+        if (intakeFormsFolderId !== undefined) cfg.intakeFormsFolderId = intakeFormsFolderId;
+        if (clientNotesFolderId !== undefined) cfg.clientNotesFolderId = clientNotesFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
@@ -2655,6 +2779,117 @@ export async function handleChatRequest(req, res, url) {
         all[targetUserId] = { steps, updatedAt: new Date().toISOString(), updatedBy: user.id };
         writeJson(TRAINING_PROTOCOLS_FILE, all);
         return sendJson(res, 200, { ok: true });
+      }
+    }
+
+    // ─── Kickoff / Intake form ──────────────────────────────────────────
+    // Client (or staff, filling it out for them) submits once; that submit
+    // immediately locks it for EVERYONE, staff included — re-editing needs
+    // an explicit /unlock first, so there's always a clear "who reopened
+    // this and when" record rather than staff silently editing over a
+    // client's original answers. Every successful submit also drops a
+    // brand-new Doc into intakeFormsFolderId — a locked point-in-time
+    // snapshot, not something later edits overwrite.
+    const intakeMatch = p.match(/^\/api\/chat\/intake\/([^/]+)(\/unlock)?$/);
+    if (intakeMatch) {
+      const targetUserId = intakeMatch[1];
+      const isUnlock = !!intakeMatch[2];
+      const canView = user.id === targetUserId || isStaff(user);
+      if (!canView) return sendJson(res, 403, { error: "Not allowed" });
+
+      if (isUnlock) {
+        if (req.method !== "POST") return sendJson(res, 404, { error: "Not found" });
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        const all = readJson(INTAKE_FORMS_FILE, {});
+        if (!all[targetUserId]) return sendJson(res, 404, { error: "No intake form submitted yet" });
+        all[targetUserId].locked = false;
+        all[targetUserId].unlockedBy = user.id;
+        all[targetUserId].unlockedAt = new Date().toISOString();
+        writeJson(INTAKE_FORMS_FILE, all);
+        return sendJson(res, 200, { form: all[targetUserId] });
+      }
+
+      if (req.method === "GET") {
+        const all = readJson(INTAKE_FORMS_FILE, {});
+        return sendJson(res, 200, { form: all[targetUserId] || null });
+      }
+      if (req.method === "POST") {
+        const all = readJson(INTAKE_FORMS_FILE, {});
+        if (all[targetUserId]?.locked) return sendJson(res, 403, { error: "This form is locked — ask a coach or admin to unlock it before editing." });
+        const { fields } = await readJsonBody(req);
+        if (!fields || typeof fields !== "object") return sendJson(res, 400, { error: "fields required" });
+        const submittedAt = new Date().toISOString();
+        all[targetUserId] = { fields, locked: true, submittedBy: user.id, submittedAt };
+        writeJson(INTAKE_FORMS_FILE, all);
+
+        try {
+          const allUsers = readJson(USERS_FILE, []);
+          const target = allUsers.find(u => u.id === targetUserId);
+          const clientName = target ? `${target.first} ${target.last}` : targetUserId;
+          const cfg = getConfig();
+          const accessToken = await getDriveAccessToken();
+          const content = formatIntakeDoc(fields, clientName, `${user.first} ${user.last}`, submittedAt);
+          const doc = await createOrUpdateDriveDoc({
+            name: `${clientName} — Kickoff Intake — ${new Date(submittedAt).toLocaleDateString()}`,
+            folderId: cfg.intakeFormsFolderId, content, accessToken,
+          });
+          all[targetUserId].driveDocId = doc.id;
+          all[targetUserId].driveDocUrl = doc.webViewLink;
+          writeJson(INTAKE_FORMS_FILE, all);
+        } catch (e) {
+          console.error("Intake form Drive doc failed:", e.message);
+        }
+
+        return sendJson(res, 200, { form: all[targetUserId] });
+      }
+    }
+
+    // ─── Coach notes ────────────────────────────────────────────────────
+    // Staff-only, per client, append-only log of structured session entries
+    // (same fields as the ZOOM session table in the source doc — Zoom Date,
+    // 1:1 Type, Sent Vids, Mindset, Coach, etc. — not a single freeform
+    // blob). Each save adds a new dated entry (never overwrites a prior
+    // one) and that same entry gets prepended to the client's single Drive
+    // doc in clientNotesFolderId, so the doc always reads newest-first,
+    // same as the in-app log.
+    const notesMatch = p.match(/^\/api\/chat\/notes\/([^/]+)$/);
+    if (notesMatch) {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const targetUserId = notesMatch[1];
+      const all = readJson(NOTES_FILE, {});
+      if (req.method === "GET") {
+        return sendJson(res, 200, { notes: all[targetUserId] || null });
+      }
+      if (req.method === "POST") {
+        const { fields } = await readJsonBody(req);
+        if (!fields || typeof fields !== "object" || !Object.values(fields).some(v => String(v || "").trim())) {
+          return sendJson(res, 400, { error: "At least one field is required" });
+        }
+        const createdAt = new Date().toISOString();
+        const record = all[targetUserId] || { entries: [], driveDocId: null, driveDocUrl: null };
+        record.entries.unshift({ fields, authorId: user.id, createdAt });
+        all[targetUserId] = record;
+        writeJson(NOTES_FILE, all);
+
+        try {
+          const allUsers = readJson(USERS_FILE, []);
+          const target = allUsers.find(u => u.id === targetUserId);
+          const clientName = target ? `${target.first} ${target.last}` : targetUserId;
+          const cfg = getConfig();
+          const accessToken = await getDriveAccessToken();
+          const entryText = formatNoteEntry(fields, `${user.first} ${user.last}`, createdAt);
+          const doc = record.driveDocId
+            ? await createOrUpdateDriveDoc({ fileId: record.driveDocId, content: entryText + await exportDriveDocText(record.driveDocId, accessToken).catch(() => ""), accessToken })
+            : await createOrUpdateDriveDoc({ name: `${clientName} — Client Notes`, folderId: cfg.clientNotesFolderId, content: entryText, accessToken });
+          record.driveDocId = doc.id;
+          record.driveDocUrl = doc.webViewLink;
+          all[targetUserId] = record;
+          writeJson(NOTES_FILE, all);
+        } catch (e) {
+          console.error("Client notes Drive doc failed:", e.message);
+        }
+
+        return sendJson(res, 200, { notes: all[targetUserId] });
       }
     }
 
