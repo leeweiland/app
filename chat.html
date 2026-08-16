@@ -36,10 +36,23 @@
   .sidebar-search input { font-size: .85rem; padding: 8px 12px; }
   .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
+  .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
   .convo-list { flex: 1; overflow-y: auto; }
   .convo-item { display: flex; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: background .12s; }
+  /* ── Bulk select (message several chats/groups at once) ── */
+  .convo-item.select-mode.selected { background: var(--pra-blue-dim); }
+  .convo-select-checkbox { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--pra-border); align-self: center; display: flex; align-items: center; justify-content: center; transition: background .12s, border-color .12s; }
+  .convo-item.selected .convo-select-checkbox { background: var(--pra-blue); border-color: var(--pra-blue); }
+  .convo-select-checkbox svg { width: 12px; height: 12px; opacity: 0; }
+  .convo-item.selected .convo-select-checkbox svg { opacity: 1; }
+  .bulk-select-bar { display: none; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--pra-border); background: rgba(0,155,255,0.06); }
+  .bulk-select-bar.show { display: flex; }
+  .bulk-select-count { font-size: .8rem; color: var(--pra-dim); white-space: nowrap; }
+  .bulk-select-actions { display: flex; gap: 8px; }
+  .compose-textarea { width: 100%; min-height: 110px; resize: vertical; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 10px 12px; font-family: inherit; font-size: .88rem; }
+  .compose-recipients { text-align: left; font-size: .78rem; color: var(--pra-dim); margin: 10px 0 4px; max-height: 90px; overflow-y: auto; }
   .convo-item:hover { background: rgba(255,255,255,0.03); }
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
@@ -447,6 +460,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="pra-h2 pra-glow" style="font-family:var(--font-secondary)">Chats</div>
           <div class="sidebar-actions">
+            <button class="icon-btn" id="bulkSelectBtn" title="Select chats/groups to message at once" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="3.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M5.5 7.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="12.5" y="12.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M14.5 16.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="newGroupBtn" title="New group" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
           </div>
         </div>
@@ -459,6 +473,13 @@
       <div class="sidebar-search search-clear-wrap">
         <input class="pra-input" id="chatSearchInput" placeholder="Search name…"/>
         <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
+      </div>
+      <div class="bulk-select-bar" id="bulkSelectBar">
+        <span class="bulk-select-count" id="bulkSelectCount">0 selected</span>
+        <div class="bulk-select-actions">
+          <button class="pra-btn pra-btn-ghost" style="padding:6px 12px;font-size:.76rem" id="bulkSelectCancelBtn">Cancel</button>
+          <button class="pra-btn" style="padding:6px 14px;font-size:.76rem" id="bulkSelectMessageBtn" disabled>Message</button>
+        </div>
       </div>
       <div class="convo-list" id="convoList"><div class="empty-hint">Loading…</div></div>
     </div>
@@ -580,6 +601,19 @@
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="groupInfoAddBtn">Add Selected</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupInfoModal')">Close</button>
+    </div>
+  </div>
+
+  <!-- Bulk-message modal — sends into each selected chat/group's OWN thread,
+       never one shared new group with everyone selected lumped together. -->
+  <div class="modal-backdrop" id="bulkComposeModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:10px">Message Selected</div>
+      <div class="compose-recipients" id="bulkComposeRecipients"></div>
+      <textarea class="compose-textarea" id="bulkComposeText" placeholder="Type a message — each chat/group gets it separately…"></textarea>
+      <div class="pra-muted" id="bulkComposeStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
+      <button class="pra-btn" style="margin-top:14px;width:100%" id="bulkComposeSendBtn">Send</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="bulkComposeCancelBtn">Cancel</button>
     </div>
   </div>
 
@@ -958,6 +992,7 @@ async function init() {
   } catch {}
 
   if (isStaffMe()) {
+    document.getElementById('bulkSelectBtn').style.display = '';
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
     document.getElementById('templatesBtn').style.display = '';
@@ -1093,8 +1128,13 @@ function convoItemHtml(i) {
   const unreadBadge = `<div class="convo-unread-badge${(i.unreadCount > 0 || showReceiptTick) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
   const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
+  const isSelected = bulkSelectMode && bulkSelected.has(i.key);
+  const checkbox = bulkSelectMode
+    ? `<div class="convo-select-checkbox"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
+    : '';
   return `
-    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''}" data-key="${i.key}">
+    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}">
+      ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
         <div class="convo-name">${pinnedMark}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
@@ -1119,6 +1159,7 @@ function wireConvoItems(wrap, items) {
     if (!item) return;
     el.onclick = (e) => {
       if (e.target.closest('.convo-fav-btn, .convo-pin-btn, .convo-channel-btn')) return; // handled separately below
+      if (bulkSelectMode) { toggleBulkSelection(item); return; }
       // Same click behavior for every contact regardless of role (student,
       // coach, or admin) and regardless of viewer: anyone not already a
       // real conversation opens a profile popup instead of jumping straight
@@ -1161,6 +1202,89 @@ function wireConvoItems(wrap, items) {
     };
   });
 }
+
+// ── Bulk select (message several chats/groups at once) ──────────────────
+// Selecting several rows and hitting Message does NOT create one new group
+// with everyone lumped together — the text lands in each row's own thread
+// separately (its existing DM/group, or a fresh DM for a virtual contact
+// with no conversation yet), same as typing it into each chat by hand.
+let bulkSelectMode = false;
+let bulkSelected = new Map(); // item.key -> { name, convoId, contactId }
+
+function setBulkSelectMode(on) {
+  bulkSelectMode = on;
+  const btn = document.getElementById('bulkSelectBtn');
+  btn.classList.toggle('on', on);
+  document.getElementById('bulkSelectBar').classList.toggle('show', on);
+  if (!on) bulkSelected.clear();
+  updateBulkSelectBar();
+  renderConvoList();
+}
+
+function toggleBulkSelection(item) {
+  if (bulkSelected.has(item.key)) {
+    bulkSelected.delete(item.key);
+  } else {
+    bulkSelected.set(item.key, { name: item.name, convoId: item.convoId || null, contactId: item.contactId || null });
+  }
+  updateBulkSelectBar();
+  renderConvoList();
+}
+
+function updateBulkSelectBar() {
+  document.getElementById('bulkSelectCount').textContent = bulkSelected.size + ' selected';
+  document.getElementById('bulkSelectMessageBtn').disabled = bulkSelected.size === 0;
+}
+
+function openBulkComposeModal() {
+  if (!bulkSelected.size) return;
+  document.getElementById('bulkComposeRecipients').textContent =
+    'To: ' + Array.from(bulkSelected.values()).map(t => t.name).join(', ');
+  document.getElementById('bulkComposeText').value = '';
+  document.getElementById('bulkComposeStatus').textContent = '';
+  openModal('bulkComposeModal');
+  document.getElementById('bulkComposeText').focus();
+}
+
+// Sequential, not Promise.all — the backend does plain read-modify-write on
+// the JSON data files with no locking, so firing these concurrently risks
+// two requests clobbering each other's write.
+async function sendBulkMessages() {
+  const text = document.getElementById('bulkComposeText').value.trim();
+  if (!text) return;
+  const status = document.getElementById('bulkComposeStatus');
+  const sendBtn = document.getElementById('bulkComposeSendBtn');
+  sendBtn.disabled = true;
+  const targets = Array.from(bulkSelected.values());
+  let sent = 0;
+  for (const t of targets) {
+    status.textContent = `Sending… (${sent}/${targets.length})`;
+    let convoId = t.convoId;
+    try {
+      if (!convoId && t.contactId) {
+        const r = await fetch('/api/chat/conversations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'dm', otherUserId: t.contactId })
+        });
+        if (r.ok) convoId = (await r.json()).conversation?.id;
+      }
+      if (!convoId) continue;
+      const mr = await fetch(`/api/chat/conversations/${convoId}/messages`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+      });
+      if (mr.ok) sent++;
+    } catch {}
+  }
+  status.textContent = sent === targets.length ? `Sent to ${sent}.` : `Sent to ${sent}/${targets.length} — some couldn't be reached.`;
+  sendBtn.disabled = false;
+  setTimeout(() => { closeModal('bulkComposeModal'); setBulkSelectMode(false); loadConversations(); }, sent === targets.length ? 700 : 1600);
+}
+
+document.getElementById('bulkSelectBtn').onclick = () => setBulkSelectMode(!bulkSelectMode);
+document.getElementById('bulkSelectCancelBtn').onclick = () => setBulkSelectMode(false);
+document.getElementById('bulkSelectMessageBtn').onclick = openBulkComposeModal;
+document.getElementById('bulkComposeCancelBtn').onclick = () => closeModal('bulkComposeModal');
+document.getElementById('bulkComposeSendBtn').onclick = sendBulkMessages;
 
 let favoritesOnlyView = false;
 let unreadOnlyView = false;
