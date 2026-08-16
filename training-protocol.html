@@ -358,16 +358,23 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
 // Every step has at most one "right" (continue this row) and one "below"
 // (start a new row, x-aligned directly under it — never offset sideways,
 // so the connector down to it is always a straight vertical line) child.
-// Each row's own rightward chain is laid out completely independently of
-// any other row — a below-subtree's own rightward extent never pushes
-// anything in the row it branched off of, or any other ancestor row. Rows
-// are stacked at different heights and never visually overlap regardless
-// of which columns they use, so there's nothing to avoid colliding with —
-// an earlier version propagated a below-subtree's width back up to shove
-// its own PARENT's next same-row step further right "to make room" that
-// was never actually needed, which showed up as unrelated steps jumping
-// sideways whenever something completely unrelated was added several rows
-// down.
+//
+// Non-root rows lay out their own rightward chain completely independently
+// of any other row — a below-subtree's own rightward extent never pushes
+// anything in the row it branched off of. Rows are stacked at different
+// heights and never visually overlap regardless of which columns they use,
+// so there's nothing to avoid colliding with there (an earlier version
+// propagated width back up through EVERY row, which meant unrelated steps
+// several rows down could shove an ancestor row sideways).
+//
+// Row 0 is the exception, on purpose — it's the protocol's main sequence
+// (Day 1, Day 2, ...), and it DOES reserve room for whatever's nested
+// underneath each of its own steps, at any depth: belowSubtreeReach walks
+// a step's entire below-subtree (its row-chain, and recursively whatever
+// hangs below each of THOSE steps too) and reports how many columns past
+// its own the deepest/widest point reaches, so row 0 always has enough
+// horizontal room and nothing nested under it ends up visually sitting
+// beneath the wrong Day.
 const COL_W = 300, ROW_H = 210;
 function childrenOf(list, pid) { return list.filter(s => s.parentId === pid); }
 function primaryChildOf(list, node) { return childrenOf(list, node.id).find(k => !k.isBranchRoot) || null; }
@@ -375,19 +382,34 @@ function branchChildrenOf(list, node) { return childrenOf(list, node.id).filter(
 
 function computeLayout(list) {
   const pos = new Map();
-  function layoutRow(node, col, row) {
+
+  function belowSubtreeReach(step) {
+    const below = branchChildrenOf(list, step)[0];
+    if (!below) return 0;
+    let reach = 0, cur = below, offset = 0;
+    while (cur) {
+      reach = Math.max(reach, offset, offset + belowSubtreeReach(cur));
+      cur = primaryChildOf(list, cur);
+      offset += 1;
+    }
+    return reach;
+  }
+
+  function layoutRow(node, col, row, pushForChildren) {
     let cur = node, curCol = col;
     while (cur) {
       pos.set(cur.id, { x: curCol, row });
       const below = branchChildrenOf(list, cur)[0];
-      if (below) layoutRow(below, curCol, row + 1);
-      cur = primaryChildOf(list, cur);
-      curCol += 1;
+      if (below) layoutRow(below, curCol, row + 1, false);
+      const next = primaryChildOf(list, cur);
+      if (next) curCol += pushForChildren ? Math.max(1, belowSubtreeReach(cur) + 1) : 1;
+      cur = next;
     }
   }
+
   let nextRootCol = 0;
   list.filter(s => !s.parentId).forEach(r => {
-    layoutRow(r, nextRootCol, 0);
+    layoutRow(r, nextRootCol, 0, true);
     // Next independent root tree starts past however far right THIS one's
     // own top row reached — a fresh root is the one case that genuinely
     // needs to avoid the previous root's row 0, since row 0 is shared.
@@ -420,13 +442,15 @@ function nextDayNumber() {
 // Splices a new step into an existing connector — the new step takes over
 // the old child's exact relationship to the parent (straight continuation
 // or branch-root elbow, whichever the clicked line was), and the old
-// child becomes the new step's own plain continuation, since past the
-// insertion point it's just carrying on the same chain either way.
+// child keeps ITS OWN relationship type unchanged (still a below-child if
+// it always was one, keeping the line vertical straight through the new
+// step — previously forced to a right-child unconditionally, which
+// visibly kinked a vertical chain sideways the moment anything got
+// inserted into it).
 async function insertStepBetween(parentId, childId, fields) {
   const child = steps.find(s => s.id === childId);
   const step = { id: newId(), parentId, isBranchRoot: child.isBranchRoot, ...fields };
   child.parentId = step.id;
-  child.isBranchRoot = false;
   steps.push(step);
   render();
   await saveSteps();
@@ -484,8 +508,7 @@ async function moveStepTo(stepId, target) {
     const child = steps.find(s => s.id === target.childId);
     step.parentId = target.parentId;
     step.isBranchRoot = child.isBranchRoot;
-    child.parentId = step.id;
-    child.isBranchRoot = false;
+    child.parentId = step.id; // child keeps its own isBranchRoot — see insertStepBetween
   } else if (target.kind === 'plus') {
     step.parentId = target.parentId;
     step.isBranchRoot = target.isBranchRoot;
