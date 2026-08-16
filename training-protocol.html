@@ -52,6 +52,13 @@
   .step-delete { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit { position: absolute; top: 8px; right: 38px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  /* Grabbing anywhere else on a card pans the canvas (see setupCanvasPanZoom)
+     — this handle is the one spot on a card that picks the step up to move
+     it instead, so the two gestures never fight each other. */
+  .step-drag-handle { position: absolute; top: 8px; left: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: grab; font-size: 13px; z-index: 2; display: flex; align-items: center; justify-content: center; touch-action: none; }
+  .step-drag-handle:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .step-drag-ghost { position: fixed; z-index: 500; pointer-events: none; padding: 8px 14px; border-radius: 10px; background: var(--pra-blue); color: #fff; font-size: .8rem; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transform: translate(-50%, -50%); opacity: .95; }
+  .drop-target-hover { transform: translate(-50%, -50%) scale(1.6) !important; box-shadow: 0 0 0 4px rgba(0,155,255,0.35); }
   .step-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
   .step-plus { position: absolute; width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .15s; }
   .step-plus:hover { background: #0086dd; }
@@ -300,6 +307,7 @@ async function init() {
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
 
   setupCanvasPanZoom();
+  setupStepDrag();
   await loadSteps();
   wireModals();
 }
@@ -350,11 +358,16 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
 // Every step has at most one "right" (continue this row) and one "below"
 // (start a new row, x-aligned directly under it — never offset sideways,
 // so the connector down to it is always a straight vertical line) child.
-// A single top-down pass per row-chain: place each step, recurse into its
-// below-child as its OWN row-chain starting at the SAME column, and let
-// however many columns that below-subtree ends up needing push this row's
-// NEXT step further right if it needed more than the usual one column —
-// the horizontal gap grows instead of the vertical line bending.
+// Each row's own rightward chain is laid out completely independently of
+// any other row — a below-subtree's own rightward extent never pushes
+// anything in the row it branched off of, or any other ancestor row. Rows
+// are stacked at different heights and never visually overlap regardless
+// of which columns they use, so there's nothing to avoid colliding with —
+// an earlier version propagated a below-subtree's width back up to shove
+// its own PARENT's next same-row step further right "to make room" that
+// was never actually needed, which showed up as unrelated steps jumping
+// sideways whenever something completely unrelated was added several rows
+// down.
 const COL_W = 300, ROW_H = 210;
 function childrenOf(list, pid) { return list.filter(s => s.parentId === pid); }
 function primaryChildOf(list, node) { return childrenOf(list, node.id).find(k => !k.isBranchRoot) || null; }
@@ -363,20 +376,25 @@ function branchChildrenOf(list, node) { return childrenOf(list, node.id).filter(
 function computeLayout(list) {
   const pos = new Map();
   function layoutRow(node, col, row) {
-    let cur = node, curCol = col, maxColUsed = col;
+    let cur = node, curCol = col;
     while (cur) {
       pos.set(cur.id, { x: curCol, row });
-      maxColUsed = Math.max(maxColUsed, curCol);
       const below = branchChildrenOf(list, cur)[0];
-      if (below) maxColUsed = Math.max(maxColUsed, layoutRow(below, curCol, row + 1));
-      const next = primaryChildOf(list, cur);
-      if (next) curCol = maxColUsed + 1;
-      cur = next;
+      if (below) layoutRow(below, curCol, row + 1);
+      cur = primaryChildOf(list, cur);
+      curCol += 1;
     }
-    return maxColUsed;
   }
   let nextRootCol = 0;
-  list.filter(s => !s.parentId).forEach(r => { nextRootCol = layoutRow(r, nextRootCol, 0) + 1; });
+  list.filter(s => !s.parentId).forEach(r => {
+    layoutRow(r, nextRootCol, 0);
+    // Next independent root tree starts past however far right THIS one's
+    // own top row reached — a fresh root is the one case that genuinely
+    // needs to avoid the previous root's row 0, since row 0 is shared.
+    let maxCol = nextRootCol, cur = r;
+    while (cur) { maxCol = Math.max(maxCol, pos.get(cur.id).x); cur = primaryChildOf(list, cur); }
+    nextRootCol = maxCol + 1;
+  });
   return pos;
 }
 
@@ -441,6 +459,46 @@ async function commitNewStep(fields) {
   return step;
 }
 
+function isDescendantOf(candidateId, ancestorId) {
+  let cur = steps.find(s => s.id === candidateId);
+  while (cur) {
+    if (cur.id === ancestorId) return true;
+    cur = steps.find(s => s.id === cur.parentId) || null;
+  }
+  return false;
+}
+
+// Drag-to-reorganize (see setupStepDrag) — relocates just the dragged step
+// itself, not its own subtree. Whatever was attached to it reconnects to
+// its old parent first (identical to deleting it), then it's attached at
+// the drop target exactly like a fresh step would be there.
+async function moveStepTo(stepId, target) {
+  const step = steps.find(s => s.id === stepId);
+  if (!step) return;
+  snapshotBeforeChange();
+  childrenOf(steps, stepId).forEach(c => {
+    c.parentId = step.parentId;
+    if (!c.isBranchRoot) c.isBranchRoot = step.isBranchRoot;
+  });
+  if (target.kind === 'insert') {
+    const child = steps.find(s => s.id === target.childId);
+    step.parentId = target.parentId;
+    step.isBranchRoot = child.isBranchRoot;
+    child.parentId = step.id;
+    child.isBranchRoot = false;
+  } else if (target.kind === 'plus') {
+    step.parentId = target.parentId;
+    step.isBranchRoot = target.isBranchRoot;
+  } else if (target.kind === 'placeholder') {
+    const ph = steps.find(s => s.id === target.placeholderId);
+    step.parentId = ph.parentId;
+    step.isBranchRoot = ph.isBranchRoot;
+    steps = steps.filter(s => s.id !== ph.id);
+  }
+  render();
+  await saveSteps();
+}
+
 function render() {
   const emptyHint = document.getElementById('emptyHint');
   const canvas = document.getElementById('protocolCanvas');
@@ -490,6 +548,7 @@ function render() {
     return `
       <div class="step-node" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
         <div class="pra-panel step-card">
+          ${canEdit ? `<button class="step-drag-handle" data-id="${s.id}" title="Drag to move">⠿</button>` : ''}
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
           ${canEdit && s.type === 'text' ? `<button class="step-edit" data-id="${s.id}" title="Edit text">✎</button>` : ''}
           ${renderStepContent(s)}
@@ -696,6 +755,72 @@ function fitCanvasToView() {
   canvasY = 24;
   applyCanvasTransform();
 }
+// Grabbing a card's drag handle picks the step up and shows a small pill
+// following the pointer; releasing over any + (mid-connector, add-next,
+// add-below) or an empty placeholder drops it there. Uses pointer events
+// rather than native HTML5 drag-and-drop specifically because that API
+// doesn't fire on touch at all — this needs to work the same way with a
+// finger as with a mouse.
+function setupStepDrag() {
+  let draggedId = null, ghost = null, hoverTarget = null;
+
+  function targetFromEl(el) {
+    if (!el) return null;
+    const insert = el.closest('.step-insert-plus');
+    if (insert && insert.dataset.child) return { el: insert, kind: 'insert', parentId: insert.dataset.parent, childId: insert.dataset.child };
+    const plus = el.closest('.step-plus');
+    if (plus) return { el: plus, kind: 'plus', parentId: plus.dataset.parent, isBranchRoot: plus.dataset.branch === 'true' };
+    const ph = el.closest('.step-placeholder');
+    if (ph) return { el: ph, kind: 'placeholder', placeholderId: ph.dataset.id };
+    return null;
+  }
+  function setHover(target) {
+    if (hoverTarget?.el === target?.el) return;
+    hoverTarget?.el.classList.remove('drop-target-hover');
+    hoverTarget = target;
+    hoverTarget?.el.classList.add('drop-target-hover');
+  }
+  function cleanup() {
+    ghost?.remove(); ghost = null;
+    hoverTarget?.el.classList.remove('drop-target-hover'); hoverTarget = null;
+    draggedId = null;
+    document.body.style.userSelect = '';
+  }
+
+  document.getElementById('protocolCanvas').addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.step-drag-handle');
+    if (!handle) return;
+    e.preventDefault();
+    e.stopPropagation();
+    draggedId = handle.dataset.id;
+    document.body.style.userSelect = 'none';
+    ghost = document.createElement('div');
+    ghost.className = 'step-drag-ghost';
+    ghost.textContent = 'Moving…';
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    document.body.appendChild(ghost);
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!draggedId) return;
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    setHover(targetFromEl(document.elementFromPoint(e.clientX, e.clientY)));
+  });
+  window.addEventListener('pointerup', async () => {
+    if (!draggedId) return;
+    const id = draggedId, target = hoverTarget;
+    cleanup();
+    if (!target) return;
+    // A step can't be dropped onto itself, onto the connector it's already
+    // the child of, or under one of its own descendants — any of those
+    // would either be a no-op or orphan part of the tree into a cycle.
+    if (target.kind === 'insert' && target.childId === id) return;
+    if (target.parentId && (target.parentId === id || isDescendantOf(target.parentId, id))) return;
+    await moveStepTo(id, target);
+  });
+}
+
 function setupCanvasPanZoom() {
   const canvasEl = document.getElementById('protocolCanvas');
 
@@ -811,7 +936,7 @@ function renderStepContent(s) {
   if (s.type === 'day') {
     return `<div class="step-day-badge">Day ${s.dayNumber}</div>`;
   }
-  return `<div class="step-type">Note</div><div class="step-text">${escapeHtml(s.content || '')}</div>`;
+  return `<div class="step-text">${escapeHtml(s.content || '')}</div>`;
 }
 
 function wireModals() {
