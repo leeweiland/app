@@ -135,6 +135,8 @@
         <div class="client-name" id="clientName">Loading…</div>
         <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
       </div>
+      <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none">💾</button>
+      <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none">📁</button>
     </div>
 
     <div class="empty-hint" id="emptyHint" style="display:none">
@@ -215,6 +217,33 @@
         <button class="pra-btn" id="templateAddBtn" style="width:100%">Save Template</button>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('templateModal')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Save the CURRENT protocol (this student's full step graph) as a
+       reusable named template — a coach/admin thing, distinct from the
+       Saved Text modal above (which saves one snippet of text, not a
+       whole protocol). -->
+  <div class="modal-backdrop" id="saveProtocolTemplateModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Save as Template</div>
+      <input class="pra-input" id="saveProtocolTemplateName" placeholder="Template name"/>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn" id="saveProtocolTemplateConfirmBtn" style="flex:1">Save</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('saveProtocolTemplateModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pick a saved protocol template to load onto THIS student — replaces
+       whatever's currently here, so applying one is confirmed separately
+       per-row rather than a single "load" action, same reasoning as
+       delete needing its own confirm. -->
+  <div class="modal-backdrop" id="loadProtocolTemplateModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Load a Template</div>
+      <div id="protocolTemplateResults" class="modal-scroll-body"></div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('loadProtocolTemplateModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -309,11 +338,49 @@ async function init() {
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
+  document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
 
   setupCanvasPanZoom();
   setupStepDrag();
+  setupProtocolTemplates();
   await loadSteps();
   wireModals();
+  await setupBackToChatLink();
+}
+
+// Deep-links back to the exact conversation this page was opened from
+// (?convo=, passed by chat.html's in-thread protocol link) — not
+// history.back(), since chat.html is served with Cache-Control: no-store
+// (needed to stop stale JS sticking around after a deploy), which also
+// defeats the browser's bfcache, so a plain back-navigation would reload
+// chat.html from scratch with nothing open rather than landing back on
+// the right thread.
+//
+// The other entry point is the persistent header's own "My Training
+// Protocol" icon, which carries no ?convo= at all. That icon is easy to
+// miss (no label, just an icon) — when the viewer IS the student whose
+// protocol this is, look up their own conversation list and link to their
+// group chat instead of just hiding the button; for anyone viewing
+// someone ELSE's protocol without a ?convo= (a rare, unusual path), there
+// genuinely isn't a specific conversation to send them to.
+async function setupBackToChatLink() {
+  let convoId = sourceConvoId;
+  if (!convoId && me?.id === targetUserId) {
+    try {
+      const r = await fetch('/api/chat/conversations');
+      if (r.ok) {
+        const d = await r.json();
+        const group = d.conversations.find(c => c.type === 'group' && !c.isChannel);
+        convoId = (group || d.conversations[0])?.id || null;
+      }
+    } catch {}
+  }
+  const backBtn = document.getElementById('backBtn');
+  backBtn.style.display = convoId ? '' : 'none';
+  backBtn.onclick = () => {
+    location.href = convoId ? '/chat-app/chat.html?convo=' + encodeURIComponent(convoId) : '/chat-app/chat.html';
+  };
 }
 
 // Older protocols were saved as a flat ordered array with no id/parentId —
@@ -966,6 +1033,78 @@ function renderStepContent(s) {
   return `<div class="step-text">${escapeHtml(s.content || '')}</div>`;
 }
 
+// Assigns every step a fresh id when applying a saved template — reusing
+// the template's own ids as-is would collide the moment the same template
+// gets applied to a second student (or re-applied to the same one twice),
+// since ids only need to be unique within one student's own steps array,
+// not globally.
+function cloneStepsWithFreshIds(templateSteps) {
+  const idMap = new Map();
+  templateSteps.forEach(s => idMap.set(s.id, newId()));
+  return templateSteps.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
+}
+
+function setupProtocolTemplates() {
+  document.getElementById('saveTemplateBtn').onclick = () => {
+    if (!steps.length) { alert('Nothing to save yet — add some steps first.'); return; }
+    document.getElementById('saveProtocolTemplateName').value = '';
+    openModal('saveProtocolTemplateModal');
+  };
+  document.getElementById('saveProtocolTemplateConfirmBtn').onclick = async () => {
+    const name = document.getElementById('saveProtocolTemplateName').value.trim();
+    if (!name) return;
+    const r = await fetch('/api/chat/protocol-templates', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, steps }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
+    closeModal('saveProtocolTemplateModal');
+  };
+
+  document.getElementById('loadTemplateBtn').onclick = () => {
+    openModal('loadProtocolTemplateModal');
+    renderProtocolTemplateList();
+  };
+}
+
+async function renderProtocolTemplateList() {
+  const list = document.getElementById('protocolTemplateResults');
+  list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div>';
+  const r = await fetch('/api/chat/protocol-templates');
+  if (!r.ok) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Could not load templates.</div>'; return; }
+  const { templates } = await r.json();
+  if (!templates.length) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">No saved templates yet.</div>'; return; }
+  list.innerHTML = templates.map(t => `
+    <div class="template-item" data-id="${t.id}">
+      <div class="template-item-body">
+        <div class="template-item-title">${escapeHtml(t.name)}</div>
+        <div class="template-item-text">${t.stepCount} step${t.stepCount === 1 ? '' : 's'} · ${new Date(t.createdAt).toLocaleDateString()}</div>
+      </div>
+      <button class="template-delete-btn" title="Delete template">🗑</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.template-item').forEach(row => {
+    const id = row.dataset.id;
+    const t = templates.find(x => x.id === id);
+    row.querySelector('.template-item-body').onclick = async () => {
+      if (!confirm(`Replace this student's current protocol with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
+      const fr = await fetch('/api/chat/protocol-templates/' + id);
+      if (!fr.ok) { alert('Could not load that template.'); return; }
+      const { template } = await fr.json();
+      snapshotBeforeChange();
+      steps = cloneStepsWithFreshIds(template.steps);
+      render();
+      await saveSteps();
+      closeModal('loadProtocolTemplateModal');
+    };
+    row.querySelector('.template-delete-btn').onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete the saved template "${t.name}"? This only removes the template — it won't affect any student's current protocol.`)) return;
+      await fetch('/api/chat/protocol-templates/' + id, { method: 'DELETE' });
+      renderProtocolTemplateList();
+    };
+  });
+}
+
 function wireModals() {
   document.getElementById('chooseVideo').onclick = () => {
     closeModal('chooseTypeModal');
@@ -1203,25 +1342,6 @@ async function submitNewTemplate() {
   document.getElementById('templateAddText').value = '';
   searchTemplates(document.getElementById('templateSearchInput').value || '');
 }
-
-// Only meaningful when this page was reached from a specific chat (the
-// "Current Training Protocol" link, which passes ?convo=) — the other entry
-// point is the persistent header's own "My Training Protocol" icon, which
-// has no conversation to go back to and would otherwise land on chat.html's
-// blank "Select a chat" screen instead of anywhere useful.
-if (!sourceConvoId) document.getElementById('backBtn').style.display = 'none';
-
-// Explicit deep link back to the exact conversation this page was opened
-// from (passed as ?convo= by chat.html's protocol link), not history.back()
-// — chat.html is served with Cache-Control: no-store (needed to stop stale
-// JS sticking around after a deploy), which also defeats the browser's
-// bfcache, so a plain back-navigation would reload chat.html from scratch
-// with nothing open rather than landing back on the right thread.
-document.getElementById('backBtn').onclick = () => {
-  location.href = sourceConvoId
-    ? '/chat-app/chat.html?convo=' + encodeURIComponent(sourceConvoId)
-    : '/chat-app/chat.html';
-};
 
 init();
 </script>

@@ -36,6 +36,10 @@ const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
 const FAVORITES_FILE = "chat_favorites.json";
 const MESSAGE_TEMPLATES_FILE = "chat_message_templates.json";
 const PROTOCOL_STEP_TEMPLATES_FILE = "chat_protocol_step_templates.json";
+// Whole reusable protocols (named, full step graph) a coach can apply to
+// any student — distinct from PROTOCOL_STEP_TEMPLATES_FILE above, which is
+// just individual saved text snippets for a single step.
+const PROTOCOL_TEMPLATES_FILE = "chat_protocol_templates.json";
 const GYM_BLOCKED_DATES_FILE = "chat_gym_blocked_dates.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
@@ -2824,6 +2828,45 @@ export async function handleChatRequest(req, res, url) {
       const next = templates.filter(t => t.id !== deleteProtocolTemplateMatch[1]);
       if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
       writeJson(PROTOCOL_STEP_TEMPLATES_FILE, next);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // ─── Whole reusable training protocols (named, full step graph) ────────
+    // List is deliberately lightweight (no steps array) — a coach picking
+    // from a menu of templates doesn't need every step's full content
+    // downloaded up front, just enough to recognize which one they want.
+    if (p === "/api/chat/protocol-templates" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const list = templates
+        .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return sendJson(res, 200, { templates: list });
+    }
+    if (p === "/api/chat/protocol-templates" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const { name, steps } = await readJsonBody(req);
+      if (!String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
+      if (!Array.isArray(steps) || !steps.length) return sendJson(res, 400, { error: "Nothing to save — this protocol has no steps yet" });
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const template = { id: randomUUID(), name: name.trim(), steps, createdAt: new Date().toISOString(), savedBy: user.id };
+      templates.push(template);
+      writeJson(PROTOCOL_TEMPLATES_FILE, templates);
+      return sendJson(res, 200, { template: { id: template.id, name: template.name, createdAt: template.createdAt, stepCount: steps.length } });
+    }
+    const protocolTemplateMatch = p.match(/^\/api\/chat\/protocol-templates\/([^/]+)$/);
+    if (protocolTemplateMatch && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const template = readJson(PROTOCOL_TEMPLATES_FILE, []).find(t => t.id === protocolTemplateMatch[1]);
+      if (!template) return sendJson(res, 404, { error: "Template not found" });
+      return sendJson(res, 200, { template });
+    }
+    if (protocolTemplateMatch && req.method === "DELETE") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const next = templates.filter(t => t.id !== protocolTemplateMatch[1]);
+      if (next.length === templates.length) return sendJson(res, 404, { error: "Template not found" });
+      writeJson(PROTOCOL_TEMPLATES_FILE, next);
       return sendJson(res, 200, { ok: true });
     }
 

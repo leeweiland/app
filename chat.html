@@ -321,7 +321,7 @@
   .template-item:hover { background: rgba(255,255,255,0.05); }
   .template-item-body { flex: 1; min-width: 0; }
   .template-item-title { font-weight: 700; font-size: .82rem; }
-  .template-item-text { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .template-item-text { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); white-space: pre-wrap; word-break: break-word; }
   .template-delete-btn { flex-shrink: 0; background: none; border: none; color: #ff5c5c; cursor: pointer; font-size: .9rem; padding: 2px 4px; }
   .template-delete-btn:hover { opacity: .7; }
   .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 8px; padding-top: 8px; }
@@ -1313,14 +1313,16 @@ async function openConvo(id) {
     el.title = canEditLevels ? 'Click to view/edit levels' : '';
   });
 
-  // Coach/admin only — lets them see/edit the CLIENT's protocol from the
-  // chat. A regular user has their own dedicated top-bar icon for viewing
-  // their own protocol instead, so this stays hidden for them here.
+  // Coach/admin sees it to view/edit the CLIENT's protocol from the chat.
+  // The student themselves sees the exact same in-thread link (pointing at
+  // their own protocol) rather than relying only on the generic top-bar
+  // icon — that icon has no "training protocol" label on it, easy to miss
+  // entirely next to the coach's own much more visible in-thread link.
   const protocolLink = document.getElementById('threadProtocolLink');
   const protocolStudent = convo.type === 'dm' ? threadOtherUser
     : convo.type === 'group' ? convo.participants.find(p => isClientRole(p.role))
     : null;
-  if (protocolStudent && isStaffMe()) {
+  if (protocolStudent && (isStaffMe() || me.id === protocolStudent.id)) {
     protocolLink.href = '/chat-app/training-protocol.html?userId=' + protocolStudent.id + '&convo=' + convo.id;
     protocolLink.style.display = 'block';
   } else {
@@ -2575,7 +2577,7 @@ async function loadTemplates(q) {
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
     const t = templates.find(x => x.id === row.dataset.id);
-    row.querySelector('.template-item-body').onclick = () => sendTemplate(t.text);
+    row.querySelector('.template-item-body').onclick = () => useTemplate(t.text);
     const delBtn = row.querySelector('.template-delete-btn');
     if (delBtn) delBtn.onclick = async (e) => {
       e.stopPropagation();
@@ -2586,13 +2588,15 @@ async function loadTemplates(q) {
   });
 }
 
-async function sendTemplate(text) {
+// Populates the composer instead of sending immediately — a saved reply is
+// a starting point to review/edit (fill in a NAME, an XX/XX date, etc.),
+// not something that should go out untouched the moment it's clicked.
+function useTemplate(text) {
   document.getElementById('templatesPanel').classList.remove('show');
-  if (!activeConvoId) return;
-  await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
-  });
-  refreshThread(true);
+  const textInput = document.getElementById('textInput');
+  textInput.value = text;
+  textInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the composer's own auto-resize + typing-ping listeners
+  textInput.focus();
 }
 
 async function submitNewTemplate() {
