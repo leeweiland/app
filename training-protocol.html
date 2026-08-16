@@ -347,72 +347,36 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { rootMargin: '400px' });
 
-// A branch fan-out needs to reserve real horizontal room, centered under
-// its parent, and every step downstream on the main line has to slide
-// right to clear it — not a fixed integer grid column. Two passes:
-//
-// 1. nodeReach/chainWidth (bottom-up, memoized): how many column-units
-//    wide a node's own branch fan is (or 1, if it has none/is narrower
-//    than one column), and the total width of a node's own chain (itself
-//    plus everything after it via its primary-next link).
-// 2. assignPositions (top-down): walks each chain left to right handing
-//    out `x += nodeReach(node)` per step (so a wide branch fan under an
-//    earlier step pushes every later step on that same line right), and
-//    for any node with branches, centers the whole fan under that node's
-//    own x and recurses into each branch as its own mini chain.
-const COL_W = 300, ROW_H = 210, BRANCH_GAP = 0.25;
+// Every step has at most one "right" (continue this row) and one "below"
+// (start a new row, x-aligned directly under it — never offset sideways,
+// so the connector down to it is always a straight vertical line) child.
+// A single top-down pass per row-chain: place each step, recurse into its
+// below-child as its OWN row-chain starting at the SAME column, and let
+// however many columns that below-subtree ends up needing push this row's
+// NEXT step further right if it needed more than the usual one column —
+// the horizontal gap grows instead of the vertical line bending.
+const COL_W = 300, ROW_H = 210;
 function childrenOf(list, pid) { return list.filter(s => s.parentId === pid); }
 function primaryChildOf(list, node) { return childrenOf(list, node.id).find(k => !k.isBranchRoot) || null; }
 function branchChildrenOf(list, node) { return childrenOf(list, node.id).filter(k => k.isBranchRoot); }
 
 function computeLayout(list) {
-  const reachCache = new Map(), widthCache = new Map();
-  function nodeReach(node) {
-    if (reachCache.has(node.id)) return reachCache.get(node.id);
-    const branches = branchChildrenOf(list, node);
-    let reach = 1;
-    if (branches.length) {
-      const total = branches.reduce((sum, b) => sum + chainWidth(b), 0) + (branches.length - 1) * BRANCH_GAP;
-      reach = Math.max(1, total);
-    }
-    reachCache.set(node.id, reach);
-    return reach;
-  }
-  function chainWidth(node) {
-    if (widthCache.has(node.id)) return widthCache.get(node.id);
-    let total = 0, cur = node;
-    while (cur) { total += nodeReach(cur); cur = primaryChildOf(list, cur); }
-    widthCache.set(node.id, total);
-    return total;
-  }
-
   const pos = new Map();
-  // `row` is nesting depth, not a monotonic counter — every sibling branch
-  // off the same step shares one row (side by side: left/center/right),
-  // one level below their shared parent's own row. Two unrelated branch
-  // groups can land on the same row number without colliding since the
-  // width-reservation above already keeps their x-ranges apart.
-  function assignPositions(node, leftEdge, row) {
-    let cur = node, x = leftEdge;
+  function layoutRow(node, col, row) {
+    let cur = node, curCol = col, maxColUsed = col;
     while (cur) {
-      const r = nodeReach(cur);
-      const centerX = x + r / 2;
-      pos.set(cur.id, { x: centerX, row });
-      const branches = branchChildrenOf(list, cur);
-      if (branches.length) {
-        const widths = branches.map(b => chainWidth(b));
-        const totalW = widths.reduce((a, b) => a + b, 0) + (branches.length - 1) * BRANCH_GAP;
-        let bx = centerX - totalW / 2;
-        branches.forEach((b, i) => {
-          assignPositions(b, bx, row + 1);
-          bx += widths[i] + BRANCH_GAP;
-        });
-      }
-      x += r;
-      cur = primaryChildOf(list, cur);
+      pos.set(cur.id, { x: curCol, row });
+      maxColUsed = Math.max(maxColUsed, curCol);
+      const below = branchChildrenOf(list, cur)[0];
+      if (below) maxColUsed = Math.max(maxColUsed, layoutRow(below, curCol, row + 1));
+      const next = primaryChildOf(list, cur);
+      if (next) curCol = maxColUsed + 1;
+      cur = next;
     }
+    return maxColUsed;
   }
-  list.filter(s => !s.parentId).forEach(r => assignPositions(r, 0, 0));
+  let nextRootCol = 0;
+  list.filter(s => !s.parentId).forEach(r => { nextRootCol = layoutRow(r, nextRootCol, 0) + 1; });
   return pos;
 }
 
