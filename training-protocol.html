@@ -12,9 +12,12 @@
   @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .icon-btn:disabled { opacity: .3; cursor: default; }
   @media (hover: hover) { .icon-btn:disabled:hover { color: var(--pra-dim); border-color: var(--pra-border); } }
+  .icon-btn svg { width: 18px; height: 18px; }
   .protocol-head { display: flex; align-items: center; gap: 12px; }
   .protocol-head-titles { flex: 1; min-width: 0; }
   .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
+  .back-to-chat-btn { display: block; margin: 10px auto 0; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .82rem; cursor: pointer; transition: color .15s, border-color .15s; }
+  @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   /* Node-graph canvas — a main horizontal chain of steps (left to right),
      with branches (started below any media step) hanging on their own row
      below the branch point and flowing right with their own steps, same as
@@ -128,15 +131,15 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="protocol-head">
-      <button class="icon-btn" id="backBtn" title="Back to chat">←</button>
       <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
       <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
       <div class="protocol-head-titles">
         <div class="client-name" id="clientName">Loading…</div>
         <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
+        <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
       </div>
-      <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none">💾</button>
-      <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none">📁</button>
+      <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
+      <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
     </div>
 
     <div class="empty-hint" id="emptyHint" style="display:none">
@@ -366,7 +369,15 @@ async function init() {
 // genuinely isn't a specific conversation to send them to.
 async function setupBackToChatLink() {
   let convoId = sourceConvoId;
-  if (!convoId && me?.id === targetUserId) {
+  // Only try to resolve a specific conversation when the viewer IS the
+  // student whose protocol this is AND they're an actual client — staff
+  // (coach/admin) viewing their OWN protocol don't have one "their own"
+  // group the way a client does, so picking the first conversation in
+  // their list landed on an essentially random one they happen to be a
+  // participant in (e.g. some other student's group), not anywhere
+  // meaningful to send them back to. That case just falls through to
+  // plain chat.html — the main sidebar, no thread open.
+  if (!convoId && me?.id === targetUserId && !canEdit) {
     try {
       const r = await fetch('/api/chat/conversations');
       if (r.ok) {
@@ -377,7 +388,7 @@ async function setupBackToChatLink() {
     } catch {}
   }
   const backBtn = document.getElementById('backBtn');
-  backBtn.style.display = convoId ? '' : 'none';
+  backBtn.style.display = '';
   backBtn.onclick = () => {
     location.href = convoId ? '/chat-app/chat.html?convo=' + encodeURIComponent(convoId) : '/chat-app/chat.html';
   };
