@@ -38,17 +38,21 @@
      by font/rendering engine), which read as the whole button sitting
      off-center from the connector line it's supposed to be centered on.
      Absolutely-positioned bars at exactly 50%/50% can't have that problem. */
-  .step-insert-plus { position: absolute; pointer-events: auto; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; border: none; background: var(--pra-blue); cursor: pointer; transition: background .15s; }
+  .step-insert-plus { position: absolute; pointer-events: auto; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(140,140,150,0.45); cursor: pointer; transition: background .15s; }
   .step-insert-plus::before, .step-insert-plus::after { content: ''; position: absolute; top: 50%; left: 50%; background: #fff; transform: translate(-50%, -50%); }
   .step-insert-plus::before { width: 10px; height: 2px; }
   .step-insert-plus::after { width: 2px; height: 10px; }
-  .step-insert-plus:hover { background: #0086dd; }
+  .step-insert-plus:hover { background: rgba(160,160,170,0.6); }
   .step-node { position: absolute; width: 260px; }
   .step-card { padding: 14px 16px; position: relative; }
   .step-day-badge { text-align: center; font-family: var(--font-secondary); font-size: 1.3rem; font-weight: 700; color: var(--pra-blue); padding: 6px 0; }
   .step-type { font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 8px; }
   .step-card video, .step-card img { width: 100%; border-radius: 8px; display: block; background: #000; }
-  .step-card .step-text { font-size: .88rem; line-height: 1.5; white-space: pre-wrap; max-height: 140px; overflow-y: auto; }
+  /* Clears the drag handle sitting at top-left of the card (position:
+     absolute, so it doesn't push text out of the way on its own) — text
+     content starts at the same ~14px as the card's own padding otherwise,
+     landing right under the handle's icon. */
+  .step-card .step-text { font-size: .88rem; line-height: 1.5; white-space: pre-wrap; max-height: 140px; overflow-y: auto; margin-top: 22px; }
   .step-delete { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit { position: absolute; top: 8px; right: 38px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
@@ -60,15 +64,15 @@
   .step-drag-ghost { position: fixed; z-index: 500; pointer-events: none; padding: 8px 14px; border-radius: 10px; background: var(--pra-blue); color: #fff; font-size: .8rem; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transform: translate(-50%, -50%); opacity: .95; }
   .drop-target-hover { transform: translate(-50%, -50%) scale(1.6) !important; box-shadow: 0 0 0 4px rgba(0,155,255,0.35); }
   .step-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
-  .step-plus { position: absolute; width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .15s; }
-  .step-plus:hover { background: #0086dd; }
+  .step-plus { position: absolute; width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(140,140,150,0.45); color: #fff; cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+  .step-plus:hover { background: rgba(160,160,170,0.6); }
   .step-plus-right { top: 50%; left: 100%; margin-left: 16px; transform: translateY(-50%); }
   .step-plus-below { top: 100%; left: 50%; margin-top: 16px; transform: translateX(-50%); }
   /* An empty, not-yet-filled branch slot — just a + in its reserved spot,
      centered under whichever step it branches off of, no card chrome. */
   .step-node-placeholder { width: 44px; }
-  .step-placeholder { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; transition: background .15s; }
-  .step-placeholder:hover { background: #0086dd; }
+  .step-placeholder { width: 44px; height: 44px; border-radius: 50%; border: none; background: rgba(140,140,150,0.45); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; transition: background .15s; }
+  .step-placeholder:hover { background: rgba(160,160,170,0.6); }
   .step-placeholder-delete { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.9); color: var(--pra-dim); font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .step-placeholder-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .88rem; margin-top: 30px; }
@@ -150,12 +154,12 @@
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">Add a Step</div>
       <div class="type-choice-row">
+        <div class="type-choice" id="chooseDay"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="15" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M4 9h16" stroke="#fff" stroke-width="1.6"/><path d="M8 3v3M16 3v3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#009bff">N</text></svg>Day</div>
         <div class="type-choice" id="chooseVideo"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5" width="17" height="14" rx="2.2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 5 7.8 8.2M10.6 5l1.6 3.2M15 5l1.6 3.2" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10.2 10.4v5.2l4.5-2.6-4.5-2.6Z" fill="#009bff"/></svg>Drive Video</div>
         <div class="type-choice" id="chooseUploadVideo"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="7" width="17" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 7 7.8 4.5M15 7l1.6-2.5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M12 10.5v5M9.5 12.5l2.5-2.5 2.5 2.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Video</div>
         <div class="type-choice" id="chooseImage"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.4" fill="#009bff"/><path d="M5 16l3.2-3.5 2.3 2.3 2.2-2.6L17 16" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/><path d="M19.5 3.5v6M16.8 6.2l2.7-2.7 2.7 2.7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Image</div>
         <div class="type-choice" id="chooseText"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>Text</div>
         <div class="type-choice" id="chooseTemplate"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 14.5l3 3M18.5 14.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Saved Text</div>
-        <div class="type-choice" id="chooseDay"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="15" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M4 9h16" stroke="#fff" stroke-width="1.6"/><path d="M8 3v3M16 3v3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#009bff">N</text></svg>Day</div>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('chooseTypeModal')">Cancel</button>
     </div>
@@ -375,7 +379,7 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
 // its own the deepest/widest point reaches, so row 0 always has enough
 // horizontal room and nothing nested under it ends up visually sitting
 // beneath the wrong Day.
-const COL_W = 300, ROW_H = 210;
+const COL_W = 340, ROW_H = 210;
 function childrenOf(list, pid) { return list.filter(s => s.parentId === pid); }
 function primaryChildOf(list, node) { return childrenOf(list, node.id).find(k => !k.isBranchRoot) || null; }
 function branchChildrenOf(list, node) { return childrenOf(list, node.id).filter(k => k.isBranchRoot); }
