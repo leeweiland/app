@@ -10,6 +10,8 @@
   .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
   .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
+  .icon-btn:disabled { opacity: .3; cursor: default; }
+  @media (hover: hover) { .icon-btn:disabled:hover { color: var(--pra-dim); border-color: var(--pra-border); } }
   .protocol-head { display: flex; align-items: center; gap: 12px; }
   .protocol-head-titles { flex: 1; min-width: 0; }
   .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
@@ -116,6 +118,8 @@
   <div class="wrap">
     <div class="protocol-head">
       <button class="icon-btn" id="backBtn" title="Back to chat">←</button>
+      <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
+      <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
       <div class="protocol-head-titles">
         <div class="client-name" id="clientName">Loading…</div>
         <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
@@ -145,7 +149,6 @@
         <div class="type-choice" id="chooseText"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>Text</div>
         <div class="type-choice" id="chooseTemplate"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 14.5l3 3M18.5 14.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Saved Text</div>
         <div class="type-choice" id="chooseDay"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="4.5" width="16" height="15" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M4 9h16" stroke="#fff" stroke-width="1.6"/><path d="M8 3v3M16 3v3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><text x="12" y="16" text-anchor="middle" font-size="8" font-weight="700" fill="#009bff">N</text></svg>Day</div>
-        <div class="type-choice branch-choice" id="chooseBranch" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6" cy="6" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="6" cy="18" r="2.2" stroke="#fff" stroke-width="1.6"/><circle cx="18" cy="12" r="2.2" stroke="#009bff" stroke-width="1.6"/><path d="M8 6.6C11 6.6 12 8 12 12s1 5.4 4 5.4M8 6.6h0" stroke="#009bff" stroke-width="1.5"/><path d="M8 17.4C11 17.4 12 16 12 12" stroke="#009bff" stroke-width="1.5"/></svg>Branch</div>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('chooseTypeModal')">Cancel</button>
     </div>
@@ -220,6 +223,53 @@ let pendingStepTarget = null;
 // textStepSaveBtn and the .step-edit wiring in render().
 let editingStepId = null;
 let canvasInitialized = false;
+
+// Undo/redo — every mutation calls snapshotBeforeChange() BEFORE touching
+// `steps`, so the stack holds pre-change states to roll back to. Capped so
+// a long editing session can't grow this unbounded; redoStack is cleared
+// on every fresh change, same as any standard editor (redo only makes
+// sense immediately after an undo, not after doing something new).
+const MAX_HISTORY = 50;
+let undoStack = [], redoStack = [];
+function snapshotBeforeChange() {
+  undoStack.push(JSON.parse(JSON.stringify(steps)));
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoButtons();
+}
+function updateUndoRedoButtons() {
+  document.getElementById('undoBtn').disabled = !undoStack.length;
+  document.getElementById('redoBtn').disabled = !redoStack.length;
+}
+async function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.parse(JSON.stringify(steps)));
+  steps = undoStack.pop();
+  updateUndoRedoButtons();
+  render();
+  await saveSteps();
+}
+async function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.parse(JSON.stringify(steps)));
+  steps = redoStack.pop();
+  updateUndoRedoButtons();
+  render();
+  await saveSteps();
+}
+document.getElementById('undoBtn').onclick = undo;
+document.getElementById('redoBtn').onclick = redo;
+document.addEventListener('keydown', (e) => {
+  // Don't hijack Ctrl+Z while the user is editing text somewhere (the Add
+  // Text textarea, search inputs, etc.) — the browser's own native
+  // per-field undo should win there, not a full step-graph rollback.
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  const ctrlOrCmd = e.ctrlKey || e.metaKey;
+  if (!ctrlOrCmd) return;
+  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+});
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
@@ -368,46 +418,13 @@ function computeLayout(list) {
 
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
 
-// mode: 'continue' (right-+ on any tip — always just extends that one
-// chain, branch or not) | 'branch-init' (below-+, only shown before a step
-// has any branches yet — offers "Branch" alongside the normal content
-// types) | 'fill-placeholder' (clicking an empty branch slot — normal
-// content types only, replaces the placeholder in place). Adding another
-// branch sibling once a step already has branches happens directly via
-// the branch group's own +/side buttons (see renderBranchControls),
-// skipping this modal entirely — there's no content choice to make, it's
-// always just a fresh empty placeholder.
+// Every step has at most one "right" child (continue this row) and one
+// "below" child (isBranchRoot — start a new row under it) — a simple grid,
+// not a fan of parallel branches. Both +'s open the same plain content
+// picker, differing only in which direction the new step attaches.
 function openAddStepModal(target) {
   pendingStepTarget = target;
-  document.getElementById('chooseBranch').style.display = target.mode === 'branch-init' ? '' : 'none';
   openModal('chooseTypeModal');
-}
-
-// "Branch" — the first time a step branches, it gets 2 empty placeholder
-// slots at once (just a + each, no content picker), centered under it.
-async function commitBranchPair(parentId) {
-  steps.push({ id: newId(), type: 'placeholder', parentId, isBranchRoot: true });
-  steps.push({ id: newId(), type: 'placeholder', parentId, isBranchRoot: true });
-  render();
-  await saveSteps();
-}
-// One more empty sibling slot added to an existing branch fan — from the
-// +/side buttons flanking (or between) the branch group, see
-// renderBranchControls. Sibling order within a branch fan is just their
-// relative order in the flat `steps` array (branchChildrenOf filters but
-// never reorders it), so "add at the start" / "insert before a specific
-// sibling" both come down to where in that array the new placeholder gets
-// spliced in — "add at the end" is the simple/common case of just pushing.
-async function addBranchSibling(parentId, beforeSiblingId) {
-  const placeholder = { id: newId(), type: 'placeholder', parentId, isBranchRoot: true };
-  if (beforeSiblingId) {
-    const idx = steps.findIndex(s => s.id === beforeSiblingId);
-    steps.splice(idx, 0, placeholder);
-  } else {
-    steps.push(placeholder);
-  }
-  render();
-  await saveSteps();
 }
 
 // Numbered across the whole protocol (every branch), not just the current
@@ -435,6 +452,7 @@ async function insertStepBetween(parentId, childId, fields) {
 }
 
 async function commitNewStep(fields) {
+  snapshotBeforeChange();
   if (pendingStepTarget?.mode === 'insert') {
     return await insertStepBetween(pendingStepTarget.parentId, pendingStepTarget.childId, fields);
   }
@@ -494,20 +512,17 @@ function render() {
       const left = slotCenter - 22;
       return `
         <div class="step-node step-node-placeholder" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
-          <button class="step-placeholder" data-id="${s.id}" title="Fill this branch step">+</button>
+          <button class="step-placeholder" data-id="${s.id}" title="Fill this step">+</button>
           ${canEdit ? `<button class="step-placeholder-delete" data-id="${s.id}" title="Remove">✕</button>` : ''}
         </div>
       `;
     }
     const left = slotCenter - 130; // center the 260px card within its slot
+    // Right-+ only once this row has nowhere further to continue; below-+
+    // only once there's no step below it yet — each step gets at most one
+    // of each, a plain grid rather than a branch fan.
     const isTip = !hasPrimaryChild(s);
-    // Below-+ ("add a branch") always stays in this same familiar spot,
-    // whether or not the step already has branches — hiding it once
-    // branches existed (relying on the branch fan's own +'s instead) meant
-    // a step you already knew had branches suddenly had no "add a branch"
-    // button anywhere near it at all, which read as broken/missing rather
-    // than "moved." Its own click handler below decides what "already has
-    // branches" means for it (skip the modal, just add one more sibling).
+    const hasBelowChild = branchChildrenOf(steps, s).length > 0;
     return `
       <div class="step-node" data-id="${s.id}" data-row="${p.row}" style="left:${left}px;top:${top}px">
         <div class="pra-panel step-card">
@@ -515,8 +530,8 @@ function render() {
           ${canEdit && s.type === 'text' ? `<button class="step-edit" data-id="${s.id}" title="Edit text">✎</button>` : ''}
           ${renderStepContent(s)}
         </div>
-        ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-mode="continue" title="Add next step">+</button>` : ''}
-        ${canEdit ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-mode="branch-init" title="Add a branch">+</button>` : ''}
+        ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-branch="false" title="Add next step">+</button>` : ''}
+        ${canEdit && !hasBelowChild ? `<button class="step-plus step-plus-below" data-parent="${s.id}" data-branch="true" title="Add step below">+</button>` : ''}
       </div>
     `;
   }).join('');
@@ -531,10 +546,10 @@ function render() {
   // non-composited view, which made this silently never run).
   layoutRowHeights();
   drawConnectors();
-  renderBranchControls();
 
   world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
+      snapshotBeforeChange();
       const id = btn.dataset.id;
       const target = steps.find(s => s.id === id);
       // Deleting a step reconnects whatever was attached to it straight to
@@ -563,17 +578,7 @@ function render() {
   });
   world.querySelectorAll('.step-plus').forEach(btn => {
     btn.onclick = () => {
-      const mode = btn.dataset.mode, parentId = btn.dataset.parent;
-      if (mode === 'branch-init') {
-        // Nothing to choose once branches already exist — a fresh branch
-        // point offers content types alongside "Branch" (its first two
-        // slots need real content or empty placeholders picked deliberately),
-        // but one more sibling here is always just another empty placeholder.
-        if (branchChildrenOf(steps, { id: parentId }).length > 0) addBranchSibling(parentId, null);
-        else openAddStepModal({ parentId, isBranchRoot: true, mode });
-      } else {
-        openAddStepModal({ parentId, isBranchRoot: false, mode: 'continue' });
-      }
+      openAddStepModal({ parentId: btn.dataset.parent, isBranchRoot: btn.dataset.branch === 'true', mode: 'continue' });
     };
   });
   world.querySelectorAll('.step-placeholder').forEach(btn => {
@@ -589,6 +594,7 @@ function render() {
   world.querySelectorAll('.step-placeholder-delete').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
+      snapshotBeforeChange();
       // A placeholder is only ever an empty slot with nothing attached to
       // it — there's no fill-it-in button that lets anything get added
       // underneath an unfilled one — so this never needs to reconnect
@@ -701,45 +707,6 @@ function drawConnectors() {
   insertLayer.innerHTML = inserts;
   insertLayer.querySelectorAll('.step-insert-plus').forEach(btn => {
     btn.onclick = () => openAddStepModal({ parentId: btn.dataset.parent, childId: btn.dataset.child, mode: 'insert' });
-  });
-}
-
-// Dedicated +'s for growing a branch fan that already has branches — one
-// flanking each end of the fan (add a sibling there) and one in each gap
-// between two existing siblings (insert one between them). Sits in its own
-// clear strip BELOW the branch row — vertically centered on the row (the
-// first version tried) put these at nearly the same height as a lone
-// sibling's own card-relative step-plus-right (a branch fan reduced to one
-// remaining child by a delete is an easy, common state to reach), landing
-// two different buttons almost exactly on top of each other. Below the row
-// entirely, there's nothing else at that height to collide with.
-function renderBranchControls() {
-  if (!canEdit) return;
-  const world = document.getElementById('protocolWorld');
-  const insertLayer = document.getElementById('protocolInsertLayer');
-  const nodeEls = new Map();
-  world.querySelectorAll('.step-node').forEach(el => nodeEls.set(el.dataset.id, el));
-  const parentIds = new Set(steps.filter(s => s.isBranchRoot).map(s => s.parentId));
-  let html = '';
-  parentIds.forEach(parentId => {
-    const kids = branchChildrenOf(steps, { id: parentId });
-    const kidEls = kids.map(k => nodeEls.get(k.id)).filter(Boolean);
-    if (!kidEls.length) return;
-    const rowBottom = kidEls[0].offsetTop + Math.max(...kidEls.map(el => el.offsetHeight));
-    const y = rowBottom + 18;
-    const firstLeft = kidEls[0].offsetLeft;
-    const last = kidEls[kidEls.length - 1];
-    const lastRight = last.offsetLeft + last.offsetWidth;
-    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${firstLeft - 18}px;top:${y}px" title="Add a branch here"></button>`;
-    html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" style="left:${lastRight + 18}px;top:${y}px" title="Add a branch here"></button>`;
-    for (let i = 0; i < kidEls.length - 1; i++) {
-      const gapCenter = (kidEls[i].offsetLeft + kidEls[i].offsetWidth + kidEls[i + 1].offsetLeft) / 2;
-      html += `<button class="step-insert-plus branch-add-plus" data-parent="${parentId}" data-before="${kids[i + 1].id}" style="left:${gapCenter}px;top:${y}px" title="Add a branch here"></button>`;
-    }
-  });
-  insertLayer.insertAdjacentHTML('beforeend', html);
-  insertLayer.querySelectorAll('.branch-add-plus').forEach(btn => {
-    btn.onclick = () => addBranchSibling(btn.dataset.parent, btn.dataset.before || null);
   });
 }
 
@@ -917,10 +884,6 @@ function wireModals() {
     closeModal('chooseTypeModal');
     await commitNewStep({ type: 'day', dayNumber: nextDayNumber() });
   };
-  document.getElementById('chooseBranch').onclick = async () => {
-    closeModal('chooseTypeModal');
-    await commitBranchPair(pendingStepTarget.parentId);
-  };
 
   let templateSearchTimer;
   document.getElementById('templateSearchInput').addEventListener('input', (e) => {
@@ -971,6 +934,7 @@ function wireModals() {
     const content = document.getElementById('textStepInput').value.trim();
     if (!content) return;
     if (editingStepId) {
+      snapshotBeforeChange();
       const s = steps.find(x => x.id === editingStepId);
       if (s) s.content = content;
       editingStepId = null;
