@@ -36,6 +36,16 @@
   .user-dot-ring { fill: none; stroke: var(--pra-blue); stroke-width: 1.5; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 14px; }
 
+  /* ── Multi-select mode (staff broadcast) ── */
+  .user-dot-select-check-bg { fill: #00e0c6; stroke: #04121e; }
+  .user-dot-select-check { fill: #04121e; font-weight: 700; }
+  .user-dot-unselectable { opacity: .3; }
+  .select-mode-bar { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(120%); z-index: 90; display: flex; align-items: center; gap: 10px; background: rgba(10,14,20,0.92); border: 1px solid var(--pra-border); border-radius: 999px; padding: 8px 10px 8px 18px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); transition: transform .22s ease; }
+  .select-mode-bar.show { transform: translateX(-50%) translateY(0); }
+  .select-mode-count { font-size: .82rem; color: #fff; white-space: nowrap; }
+  .compose-textarea { width: 100%; min-height: 110px; resize: vertical; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 10px 12px; font-family: inherit; font-size: .88rem; }
+  .compose-recipients { text-align: left; font-size: .78rem; color: var(--pra-dim); margin: 10px 0 4px; max-height: 90px; overflow-y: auto; }
+
   .map-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 0 16px; }
   .map-loading-label { font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
   .map-loading-dots { display: flex; gap: 5px; }
@@ -86,7 +96,10 @@
     <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Strength Ninjas World Map</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap">
       <div class="pra-muted" style="font-size:.85rem">Every dot is a Strength Ninja of the Pacific Rim Athletics Universe somewhere in the world. Tap one to see who...</div>
-      <button class="pra-btn pra-btn-ghost" id="refreshLevelsBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Re-fetch levels straight from the sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh Levels</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="pra-btn pra-btn-ghost" id="selectModeBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Select multiple people to message at once">☑ Select</button>
+        <button class="pra-btn pra-btn-ghost" id="refreshLevelsBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Re-fetch levels straight from the sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh Levels</button>
+      </div>
     </div>
     <div class="map-loading" id="mapLoading">
       <span class="map-loading-label">Loading</span>
@@ -117,6 +130,29 @@
       <div class="pra-muted" id="retreatPopupYear" style="font-size:.85rem;margin-top:2px"></div>
       <div class="pra-muted" id="retreatPopupDesc" style="margin-top:12px;font-size:.8rem;line-height:1.6;text-align:left;display:flex;flex-direction:column;gap:6px"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closeRetreatPopup()">Close</button>
+    </div>
+  </div>
+
+  <!-- Floating bar shown while selectMode is on — count + Message/Cancel.
+       Message goes straight to each recipient's OWN chat (their dedicated
+       group, or a DM if they don't have one) — never one shared group
+       thread with everyone selected lumped together. -->
+  <div class="select-mode-bar" id="selectModeBar">
+    <span class="select-mode-count" id="selectModeCount">0 selected</span>
+    <button class="pra-btn pra-btn-ghost" style="padding:6px 14px;font-size:.78rem" id="selectModeCancelBtn">Cancel</button>
+    <button class="pra-btn" style="padding:6px 16px;font-size:.78rem" id="selectModeMessageBtn" disabled>Message</button>
+  </div>
+
+  <div class="popup-backdrop" id="composePopup">
+    <div class="pra-panel popup-box" style="width:360px;text-align:left">
+      <div class="pra-h2" style="text-align:center">Message Selected</div>
+      <div class="compose-recipients" id="composeRecipients"></div>
+      <textarea class="compose-textarea" id="composeText" placeholder="Type a message to send to everyone selected — each person gets it in their own chat…"></textarea>
+      <div class="pra-muted" id="composeStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="pra-btn pra-btn-ghost" style="flex:1" id="composeCancelBtn">Cancel</button>
+        <button class="pra-btn" style="flex:1" id="composeSendBtn">Send</button>
+      </div>
     </div>
   </div>
 </div>
@@ -470,6 +506,22 @@ function applyDotSize(d, r, scale, hover) {
     if (hover) d.els.dot.setAttribute("fill", "#fff");
     else d.els.dot.setAttribute("fill", "var(--pra-blue)");
   }
+  if (d.els.selectBg) {
+    const canSelect = !!d.chatUserId;
+    d.clickTarget.classList.toggle("user-dot-unselectable", selectMode && !canSelect);
+    if (selectMode && canSelect && d.selected) {
+      const bx = x + r * 0.62, by = y - r * 0.62, br = r * 0.42;
+      d.els.selectBg.setAttribute("cx", bx); d.els.selectBg.setAttribute("cy", by); d.els.selectBg.setAttribute("r", br);
+      d.els.selectBg.style.strokeWidth = strokeW;
+      d.els.selectCheck.setAttribute("x", bx); d.els.selectCheck.setAttribute("y", by);
+      d.els.selectCheck.setAttribute("font-size", br * 1.3);
+      d.els.selectBg.style.display = "";
+      d.els.selectCheck.style.display = "";
+    } else {
+      d.els.selectBg.style.display = "none";
+      d.els.selectCheck.style.display = "none";
+    }
+  }
 }
 function updateDotVisuals(scale) {
   const r = currentDotRadius(scale);
@@ -742,7 +794,10 @@ async function drawUsers() {
       // giving the SVG filter region room to render the full glow at all zoom
       // levels. Actual value is set (and kept in sync with zoom) in
       // applyDotSize, not here — see roleGlowFilter's comment.
-      clickTarget.addEventListener("click", () => openPopup(u));
+      clickTarget.addEventListener("click", () => {
+        if (selectMode) toggleDotSelection(desc, u);
+        else openPopup(u);
+      });
 
       // A real uploaded profile picture wins over the archetype illustration
       // — it's who they actually are, not a stand-in for their quiz result.
@@ -773,7 +828,24 @@ async function drawUsers() {
       ring.setAttribute("stroke", stroke);
       clickTarget.appendChild(ring);
 
-      const desc = { baseX: x, baseY: y, angle, n: members.length, kind: "img", role: u.role, clickTarget, els: { clipCircle, img, ring, bg } };
+      // Selection badge — a small check disc parked at the dot's upper-right,
+      // hidden until selectMode picks this dot. Only ever shown for people
+      // with a real chat account (u.chatUserId); a sheet row with no account
+      // has nothing to message, so it can't be selected in the first place.
+      const selectBg = document.createElementNS(NS, "circle");
+      selectBg.setAttribute("class", "user-dot-select-check-bg");
+      selectBg.setAttribute("stroke-width", "1.5");
+      selectBg.style.display = "none";
+      clickTarget.appendChild(selectBg);
+      const selectCheck = document.createElementNS(NS, "text");
+      selectCheck.setAttribute("class", "user-dot-select-check");
+      selectCheck.setAttribute("text-anchor", "middle");
+      selectCheck.setAttribute("dominant-baseline", "central");
+      selectCheck.textContent = "✓";
+      selectCheck.style.display = "none";
+      clickTarget.appendChild(selectCheck);
+
+      const desc = { baseX: x, baseY: y, angle, n: members.length, kind: "img", role: u.role, clickTarget, chatUserId: u.chatUserId || null, selected: false, els: { clipCircle, img, ring, bg, selectBg, selectCheck } };
       dotDescriptors.push(desc);
 
       // Hover is managed centrally (see setupDotHover) via cursor distance
@@ -804,6 +876,92 @@ async function drawUsers() {
   updateDotVisuals(mapScale);
   setupDotHover();
 }
+
+// ── Multi-select broadcast (staff only) ─────────────────────────────────
+// Selecting a set of dots and hitting Message does NOT create one shared
+// group thread — the text lands separately in each recipient's own chat
+// (their dedicated group, or a DM), same as if a coach had gone and typed
+// it into each conversation individually. See /api/chat/broadcast-message.
+let selectMode = false;
+let selectedIds = new Set();
+let selectedMeta = new Map(); // chatUserId -> { first, last }
+
+function setSelectMode(on) {
+  selectMode = on;
+  const btn = document.getElementById("selectModeBtn");
+  btn.textContent = on ? "✕ Cancel Select" : "☑ Select";
+  document.getElementById("selectModeBar").classList.toggle("show", on);
+  if (!on) {
+    selectedIds.clear();
+    selectedMeta.clear();
+    dotDescriptors.forEach(d => d.selected = false);
+  }
+  updateDotVisuals(mapScale);
+  updateSelectModeBar();
+}
+
+function toggleDotSelection(desc, u) {
+  if (!desc.chatUserId) return; // sheet row with no chat account — nothing to message
+  desc.selected = !desc.selected;
+  if (desc.selected) {
+    selectedIds.add(desc.chatUserId);
+    selectedMeta.set(desc.chatUserId, { first: u.first, last: u.last || "" });
+  } else {
+    selectedIds.delete(desc.chatUserId);
+    selectedMeta.delete(desc.chatUserId);
+  }
+  const isHovered = desc === hoveredDesc;
+  applyDotSize(desc, currentDotRadius(mapScale) * (isHovered ? 2 : 1), mapScale, isHovered);
+  updateSelectModeBar();
+}
+
+function updateSelectModeBar() {
+  document.getElementById("selectModeCount").textContent = selectedIds.size + " selected";
+  document.getElementById("selectModeMessageBtn").disabled = selectedIds.size === 0;
+}
+
+function openComposeModal() {
+  if (!selectedIds.size) return;
+  document.getElementById("composeRecipients").textContent =
+    "To: " + Array.from(selectedMeta.values()).map(m => m.first).join(", ");
+  document.getElementById("composeText").value = "";
+  document.getElementById("composeStatus").textContent = "";
+  document.getElementById("composePopup").classList.add("show");
+  document.getElementById("composeText").focus();
+}
+function closeComposeModal() { document.getElementById("composePopup").classList.remove("show"); }
+
+async function sendBroadcast() {
+  const text = document.getElementById("composeText").value.trim();
+  if (!text) return;
+  const status = document.getElementById("composeStatus");
+  const sendBtn = document.getElementById("composeSendBtn");
+  sendBtn.disabled = true;
+  status.textContent = "Sending…";
+  try {
+    const r = await fetch("/api/chat/broadcast-message", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: Array.from(selectedIds), text }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { status.textContent = d.error || "Could not send."; sendBtn.disabled = false; return; }
+    const results = d.results || [];
+    const failed = results.filter(x => !x.ok);
+    status.textContent = failed.length
+      ? `Sent to ${results.length - failed.length}/${results.length} — some couldn't be reached.`
+      : `Sent to ${results.length}.`;
+    setTimeout(() => { closeComposeModal(); setSelectMode(false); }, failed.length ? 1600 : 700);
+  } catch {
+    status.textContent = "Network error — try again.";
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+document.getElementById("selectModeCancelBtn").addEventListener("click", () => setSelectMode(false));
+document.getElementById("selectModeMessageBtn").addEventListener("click", openComposeModal);
+document.getElementById("composeCancelBtn").addEventListener("click", closeComposeModal);
+document.getElementById("composeSendBtn").addEventListener("click", sendBroadcast);
 
 let isStaffUser = false;
 let currentUser = null;
@@ -1153,6 +1311,10 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
   currentUser = me;
   isStaffUser = me.role === "coach" || me.role === "admin" || me.role === "admin2";
   if (isStaffUser) {
+    const selectBtn = document.getElementById("selectModeBtn");
+    selectBtn.style.display = "";
+    selectBtn.addEventListener("click", () => setSelectMode(!selectMode));
+
     const refreshBtn = document.getElementById("refreshLevelsBtn");
     refreshBtn.style.display = "";
     refreshBtn.addEventListener("click", async () => {

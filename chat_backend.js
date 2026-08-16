@@ -655,6 +655,12 @@ async function fetchUsersMapPoints() {
       // the right person when a coach/admin edits levels from the map
       // popup, via the name-matched /api/chat/levels/update endpoint.
       last,
+      // Real chat account id, when this sheet row has one — lets a staff
+      // viewer multi-select dots and fire a broadcast message via
+      // /api/chat/broadcast-message. A sheet row with no matching chat
+      // account (someone who filled out the quiz but never signed up) has
+      // nothing to message, so this stays null and the dot isn't selectable.
+      chatUserId: localUser?.id || null,
       profilePictureFileId: localUser?.profilePictureFileId || null,
       archetypeImage,
       archetypeTitle,
@@ -2442,7 +2448,7 @@ export async function handleChatRequest(req, res, url) {
         const visible = isStaff(user) ? points : points.map(pt => {
           const isSelf = nameKey(pt.first, pt.last) === nameKey(user.first, user.last);
           if (isSelf) return pt;
-          const { levels, last, ...rest } = pt;
+          const { levels, last, chatUserId, ...rest } = pt;
           return rest;
         });
         return sendJson(res, 200, { points: visible });
@@ -3071,6 +3077,57 @@ export async function handleChatRequest(req, res, url) {
       convos.push(convo);
       writeJson(CONVOS_FILE, convos);
       return sendJson(res, 200, { conversation: convo });
+    }
+
+    // ─── Broadcast message ──────────────────────────────────────────────
+    // Backs the Strength Ninjas map's multi-select — a coach/admin picks a
+    // handful of dots and this fires the same text into each recipient's
+    // own conversation (their dedicated group if they're in one, a DM
+    // otherwise) instead of opening threads one at a time by hand.
+    if (p === "/api/chat/broadcast-message" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const body = await readJsonBody(req);
+      const text = String(body.text || "").trim();
+      const userIds = Array.from(new Set(body.userIds || []));
+      if (!text) return sendJson(res, 400, { error: "Message text required" });
+      if (!userIds.length) return sendJson(res, 400, { error: "No recipients selected" });
+
+      const allUsers = readJson(USERS_FILE, []);
+      const convos = readJson(CONVOS_FILE, []);
+      const messages = readJson(MESSAGES_FILE, []);
+      const results = [];
+
+      for (const targetId of userIds) {
+        const target = allUsers.find(u => u.id === targetId && !u.archived);
+        if (!target) { results.push({ userId: targetId, ok: false, error: "Account not found" }); continue; }
+
+        // Prefer the recipient's own dedicated group (where staff already
+        // are, per createGroupsForUser) — same place a coach would normally
+        // message them from. Only falls back to a DM when no such group
+        // exists (e.g. broadcasting to a fellow coach/admin on the map).
+        let convo = convos.find(c => c.type === "group" && !c.isChannel && c.participantIds.includes(targetId));
+        if (!convo) {
+          if (!canCreateDm(user, target)) { results.push({ userId: targetId, ok: false, error: "No reachable conversation" }); continue; }
+          convo = convos.find(c => c.type === "dm" && c.participantIds.includes(user.id) && c.participantIds.includes(targetId));
+          if (!convo) {
+            convo = { id: randomUUID(), type: "dm", participantIds: [user.id, targetId], createdBy: user.id, createdAt: new Date().toISOString() };
+            convos.push(convo);
+          }
+        }
+
+        messages.push({ id: randomUUID(), conversationId: convo.id, senderId: user.id, type: "text", text, createdAt: new Date().toISOString() });
+        results.push({ userId: targetId, ok: true, conversationId: convo.id });
+      }
+
+      writeJson(CONVOS_FILE, convos);
+      writeJson(MESSAGES_FILE, messages);
+
+      const senderName = `${user.first} ${user.last}`;
+      results.filter(r => r.ok).forEach(r => {
+        notifyParticipants(r.conversationId, user.id, { title: senderName, body: text, conversationId: r.conversationId }).catch(() => {});
+      });
+
+      return sendJson(res, 200, { results });
     }
 
     const convoIdMatch = p.match(/^\/api\/chat\/conversations\/([^/]+)(\/.*)?$/);
