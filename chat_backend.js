@@ -684,17 +684,18 @@ async function fetchUsersMapPoints() {
 
 // Same App-sheet row matching as fetchUsersMapPoints() above, but for one
 // specific chat account by name instead of every geolocatable sheet row —
-// used by the chat sidebar's read-only profile popup. Deliberately never
-// includes levels (that stays internal to staff, unlike the map/levels
-// endpoints which gate it per-viewer) and doesn't require a geo match to
-// succeed — a person with no location on the sheet still gets a profile
-// card, just without a location line.
+// used by the chat sidebar's read-only profile popup. Includes levels (same
+// as the map/levels endpoints, visible to everyone) and doesn't require a
+// geo match to succeed — a person with no location on the sheet still gets
+// a profile card, just without a location line.
 async function fetchUserProfileCard(targetUser) {
   const card = {
     first: targetUser.first, last: targetUser.last, role: targetUser.role,
     profilePictureFileId: targetUser.profilePictureFileId || null,
-    location: null, archetypeImage: null, archetypeTitle: null,
+    location: null, archetypeImage: null, archetypeTitle: null, levels: [],
   };
+  const levelsPeople = await fetchAllLevels().catch(() => []);
+  card.levels = findLevelsEntries(levelsPeople, targetUser.first, targetUser.last);
   const accessToken = await getGoogleAccessToken();
   const range = `'${APP_SHEET_TAB}'!A:K`;
   const r = await fetch(
@@ -2604,16 +2605,14 @@ export async function handleChatRequest(req, res, url) {
       res.setHeader("Cache-Control", "no-store");
       try {
         const points = await fetchUsersMapPoints();
-        // Levels are internal to staff — a client/user viewer gets every
-        // other field (avatar, role, location, training personality) for
-        // everyone else, but never someone else's level data. Their own
-        // dot is the one exception: they see their own levels same as an
-        // admin/coach would, matching the self-lookup carve-out on
-        // /api/chat/levels/lookup above.
+        // Levels (including Super Level) are visible to everyone now — the
+        // map is meant to double as a shared leaderboard. `last` name stays
+        // staff-only — it only ever mattered for the staff-only levels-edit
+        // affordance, and a non-staff viewer has no use for it.
         const visible = isStaff(user) ? points : points.map(pt => {
           const isSelf = nameKey(pt.first, pt.last) === nameKey(user.first, user.last);
           if (isSelf) return pt;
-          const { levels, last, ...rest } = pt;
+          const { last, ...rest } = pt;
           return rest;
         });
         return sendJson(res, 200, { points: visible });
@@ -2624,9 +2623,9 @@ export async function handleChatRequest(req, res, url) {
 
     // ─── Single-person profile (chat sidebar → profile popup) ─────────────
     // A plain user/online/gym viewer can see everyone in the contacts
-    // directory now, but clicking someone just shows this read-only card —
-    // avatar, role, location, training personality — never levels (that
-    // stays internal, see /api/chat/levels* and /api/chat/users-map above).
+    // directory now, and clicking someone shows this read-only card —
+    // avatar, role, location, training personality, and levels/Super Level
+    // (editing levels still stays staff-only, see /api/chat/levels/update).
     // Any logged-in user may look up any other non-archived account.
     const chatProfileMatch = p.match(/^\/api\/chat\/profile\/([^/]+)$/);
     if (chatProfileMatch && req.method === "GET") {
@@ -2763,16 +2762,13 @@ export async function handleChatRequest(req, res, url) {
       }
     }
 
-    // Lookup by arbitrary name — used by the Users Map popup and by coaches
-    // prefilling the edit-levels panel from chat (staff, any name), and by
-    // profile.html's "My Levels" section (any signed-in viewer, own name
-    // only — everyone gets to see their own levels, just never anyone
-    // else's unless they're staff).
+    // Lookup by arbitrary name — used by the Users Map popup, chat's
+    // contact-profile popup, and profile.html's "My Levels" section. Levels
+    // are visible to any signed-in viewer for anyone now; only the write
+    // side (/api/chat/levels/update below) stays staff-only.
     if (p === "/api/chat/levels/lookup" && req.method === "GET") {
       const qFirst = url.searchParams.get("first");
       const qLast = url.searchParams.get("last");
-      const isSelf = nameKey(qFirst, qLast) === nameKey(user.first, user.last);
-      if (!isStaff(user) && !isSelf) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         const entries = findLevelsEntries(people, qFirst, qLast);
