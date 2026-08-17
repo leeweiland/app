@@ -102,7 +102,7 @@ function render(u, editable) {
 
     ${u.archetypeTitle ? `
     <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">Training Personality</div>
-    <a class="archetype-link" href="${archetypeUrl(u.archetypeTitle, u.gender)}" target="_blank" rel="noopener">
+    <a class="archetype-link" href="${archetypeUrl(u.archetypeTitle, u.gender)}">
       <div class="level-chip" style="max-width:none">
         <span class="cat" style="flex:none">${u.archetypeTitle}</span>
         ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:32px;height:32px;border-radius:7px;object-fit:cover;margin-left:auto"/>` : ''}
