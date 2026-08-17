@@ -53,6 +53,19 @@
   .bulk-select-actions { display: flex; gap: 8px; }
   .compose-textarea { width: 100%; min-height: 110px; resize: vertical; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 10px 12px; font-family: inherit; font-size: .88rem; }
   .compose-recipients { text-align: left; font-size: .78rem; color: var(--pra-dim); margin: 10px 0 4px; max-height: 90px; overflow-y: auto; }
+  /* ── Video-reply timestamped notes — shared between the compose modal's
+     own list and the sent bubble's list (same row/time/text shape, just
+     different containers/backgrounds around them). ── */
+  .video-note-row { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; }
+  .video-note-time { flex-shrink: 0; color: var(--pra-blue); font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+  .video-note-time:hover { color: #fff; }
+  .video-note-text { word-break: break-word; flex: 1; }
+  .video-note-remove { flex-shrink: 0; background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .9rem; padding: 0 2px; line-height: 1; }
+  .video-note-remove:hover { color: #ff5c5c; }
+  #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+  #videoReplyNotesList .video-note-row { padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
+  .video-note-reply .video-note-player { width: 100%; border-radius: 10px; display: block; margin-top: 2px; }
+  .video-note-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
   .convo-item:hover { background: rgba(255,255,255,0.03); }
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
@@ -645,6 +658,34 @@
       <div class="pra-muted" id="bulkComposeStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
       <button class="pra-btn" style="margin-top:14px;width:100%" id="bulkComposeSendBtn">Send</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="bulkComposeCancelBtn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Video reply modal — replying to a video plays it right here instead
+       of a plain text box. Pause, write a note, hit "+ Add Timestamp" (or
+       just Enter) — it tags the note with wherever the video currently is
+       and clears the box for the next one. Keep playing/pausing/adding as
+       many as you want; Send posts them all as ONE message. The sent
+       bubble embeds this same video (not re-uploaded) with each timestamp
+       clickable to jump the bubble's own player there — see
+       renderBubble's m.videoNotes branch. -->
+  <div class="modal-backdrop" id="videoReplyModal">
+    <div class="pra-panel modal-box modal-box-wide" style="text-align:left">
+      <div class="pra-h2" style="margin-bottom:10px">Reply with Timestamped Notes</div>
+      <video id="videoReplyPlayer" controls playsinline style="width:100%;border-radius:10px;background:#000;display:block"></video>
+      <div id="videoReplyNotesList" style="margin:12px 0"></div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="pra-label">Note at <span id="videoReplyCurrentTime" style="color:var(--pra-blue);font-weight:700">0:00</span></label>
+          <textarea class="pra-input" id="videoReplyNoteInput" rows="2" placeholder="Type a note, then Add Timestamp (or press Enter)" style="width:100%;resize:vertical"></textarea>
+        </div>
+        <button class="pra-btn" id="videoReplyAddBtn" style="white-space:nowrap">+ Add Timestamp</button>
+      </div>
+      <div class="pra-muted" id="videoReplyStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn pra-btn-ghost" id="videoReplyCancelBtn" style="flex:1">Cancel</button>
+        <button class="pra-btn" id="videoReplySendBtn" style="flex:1" disabled>Send</button>
+      </div>
     </div>
   </div>
 
@@ -2456,6 +2497,7 @@ function svgForward() {
 // so it escapes rather than assuming that stays true).
 function replySnippet(m) {
   if (!m) return 'Original message';
+  if (m.videoNotes?.length) return `${m.videoNotes.length} timestamped video note${m.videoNotes.length > 1 ? 's' : ''}`;
   if (m.type === 'text') return escapeHtml(m.text);
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'image') return 'Photo';
@@ -2490,6 +2532,35 @@ function renderBubble(m, convo) {
   const forwardedLabel = m.forwarded ? `<div class="bubble-forwarded-label">➦ Forwarded</div>` : '';
   const replyQuote = canReplyForward ? replyQuoteHtml(m, convo) : '';
   let content;
+  if (m.videoNotes?.length) {
+    // Reply-to-a-video with timestamped notes — the actual video (same
+    // driveFileId as the original, streamed again rather than re-uploaded)
+    // stands in for the usual text-snippet reply-quote, with every note
+    // listed underneath it and each timestamp clickable to seek THIS
+    // bubble's own player (see the delegated .video-note-time handler
+    // below — it looks for the player inside .closest('.video-note-reply')
+    // so replies to different videos never cross-wire).
+    const original = m.replyToId ? currentThreadMessages.find(x => x.id === m.replyToId) : null;
+    const deleteBtn = canAct ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
+    const actions = msgActionsHtml(m.id, canAct, canReplyForward, deleteBtn);
+    const videoHtml = original?.driveFileId
+      ? `<video class="video-note-player" data-src="/api/chat/media/${original.driveFileId}#t=0.5" controls preload="metadata" playsinline></video>`
+      : `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`;
+    const notesHtml = m.videoNotes.map(n => `
+      <div class="video-note-row">
+        <span class="video-note-time" data-time="${n.time}">${formatVideoTime(n.time)}</span>
+        <span class="video-note-text">${escapeHtml(n.text)}</span>
+      </div>
+    `).join('');
+    content = `<div class="bubble media video-note-reply">${senderLabel}${forwardedLabel}${videoHtml}<div class="video-note-list">${notesHtml}</div></div>`;
+    return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
+      <div>
+        <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
+        ${renderReactionChips(m)}
+        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
+      </div>
+    </div>`;
+  }
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
     const editDelete = canAct ? `<button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
@@ -2503,10 +2574,14 @@ function renderBubble(m, convo) {
       </div>
     </div>`;
   }
+  // GIF keeps the persistent forward icon (a GIF's own "message" IS the
+  // media, sent by URL — there's no separate download/expand affordance to
+  // fall back on the way photos/videos have). Photos and videos dropped it:
+  // Forward already lives one tap away in the triple-dot/long-press menu.
   const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
-  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}${forwardIcon}</div>`;
+  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
   const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
@@ -2644,6 +2719,20 @@ function escapeHtml(s) {
       // observer hasn't fired yet (e.g. rootMargin threshold not yet hit).
       openVideo(vid.src || vid.dataset.src);
     }
+  });
+  // Clicking a timestamp inside a sent video-notes reply seeks that
+  // bubble's OWN inline player (not the lightbox) — .video-note-reply
+  // scopes the lookup so multiple video-note replies on screen at once
+  // each only ever control their own video.
+  document.getElementById('threadBody').addEventListener('click', (e) => {
+    const timeEl = e.target.closest('.video-note-time');
+    if (!timeEl) return;
+    const vid = timeEl.closest('.video-note-reply')?.querySelector('.video-note-player');
+    if (!vid) return;
+    if (!vid.src && vid.dataset.src) vid.src = vid.dataset.src;
+    const seekTo = Number(timeEl.dataset.time) || 0;
+    const seek = () => { vid.currentTime = seekTo; vid.play(); };
+    if (vid.readyState >= 1) seek(); else vid.addEventListener('loadedmetadata', seek, { once: true });
   });
   document.getElementById('lightboxClose').onclick = close;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
@@ -3095,6 +3184,9 @@ document.getElementById('threadBody').addEventListener('click', (e) => {
 function startReply(mid) {
   const m = currentThreadMessages.find(x => x.id === mid);
   if (!m) return;
+  // Replying to a video gets the whole timestamped-notes flow instead of
+  // the plain text-reply box — see startVideoReply/videoReplyModal.
+  if (m.type === 'video') { startVideoReply(mid); return; }
   replyingToId = mid;
   const convo = conversations.find(c => c.id === activeConvoId);
   const sender = convo?.participants.find(p => p.id === m.senderId);
@@ -3116,6 +3208,108 @@ function cancelReply() {
   preview.style.display = 'none';
   preview.innerHTML = '';
 }
+
+// ── Video reply: timestamped notes ──────────────────────────────────────
+// Pause the video, write a note, add it (tagged with wherever the video
+// currently sits), keep going, then Send posts every note collected so far
+// as ONE message. The video itself is never re-uploaded — the modal and
+// the eventual sent bubble both just stream the SAME driveFileId again,
+// exactly like the original bubble already does.
+function formatVideoTime(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+let videoReplyTargetId = null;
+let videoReplyNotes = []; // { time, text }
+
+function startVideoReply(mid) {
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m || m.type !== 'video') return;
+  videoReplyTargetId = mid;
+  videoReplyNotes = [];
+  const player = document.getElementById('videoReplyPlayer');
+  player.pause();
+  player.src = `/api/chat/media/${m.driveFileId}`;
+  renderVideoReplyNotes();
+  document.getElementById('videoReplyNoteInput').value = '';
+  document.getElementById('videoReplyStatus').textContent = '';
+  document.getElementById('videoReplySendBtn').disabled = true;
+  document.getElementById('videoReplyCurrentTime').textContent = '0:00';
+  openModal('videoReplyModal');
+}
+
+function renderVideoReplyNotes() {
+  const wrap = document.getElementById('videoReplyNotesList');
+  if (!videoReplyNotes.length) {
+    wrap.innerHTML = '<div class="pra-muted" style="font-size:.78rem">No notes yet — play the video, pause, and add one below.</div>';
+    return;
+  }
+  wrap.innerHTML = videoReplyNotes.map((n, i) => `
+    <div class="video-note-row">
+      <span class="video-note-time" data-idx="${i}">${formatVideoTime(n.time)}</span>
+      <span class="video-note-text">${escapeHtml(n.text)}</span>
+      <button class="video-note-remove" data-idx="${i}" title="Remove">✕</button>
+    </div>
+  `).join('');
+}
+
+function addVideoReplyNote() {
+  const input = document.getElementById('videoReplyNoteInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const player = document.getElementById('videoReplyPlayer');
+  videoReplyNotes.push({ time: player.currentTime || 0, text });
+  videoReplyNotes.sort((a, b) => a.time - b.time);
+  input.value = '';
+  renderVideoReplyNotes();
+  document.getElementById('videoReplySendBtn').disabled = false;
+  input.focus();
+}
+
+document.getElementById('videoReplyPlayer').addEventListener('timeupdate', function () {
+  document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(this.currentTime);
+});
+document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
+document.getElementById('videoReplyNoteInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addVideoReplyNote(); }
+});
+document.getElementById('videoReplyNotesList').addEventListener('click', (e) => {
+  const player = document.getElementById('videoReplyPlayer');
+  const timeEl = e.target.closest('.video-note-time');
+  if (timeEl) { player.currentTime = videoReplyNotes[Number(timeEl.dataset.idx)].time; player.play(); return; }
+  const rmBtn = e.target.closest('.video-note-remove');
+  if (rmBtn) {
+    videoReplyNotes.splice(Number(rmBtn.dataset.idx), 1);
+    renderVideoReplyNotes();
+    document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length;
+  }
+});
+document.getElementById('videoReplyCancelBtn').onclick = () => {
+  document.getElementById('videoReplyPlayer').pause();
+  closeModal('videoReplyModal');
+};
+document.getElementById('videoReplySendBtn').onclick = async () => {
+  if (!videoReplyNotes.length || !videoReplyTargetId) return;
+  const status = document.getElementById('videoReplyStatus');
+  const btn = document.getElementById('videoReplySendBtn');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  // Synthesized fallback text — keeps push notifications, the sidebar
+  // preview, search, and a normal reply-to-this-message all working with
+  // zero special-casing; renderBubble still renders the rich version
+  // whenever m.videoNotes is present.
+  const text = videoReplyNotes.map(n => `[${formatVideoTime(n.time)}] ${n.text}`).join('\n');
+  const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, replyToId: videoReplyTargetId, videoNotes: videoReplyNotes }),
+  });
+  if (!r.ok) { status.textContent = 'Could not send — try again.'; btn.disabled = false; return; }
+  document.getElementById('videoReplyPlayer').pause();
+  closeModal('videoReplyModal');
+  refreshThread(true);
+};
 
 async function openForwardModal(mid) {
   moreMenuMessageId = null;

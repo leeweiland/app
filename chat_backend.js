@@ -3667,6 +3667,16 @@ export async function handleChatRequest(req, res, url) {
               type: body.gifUrl ? "gif" : "text",
               text: body.gifUrl || body.text,
               replyToId: body.replyToId || undefined,
+              // Timestamped video-reply notes (chat.html's video-reply modal) —
+              // `text` above is still always sent too (a synthesized "[m:ss]
+              // note" summary), so every other consumer of a plain message
+              // (push notifications, sidebar preview, search, a normal reply
+              // quoting this message) keeps working with zero special-casing;
+              // this field only adds the richer inline-video-with-clickable-
+              // timestamps rendering on top.
+              videoNotes: Array.isArray(body.videoNotes) && body.videoNotes.length
+                ? body.videoNotes.map(n => ({ time: Number(n.time) || 0, text: String(n.text || "").slice(0, 2000) }))
+                : undefined,
               createdAt: new Date().toISOString(),
             };
             messages.push(msg);
