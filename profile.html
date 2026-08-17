@@ -80,7 +80,7 @@ function avatarHtml(u) {
 // (personality-quiz/index.html's slugify) — lowercase, alphanumeric only.
 function slugify(title) { return String(title || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 function archetypeUrl(title, gender) {
-  return `https://custom.pacificrimathletics.com/wp-content/uploads/2025/06/results.php?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || 'male')}`;
+  return `/personality-quiz/results.html?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || 'male')}`;
 }
 
 function locationText(u) {

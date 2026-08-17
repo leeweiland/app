@@ -23,6 +23,14 @@
   .result-section p { font-size: 1em; line-height: 1.5; margin: 0; }
   .not-found { padding: 3em 1em; text-align: center; }
   .not-found a { color: var(--accent, #4da3ff); }
+  .explore-section { margin: 1.8em 0 0.5em; padding-top: 1.2em; border-top: 1px solid rgba(255,255,255,0.12); }
+  .explore-section h2 { color: var(--accent, #4da3ff); font-size: 1.15em; margin: 0 0 1em; }
+  .explore-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1em; }
+  .explore-card { display: block; text-decoration: none; color: inherit; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.8em; transition: border-color .15s; }
+  .explore-card:hover { border-color: var(--accent, #4da3ff); }
+  .explore-card.current { border-color: var(--accent, #4da3ff); background: rgba(77,163,255,0.1); }
+  .explore-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; margin-bottom: 0.5em; }
+  .explore-card .name { font-size: 0.85em; }
 </style>
 </head>
 <body>
@@ -37,7 +45,12 @@ async function main() {
   const titleParam = (params.get('title') || '').toLowerCase();
   const genderParam = (params.get('gender') || 'male').toLowerCase();
 
-  const res = await fetch('/personality-quiz/config.json?_=' + Date.now());
+  // Via the API (DATA_DIR-aware), not the static .json file directly —
+  // the static file only ever reflects whatever was last git-committed;
+  // an admin's edit in the Admin Panel writes through this same endpoint
+  // (see chat_backend.js), so this is the only fetch that's guaranteed to
+  // show current data on a production deploy with a Volume attached.
+  const res = await fetch('/api/personality-quiz/config?_=' + Date.now());
   const CONFIG = await res.json();
   const archetypes = CONFIG.archetypes;
   const settings = CONFIG.settings;
@@ -98,12 +111,30 @@ async function main() {
     </div>
   `).join('');
 
+  // Every other archetype, linked to its own version of this same page —
+  // same gender carried over so the grid keeps showing the viewer's own
+  // gendered image set as they click around.
+  const exploreHtml = Object.values(archetypes).map(a => {
+    const img = genderParam === 'female' ? a.images.female : a.images.male;
+    const isCurrent = a.title === result.title;
+    return `
+    <a class="explore-card${isCurrent ? ' current' : ''}" href="/personality-quiz/results.html?title=${encodeURIComponent(slugify(a.title))}&gender=${encodeURIComponent(genderParam)}">
+      <img src="${img}" alt="${a.title}">
+      <div class="name">${a.title}</div>
+    </a>
+  `;
+  }).join('');
+
   app.innerHTML = `
     <div class="container">
       <h1>You Are The ${result.title}</h1>
       <p>${result.summary}</p>
       <img class="result-image" src="${imageUrl}" alt="${result.title}">
       ${sectionsHtml}
+      <div class="explore-section">
+        <h2>Explore All Training Personality Types</h2>
+        <div class="explore-grid">${exploreHtml}</div>
+      </div>
     </div>
   `;
 }
