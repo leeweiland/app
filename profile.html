@@ -11,12 +11,18 @@
   .profile-card { padding: 32px; text-align: center; }
   .avatar-lg { width: 100px; height: 100px; margin: 0 auto 16px; font-size: 2.2rem; }
   .avatar-lg img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .avatar-wrap { position: relative; width: 100px; margin: 0 auto 16px; }
+  .avatar-wrap .avatar-lg { margin: 0; }
+  .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 30px; height: 30px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
+  .avatar-edit-badge:hover { border-color: var(--pra-blue); }
+  .avatar-edit-badge svg { width: 15px; height: 15px; }
   .role-badge { margin-top: 8px; }
   .fields { text-align: left; margin-top: 26px; }
   .field { margin-bottom: 14px; }
   .field label { display:block; margin-bottom: 6px; }
   .btn-row { display: flex; gap: 10px; margin-top: 22px; }
-  #uploadLabel { display: block; margin-top: 10px; cursor: pointer; }
+  .archetype-link { text-decoration: none; display: block; }
+  .archetype-link:hover .level-chip { border-color: var(--pra-blue); }
   .section-title { text-align: left; font-weight: 700; font-size: .95rem; margin: 28px 0 12px; padding-top: 20px; border-top: 1px solid var(--pra-border); }
   .save-msg { text-align: left; font-size: .78rem; color: var(--pra-blue); margin-top: 8px; min-height: 1em; }
   .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -59,6 +65,7 @@ async function load() {
     target.location = profile.location;
     target.archetypeImage = profile.archetypeImage;
     target.archetypeTitle = profile.archetypeTitle;
+    target.gender = profile.gender;
   }
   render(target, !viewingUser);
 }
@@ -69,6 +76,12 @@ function avatarHtml(u) {
     ? '<img src="/api/chat/media/' + u.profilePictureFileId + '"/>'
     : initials(u);
 }
+// Same slug rule the quiz itself uses to build its own results.html link
+// (personality-quiz/index.html's slugify) — lowercase, alphanumeric only.
+function slugify(title) { return String(title || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function archetypeUrl(title, gender) {
+  return `https://custom.pacificrimathletics.com/wp-content/uploads/2025/06/results.php?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || 'male')}`;
+}
 
 function locationText(u) {
   return u.location ? [u.location.city, u.location.region, u.location.country].filter(Boolean).join(', ') : '';
@@ -77,16 +90,24 @@ function locationText(u) {
 function render(u, editable) {
   const card = document.getElementById('profileCard');
   card.innerHTML = `
-    <div class="pra-avatar avatar-lg role-${u.role}">${avatarHtml(u)}</div>
+    <div class="avatar-wrap">
+      <div class="pra-avatar avatar-lg role-${u.role}">${avatarHtml(u)}</div>
+      ${editable ? `
+        <div class="avatar-edit-badge" id="avatarEditBadge" title="Change profile photo"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
+        <input type="file" id="picInput" accept="image/*" style="display:none"/>
+      ` : ''}
+    </div>
     <div class="pra-h1">${u.first} ${u.last}</div>
     <div class="pra-badge role-badge">${u.role}</div>
 
     ${u.archetypeTitle ? `
     <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">Training Personality</div>
-    <div class="level-chip" style="max-width:none">
-      <span class="cat" style="flex:none">${u.archetypeTitle}</span>
-      ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:32px;height:32px;border-radius:7px;object-fit:cover;margin-left:auto"/>` : ''}
-    </div>
+    <a class="archetype-link" href="${archetypeUrl(u.archetypeTitle, u.gender)}" target="_blank" rel="noopener">
+      <div class="level-chip" style="max-width:none">
+        <span class="cat" style="flex:none">${u.archetypeTitle}</span>
+        ${u.archetypeImage ? `<img src="${u.archetypeImage}" style="width:32px;height:32px;border-radius:7px;object-fit:cover;margin-left:auto"/>` : ''}
+      </div>
+    </a>
     ` : ''}
 
     <div class="section-title" style="${u.archetypeTitle ? '' : 'border-top:none;padding-top:0;'}margin-top:20px">My Levels</div>
@@ -106,10 +127,6 @@ function render(u, editable) {
       ${u.role !== 'user' ? `
       <div class="field"><label class="pra-label">Zoom Link</label>
         <input class="pra-input" id="fZoomLink" placeholder="https://zoom.us/j/..." value="${u.zoomLink||''}" ${editable ? '' : 'disabled'}/></div>
-      ` : ''}
-      ${editable ? `
-        <label id="uploadLabel" class="pra-link">Change profile photo</label>
-        <input type="file" id="picInput" accept="image/*" style="display:none"/>
       ` : ''}
     </div>
     ${editable ? '<div class="save-msg" id="locationMsg"></div>' : ''}
@@ -132,7 +149,8 @@ function render(u, editable) {
   `;
 
   if (editable) {
-    document.getElementById('uploadLabel').onclick = () => document.getElementById('picInput').click();
+    document.getElementById('avatarEditBadge').onclick = () => document.getElementById('picInput').click();
+    document.getElementById('picInput').onchange = uploadPhotoNow;
     document.getElementById('saveBtn').onclick = save;
     document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/chat-app/login.html'; };
     document.getElementById('changePwBtn').onclick = changePassword;
@@ -198,8 +216,6 @@ async function save() {
   fd.append('location', document.getElementById('fLocation').value);
   const zoomLinkEl = document.getElementById('fZoomLink');
   if (zoomLinkEl) fd.append('zoomLink', zoomLinkEl.value);
-  const pic = document.getElementById('picInput').files[0];
-  if (pic) fd.append('profilePicture', pic);
   const r = await fetch('/api/auth/update-profile', { method: 'POST', body: fd });
   if (!r.ok) return;
   const d = await r.json();
@@ -211,6 +227,18 @@ async function save() {
     const msg = document.getElementById('locationMsg');
     if (msg) msg.textContent = d.locationError;
   }
+}
+
+// Clicking the edit badge on the avatar uploads immediately (no waiting on
+// the general Save Changes button below) — picking a photo IS the action,
+// same as tapping a profile pic in any other app.
+async function uploadPhotoNow() {
+  const pic = document.getElementById('picInput').files[0];
+  if (!pic) return;
+  const fd = new FormData();
+  fd.append('profilePicture', pic);
+  await fetch('/api/auth/update-profile', { method: 'POST', body: fd });
+  await load();
 }
 
 load();

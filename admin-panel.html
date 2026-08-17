@@ -39,6 +39,31 @@
   .reminder-row .reminder-value { width: 70px; flex: none; }
   .reminder-row .reminder-unit { width: 110px; flex: none; }
   .reminder-row .reminder-suffix { font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
+
+  /* ── Training Personality archetype editor — ported from
+     personality-quiz/admin.html, class names prefixed with "arch-" so
+     nothing here collides with this page's own .field/.card etc. Every
+     field saves itself the same debounced way as the two sections above;
+     there's no separate "Save Archetypes" button either. ── */
+  .arch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+  .arch-card { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; overflow: hidden; }
+  .arch-hdr { padding: 10px 14px; background: rgba(0,155,255,0.08); border-bottom: 1px solid var(--pra-border); display: flex; align-items: center; gap: 8px; }
+  .arch-mbti { font-weight: 700; color: var(--pra-blue); font-size: .85rem; }
+  .arch-hdr .arch-standard { color: var(--pra-dim); font-size: .72rem; }
+  .arch-body { padding: 14px; }
+  .arch-field { margin-bottom: 10px; }
+  .arch-field label { display: block; font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+  .arch-field input[type="text"], .arch-field input[type="url"], .arch-field textarea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 7px 9px; font-family: inherit; font-size: .82rem; }
+  .arch-field textarea { resize: vertical; min-height: 60px; }
+  .arch-field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .arch-field-row .arch-field { flex: 1; min-width: 140px; }
+  .arch-elements-checks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .arch-elements-checks label { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: #fff; font-weight: normal; text-transform: none; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+  .arch-elements-checks input { width: auto; }
+  .arch-img-row { display: flex; gap: 10px; margin-top: 6px; }
+  .arch-img-col { flex: 1; }
+  .arch-img-col img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); margin-bottom: 6px; }
+  .arch-upload-btn { display: inline-block; font-size: .7rem; color: var(--pra-blue); cursor: pointer; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -63,7 +88,7 @@
       </div>
     </div>
 
-    <div class="pra-panel section">
+    <div class="pra-panel section" id="chatConfigSection">
       <div class="pra-h2" style="margin-bottom:14px">Chat Configuration</div>
       <div class="field">
         <label class="pra-label">Profile Photos Drive Folder ID</label>
@@ -105,11 +130,10 @@
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
-      <button class="pra-btn" id="saveConfigBtn">SAVE CONFIG</button>
       <div class="save-msg" id="saveMsg"></div>
     </div>
 
-    <div class="pra-panel section">
+    <div class="pra-panel section" id="apptConfigSection">
       <div class="pra-h2" style="margin-bottom:14px">Appointments</div>
 
       <div class="field">
@@ -222,8 +246,14 @@
         </div>
       </div>
 
-      <button class="pra-btn" id="saveApptConfigBtn">SAVE APPOINTMENT SETTINGS</button>
       <div class="save-msg" id="apptSaveMsg"></div>
+    </div>
+
+    <div class="pra-panel section">
+      <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
+      <div class="save-msg" id="archSaveMsg"></div>
+      <div id="archGrid" class="arch-grid">Loading…</div>
     </div>
   </div>
 
@@ -300,6 +330,122 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function escapeAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
+// ── Training Personality archetype editor ───────────────────────────────
+// Ported from personality-quiz/admin.html (which posts to the same
+// /api/personality-quiz/config endpoint, now also wired up in
+// chat_backend.js). That page edits the whole in-memory CONFIG object and
+// only writes it back on an explicit Save click; here every field schedules
+// its own debounced save instead, matching the two sections above.
+let ARCH_CONFIG = null;
+const ARCH_ALL_ELEMENTS = ['Handstand', 'Ninja Strength', 'Powermoves', 'Cirque', 'Freerun'];
+let archSaveTimer;
+function scheduleArchetypeSave() { clearTimeout(archSaveTimer); archSaveTimer = setTimeout(saveArchetypes, 500); }
+async function saveArchetypes() {
+  if (!ARCH_CONFIG) return;
+  await fetch('/api/personality-quiz/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ARCH_CONFIG),
+  });
+  const msg = document.getElementById('archSaveMsg');
+  msg.textContent = 'Saved.';
+  setTimeout(() => msg.textContent = '', 2000);
+}
+
+async function loadArchetypes() {
+  const r = await fetch('/api/personality-quiz/config');
+  if (!r.ok) { document.getElementById('archGrid').textContent = 'Could not load.'; return; }
+  ARCH_CONFIG = await r.json();
+  renderArchetypeCards();
+}
+
+function renderArchetypeCards() {
+  const grid = document.getElementById('archGrid');
+  grid.innerHTML = '';
+  Object.entries(ARCH_CONFIG.archetypes || {}).forEach(([mbti, data]) => {
+    const card = document.createElement('div');
+    card.className = 'arch-card';
+    const elChecks = ARCH_ALL_ELEMENTS.map(el => {
+      const checked = (data.elements || []).includes(el) ? 'checked' : '';
+      return `<label><input type="checkbox" data-el="${el}" ${checked}>${el}</label>`;
+    }).join('');
+    card.innerHTML = `
+      <div class="arch-hdr"><span class="arch-mbti">${mbti}</span><span class="arch-standard">(${escapeAttr(data.standard || '')})</span></div>
+      <div class="arch-body">
+        <div class="arch-field-row">
+          <div class="arch-field"><label>Title (PRA Archetype)</label><input type="text" class="f-title" value="${escapeAttr(data.title || '')}"></div>
+          <div class="arch-field"><label>Standard MBTI Name (16P Label)</label><input type="text" class="f-standard" value="${escapeAttr(data.standard || '')}"></div>
+        </div>
+        <div class="arch-field"><label>Summary</label><input type="text" class="f-summary" value="${escapeAttr(data.summary || '')}"></div>
+        <div class="arch-field"><label>Training Elements</label><div class="arch-elements-checks">${elChecks}</div></div>
+        <div class="arch-field"><label>Strategy (HTML — supports &lt;strong&gt; &lt;br&gt;)</label><textarea class="f-strategy">${data.strategy || ''}</textarea></div>
+        <div class="arch-img-row">
+          <div class="arch-img-col">
+            <label>Male Image</label>
+            <img class="img-male-preview" src="${data.images?.male || ''}" onerror="this.style.opacity=0.3">
+            <input type="url" class="f-img-male" value="${data.images?.male || ''}">
+            <label class="arch-upload-btn">Upload new file<input type="file" accept="image/*" class="f-upload-male" style="display:none"></label>
+          </div>
+          <div class="arch-img-col">
+            <label>Female Image</label>
+            <img class="img-female-preview" src="${data.images?.female || ''}" onerror="this.style.opacity=0.3">
+            <input type="url" class="f-img-female" value="${data.images?.female || ''}">
+            <label class="arch-upload-btn">Upload new file<input type="file" accept="image/*" class="f-upload-female" style="display:none"></label>
+          </div>
+        </div>
+      </div>
+    `;
+    const entry = ARCH_CONFIG.archetypes[mbti];
+    if (!entry.images) entry.images = {};
+    card.querySelector('.f-title').addEventListener('input', e => { entry.title = e.target.value; scheduleArchetypeSave(); });
+    card.querySelector('.f-standard').addEventListener('input', e => {
+      entry.standard = e.target.value;
+      card.querySelector('.arch-standard').textContent = `(${e.target.value})`;
+      scheduleArchetypeSave();
+    });
+    card.querySelector('.f-summary').addEventListener('input', e => { entry.summary = e.target.value; scheduleArchetypeSave(); });
+    card.querySelector('.f-strategy').addEventListener('input', e => { entry.strategy = e.target.value; scheduleArchetypeSave(); });
+    card.querySelectorAll('.arch-elements-checks input').forEach(cb => {
+      cb.addEventListener('change', () => {
+        entry.elements = [...card.querySelectorAll('.arch-elements-checks input:checked')].map(c => c.dataset.el);
+        scheduleArchetypeSave();
+      });
+    });
+    card.querySelector('.f-img-male').addEventListener('input', e => {
+      entry.images.male = e.target.value;
+      card.querySelector('.img-male-preview').src = e.target.value;
+      scheduleArchetypeSave();
+    });
+    card.querySelector('.f-img-female').addEventListener('input', e => {
+      entry.images.female = e.target.value;
+      card.querySelector('.img-female-preview').src = e.target.value;
+      scheduleArchetypeSave();
+    });
+    card.querySelector('.f-upload-male').addEventListener('change', e => uploadArchetypeImage(e, mbti, 'male', card));
+    card.querySelector('.f-upload-female').addEventListener('change', e => uploadArchetypeImage(e, mbti, 'female', card));
+    grid.appendChild(card);
+  });
+}
+
+function uploadArchetypeImage(e, mbti, which, card) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const filename = `${mbti.toLowerCase()}-${which}-${Date.now()}.${file.name.split('.').pop() || 'png'}`;
+    const res = await fetch('/api/personality-quiz/upload-image', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, dataUrl: reader.result }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      ARCH_CONFIG.archetypes[mbti].images[which] = data.url;
+      card.querySelector(which === 'male' ? '.f-img-male' : '.f-img-female').value = data.url;
+      card.querySelector(which === 'male' ? '.img-male-preview' : '.img-female-preview').src = data.url;
+      scheduleArchetypeSave();
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 async function init() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
@@ -311,8 +457,20 @@ async function init() {
   loadUsers();
   loadConfig();
   loadCalendarStatus();
-  document.getElementById('saveConfigBtn').onclick = saveConfig;
-  document.getElementById('saveApptConfigBtn').onclick = saveApptConfig;
+  loadArchetypes();
+  // No Save buttons — every field in these two sections saves itself.
+  // 'change' catches selects/checkboxes immediately; 'focusout' (the
+  // bubbling version of blur) catches text/textarea fields once you tab or
+  // click away, including ones added later (the reminder-row inputs are
+  // built dynamically) since this is delegated on the section container,
+  // not attached per-field. A short debounce means typing several
+  // characters then tabbing away only fires one save, not one per
+  // keystroke's blur.
+  let chatConfigSaveTimer, apptConfigSaveTimer;
+  document.getElementById('chatConfigSection').addEventListener('change', () => { clearTimeout(chatConfigSaveTimer); chatConfigSaveTimer = setTimeout(saveConfig, 400); });
+  document.getElementById('chatConfigSection').addEventListener('focusout', () => { clearTimeout(chatConfigSaveTimer); chatConfigSaveTimer = setTimeout(saveConfig, 400); });
+  document.getElementById('apptConfigSection').addEventListener('change', () => { clearTimeout(apptConfigSaveTimer); apptConfigSaveTimer = setTimeout(saveApptConfig, 400); });
+  document.getElementById('apptConfigSection').addEventListener('focusout', () => { clearTimeout(apptConfigSaveTimer); apptConfigSaveTimer = setTimeout(saveApptConfig, 400); });
   wireReminderCount('apptEmailReminderCount', 'apptEmailReminderRows', [1440, 60, 15]);
   wireReminderCount('apptSmsReminderCount', 'apptSmsReminderRows', [60, 15, 5]);
   wireReminderCount('apptMessengerReminderCount', 'apptMessengerReminderRows', [60, 15, 5]);
@@ -493,12 +651,15 @@ function renderUsers() {
         <input class="pra-input set-password-input" type="text" data-id="${u.id}" placeholder="New password" style="width:120px;font-size:.78rem"/>
         <button class="pra-btn pra-btn-ghost set-password-btn" data-id="${u.id}" style="padding:5px 10px;font-size:.75rem">Set</button>
       </td>
+      <td>
+        <a class="pra-btn pra-btn-ghost" href="/chat-app/profile.html?userId=${u.id}" target="_blank" style="padding:5px 12px;font-size:.75rem;text-decoration:none;display:inline-block">Profile</a>
+      </td>
     </tr>
   `).join('');
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th><th>Set Password</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>

@@ -93,7 +93,7 @@ function migrateDataFile(file) {
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
-  "chat_gym_blocked_dates.json", "personality-quiz/leads.json",
+  "chat_gym_blocked_dates.json", "personality-quiz/leads.json", "personality-quiz/config.json",
 // Defensive: this runs at module-load time, before the server starts
 // listening — one bad seed here must never take the whole app down again
 // the way the missing-mkdirSync bug above just did in production.
@@ -124,13 +124,13 @@ function writeJson(file, data) {
   if (changed) writeJson(USERS_FILE, users);
 })();
 
-// Static, bundled-with-code content (not user data) — always read from the
-// app's own directory, never the Volume. personality-quiz/config.json and
-// leads.json aren't in the migrated data-file list and this server has no
-// write path for either of them (that lives on a separate deployment), so
-// routing them through DATA_DIR just meant they silently resolved to a
-// path that never existed on the Volume, every archetype lookup failing
-// and quietly falling back to the generic handstand silhouette.
+// Static, bundled-with-code content that has no write path anywhere in this
+// file — always read from the app's own directory, never the Volume. Kept
+// for personality-quiz/config.json's other tabs (questions/settings) if
+// anything ever reads those without going through readJson; config.json and
+// leads.json themselves are now regular DATA_DIR-routed data files (see
+// migrateDataFile's list above) since /api/personality-quiz/config and
+// /lead both have real write paths in this file now.
 function readAppJson(file, fallback) {
   const p = join(__dirname, file);
   try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
@@ -599,7 +599,7 @@ async function geocodeLocationTextCached(text) {
 // on each new submission (newest first), so the first match is the latest.
 function getLatestArchetypeImage(email) {
   if (!email) return null;
-  const leads = readAppJson(join("personality-quiz", "leads.json"), []);
+  const leads = readJson("personality-quiz/leads.json", []);
   const lead = leads.find(l => (l.email || "").toLowerCase() === email.toLowerCase());
   return lead?.image || null;
 }
@@ -607,7 +607,7 @@ function getLatestArchetypeImage(email) {
 // Build lookups from MBTI code, PRA title, and 16P standard name → {male, female} image URLs.
 // All keys are normalized for case-insensitive matching.
 function buildArchetypeImageMaps() {
-  const cfg = readAppJson(join("personality-quiz", "config.json"), {});
+  const cfg = readJson("personality-quiz/config.json", {});
   const byCode = {}, byTitle = {}, byStandard = {};
   for (const [code, arch] of Object.entries(cfg.archetypes || {})) {
     if (!arch.images) continue;
@@ -689,6 +689,7 @@ async function fetchUsersMapPoints() {
       profilePictureFileId: localUser?.profilePictureFileId || null,
       archetypeImage,
       archetypeTitle,
+      gender,
       role: sheetRole || "user",
       lat: geo.lat, lng: geo.lng,
       city: geo.city, region: geo.region, country: geo.country,
@@ -708,7 +709,7 @@ async function fetchUserProfileCard(targetUser) {
   const card = {
     first: targetUser.first, last: targetUser.last, role: targetUser.role,
     profilePictureFileId: targetUser.profilePictureFileId || null,
-    location: null, archetypeImage: null, archetypeTitle: null, levels: [],
+    location: null, archetypeImage: null, archetypeTitle: null, gender: null, levels: [],
   };
   const levelsPeople = await fetchAllLevels().catch(() => []);
   card.levels = findLevelsEntries(levelsPeople, targetUser.first, targetUser.last);
@@ -733,6 +734,7 @@ async function fetchUserProfileCard(targetUser) {
 
   const archetypeMaps = buildArchetypeImageMaps();
   const gender = targetUser.gender || (sheetGender || "").toLowerCase() || "male";
+  card.gender = gender;
   const pick = entry => entry ? (entry[gender] || entry.male || null) : null;
   const matchedArchetype =
     archetypeMaps.byTitle[(praPersona || "").toLowerCase()] ||
@@ -2349,6 +2351,67 @@ export async function handleChatRequest(req, res, url) {
       })();
     }
     return sendJson(res, 200, { ok: true });
+  }
+
+  // ─── Personality Quiz admin — archetype/config editor ─────────────────
+  // Same missing-in-production issue as /lead above: these existed only in
+  // the local-dev root server.js. Ported here, admin-gated (the original
+  // had NO auth check at all — anyone could rewrite every archetype).
+  const PERSONALITY_CONFIG_FILE = "personality-quiz/config.json";
+  if (p === "/api/personality-quiz/config") {
+    if (req.method === "GET") {
+      return sendJson(res, 200, readJson(PERSONALITY_CONFIG_FILE, {}));
+    }
+    if (req.method === "POST") {
+      const user = getSessionUser(req);
+      if (!user || !isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const cfg = await readJsonBody(req);
+      if (!cfg.settings || !cfg.questions || !cfg.archetypes) return sendJson(res, 400, { error: "invalid config shape" });
+      writeJson(PERSONALITY_CONFIG_FILE, cfg);
+      return sendJson(res, 200, { ok: true });
+    }
+  }
+
+  // Archetype images uploaded from the admin editor — same
+  // filename-sanitizing + data-URL-decode approach as the original,
+  // just written under DATA_DIR (see writeJson above) so an uploaded
+  // image survives the next deploy instead of vanishing with the rest
+  // of __dirname's git-checked-out code. Served back by the GET route
+  // just below, since server.js's static-file fallback only ever looks
+  // in __dirname and would never find a DATA_DIR-only file.
+  if (p === "/api/personality-quiz/upload-image" && req.method === "POST") {
+    const user = getSessionUser(req);
+    if (!user || !isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+    try {
+      const { filename, dataUrl } = await readJsonBody(req);
+      const m = /^data:(image\/\w+);base64,(.+)$/.exec(dataUrl || "");
+      if (!filename || !m) return sendJson(res, 400, { error: "expected {filename, dataUrl}" });
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const dest = join(DATA_DIR, "personality-quiz", "images", safeName);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, Buffer.from(m[2], "base64"));
+      return sendJson(res, 200, { ok: true, url: `/personality-quiz/images/${safeName}` });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
+  // Serves an uploaded archetype image — checks DATA_DIR first (where
+  // uploads actually land, see above) and falls back to the git-bundled
+  // copy in __dirname (e.g. images that shipped with the repo and were
+  // never re-uploaded through the admin editor).
+  const archetypeImageMatch = p.match(/^\/personality-quiz\/images\/([a-zA-Z0-9._-]+)$/);
+  if (archetypeImageMatch && req.method === "GET") {
+    const name = archetypeImageMatch[1];
+    const volumePath = join(DATA_DIR, "personality-quiz", "images", name);
+    const bundledPath = join(__dirname, "personality-quiz", "images", name);
+    const filePath = existsSync(volumePath) ? volumePath : bundledPath;
+    if (!existsSync(filePath)) { res.writeHead(404); res.end("Not found"); return true; }
+    const ext = name.split(".").pop().toLowerCase();
+    const mime = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" }[ext] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": mime, "Cache-Control": "no-store" });
+    res.end(readFileSync(filePath));
+    return true;
   }
 
   // Everything below requires a logged-in user.

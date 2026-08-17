@@ -59,7 +59,13 @@
   .popup-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
   .popup-backdrop.show { display: flex; }
   .popup-box { padding: 26px; text-align: center; width: 300px; }
-  .popup-avatar { width: 84px; height: 84px; margin: 0 auto 14px; font-size: 1.8rem; }
+  .popup-avatar { width: 84px; height: 84px; margin: 0; font-size: 1.8rem; }
+  .avatar-wrap { position: relative; }
+  .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 28px; height: 28px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
+  .avatar-edit-badge:hover { border-color: var(--pra-blue); }
+  .avatar-edit-badge svg { width: 14px; height: 14px; }
+  .archetype-link { text-decoration: none; display: block; }
+  .archetype-link:hover .popup-level-chip { border-color: var(--pra-blue); }
   .popup-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   .popup-levels-program { margin-bottom: 10px; }
   .popup-super-level { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 6px; }
@@ -100,8 +106,12 @@
 
   <div class="popup-backdrop" id="popup">
     <div class="pra-panel popup-box">
-      <div class="pra-avatar popup-avatar" id="popupAvatar"></div>
-      <div class="pra-h2" id="popupName"></div>
+      <div class="avatar-wrap" style="width:84px;margin:0 auto">
+        <div class="pra-avatar popup-avatar" id="popupAvatar"></div>
+        <div class="avatar-edit-badge" id="popupAvatarEditBadge" title="Change profile photo" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
+        <input type="file" id="popupPicInput" accept="image/*" style="display:none"/>
+      </div>
+      <div class="pra-h2" id="popupName" style="margin-top:14px"></div>
       <div id="popupRoleBadge" style="margin-top:4px"></div>
       <div class="pra-muted" id="popupLocation" style="margin-top:6px;font-size:.85rem"></div>
       <div id="popupEditLink" style="margin-top:6px"></div>
@@ -841,16 +851,36 @@ function openPopup(u) {
   document.getElementById("popupEditLink").innerHTML = isSelf
     ? '<a class="pra-link" href="/chat-app/profile.html" style="font-size:.8rem">Edit my location & profile →</a>'
     : '';
+  document.getElementById("popupAvatarEditBadge").style.display = isSelf ? "" : "none";
   renderPopupLevels();
   document.getElementById("popup").classList.add("show");
 }
 
-// Coach/admin only — clicking a level's number or a checkmark edits it right
-// on the map popup, matching by first+last name via the same
-// /api/chat/levels/update endpoint the Levels page uses. A client/user
-// viewer's popupUser has no `levels` field at all (stripped server-side) and
-// no `last` name either, so entries is always empty and isStaffUser gates
-// the edit affordance off anyway.
+// Same slug rule the quiz itself uses to build its own results.html link
+// (personality-quiz/index.html's slugify) — lowercase, alphanumeric only.
+function slugify(title) { return String(title || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function archetypeUrl(title, gender) {
+  return `https://custom.pacificrimathletics.com/wp-content/uploads/2025/06/results.php?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || "male")}`;
+}
+
+document.getElementById("popupAvatarEditBadge").onclick = () => document.getElementById("popupPicInput").click();
+document.getElementById("popupPicInput").onchange = async () => {
+  const pic = document.getElementById("popupPicInput").files[0];
+  if (!pic) return;
+  const fd = new FormData();
+  fd.append("profilePicture", pic);
+  await fetch("/api/auth/update-profile", { method: "POST", body: fd });
+  await drawUsers(); // re-fetches points (including the new profilePictureFileId) and re-renders the map/dots
+  if (popupUser) {
+    const refreshed = users.find(u => u.first === popupUser.first && u.last === popupUser.last);
+    if (refreshed) openPopup(refreshed);
+  }
+};
+
+// Levels/Super Level are visible to everyone now (see /api/chat/users-map);
+// clicking a level's number or a checkmark to edit it in place is still
+// coach/admin only, matched by first+last name via the same
+// /api/chat/levels/update endpoint the Levels page uses.
 function renderPopupLevels() {
   const editCls = isStaffUser ? ' editable' : '';
 
@@ -858,13 +888,15 @@ function renderPopupLevels() {
   // only needs rendering once — placed directly above Foundation on
   // whichever program card ends up first.
   const personalityRow = popupUser.archetypeTitle ? `
-    <div class="popup-level-chip">
-      <span class="cat">Training Personality</span>
-      <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
-        ${popupUser.archetypeTitle}
-        ${popupUser.archetypeImage ? `<img src="${popupUser.archetypeImage}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
-      </span>
-    </div>
+    <a class="archetype-link" href="${archetypeUrl(popupUser.archetypeTitle, popupUser.gender)}" target="_blank" rel="noopener">
+      <div class="popup-level-chip">
+        <span class="cat">Training Personality</span>
+        <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
+          ${popupUser.archetypeTitle}
+          ${popupUser.archetypeImage ? `<img src="${popupUser.archetypeImage}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
+        </span>
+      </div>
+    </a>
   ` : '';
 
   const levelsHtml = popupEntries.map((e, idx) => {

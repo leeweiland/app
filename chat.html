@@ -354,6 +354,12 @@
      that don't understand the dvh line just ignore it and keep the vh one. */
   .modal-box { width: 100%; max-width: 420px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
   .modal-box-wide { max-width: 620px; }
+  .avatar-wrap { position: relative; }
+  .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 26px; height: 26px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
+  .avatar-edit-badge:hover { border-color: var(--pra-blue); }
+  .avatar-edit-badge svg { width: 13px; height: 13px; }
+  .archetype-link { text-decoration: none; display: block; }
+  .archetype-link:hover .popup-level-chip { border-color: var(--pra-blue); }
   .intake-section-label { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-blue); margin: 18px 0 8px; }
   .intake-section-label:first-child { margin-top: 0; }
   .intake-field { margin-bottom: 10px; }
@@ -729,7 +735,11 @@
        interaction, reused here). -->
   <div class="modal-backdrop" id="levelsModal">
     <div class="pra-panel modal-box" style="max-width:360px;text-align:center">
-      <div class="pra-avatar" id="levelsAvatar" style="width:80px;height:80px;font-size:1.7rem;margin:0 auto 12px"></div>
+      <div class="avatar-wrap" style="width:80px;margin:0 auto 12px">
+        <div class="pra-avatar" id="levelsAvatar" style="width:80px;height:80px;font-size:1.7rem;margin:0"></div>
+        <div class="avatar-edit-badge" id="levelsAvatarEditBadge" title="Change profile photo" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
+        <input type="file" id="levelsPicInput" accept="image/*" style="display:none"/>
+      </div>
       <div class="pra-h2" id="levelsName" style="margin-bottom:6px"></div>
       <div id="levelsRoleBadge" style="margin-bottom:8px"></div>
       <div class="pra-muted" id="levelsLocation" style="font-size:.85rem;margin-bottom:10px"></div>
@@ -1998,6 +2008,13 @@ function renderLevelsAccountActions(otherUser) {
   };
 }
 
+// Same slug rule the quiz itself uses to build its own results.html link
+// (personality-quiz/index.html's slugify) — lowercase, alphanumeric only.
+function slugify(title) { return String(title || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function archetypeUrl(title, gender) {
+  return `https://custom.pacificrimathletics.com/wp-content/uploads/2025/06/results.php?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || 'male')}`;
+}
+
 async function openLevelsModal(otherUser) {
   levelsModalUser = otherUser;
   document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
@@ -2009,6 +2026,11 @@ async function openLevelsModal(otherUser) {
   document.getElementById('levelsBody').innerHTML = '';
   renderLevelsAccountActions(otherUser);
   document.getElementById('levelsMessageBtn').onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
+  // Photo editing only ever targets the session's own account server-side
+  // (/api/auth/update-profile), so the badge only makes sense — and only
+  // shows — when this modal is open on your own profile.
+  const isSelf = me && otherUser.id === me.id;
+  document.getElementById('levelsAvatarEditBadge').style.display = isSelf ? '' : 'none';
   openModal('levelsModal');
 
   const [profileRes, levelsRes] = await Promise.all([
@@ -2021,9 +2043,25 @@ async function openLevelsModal(otherUser) {
 
   const loc = profile?.location ? [profile.location.city, profile.location.region, profile.location.country].filter(Boolean).join(', ') : '';
   document.getElementById('levelsLocation').textContent = loc;
-  levelsModalArchetype = profile ? { title: profile.archetypeTitle, image: profile.archetypeImage } : { title: null, image: null };
+  levelsModalArchetype = profile
+    ? { title: profile.archetypeTitle, image: profile.archetypeImage, gender: profile.gender }
+    : { title: null, image: null, gender: null };
   renderLevelsBody();
 }
+
+document.getElementById('levelsAvatarEditBadge').onclick = () => document.getElementById('levelsPicInput').click();
+document.getElementById('levelsPicInput').onchange = async () => {
+  const pic = document.getElementById('levelsPicInput').files[0];
+  if (!pic) return;
+  const fd = new FormData();
+  fd.append('profilePicture', pic);
+  await fetch('/api/auth/update-profile', { method: 'POST', body: fd });
+  // Refresh the whole session (me.profilePictureFileId) and this modal's
+  // own avatar, since the photo just changed while it's open.
+  const meRes = await fetch('/api/auth/me');
+  if (meRes.ok) me = (await meRes.json()).user;
+  if (levelsModalUser) openLevelsModal(levelsModalUser.id === me.id ? me : levelsModalUser);
+};
 
 // Completing Foundation means they've at least started every skill — an
 // unrecorded category reads as Level 1, not 0, once Foundation is done.
@@ -2037,13 +2075,15 @@ let levelsModalArchetype = { title: null, image: null };
 
 function renderLevelsBody() {
   const personalityRow = levelsModalArchetype.title ? `
-    <div class="popup-level-chip">
-      <span class="cat">Training Personality</span>
-      <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
-        ${levelsModalArchetype.title}
-        ${levelsModalArchetype.image ? `<img src="${levelsModalArchetype.image}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
-      </span>
-    </div>
+    <a class="archetype-link" href="${archetypeUrl(levelsModalArchetype.title, levelsModalArchetype.gender)}" target="_blank" rel="noopener">
+      <div class="popup-level-chip">
+        <span class="cat">Training Personality</span>
+        <span class="chip-val" style="display:flex;align-items:center;gap:8px;color:#fff">
+          ${levelsModalArchetype.title}
+          ${levelsModalArchetype.image ? `<img src="${levelsModalArchetype.image}" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0"/>` : ''}
+        </span>
+      </div>
+    </a>
   ` : '';
 
   // Viewing (location, archetype, levels, Super Level) is open to everyone;
