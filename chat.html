@@ -246,7 +246,11 @@
   .bubble-row.mine .bubble-reply-quote { background: rgba(0,0,0,0.15); border-left-color: rgba(255,255,255,0.7); }
   .bubble-reply-quote-sender { font-weight: 700; color: var(--pra-blue); }
   .bubble-row.mine .bubble-reply-quote-sender { color: #fff; }
-  .bubble-reply-quote-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Was white-space:nowrap — a long quoted message just kept growing the
+     bubble sideways past the screen edge instead of wrapping, dragging the
+     whole thread into horizontal scroll. Wrap normally instead, clamped to
+     3 lines so one very long quote still can't dominate the bubble. */
+  .bubble-reply-quote-text { overflow: hidden; word-break: break-word; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
   .bubble-forwarded-label { font-size: .68rem; font-style: italic; color: var(--pra-dim); margin-bottom: 3px; }
   .bubble-row.mine .bubble-forwarded-label { color: rgba(255,255,255,0.75); }
   /* Reply-preview strip above the composer — same floating-above pattern as
@@ -355,6 +359,11 @@
   .intake-field { margin-bottom: 10px; }
   .intake-field label { display: block; font-size: .76rem; color: var(--pra-dim); margin-bottom: 4px; }
   .intake-field input, .intake-field textarea, .intake-field select { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 8px 10px; font-family: inherit; font-size: .84rem; }
+  /* The closed <select> stays white-on-dark like every other field, but
+     mobile OSes render the OPEN options popup with their own light-themed
+     background regardless of this element's own styling — inheriting
+     white text made every option invisible against that light popup. */
+  .intake-field select option { color: #000; background: #fff; }
   .intake-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .intake-field textarea { min-height: 64px; resize: vertical; }
   .intake-field input:disabled, .intake-field textarea:disabled { opacity: .6; cursor: not-allowed; }

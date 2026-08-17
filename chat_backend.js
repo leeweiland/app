@@ -86,7 +86,7 @@ function migrateDataFile(file) {
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
-  "chat_gym_blocked_dates.json",
+  "chat_gym_blocked_dates.json", "personality-quiz/leads.json",
 ].forEach(migrateDataFile);
 
 function readJson(file, fallback) {
@@ -2285,6 +2285,53 @@ export async function handleChatRequest(req, res, url) {
       res.writeHead(500); res.end("Media fetch failed: " + e.message);
     }
     return true;
+  }
+
+  // ─── Personality Quiz lead submission ──────────────────────────────────
+  // The quiz frontend (chat-app/personality-quiz/index.html) computes a
+  // result client-side and posts it here. This route previously existed
+  // ONLY in the separate root server.js used for local dev — never in this
+  // file, which is what Railway actually runs — so every real submission
+  // 404'd silently (the frontend never checks the response and redirects
+  // to the results page regardless of outcome). updatePersonalityColumn
+  // (above) was already correct; it just had nothing calling it in prod.
+  const PERSONALITY_LEADS_FILE = "personality-quiz/leads.json";
+  const PERSONALITY_QUIZ_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
+  if (p === "/api/personality-quiz/leads" && req.method === "GET") {
+    const user = getSessionUser(req);
+    if (!user || !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
+    return sendJson(res, 200, readJson(PERSONALITY_LEADS_FILE, []));
+  }
+  if (p === "/api/personality-quiz/lead" && req.method === "POST") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const contact = await readJsonBody(req);
+    contact.receivedAt = new Date().toISOString();
+    const leads = readJson(PERSONALITY_LEADS_FILE, []);
+    leads.unshift(contact);
+    writeJson(PERSONALITY_LEADS_FILE, leads);
+
+    if (contact.email) {
+      updatePersonalityColumn(contact.email, contact.mbti || "", contact.standard || "", contact.archetype || "", contact.gender || "", contact.firstName, contact.lastName)
+        .catch(e => console.error("[personality-quiz sheet sync]", e.message));
+      (async () => {
+        try {
+          const accessToken = await getGoogleAccessToken();
+          const personality = [
+            contact.mbti ? `MBTI: ${contact.mbti} ${contact.standard || ""}`.trim() : "",
+            contact.archetype ? `PRA: ${contact.archetype} ${contact.summary || ""}`.trim() : "",
+          ].filter(Boolean).join(" ");
+          const row = [contact.email || "", contact.firstName || "", contact.lastName || "", contact.phone || "", new Date().toLocaleString("en-US"), personality];
+          await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${PERSONALITY_QUIZ_SHEET_ID}/values/${encodeURIComponent("'PERSONALITY QUIZ'!A1:F1")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+            { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ values: [row] }) }
+          );
+        } catch (e) {
+          console.error("[personality-quiz sheet append]", e.message);
+        }
+      })();
+    }
+    return sendJson(res, 200, { ok: true });
   }
 
   // Everything below requires a logged-in user.
