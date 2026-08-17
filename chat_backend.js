@@ -3,7 +3,7 @@
 // Mounted from server.js: handleChatRequest(req, res, url) returns true if it
 // handled the request, false to let server.js's existing routing continue.
 
-import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
@@ -78,6 +78,13 @@ function migrateDataFile(file) {
   const dest = join(DATA_DIR, file);
   const seed = join(__dirname, file);
   if (dest !== seed && !existsSync(dest) && existsSync(seed)) {
+    // writeFileSync does NOT create intermediate directories — for a
+    // nested path (e.g. "personality-quiz/leads.json") on a freshly
+    // attached Volume that's never held anything but flat files before,
+    // this threw ENOENT synchronously at module-load time, before the
+    // server ever started listening, which took the whole app down
+    // ("Application failed to respond") rather than failing one request.
+    mkdirSync(dirname(dest), { recursive: true });
     writeFileSync(dest, readFileSync(seed));
   }
 }
@@ -87,14 +94,23 @@ function migrateDataFile(file) {
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
   "chat_gym_blocked_dates.json", "personality-quiz/leads.json",
-].forEach(migrateDataFile);
+// Defensive: this runs at module-load time, before the server starts
+// listening — one bad seed here must never take the whole app down again
+// the way the missing-mkdirSync bug above just did in production.
+].forEach(file => { try { migrateDataFile(file); } catch (e) { console.error("[migrateDataFile]", file, e.message); } });
 
 function readJson(file, fallback) {
   const p = join(DATA_DIR, file);
   try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
 }
 function writeJson(file, data) {
-  writeFileSync(join(DATA_DIR, file), JSON.stringify(data, null, 2), "utf8");
+  const dest = join(DATA_DIR, file);
+  // Same nested-path issue as migrateDataFile above, just at request time
+  // instead of boot time — a first-ever write for a nested file (e.g.
+  // personality-quiz/leads.json) on a fresh Volume needs its subdirectory
+  // created before the file itself can be.
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, JSON.stringify(data, null, 2), "utf8");
 }
 
 // One-time role rename: "student" -> "online" (the "gym" role is new
