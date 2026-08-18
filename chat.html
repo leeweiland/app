@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Chat — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
   /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` —
      that magic number only ever accounted for chat-header.js's own bar and
@@ -386,6 +387,54 @@
   .shortcode-menu-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .8rem; }
   .shortcode-menu-item:hover { background: rgba(255,255,255,0.06); }
 
+  /* ── In-app camera capture (students/users, touch devices only) ──
+     A full-bleed overlay rather than the usual centered .modal-box — a
+     camera view needs the whole screen, not a card floating over the
+     thread. Two screens inside one overlay (capture, then review/trim/
+     send) toggled by display, not two separate modals, so switching
+     between them doesn't tear down/rebuild the getUserMedia stream. */
+  .camera-modal { position: fixed; inset: 0; background: #000; z-index: 200; display: none; }
+  .camera-modal.show { display: block; }
+  .camera-screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  #cameraPreviewVideo, #cameraReviewVideo { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+  /* Selfie mode mirrors the LIVE PREVIEW only (the natural "looking in a
+     mirror" feel) — the frame actually captured/recorded is read straight
+     off the unmirrored video element via canvas/MediaRecorder, so a coach
+     reviewing the clip still sees the student's real left/right, which
+     matters for form feedback. */
+  #cameraPreviewVideo.mirrored { transform: scaleX(-1); }
+  #cameraReviewImage { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  .camera-close-btn, .camera-flip-btn { position: absolute; top: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.45); color: #fff; font-size: 1.1rem; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
+  .camera-close-btn { left: 16px; }
+  .camera-flip-btn { right: 16px; font-size: 1.3rem; }
+  .camera-mode-toggle { position: absolute; bottom: 118px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(0,0,0,0.45); border-radius: 999px; padding: 4px; z-index: 2; }
+  .camera-mode-opt { border: none; background: transparent; color: rgba(255,255,255,0.65); font-size: .78rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .camera-mode-opt.active { background: #fff; color: #000; }
+  .camera-shutter-btn { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); width: 72px; height: 72px; border-radius: 50%; background: transparent; border: 4px solid #fff; cursor: pointer; z-index: 2; }
+  .camera-shutter-btn::after { content: ''; display: block; width: 56px; height: 56px; margin: 4px auto; border-radius: 50%; background: #fff; transition: border-radius .15s, background .15s; }
+  .camera-shutter-btn.recording::after { border-radius: 10px; background: #ff3b3b; width: 32px; height: 32px; }
+  .camera-record-timer { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: rgba(255,59,59,0.85); color: #fff; font-size: .82rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; z-index: 2; }
+  /* Hand-drawn callouts — a rough curved arrow (plain SVG stroke, not an
+     asset) plus a handwriting-font label, pointing at whatever this step
+     wants the student looking at next. */
+  .camera-handwritten { font-family: 'Caveat', cursive; font-size: 1.7rem; font-weight: 700; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.7); line-height: 1.1; }
+  .hand-arrow path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
+  .camera-callout { position: absolute; z-index: 2; pointer-events: none; }
+  .camera-callout-step1 { bottom: 128px; left: 50%; transform: translateX(calc(-50% + 90px)); text-align: right; width: 170px; }
+  .camera-callout-step1 .hand-arrow { width: 60px; height: 50px; margin-left: auto; }
+  .camera-review-actions { position: relative; padding: 18px 20px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
+  .camera-callout-step3 { position: static; flex: 1; text-align: center; }
+  .camera-callout-step3 .hand-arrow { width: 54px; height: 40px; display: block; margin: 0 auto -6px; }
+  .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
+  .camera-callout-step2 { position: static; margin-bottom: 4px; }
+  .camera-callout-step2 .hand-arrow { width: 46px; height: 34px; }
+  .camera-trim-track { position: relative; height: 46px; border-radius: 8px; background: rgba(255,255,255,0.12); overflow: hidden; touch-action: none; }
+  .camera-trim-range { position: absolute; top: 0; bottom: 0; background: rgba(0,155,255,0.35); border-top: 2px solid var(--pra-blue); border-bottom: 2px solid var(--pra-blue); }
+  .camera-trim-handle { position: absolute; top: 0; bottom: 0; width: 18px; background: var(--pra-blue); border-radius: 6px; cursor: ew-resize; touch-action: none; }
+  .camera-trim-handle::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 3px; height: 16px; background: rgba(255,255,255,0.8); border-radius: 2px; }
+  .camera-trim-handle-start { left: 0; }
+  .camera-trim-handle-end { right: 0; }
+
   /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
   .modal-backdrop.show { display: flex; }
@@ -621,6 +670,7 @@
             <button class="icon-btn composer-icon" id="templatesBtn" title="Saved message templates" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 3.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v.5" stroke="#fff" stroke-width="1.6"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <textarea id="textInput" class="composer-textarea" placeholder="Type a message…" rows="1"></textarea>
             <button class="icon-btn composer-icon" id="attachBtn">📎</button>
+            <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none">📷</button>
             <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           </div>
           <button class="composer-send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.4 20.4l17.45-8.4a.6.6 0 0 0 0-1.08L3.4 2.52a.6.6 0 0 0-.85.66l2.17 7.02a.6.6 0 0 0 .49.42l8.9 1.3-8.9 1.3a.6.6 0 0 0-.49.42l-2.17 7.1a.6.6 0 0 0 .85.66z" fill="#fff"/></svg></button>
@@ -762,6 +812,55 @@
       <div class="pra-h2" style="margin-bottom:14px">Shared Media</div>
       <div class="media-grid" id="mediaGrid"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('mediaModal')">Close</button>
+    </div>
+  </div>
+
+  <!-- In-app camera capture — students/users on touch devices only (see
+       cameraCaptureBtn's own display toggle in setupComposer). Two screens:
+       shoot (live preview, front camera default) then review/trim/send.
+       Whatever gets recorded/shot here uploads straight to Drive through
+       the same multipart /messages endpoint attach/paste already use —
+       nothing ever touches the phone's own photo/video storage. -->
+  <div class="camera-modal" id="cameraCaptureModal">
+    <div class="camera-screen" id="cameraScreenShoot">
+      <video id="cameraPreviewVideo" autoplay playsinline muted></video>
+      <button class="camera-close-btn" id="cameraCloseBtn" title="Cancel">✕</button>
+      <button class="camera-flip-btn" id="cameraFlipBtn" title="Switch camera">🔄</button>
+      <div class="camera-record-timer" id="cameraRecordTimer" style="display:none">0:00</div>
+      <div class="camera-mode-toggle">
+        <button class="camera-mode-opt active" id="cameraModePhotoBtn" type="button">Photo</button>
+        <button class="camera-mode-opt" id="cameraModeVideoBtn" type="button">Video</button>
+      </div>
+      <div class="camera-callout camera-callout-step1">
+        <svg class="hand-arrow" viewBox="0 0 60 50"><path d="M6 6 Q10 34 30 40 T54 34" marker-end="url(#handArrowHead)"/><defs><marker id="handArrowHead" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#fff"/></marker></defs></svg>
+        <div class="camera-handwritten">Step 1: Shoot your training clip.</div>
+      </div>
+      <button class="camera-shutter-btn" id="cameraShutterBtn" title="Capture"></button>
+    </div>
+    <div class="camera-screen" id="cameraScreenReview" style="display:none">
+      <video id="cameraReviewVideo" playsinline style="display:none"></video>
+      <img id="cameraReviewImage" style="display:none"/>
+      <button class="camera-close-btn" id="cameraReviewCloseBtn" title="Cancel">✕</button>
+      <div class="camera-trim-wrap" id="cameraTrimWrap" style="display:none">
+        <div class="camera-callout camera-callout-step2">
+          <svg class="hand-arrow" viewBox="0 0 46 34"><path d="M4 4 Q6 22 23 28 T42 26" marker-end="url(#handArrowHead2)"/><defs><marker id="handArrowHead2" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
+          <div class="camera-handwritten">Step 2: Trim your training clip.</div>
+        </div>
+        <div class="camera-trim-track" id="cameraTrimTrack">
+          <div class="camera-trim-range" id="cameraTrimRange"></div>
+          <div class="camera-trim-handle camera-trim-handle-start" id="cameraTrimStartHandle"></div>
+          <div class="camera-trim-handle camera-trim-handle-end" id="cameraTrimEndHandle"></div>
+        </div>
+      </div>
+      <div class="camera-review-actions">
+        <button class="pra-btn pra-btn-ghost" id="cameraRetakeBtn" type="button">Retake</button>
+        <div class="camera-callout camera-callout-step3">
+          <svg class="hand-arrow" viewBox="0 0 54 40"><path d="M50 4 Q40 4 27 20 T6 34" marker-end="url(#handArrowHead3)"/><defs><marker id="handArrowHead3" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
+          <div class="camera-handwritten">Step 3: Send your training clip with your Coach.</div>
+        </div>
+        <button class="pra-btn" id="cameraSendBtn" type="button">Send</button>
+      </div>
+      <div class="pra-muted" id="cameraSendStatus" style="text-align:center;font-size:.78rem;min-height:1em;padding-bottom:8px"></div>
     </div>
   </div>
 
@@ -2907,10 +3006,22 @@ function setupComposer() {
   const gifBtn = document.getElementById('gifBtn');
   const templatesBtn = document.getElementById('templatesBtn');
   const attachBtn = document.getElementById('attachBtn');
+  const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
   const fileInput = document.getElementById('fileInput');
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
+  // `pointer: coarse` is the standard touch-vs-desktop signal (also used
+  // below for Enter-to-send). On touch, students/users get a camera-only
+  // icon instead of the paperclip — coaches/admins keep the paperclip
+  // either way, since drag-and-drop above already covers their case and
+  // they're overwhelmingly on desktop anyway.
+  const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+  if (isTouchDevice && !isStaffMe()) {
+    attachBtn.style.display = 'none';
+    cameraCaptureBtn.style.display = '';
+  }
+  cameraCaptureBtn.onclick = openCameraCapture;
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by the .react-trigger handler above) decides which one a pick means.
@@ -3042,8 +3153,7 @@ function setupComposer() {
   // convention). Mobile keeps its own behavior untouched — Enter/return is
   // a plain newline there, only the Send button sends — since a phone's
   // on-screen keyboard has no convenient way to hold Shift while tapping
-  // return. `pointer: coarse` is the standard touch-vs-desktop signal.
-  const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+  // return. isTouchDevice is computed once at the top of setupComposer.
   if (!isTouchDevice) {
     textInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -3092,6 +3202,250 @@ function setupComposer() {
   document.getElementById('favoritesBtn').onclick = openFavoritesGallery;
   document.getElementById('favNameSaveBtn').onclick = submitFavoriteName;
   document.getElementById('favNameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitFavoriteName(); });
+
+  setupCameraCapture();
+}
+
+// ── In-app camera capture (students/users, touch devices) ─────────────────
+// State lives at module scope (not closed over setupComposer) since the
+// capture flow spans several independent event handlers wired once here.
+let cameraStream = null;
+let cameraFacing = 'user';
+let cameraShootMode = 'photo';
+let cameraRecorder = null;
+let cameraRecordedChunks = [];
+let cameraCapturedBlob = null; // the photo Blob, or the recorded video Blob
+let cameraRecordStart = 0;
+let cameraRecordTimerHandle = null;
+let cameraTrimDragging = null; // 'start' | 'end' | null
+let cameraTrimStart = 0;
+let cameraTrimEnd = 0;
+
+function setupCameraCapture() {
+  document.getElementById('cameraCloseBtn').onclick = closeCameraCapture;
+  document.getElementById('cameraReviewCloseBtn').onclick = closeCameraCapture;
+  document.getElementById('cameraFlipBtn').onclick = flipCameraFacing;
+  document.getElementById('cameraModePhotoBtn').onclick = () => setCameraShootMode('photo');
+  document.getElementById('cameraModeVideoBtn').onclick = () => setCameraShootMode('video');
+  document.getElementById('cameraShutterBtn').onclick = onCameraShutterClick;
+  document.getElementById('cameraRetakeBtn').onclick = retakeCameraCapture;
+  document.getElementById('cameraSendBtn').onclick = sendCameraCapture;
+
+  const track = document.getElementById('cameraTrimTrack');
+  const startHandle = document.getElementById('cameraTrimStartHandle');
+  const endHandle = document.getElementById('cameraTrimEndHandle');
+  startHandle.addEventListener('pointerdown', (e) => { e.preventDefault(); cameraTrimDragging = 'start'; });
+  endHandle.addEventListener('pointerdown', (e) => { e.preventDefault(); cameraTrimDragging = 'end'; });
+  window.addEventListener('pointermove', (e) => {
+    if (!cameraTrimDragging) return;
+    const rect = track.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const video = document.getElementById('cameraReviewVideo');
+    const duration = video.duration || 0;
+    const seconds = pct * duration;
+    // Keeps a minimum gap so the two handles can never cross/overlap into
+    // an unplayable zero-length (or negative) clip.
+    const MIN_GAP = 0.3;
+    if (cameraTrimDragging === 'start') cameraTrimStart = Math.min(seconds, cameraTrimEnd - MIN_GAP);
+    else cameraTrimEnd = Math.max(seconds, cameraTrimStart + MIN_GAP);
+    cameraTrimStart = Math.max(0, cameraTrimStart);
+    cameraTrimEnd = Math.min(duration, cameraTrimEnd);
+    renderCameraTrim();
+    video.currentTime = cameraTrimDragging === 'start' ? cameraTrimStart : cameraTrimEnd;
+  });
+  window.addEventListener('pointerup', () => { cameraTrimDragging = null; });
+}
+
+async function openCameraCapture() {
+  document.getElementById('cameraCaptureModal').classList.add('show');
+  cameraShootMode = 'photo';
+  setCameraShootMode('photo');
+  await startCameraStream();
+}
+
+function closeCameraCapture() {
+  document.getElementById('cameraCaptureModal').classList.remove('show');
+  stopCameraStream();
+  if (cameraRecorder && cameraRecorder.state !== 'inactive') cameraRecorder.stop();
+  resetCameraCaptureState();
+}
+
+function resetCameraCaptureState() {
+  cameraCapturedBlob = null;
+  cameraRecordedChunks = [];
+  document.getElementById('cameraScreenShoot').style.display = 'flex';
+  document.getElementById('cameraScreenReview').style.display = 'none';
+  document.getElementById('cameraSendStatus').textContent = '';
+  document.getElementById('cameraSendBtn').disabled = false;
+}
+
+function stopCameraStream() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+}
+
+async function startCameraStream() {
+  stopCameraStream();
+  const preview = document.getElementById('cameraPreviewVideo');
+  try {
+    // Audio only matters once actually recording video, but requesting it
+    // upfront avoids re-negotiating getUserMedia (and a second permission
+    // prompt) the moment someone taps over to Video mode.
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing }, audio: true });
+  } catch (e) {
+    document.getElementById('cameraSendStatus').textContent = '';
+    alert("Couldn't access the camera — check your browser/app camera permission and try again.");
+    closeCameraCapture();
+    return;
+  }
+  preview.srcObject = cameraStream;
+  preview.classList.toggle('mirrored', cameraFacing === 'user');
+}
+
+function flipCameraFacing() {
+  cameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
+  startCameraStream();
+}
+
+function setCameraShootMode(mode) {
+  cameraShootMode = mode;
+  document.getElementById('cameraModePhotoBtn').classList.toggle('active', mode === 'photo');
+  document.getElementById('cameraModeVideoBtn').classList.toggle('active', mode === 'video');
+}
+
+function formatCameraTimer(sec) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function onCameraShutterClick() {
+  if (cameraShootMode === 'photo') { captureCameraPhoto(); return; }
+  if (cameraRecorder && cameraRecorder.state === 'recording') stopCameraRecording();
+  else startCameraRecording();
+}
+
+function captureCameraPhoto() {
+  const preview = document.getElementById('cameraPreviewVideo');
+  const canvas = document.createElement('canvas');
+  canvas.width = preview.videoWidth;
+  canvas.height = preview.videoHeight;
+  // Drawn straight off the (unmirrored) video element regardless of the
+  // CSS mirror transform applied to the preview — canvas always reads the
+  // real frame data, so the saved photo matches what actually happened,
+  // not the mirror-image the student saw while framing the shot.
+  canvas.getContext('2d').drawImage(preview, 0, 0);
+  canvas.toBlob((blob) => {
+    cameraCapturedBlob = blob;
+    showCameraReviewPhoto(blob);
+  }, 'image/jpeg', 0.9);
+}
+
+function showCameraReviewPhoto(blob) {
+  document.getElementById('cameraScreenShoot').style.display = 'none';
+  document.getElementById('cameraScreenReview').style.display = 'flex';
+  document.getElementById('cameraTrimWrap').style.display = 'none';
+  const img = document.getElementById('cameraReviewImage');
+  const video = document.getElementById('cameraReviewVideo');
+  video.style.display = 'none';
+  img.style.display = 'block';
+  img.src = URL.createObjectURL(blob);
+}
+
+function pickCameraRecorderMimeType() {
+  const candidates = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return candidates.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+}
+
+function startCameraRecording() {
+  cameraRecordedChunks = [];
+  const mimeType = pickCameraRecorderMimeType();
+  cameraRecorder = new MediaRecorder(cameraStream, mimeType ? { mimeType } : undefined);
+  cameraRecorder.ondataavailable = (e) => { if (e.data.size) cameraRecordedChunks.push(e.data); };
+  cameraRecorder.onstop = () => {
+    const blob = new Blob(cameraRecordedChunks, { type: cameraRecorder.mimeType || 'video/webm' });
+    cameraCapturedBlob = blob;
+    showCameraReviewVideo(blob);
+  };
+  cameraRecorder.start();
+  cameraRecordStart = Date.now();
+  document.getElementById('cameraShutterBtn').classList.add('recording');
+  const timerEl = document.getElementById('cameraRecordTimer');
+  timerEl.style.display = '';
+  cameraRecordTimerHandle = setInterval(() => {
+    timerEl.textContent = formatCameraTimer((Date.now() - cameraRecordStart) / 1000);
+  }, 250);
+}
+
+function stopCameraRecording() {
+  if (cameraRecorder && cameraRecorder.state === 'recording') cameraRecorder.stop();
+  document.getElementById('cameraShutterBtn').classList.remove('recording');
+  document.getElementById('cameraRecordTimer').style.display = 'none';
+  clearInterval(cameraRecordTimerHandle);
+}
+
+function showCameraReviewVideo(blob) {
+  document.getElementById('cameraScreenShoot').style.display = 'none';
+  document.getElementById('cameraScreenReview').style.display = 'flex';
+  document.getElementById('cameraTrimWrap').style.display = '';
+  const video = document.getElementById('cameraReviewVideo');
+  const img = document.getElementById('cameraReviewImage');
+  img.style.display = 'none';
+  video.style.display = 'block';
+  video.src = URL.createObjectURL(blob);
+  video.controls = true;
+  video.loop = true;
+  video.addEventListener('loadedmetadata', () => {
+    cameraTrimStart = 0;
+    cameraTrimEnd = video.duration;
+    renderCameraTrim();
+    video.play().catch(() => {});
+  }, { once: true });
+}
+
+function renderCameraTrim() {
+  const video = document.getElementById('cameraReviewVideo');
+  const duration = video.duration || 1;
+  const startPct = (cameraTrimStart / duration) * 100;
+  const endPct = (cameraTrimEnd / duration) * 100;
+  document.getElementById('cameraTrimRange').style.left = startPct + '%';
+  document.getElementById('cameraTrimRange').style.width = (endPct - startPct) + '%';
+  document.getElementById('cameraTrimStartHandle').style.left = 'calc(' + startPct + '% - 9px)';
+  document.getElementById('cameraTrimEndHandle').style.left = 'calc(' + endPct + '% - 9px)';
+}
+
+function retakeCameraCapture() {
+  resetCameraCaptureState();
+  setCameraShootMode(cameraShootMode);
+  startCameraStream();
+}
+
+async function sendCameraCapture() {
+  if (!cameraCapturedBlob || !activeConvoId) return;
+  const btn = document.getElementById('cameraSendBtn');
+  const status = document.getElementById('cameraSendStatus');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  const isVideo = cameraCapturedBlob.type.startsWith('video/');
+  const ext = isVideo ? (cameraCapturedBlob.type.includes('mp4') ? '.mp4' : '.webm') : '.jpg';
+  const fd = new FormData();
+  fd.append('files', cameraCapturedBlob, 'capture' + ext);
+  // Only sent when the student actually dragged a handle — an untouched
+  // full-range selection uploads the raw capture as-is, skipping a
+  // pointless server-side re-encode of a clip nobody asked to trim.
+  const video = document.getElementById('cameraReviewVideo');
+  const isTrimmed = isVideo && (cameraTrimStart > 0.05 || cameraTrimEnd < (video.duration - 0.05));
+  if (isTrimmed) {
+    fd.append('trimStart', String(cameraTrimStart));
+    fd.append('trimEnd', String(cameraTrimEnd));
+  }
+  try {
+    const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error();
+    closeCameraCapture();
+    refreshThread(true);
+  } catch {
+    status.textContent = 'Could not send — try again.';
+    btn.disabled = false;
+  }
 }
 
 async function loadGifs(q) {

@@ -1453,6 +1453,21 @@ async function guessContentLabel(imageBuffer, mimeType) {
   }
 }
 
+// In-app camera capture (training-protocol's mobile record flow) trims
+// client-side by picking start/end seconds on a timeline, but the actual
+// cut happens here, server-side, with the rest of this file's other ffmpeg
+// work — `-ss` before `-i` is a fast input seek, `-t` (not `-to`) gives an
+// unambiguous output duration relative to that seek point regardless of
+// where `-ss` sits, avoiding -to's absolute-vs-relative ambiguity.
+function trimVideo(inputPath, outputPath, startSec, endSec) {
+  execFileSync(FFMPEG_EXE, [
+    "-y", "-ss", String(Math.max(0, startSec)), "-i", inputPath,
+    "-t", String(Math.max(0.1, endSec - startSec)),
+    "-c:v", "libx264", "-c:a", "aac", "-preset", "veryfast", "-avoid_negative_ts", "make_zero",
+    outputPath,
+  ], { stdio: ["pipe", "pipe", "pipe"], timeout: 60000 });
+}
+
 // One frame, one second in (skips a possible black/blank opening frame),
 // small enough to send straight to the vision model without extra resizing.
 function extractVideoFrame(videoPath) {
@@ -3547,6 +3562,17 @@ export async function handleChatRequest(req, res, url) {
           await new Promise((resolve, reject) => {
             const bb = Busboy({ headers: req.headers });
             const uploads = [];
+            // In-app camera capture sends these two text fields ahead of the
+            // video file itself (client controls FormData append order,
+            // which busboy parses in stream order) — only present when the
+            // student actually dragged a trim handle; a plain attach/paste
+            // upload never sends them, so trimStart stays undefined and the
+            // video branch below skips trimming entirely.
+            let trimStart, trimEnd;
+            bb.on("field", (name, val) => {
+              if (name === "trimStart") trimStart = Number(val);
+              if (name === "trimEnd") trimEnd = Number(val);
+            });
             bb.on("file", (name, stream, info) => {
               const type = info.mimeType.startsWith("video/") ? "video" : "image";
               const ext = extFromMime(info.mimeType, info.filename);
@@ -3581,6 +3607,7 @@ export async function handleChatRequest(req, res, url) {
                 // content guess, then upload from disk.
                 uploads.push((async () => {
                   const tempPath = join(tmpdir(), `chat-upload-${randomUUID()}${ext}`);
+                  let trimmedPath = null;
                   try {
                     await new Promise((res, rej) => {
                       const ws = createWriteStream(tempPath);
@@ -3589,21 +3616,43 @@ export async function handleChatRequest(req, res, url) {
                       ws.on("error", rej);
                       stream.on("error", rej);
                     });
-                    const frame = extractVideoFrame(tempPath);
+                    // Everything downstream (frame guess, upload) reads from
+                    // whichever path is "the file to use" — trimming, when
+                    // requested, just swaps that path once up front instead
+                    // of threading a condition through every step below.
+                    let sourcePath = tempPath;
+                    if (Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart) {
+                      trimmedPath = tempPath + "-trimmed.mp4";
+                      try {
+                        trimVideo(tempPath, trimmedPath, trimStart, trimEnd);
+                        sourcePath = trimmedPath;
+                      } catch (e) {
+                        console.error("[trimVideo]", e.message);
+                        // Fall back to the untrimmed capture rather than
+                        // losing the student's clip entirely over a trim
+                        // failure — trimmedPath stays null so cleanup below
+                        // doesn't try to unlink a file that was never made.
+                        trimmedPath = null;
+                      }
+                    }
+                    const frame = extractVideoFrame(sourcePath);
                     const label = frame ? await guessContentLabel(frame, "image/jpeg") : "TRAINING VIDEO";
                     const baseName = `${user.first} ${user.last} ${label}`.toUpperCase();
-                    const result = await uploadStreamToDrive(createReadStream(tempPath), {
-                      name: baseName + ext,
-                      mimeType: info.mimeType,
+                    const outExt = sourcePath === trimmedPath ? ".mp4" : ext;
+                    const outMimeType = sourcePath === trimmedPath ? "video/mp4" : info.mimeType;
+                    const result = await uploadStreamToDrive(createReadStream(sourcePath), {
+                      name: baseName + outExt,
+                      mimeType: outMimeType,
                       folderId: cfg.chatVideosFolderId,
                       accessToken,
                     });
-                    return { type, driveFileId: result.id, mimeType: info.mimeType, name: info.filename, driveFileName: baseName };
+                    return { type, driveFileId: result.id, mimeType: outMimeType, name: info.filename, driveFileName: baseName };
                   } catch (e) {
                     stream.resume();
                     return { error: e.message, name: info.filename };
                   } finally {
                     try { unlinkSync(tempPath); } catch {}
+                    if (trimmedPath) { try { unlinkSync(trimmedPath); } catch {} }
                   }
                 })());
               }
