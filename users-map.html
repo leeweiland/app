@@ -840,7 +840,11 @@ function openPopup(u) {
   document.getElementById("popupAvatar").innerHTML = u.profilePictureFileId
     ? '<img src="/api/chat/media/' + u.profilePictureFileId + '"/>'
     : (u.first?.[0] || "?").toUpperCase();
-  document.getElementById("popupName").textContent = u.first;
+  // The backend already omits `last` entirely for non-staff viewers except
+  // on their own point (chat_backend.js's isStaff(user) check on
+  // /api/chat/users-map/points), so its presence here IS the permission
+  // check -- no separate isStaffUser/isSelf branch needed.
+  document.getElementById("popupName").textContent = u.last ? (u.first + ' ' + u.last) : u.first;
   document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
   document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
   // Matched by name, same convention findLevelsEntries/nameKey use

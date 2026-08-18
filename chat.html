@@ -1242,7 +1242,11 @@ function otherParticipant(convo) { return convo.participants.find(p => p.id !== 
 function convoDisplayName(convo) {
   if (convo.type === 'group') return convo.name;
   const other = otherParticipant(convo);
-  return other ? (other.first + ' ' + other.last) : 'Unknown';
+  if (!other) return 'Unknown';
+  // Same viewer-based last-name gating as the map profile panel
+  // (isStaff(user) in chat_backend.js) -- students/users see first name
+  // only, coaches/admins see the full name.
+  return isStaffMe() ? (other.first + ' ' + other.last) : other.first;
 }
 // Group avatars glow the color of the "client" role present in the group —
 // online/gym (green) takes priority since that's the typical case, falling
@@ -1251,6 +1255,14 @@ function convoDisplayName(convo) {
 // finally the old default green as a last resort.
 function convoAvatarUser(convo) {
   if (convo.type !== 'group') return otherParticipant(convo);
+  // Auto-personal-groups ("Bryan Armstrong Group") are really just that one
+  // student's thread with staff cc'd in -- use the student's own profile
+  // picture (and initials as its fallback) instead of the group name's
+  // initial, same as syncDefaultGroups() (chat_backend.js) treats them.
+  if (convo.autoGroupUserId) {
+    const student = convo.participants.find(p => p.id === convo.autoGroupUserId);
+    if (student) return student;
+  }
   const client = convo.participants.find(p => isClientRole(p.role));
   const plainUser = convo.participants.find(p => p.role === 'user');
   const coach = convo.participants.find(p => p.role === 'coach' || p.role === 'admin' || p.role === 'admin2');
@@ -1361,7 +1373,7 @@ function buildDirectory() {
   contacts.filter(c => !dmContactIds.has(c.id)).forEach(c => {
     items.push({
       key: 'u:' + c.id, contactId: c.id, virtual: true,
-      name: c.first + ' ' + c.last, avatarUser: c,
+      name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
       preview: 'No messages yet', timestamp: null,
     });
   });
@@ -2239,19 +2251,20 @@ function archetypeUrl(title, gender) {
 
 async function openLevelsModal(otherUser) {
   levelsModalUser = otherUser;
+  // Photo editing only ever targets the session's own account server-side
+  // (/api/auth/update-profile), so the badge only makes sense — and only
+  // shows — when this modal is open on your own profile. Same isSelf also
+  // exempts your own last name from the student/user last-name gating below.
+  const isSelf = me && otherUser.id === me.id;
   document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
   document.getElementById('levelsAvatar').innerHTML = avatarHtml(otherUser);
-  document.getElementById('levelsName').textContent = otherUser.first + ' ' + otherUser.last;
+  document.getElementById('levelsName').textContent = (isStaffMe() || isSelf) ? (otherUser.first + ' ' + otherUser.last) : otherUser.first;
   document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser);
   document.getElementById('levelsLocation').textContent = '';
   document.getElementById('levelsMsg').textContent = 'Loading…';
   document.getElementById('levelsBody').innerHTML = '';
   renderLevelsAccountActions(otherUser);
   document.getElementById('levelsMessageBtn').onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
-  // Photo editing only ever targets the session's own account server-side
-  // (/api/auth/update-profile), so the badge only makes sense — and only
-  // shows — when this modal is open on your own profile.
-  const isSelf = me && otherUser.id === me.id;
   document.getElementById('levelsAvatarEditBadge').style.display = isSelf ? '' : 'none';
   openModal('levelsModal');
 
