@@ -20,6 +20,7 @@ import webPush from "web-push";
 import admin from "firebase-admin";
 import { getMessaging } from "firebase-admin/messaging";
 import { JSDOM } from "jsdom";
+import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1420,7 +1421,17 @@ setInterval(() => {
 // HANDSTAND HOLD") instead of a bare sequence number — makes the raw Drive
 // folders actually browsable/searchable later, matching how the existing
 // training-footage library is already named by the coaches themselves.
-const FFMPEG_EXE = join(__dirname, "..", "node_modules", "ffmpeg-static", "ffmpeg.exe");
+// ffmpeg-static's default export is the correct binary PATH FOR WHATEVER
+// PLATFORM npm install actually ran on — this used to be a hardcoded
+// `../node_modules/ffmpeg-static/ffmpeg.exe` (a Windows-only path one
+// directory above chat-app itself), which only ever resolved locally.
+// Railway deploys just the chat-app folder — no ".." sibling exists there,
+// and the binary installed by `npm install` on Railway's Linux build
+// wouldn't have a .exe suffix anyway — so every ffmpeg call in production
+// was silently failing and falling back to whatever each caller does on
+// error (extractVideoFrame: a generic label; trimVideo: skip the trim and
+// keep the full-length clip).
+const FFMPEG_EXE = ffmpegPath;
 
 async function guessContentLabel(imageBuffer, mimeType) {
   try {
