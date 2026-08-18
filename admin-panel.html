@@ -255,6 +255,26 @@
       <div class="save-msg" id="archSaveMsg"></div>
       <div id="archGrid" class="arch-grid">Loading…</div>
     </div>
+
+    <div class="pra-panel section" id="socialVideoConfigSection">
+      <div class="pra-h2" style="margin-bottom:6px">Powerbatics Social Video</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Powers the favorite-star pipeline (trim → AI reframe/track → AI caption → schedule to Metricool). Every field saves itself — no Save button. API keys live in Railway's environment variables, not here.</div>
+      <div class="save-msg" id="socialVideoSaveMsg"></div>
+      <div class="field">
+        <label class="pra-label">Brand Voice Instructions (used to write every caption)</label>
+        <textarea class="pra-input" id="svAiPrompt" rows="6" style="width:100%;font-family:var(--font-primary);resize:vertical" placeholder="e.g. Bold, direct, no-fluff. Speak to the pain of stalled progress. Never mention a student's job or career."></textarea>
+      </div>
+      <div class="field">
+        <label class="pra-label">Own-Words Ratio: <span id="svOwnWordsRatioLabel">60</span>%</label>
+        <input type="range" id="svOwnWordsRatio" min="0" max="100" step="5" style="width:100%"/>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">0% = write completely fresh copy. 100% = reuse the voice bank's exact past sentences as much as possible.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Connections</label>
+        <div id="svConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
+        <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> / <code>METRICOOL_PB_BLOG_ID</code> (scheduling).</div>
+      </div>
+    </div>
   </div>
 
   <!-- Add User -->
@@ -346,6 +366,36 @@ async function saveArchetypes() {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ARCH_CONFIG),
   });
   const msg = document.getElementById('archSaveMsg');
+  msg.textContent = 'Saved.';
+  setTimeout(() => msg.textContent = '', 2000);
+}
+
+async function loadSocialVideoSettings() {
+  const r = await fetch('/api/social-video/settings');
+  if (!r.ok) return;
+  const s = await r.json();
+  document.getElementById('svAiPrompt').value = s.aiPrompt || '';
+  document.getElementById('svOwnWordsRatio').value = s.ownWordsRatio ?? 60;
+  document.getElementById('svOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
+  const rows = [
+    ['Anthropic (captions)', s.anthropicConfigured],
+    ['OpenAI (voice-bank search)', s.openaiConfigured],
+    ['Metricool (scheduling)', s.metricoolConfigured],
+  ];
+  document.getElementById('svConnectionStatus').innerHTML = rows.map(([label, ok]) =>
+    `<div>${ok ? '✅' : '❌'} ${label}</div>`
+  ).join('');
+}
+
+async function saveSocialVideoSettings() {
+  await fetch('/api/social-video/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      aiPrompt: document.getElementById('svAiPrompt').value,
+      ownWordsRatio: Number(document.getElementById('svOwnWordsRatio').value),
+    }),
+  });
+  const msg = document.getElementById('socialVideoSaveMsg');
   msg.textContent = 'Saved.';
   setTimeout(() => msg.textContent = '', 2000);
 }
@@ -458,6 +508,7 @@ async function init() {
   loadConfig();
   loadCalendarStatus();
   loadArchetypes();
+  loadSocialVideoSettings();
   // No Save buttons — every field in these two sections saves itself.
   // 'change' catches selects/checkboxes immediately; 'focusout' (the
   // bubbling version of blur) catches text/textarea fields once you tab or
@@ -474,6 +525,11 @@ async function init() {
   wireReminderCount('apptEmailReminderCount', 'apptEmailReminderRows', [1440, 60, 15]);
   wireReminderCount('apptSmsReminderCount', 'apptSmsReminderRows', [60, 15, 5]);
   wireReminderCount('apptMessengerReminderCount', 'apptMessengerReminderRows', [60, 15, 5]);
+
+  let socialVideoSaveTimer;
+  document.getElementById('socialVideoConfigSection').addEventListener('change', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
+  document.getElementById('socialVideoConfigSection').addEventListener('focusout', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
+  document.getElementById('svOwnWordsRatio').addEventListener('input', (e) => { document.getElementById('svOwnWordsRatioLabel').textContent = e.target.value; });
 
   let searchTimer;
   document.getElementById('userSearchInput').addEventListener('input', () => {

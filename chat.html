@@ -435,6 +435,14 @@
   .camera-trim-handle-start { left: 0; }
   .camera-trim-handle-end { right: 0; }
 
+  .publish-platform-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .publish-platform-check { display: flex; align-items: center; gap: 5px; font-size: .82rem; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--pra-border); cursor: pointer; }
+  .publish-platform-check input { margin: 0; }
+  .publish-caption-field { border: 1px solid var(--pra-border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .publish-caption-field-label { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 4px; }
+  .publish-caption-field input, .publish-caption-field textarea { width: 100%; margin-bottom: 4px; }
+  .publish-caption-field textarea { resize: vertical; min-height: 44px; font-family: inherit; }
+
   /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
   .modal-backdrop.show { display: flex; }
@@ -891,6 +899,51 @@
     </div>
   </div>
 
+  <!-- Publish to Powerbatics — video favorites only. Trim -> AI track/reframe
+       -> AI captions -> schedule to Metricool. Images keep the plain
+       rename-and-favorite flow above; this is the richer video-only pipeline. -->
+  <div class="modal-backdrop" id="publishModal">
+    <div class="pra-panel modal-box modal-box-wide">
+      <div class="pra-h2" style="margin-bottom:4px">Publish to Powerbatics</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Trim the clip, optionally track the subject so the vertical crop follows them, write captions, then schedule.</div>
+
+      <video id="publishSourceVideo" playsinline style="width:100%;border-radius:10px;background:#000;display:block;max-height:280px;object-fit:contain"></video>
+      <div class="camera-trim-wrap" style="padding:10px 0 0">
+        <div class="camera-trim-track" id="publishTrimTrack">
+          <div class="camera-trim-range" id="publishTrimRange"></div>
+          <div class="camera-trim-handle camera-trim-handle-start" id="publishTrimStartHandle"></div>
+          <div class="camera-trim-handle camera-trim-handle-end" id="publishTrimEndHandle"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:12px;align-items:center">
+        <button class="pra-btn pra-btn-ghost" id="publishTrackBtn" type="button" style="flex:1">Track Subject (AI)</button>
+        <div class="pra-muted" id="publishTrackStatus" style="font-size:.78rem;flex:1"></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <label class="pra-label">What's happening in this clip? (helps AI write the caption)</label>
+        <input class="pra-input" id="publishDescInput" placeholder="e.g. student drilling muscle-up transition"/>
+      </div>
+      <button class="pra-btn pra-btn-ghost" id="publishCaptionBtn" type="button" style="width:100%;margin-top:8px">Generate Captions (AI)</button>
+      <div id="publishCaptionFields" style="margin-top:10px"></div>
+
+      <div style="margin-top:14px">
+        <label class="pra-label">Platforms</label>
+        <div id="publishPlatformChecks" class="publish-platform-checks"></div>
+      </div>
+
+      <div class="pra-muted" id="publishScheduleDate" style="font-size:.82rem;margin-top:10px"></div>
+      <div class="pra-muted" id="publishStatus" style="font-size:.78rem;margin-top:6px;min-height:1em"></div>
+
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn pra-btn-ghost" id="publishReframeBtn" type="button" style="flex:1">Reframe & Prepare</button>
+        <button class="pra-btn" id="publishScheduleBtn" type="button" style="flex:1" disabled>Schedule to Powerbatics</button>
+      </div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('publishModal')">Cancel</button>
+    </div>
+  </div>
+
   <!-- "My Favorites" list modal (coach/admin only) -->
   <div class="modal-backdrop" id="favoritesModal">
     <div class="pra-panel modal-box">
@@ -1243,6 +1296,7 @@ async function init() {
     openConvo(deepLinkConvoId);
   }
   setupComposer();
+  setupPublishModal();
   setupPush();
   setupSearchClearButtons();
   setupSidebarResize();
@@ -2719,8 +2773,8 @@ function renderBubble(m, convo) {
   // Forward already lives one tap away in the triple-dot/long-press menu.
   const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
-  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName)}</div>`;
+  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName, 'image')}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName, 'video')}</div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
   const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
@@ -2845,7 +2899,15 @@ function escapeHtml(s) {
   // would just get thrown away each cycle).
   document.getElementById('threadBody').addEventListener('click', (e) => {
     const starBtn = e.target.closest('.fav-star-btn');
-    if (starBtn) { openFavoriteNameModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested); return; }
+    if (starBtn) {
+      // Video gets the richer trim/track/caption/schedule pipeline (see
+      // openPublishModal below) — its "save to Drive" step supersedes the
+      // plain copy-and-rename flow for video specifically. Images keep the
+      // original simple flow, unchanged.
+      if (starBtn.dataset.favType === 'video') openPublishModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested);
+      else openFavoriteNameModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested);
+      return;
+    }
     if (!e.target.closest('.bubble.media')) return;
     // Video keeps its native controls for inline play/pause/scrub — only the
     // dedicated expand button opens the lightbox, so clicking play doesn't
@@ -3448,6 +3510,335 @@ async function sendCameraCapture() {
   }
 }
 
+// ── Publish to Powerbatics (favorite-star on a video) ──────────────────────
+const PUBLISH_PLATFORMS = [
+  { id: 'fb', label: 'Facebook', hasTitle: true, checked: true },
+  { id: 'ig', label: 'Instagram', hasTitle: false, checked: true },
+  { id: 'yt', label: 'YouTube', hasTitle: true, checked: true },
+  { id: 'tt', label: 'TikTok', hasTitle: false, checked: true },
+  { id: 'li', label: 'LinkedIn', hasTitle: false, checked: false },
+  { id: 'x', label: 'X', hasTitle: false, checked: false },
+  { id: 'fbs', label: 'FB Story', hasTitle: false, checked: false },
+  { id: 'igs', label: 'IG Story', hasTitle: false, checked: false },
+];
+
+let publishSourceFileId = null;
+let publishVideoWidth = 1920, publishVideoHeight = 1080;
+let publishTrimDragging = null;
+let publishTrimStart = 0, publishTrimEnd = 0;
+let publishKeyframes = null; // set once Track Subject finishes
+let publishCaptions = null;  // set once Generate Captions finishes
+let publishReframedResult = null; // { driveFileId, publicMediaUrl } once Reframe & Prepare finishes
+let publishNextOpenDay = null;
+
+function setupPublishModal() {
+  document.getElementById('publishTrackBtn').onclick = runPublishTracking;
+  document.getElementById('publishCaptionBtn').onclick = runPublishCaptionGen;
+  document.getElementById('publishReframeBtn').onclick = runPublishReframe;
+  document.getElementById('publishScheduleBtn').onclick = runPublishSchedule;
+
+  document.getElementById('publishPlatformChecks').innerHTML = PUBLISH_PLATFORMS.map(p => `
+    <label class="publish-platform-check">
+      <input type="checkbox" data-platform="${p.id}" ${p.checked ? 'checked' : ''}/> ${p.label}
+    </label>
+  `).join('');
+
+  const track = document.getElementById('publishTrimTrack');
+  const startHandle = document.getElementById('publishTrimStartHandle');
+  const endHandle = document.getElementById('publishTrimEndHandle');
+  startHandle.addEventListener('pointerdown', (e) => { e.preventDefault(); publishTrimDragging = 'start'; });
+  endHandle.addEventListener('pointerdown', (e) => { e.preventDefault(); publishTrimDragging = 'end'; });
+  window.addEventListener('pointermove', (e) => {
+    if (!publishTrimDragging) return;
+    const rect = track.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const video = document.getElementById('publishSourceVideo');
+    const duration = video.duration || 0;
+    const seconds = pct * duration;
+    const MIN_GAP = 0.3;
+    if (publishTrimDragging === 'start') publishTrimStart = Math.min(seconds, publishTrimEnd - MIN_GAP);
+    else publishTrimEnd = Math.max(seconds, publishTrimStart + MIN_GAP);
+    publishTrimStart = Math.max(0, publishTrimStart);
+    publishTrimEnd = Math.min(duration, publishTrimEnd);
+    renderPublishTrim();
+    video.currentTime = publishTrimDragging === 'start' ? publishTrimStart : publishTrimEnd;
+  });
+  window.addEventListener('pointerup', () => { publishTrimDragging = null; });
+}
+
+function renderPublishTrim() {
+  const video = document.getElementById('publishSourceVideo');
+  const duration = video.duration || 1;
+  const startPct = (publishTrimStart / duration) * 100;
+  const endPct = (publishTrimEnd / duration) * 100;
+  document.getElementById('publishTrimRange').style.left = startPct + '%';
+  document.getElementById('publishTrimRange').style.width = (endPct - startPct) + '%';
+  document.getElementById('publishTrimStartHandle').style.left = 'calc(' + startPct + '% - 9px)';
+  document.getElementById('publishTrimEndHandle').style.left = 'calc(' + endPct + '% - 9px)';
+}
+
+async function openPublishModal(fileId, suggestedName) {
+  publishSourceFileId = fileId;
+  publishKeyframes = null;
+  publishCaptions = null;
+  publishReframedResult = null;
+  document.getElementById('publishDescInput').value = suggestedName || '';
+  document.getElementById('publishCaptionFields').innerHTML = '';
+  document.getElementById('publishTrackStatus').textContent = '';
+  document.getElementById('publishStatus').textContent = '';
+  document.getElementById('publishScheduleDate').textContent = 'Checking next open day…';
+  document.getElementById('publishScheduleBtn').disabled = true;
+
+  const video = document.getElementById('publishSourceVideo');
+  video.src = '/api/chat/media/' + fileId;
+  await new Promise((resolve) => video.addEventListener('loadedmetadata', resolve, { once: true }));
+  publishVideoWidth = video.videoWidth || 1920;
+  publishVideoHeight = video.videoHeight || 1080;
+  publishTrimStart = 0;
+  publishTrimEnd = video.duration;
+  renderPublishTrim();
+
+  openModal('publishModal');
+
+  fetch('/api/social-video/next-open-day').then(r => r.json()).then(d => {
+    publishNextOpenDay = d.day;
+    document.getElementById('publishScheduleDate').textContent = d.day
+      ? `Will schedule for ${d.day} (next open day across all platforms)`
+      : 'Could not find an open day — try again later.';
+  }).catch(() => {
+    document.getElementById('publishScheduleDate').textContent = "Couldn't reach Metricool to check the schedule.";
+  });
+}
+
+// ── AI motion tracking (TF.js + COCO-SSD, ported from social-video.html) ───
+// Loaded on demand — most favorite-clicks won't need it, and it's a couple
+// MB of model weights nobody should pay for until they actually click
+// "Track Subject".
+let _publishTrackModel = null;
+const PUBLISH_TRACK_CLASSES = new Set(['person', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'bird', 'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'boat', 'airplane']);
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function ensurePublishTrackModel() {
+  if (_publishTrackModel) return _publishTrackModel;
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
+  _publishTrackModel = await window.cocoSsd.load({ base: 'mobilenet_v2' });
+  return _publishTrackModel;
+}
+
+// Frame dimensions the crop math is expressed against (matches the fixed
+// 9:16 target this pipeline always outputs) — the actual output is scaled
+// up to 1080x1920 server-side afterward, this is just the proportional
+// reference frame the pan/scale numbers are computed relative to.
+const PUBLISH_FRAME_W = 240, PUBLISH_FRAME_H = 426;
+const PUBLISH_TRACK_SCALE = 130; // % zoom — gives room to pan without exposing background
+
+async function runPublishTracking() {
+  const btn = document.getElementById('publishTrackBtn');
+  const status = document.getElementById('publishTrackStatus');
+  const video = document.getElementById('publishSourceVideo');
+  btn.disabled = true;
+  status.textContent = '⏳ loading AI…';
+  try {
+    const model = await ensurePublishTrackModel();
+    status.textContent = '🔍 detecting…';
+
+    const vw = publishVideoWidth, vh = publishVideoHeight;
+    const scaledW = vw * PUBLISH_TRACK_SCALE / 100, scaledH = vh * PUBLISH_TRACK_SCALE / 100;
+    const maxPanX = Math.max(0, (scaledW - PUBLISH_FRAME_W) / 2), maxPanY = Math.max(0, (scaledH - PUBLISH_FRAME_H) / 2);
+    const dcW = Math.min(vw, 416), dcH = Math.round(dcW * vh / vw);
+    const dc = document.createElement('canvas'); dc.width = dcW; dc.height = dcH;
+    const dctx = dc.getContext('2d');
+
+    let lastCx = 0.5, lastCy = 0.35, hasLocked = false;
+    const STEP = 0.1;
+    const startT = publishTrimStart, endT = publishTrimEnd;
+    const steps = Math.max(1, Math.ceil((endT - startT) / STEP));
+    const raw = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const t = Math.min(startT + i * STEP, endT - 0.01);
+      video.currentTime = t;
+      await new Promise(r => { const h = () => r(); video.addEventListener('seeked', h, { once: true }); setTimeout(h, 1500); });
+      dctx.drawImage(video, 0, 0, dcW, dcH);
+
+      let cx = lastCx, cy = lastCy, detected = false;
+      try {
+        const preds = await model.detect(dc);
+        const subjects = preds.filter(p => PUBLISH_TRACK_CLASSES.has(p.class) && p.score > 0.38)
+          .sort((a, b) => (b.bbox[2] * b.bbox[3]) - (a.bbox[2] * a.bbox[3]));
+        if (subjects.length > 0) {
+          const MAX_JUMP = 0.4;
+          const pick = subjects.reduce((best, p) => {
+            const pc = [(p.bbox[0] + p.bbox[2] / 2) / dcW, (p.bbox[1] + p.bbox[3] / 2) / dcH];
+            const bc = [(best.bbox[0] + best.bbox[2] / 2) / dcW, (best.bbox[1] + best.bbox[3] / 2) / dcH];
+            return Math.hypot(pc[0] - lastCx, pc[1] - lastCy) < Math.hypot(bc[0] - lastCx, bc[1] - lastCy) ? p : best;
+          });
+          const pickedCx = (pick.bbox[0] + pick.bbox[2] / 2) / dcW, pickedCy = (pick.bbox[1] + pick.bbox[3] / 2) / dcH;
+          const jumpDist = Math.hypot(pickedCx - lastCx, pickedCy - lastCy);
+          if (!hasLocked || jumpDist <= MAX_JUMP) { cx = pickedCx; cy = pickedCy; lastCx = cx; lastCy = cy; detected = true; hasLocked = true; }
+        }
+      } catch {}
+      raw.push({ t, cx, cy, detected });
+      status.textContent = `🔍 detecting… ${Math.round((i / steps) * 100)}%`;
+    }
+
+    // Gap-fill undetected frames by interpolating between surrounding real detections.
+    for (let i = 0; i < raw.length; i++) {
+      if (!raw[i].detected) {
+        let j = i + 1;
+        while (j < raw.length && !raw[j].detected) j++;
+        if (j < raw.length) {
+          const a = i > 0 ? raw[i - 1] : raw[j], b = raw[j];
+          const span = j - (i > 0 ? i - 1 : 0);
+          for (let k = i; k < j; k++) {
+            const frac = (k - (i > 0 ? i - 1 : 0)) / span;
+            raw[k].cx = a.cx + (b.cx - a.cx) * frac;
+            raw[k].cy = a.cy + (b.cy - a.cy) * frac;
+          }
+        }
+        i = j - 1;
+      }
+    }
+
+    // Bidirectional EMA smoothing.
+    const S = 0.15;
+    const fwd = [{ ...raw[0] }];
+    for (let i = 1; i < raw.length; i++) fwd.push({ t: raw[i].t, cx: fwd[i - 1].cx + (raw[i].cx - fwd[i - 1].cx) * S, cy: fwd[i - 1].cy + (raw[i].cy - fwd[i - 1].cy) * S });
+    const smoothed = [...fwd];
+    for (let i = smoothed.length - 2; i >= 0; i--) smoothed[i] = { t: fwd[i].t, cx: smoothed[i + 1].cx + (fwd[i].cx - smoothed[i + 1].cx) * S, cy: smoothed[i + 1].cy + (fwd[i].cy - smoothed[i + 1].cy) * S };
+
+    publishKeyframes = smoothed.map(pos => ({
+      time: parseFloat(pos.t.toFixed(3)),
+      scale: PUBLISH_TRACK_SCALE,
+      offsetX: Math.max(-maxPanX, Math.min(maxPanX, Math.round(-(pos.cx - 0.5) * scaledW))),
+      offsetY: Math.max(-maxPanY, Math.min(maxPanY, Math.round(-(pos.cy - 0.5) * scaledH))),
+    }));
+    status.textContent = `✓ tracked · ${publishKeyframes.length} keyframes`;
+  } catch (e) {
+    status.textContent = '✗ ' + (e.message || 'tracking failed');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runPublishCaptionGen() {
+  const btn = document.getElementById('publishCaptionBtn');
+  const fieldsEl = document.getElementById('publishCaptionFields');
+  btn.disabled = true;
+  fieldsEl.innerHTML = '<div class="pra-muted">Writing…</div>';
+  try {
+    const r = await fetch('/api/social-video/generate-caption', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: document.getElementById('publishDescInput').value.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not generate captions.');
+    publishCaptions = d.captions;
+    renderPublishCaptionFields();
+  } catch (e) {
+    fieldsEl.innerHTML = `<div class="pra-muted">${escapeHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderPublishCaptionFields() {
+  const fieldsEl = document.getElementById('publishCaptionFields');
+  const mainPlatforms = [{ id: 'fb', label: 'Facebook', hasTitle: true }, { id: 'ig', label: 'Instagram', hasTitle: false }, { id: 'yt', label: 'YouTube', hasTitle: true }, { id: 'tt', label: 'TikTok', hasTitle: false }, { id: 'li', label: 'LinkedIn', hasTitle: false }, { id: 'x', label: 'X', hasTitle: false }];
+  fieldsEl.innerHTML = mainPlatforms.map(p => {
+    const c = publishCaptions?.[p.id] || {};
+    return `
+      <div class="publish-caption-field" data-cap-platform="${p.id}">
+        <div class="publish-caption-field-label">${p.label}</div>
+        ${p.hasTitle ? `<input class="pra-input" data-cap-title placeholder="Title" value="${escapeHtml(c.title || '')}"/>` : ''}
+        <textarea class="pra-input" data-cap-desc placeholder="Caption">${escapeHtml(c.desc || '')}</textarea>
+      </div>
+    `;
+  }).join('');
+  // Field edits stay live in publishCaptions so Schedule always sends
+  // whatever's currently on screen, not the AI's first draft.
+  fieldsEl.querySelectorAll('[data-cap-platform]').forEach(row => {
+    const id = row.dataset.capPlatform;
+    if (!publishCaptions[id]) publishCaptions[id] = {};
+    const titleEl = row.querySelector('[data-cap-title]');
+    const descEl = row.querySelector('[data-cap-desc]');
+    if (titleEl) titleEl.addEventListener('input', () => { publishCaptions[id].title = titleEl.value; });
+    descEl.addEventListener('input', () => { publishCaptions[id].desc = descEl.value; });
+  });
+}
+
+async function runPublishReframe() {
+  const btn = document.getElementById('publishReframeBtn');
+  const status = document.getElementById('publishStatus');
+  btn.disabled = true;
+  status.textContent = 'Reframing…';
+  try {
+    const r = await fetch('/api/social-video/reframe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        driveFileId: publishSourceFileId,
+        videoWidth: publishVideoWidth, videoHeight: publishVideoHeight,
+        trimStart: publishTrimStart, trimEnd: publishTrimEnd,
+        keyframes: publishKeyframes || undefined,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not reframe.');
+    publishReframedResult = d;
+    status.textContent = '✓ Ready to schedule.';
+    document.getElementById('publishScheduleBtn').disabled = false;
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runPublishSchedule() {
+  const btn = document.getElementById('publishScheduleBtn');
+  const status = document.getElementById('publishStatus');
+  if (!publishReframedResult) { status.textContent = 'Reframe & Prepare first.'; return; }
+  if (!publishNextOpenDay) { status.textContent = "Don't have a schedule date yet — try again."; return; }
+  const platformIds = Array.from(document.querySelectorAll('#publishPlatformChecks input:checked')).map(el => el.dataset.platform);
+  if (!platformIds.length) { status.textContent = 'Pick at least one platform.'; return; }
+  btn.disabled = true;
+  status.textContent = 'Scheduling…';
+  try {
+    const r = await fetch('/api/social-video/schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        driveFileId: publishReframedResult.driveFileId,
+        mediaUrl: publishReframedResult.publicMediaUrl,
+        captions: publishCaptions || {},
+        platformIds,
+        dateTimeStr: publishNextOpenDay + 'T03:00:00',
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not schedule.');
+    const failed = (d.results || []).filter(x => !x.ok);
+    if (failed.length) {
+      status.textContent = `Scheduled ${d.results.length - failed.length}/${d.results.length} — ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
+    } else {
+      status.textContent = `✓ Scheduled on ${platformIds.length} platform${platformIds.length > 1 ? 's' : ''} for ${publishNextOpenDay}.`;
+      setTimeout(() => closeModal('publishModal'), 2000);
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function loadGifs(q) {
   const grid = document.getElementById('gifGrid');
   grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Loading…</div>';
@@ -3969,11 +4360,11 @@ function svgStar() {
 // message, so the star simply never renders in the DOM for students/users
 // rather than being hidden via CSS (keeps the click-delegation handler
 // below from ever having to re-check permission on click too).
-function favStarHtml(fileId, suggestedName) {
+function favStarHtml(fileId, suggestedName, mediaType) {
   if (!isStaffMe()) return '';
   const isFav = favoritedFileIds.has(fileId);
   const suggestedAttr = suggestedName ? ` data-fav-suggested="${escapeHtml(suggestedName)}"` : '';
-  return `<button class="fav-star-btn${isFav ? ' favorited' : ''}" data-fav-file="${fileId}"${suggestedAttr} title="${isFav ? 'Favorited' : 'Favorite this'}">${svgStar()}</button>`;
+  return `<button class="fav-star-btn${isFav ? ' favorited' : ''}" data-fav-file="${fileId}" data-fav-type="${mediaType}"${suggestedAttr} title="${isFav ? 'Favorited' : 'Favorite this'}">${svgStar()}</button>`;
 }
 
 async function loadFavorites() {

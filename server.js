@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { handleChatRequest } from "./chat_backend.js";
 import { handleBodyAnalysisRequest } from "./body_analysis_backend.js";
 import { handleMovesDictionaryRequest } from "./moves_dictionary_backend.js";
+import { handleSocialVideoRequest } from "./social_video_backend.js";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ createServer(async (req, res) => {
   if (await handleChatRequest(req, res, url)) return;
   if (await handleBodyAnalysisRequest(req, res, url)) return;
   if (await handleMovesDictionaryRequest(req, res, url)) return;
+  if (await handleSocialVideoRequest(req, res, url)) return;
 
   // Serve static files — strip /chat-app/ prefix if present
   let pathname = url.pathname.replace(/^\/chat-app\//, "/");

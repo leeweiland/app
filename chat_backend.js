@@ -68,7 +68,7 @@ const LEVELS_CATEGORIES = ["FOUNDATION", "NINJA STRENGTH", "HANDSTAND", "POWERMO
 // RAILWAY_VOLUME_MOUNT_PATH is set automatically once a Volume is attached
 // to this service in the Railway dashboard; falls back to __dirname (the
 // old, non-persistent behavior) if none is attached yet.
-const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+export const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 
 // One-time seed: the first boot after a Volume is attached, its mount dir is
 // empty — copy each file's last git-committed version over as a starting
@@ -100,11 +100,11 @@ function migrateDataFile(file) {
 // the way the missing-mkdirSync bug above just did in production.
 ].forEach(file => { try { migrateDataFile(file); } catch (e) { console.error("[migrateDataFile]", file, e.message); } });
 
-function readJson(file, fallback) {
+export function readJson(file, fallback) {
   const p = join(DATA_DIR, file);
   try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
 }
-function writeJson(file, data) {
+export function writeJson(file, data) {
   const dest = join(DATA_DIR, file);
   // Same nested-path issue as migrateDataFile above, just at request time
   // instead of boot time — a first-ever write for a nested file (e.g.
@@ -308,7 +308,7 @@ function destroySession(token) {
   delete sessions[token];
   writeJson(SESSIONS_FILE, sessions);
 }
-function getSessionUser(req) {
+export function getSessionUser(req) {
   const token = getCookie(req, "pra_session");
   if (!token) return null;
   const sessions = readJson(SESSIONS_FILE, {});
@@ -326,14 +326,14 @@ function setSessionCookie(res, token) {
 }
 
 // ── JSON body helper ─────────────────────────────────────────────────────
-function readJsonBody(req) {
+export function readJsonBody(req) {
   return new Promise((resolve) => {
     let body = "";
     req.on("data", d => body += d);
     req.on("end", () => { try { resolve(JSON.parse(body || "{}")); } catch { resolve({}); } });
   });
 }
-function sendJson(res, status, obj) {
+export function sendJson(res, status, obj) {
   res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
   res.end(JSON.stringify(obj));
   return true; // signals "handled" to the caller's fall-through check
@@ -348,7 +348,7 @@ function sendJson(res, status, obj) {
 // before the actual Drive fetch even started, which is exactly what showed
 // up as a video that looks like it's perpetually loading/re-buffering.
 let driveTokenCache = null; // { token, expiresAt }
-async function getDriveAccessToken() {
+export async function getDriveAccessToken() {
   if (driveTokenCache && driveTokenCache.expiresAt > Date.now()) return driveTokenCache.token;
   const r = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -1498,7 +1498,7 @@ function extractVideoFrame(videoPath) {
 
 // Stream a single multipart file part directly into a Drive resumable upload
 // (no full-buffer in memory — important for large, intentionally-uncompressed video).
-function uploadStreamToDrive(fileStream, { name, mimeType, folderId, accessToken }) {
+export function uploadStreamToDrive(fileStream, { name, mimeType, folderId, accessToken }) {
   return new Promise((resolve, reject) => {
     const metadata = { name };
     if (folderId) metadata.parents = [folderId];
@@ -1857,8 +1857,8 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
 // (that page's own access gate stays hardcoded to "admin" — see
 // admin-panel.html's init()). Every other admin-only check in this file
 // goes through isAdmin() so admin2 gets full parity everywhere else.
-function isAdmin(user) { return user.role === "admin" || user.role === "admin2"; }
-function isStaff(user) { return user.role === "coach" || isAdmin(user); }
+export function isAdmin(user) { return user.role === "admin" || user.role === "admin2"; }
+export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // "online" and "gym" are both client-facing training roles -- same
 // permissions/behaviors everywhere, just tracking which program someone's
 // actually enrolled in.
