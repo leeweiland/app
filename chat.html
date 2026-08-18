@@ -338,6 +338,7 @@
   .paste-preview-item img, .paste-preview-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .paste-preview-remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .paste-preview-remove:hover { background: var(--pra-blue); }
+  #threadBody.drag-over { outline: 2px dashed var(--pra-blue); outline-offset: -8px; background: rgba(0,155,255,0.05); }
   .picker-panel.show { display: block; }
   .emoji-tabs { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--pra-border); }
   .emoji-tab { flex-shrink: 0; font-size: 1.15rem; padding: 3px 7px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
@@ -2905,9 +2906,39 @@ function setupComposer() {
   document.getElementById('templateAddBtn').onclick = submitNewTemplate;
 
   attachBtn.onclick = () => fileInput.click();
-  fileInput.addEventListener('change', async () => {
-    if (fileInput.files.length) await sendFiles(fileInput.files);
+  // Stages into the same preview-strip pendingPasteFiles already uses for
+  // clipboard pastes, rather than uploading the instant a file's picked —
+  // people could tap the wrong photo/video and not notice until it's
+  // already sent. Now every attach path (picker, paste, drag-drop below)
+  // funnels through one staged-preview → explicit Send/Enter flow.
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) pendingPasteFiles.push(...fileInput.files);
     fileInput.value = '';
+    renderPastePreview();
+  });
+
+  // Staff-only drag-and-drop of media straight into the thread — same
+  // staged-preview flow as the picker/paste, just a different entry point.
+  // Not offered to students; the paperclip/camera already cover that case
+  // and dragging files in isn't a mobile gesture anyway.
+  const threadBodyEl = document.getElementById('threadBody');
+  ['dragenter', 'dragover'].forEach(evt => threadBodyEl.addEventListener(evt, (e) => {
+    if (!isStaffMe() || !activeConvoId) return;
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    threadBodyEl.classList.add('drag-over');
+  }));
+  ['dragleave', 'dragend'].forEach(evt => threadBodyEl.addEventListener(evt, (e) => {
+    if (e.target === threadBodyEl) threadBodyEl.classList.remove('drag-over');
+  }));
+  threadBodyEl.addEventListener('drop', (e) => {
+    threadBodyEl.classList.remove('drag-over');
+    if (!isStaffMe() || !activeConvoId) return;
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (!files.length) return;
+    e.preventDefault();
+    pendingPasteFiles.push(...files);
+    renderPastePreview();
   });
 
   // Ctrl+V into the message box — an image (a screenshot, a copied photo)
