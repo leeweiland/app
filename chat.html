@@ -358,8 +358,16 @@
   .gif-search { width: 100%; margin-bottom: 8px; }
   .gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; }
-  .template-search { width: 100%; margin-bottom: 8px; }
-  #templateList { max-height: none; overflow: visible; }
+  /* Three-zone layout: search stays put at the top, the reply list is the
+     only part that scrolls, and the add-template form stays pinned at the
+     bottom — so search and "save a new one" are always reachable without
+     hunting through however many saved replies exist. Overrides
+     .picker-panel's own overflow-y (which scrolled the whole panel as one
+     block) with display:flex on the panel itself, done as a direct id
+     selector so it only touches this panel, not the shared emoji/gif ones. */
+  #templatesPanel.show { display: flex; flex-direction: column; overflow-y: hidden; }
+  .template-search { width: 100%; margin-bottom: 8px; flex-shrink: 0; }
+  #templateList { flex: 1; min-height: 60px; overflow-y: auto; }
   .template-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; cursor: pointer; }
   .template-item:hover { background: rgba(255,255,255,0.05); }
   .template-item-body { flex: 1; min-width: 0; }
@@ -367,9 +375,16 @@
   .template-item-text { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); white-space: pre-wrap; word-break: break-word; }
   .template-delete-btn { flex-shrink: 0; background: none; border: none; color: #ff5c5c; cursor: pointer; font-size: .9rem; padding: 2px 4px; }
   .template-delete-btn:hover { opacity: .7; }
-  .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 8px; padding-top: 8px; }
+  .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 8px; padding-top: 8px; flex-shrink: 0; }
   .template-add-form input, .template-add-form textarea { width: 100%; margin-bottom: 6px; }
   .template-add-form textarea { resize: vertical; min-height: 50px; font-family: inherit; }
+  .template-text-row { position: relative; }
+  .shortcode-btn { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); font-size: .68rem; font-weight: 700; cursor: pointer; z-index: 1; }
+  .shortcode-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .shortcode-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 4px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; z-index: 2; display: none; min-width: 130px; }
+  .shortcode-menu.show { display: block; }
+  .shortcode-menu-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .8rem; }
+  .shortcode-menu-item:hover { background: rgba(255,255,255,0.06); }
 
   /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
@@ -623,7 +638,13 @@
             <div id="templateList"></div>
             <div class="template-add-form" id="templateAddForm" style="display:none">
               <input class="pra-input" id="templateAddTitle" placeholder="Template title"/>
-              <textarea class="pra-input" id="templateAddText" placeholder="Message text"></textarea>
+              <div class="template-text-row">
+                <textarea class="pra-input" id="templateAddText" placeholder="Message text"></textarea>
+                <button class="shortcode-btn" id="shortcodeBtn" type="button" title="Insert shortcode">{ }</button>
+                <div class="shortcode-menu" id="shortcodeMenu">
+                  <div class="shortcode-menu-item" data-code="{first_name}">First Name</div>
+                </div>
+              </div>
               <button class="pra-btn" id="templateAddBtn" style="width:100%">Save Template</button>
             </div>
           </div>
@@ -2918,6 +2939,28 @@ function setupComposer() {
   });
   document.getElementById('templateAddBtn').onclick = submitNewTemplate;
 
+  // Inserts at the cursor (not appended to the end) so a shortcode can land
+  // mid-sentence — "Hey {first_name}, ..." — same as typing there directly.
+  const shortcodeBtn = document.getElementById('shortcodeBtn');
+  const shortcodeMenu = document.getElementById('shortcodeMenu');
+  shortcodeBtn.onclick = (e) => { e.stopPropagation(); shortcodeMenu.classList.toggle('show'); };
+  shortcodeMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('.shortcode-menu-item');
+    if (!item) return;
+    e.stopPropagation();
+    const textarea = document.getElementById('templateAddText');
+    const code = item.dataset.code;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    textarea.value = textarea.value.slice(0, start) + code + textarea.value.slice(end);
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + code.length;
+    shortcodeMenu.classList.remove('show');
+  });
+  document.addEventListener('click', (e) => {
+    if (!shortcodeMenu.contains(e.target) && e.target !== shortcodeBtn) shortcodeMenu.classList.remove('show');
+  });
+
   attachBtn.onclick = () => fileInput.click();
   // Stages into the same preview-strip pendingPasteFiles already uses for
   // clipboard pastes, rather than uploading the instant a file's picked —
@@ -3132,7 +3175,11 @@ async function loadTemplates(q) {
 function useTemplate(text) {
   document.getElementById('templatesPanel').classList.remove('show');
   const textInput = document.getElementById('textInput');
-  textInput.value = text;
+  // {first_name} resolves against whoever the open thread is with — falls
+  // back to leaving the literal token in place for a group chat/no student
+  // in context, same as the shortcode never having been there, rather than
+  // guessing at a name.
+  textInput.value = currentThreadStudent?.first ? text.replaceAll('{first_name}', currentThreadStudent.first) : text;
   textInput.dispatchEvent(new Event('input', { bubbles: true })); // triggers the composer's own auto-resize + typing-ping listeners
   textInput.focus();
 }
