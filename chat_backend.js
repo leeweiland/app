@@ -3664,8 +3664,15 @@ export async function handleChatRequest(req, res, url) {
             if (!body.text && !body.gifUrl) return sendJson(res, 400, { error: "text or gifUrl required" });
             const msg = {
               id: randomUUID(), conversationId: convoId, senderId: user.id,
-              type: body.gifUrl ? "gif" : "text",
+              // driveFileId here references a file that ALREADY exists in
+              // Drive (e.g. training-protocol.html's "Ask a Question" on a
+              // step's video/image) rather than one just uploaded through
+              // the multipart branch above — same shape of message either
+              // way, just skipping the upload since there's nothing new to
+              // upload.
+              type: body.driveFileId ? (body.mediaType === "image" ? "image" : "video") : (body.gifUrl ? "gif" : "text"),
               text: body.gifUrl || body.text,
+              driveFileId: body.driveFileId || undefined,
               replyToId: body.replyToId || undefined,
               // Timestamped video-reply notes (chat.html's video-reply modal) —
               // `text` above is still always sent too (a synthesized "[m:ss]

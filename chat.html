@@ -2569,14 +2569,26 @@ function renderBubble(m, convo) {
     // below — it looks for the player inside .closest('.video-note-reply')
     // so replies to different videos never cross-wire).
     const original = m.replyToId ? currentThreadMessages.find(x => x.id === m.replyToId) : null;
+    // A "reply to a video already in this thread" message carries no
+    // driveFileId of its own — it's found via the original. An "Ask a
+    // Question" message (from a training-protocol step, which isn't a
+    // chat message at all) carries its own driveFileId/type directly since
+    // there's no original message to look up.
+    const mediaFileId = m.driveFileId || original?.driveFileId;
+    const mediaIsImage = m.driveFileId ? m.type === 'image' : original?.type === 'image';
     const deleteBtn = canAct ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
     const actions = msgActionsHtml(m.id, canAct, canReplyForward, deleteBtn);
-    const videoHtml = original?.driveFileId
-      ? `<video class="video-note-player" data-src="/api/chat/media/${original.driveFileId}#t=0.5" controls preload="metadata" playsinline></video>`
-      : `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`;
+    const videoHtml = !mediaFileId
+      ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
+      : mediaIsImage
+        ? `<img class="video-note-player" src="/api/chat/media/${mediaFileId}"/>`
+        : `<video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" controls preload="metadata" playsinline></video>`;
+    // No timestamp badge on an image note — "time" only means anything for
+    // video, and omitting it here also means the seek-on-click handler
+    // below (which assumes a <video> player) never fires for one.
     const notesHtml = m.videoNotes.map(n => `
       <div class="video-note-row">
-        <span class="video-note-time" data-time="${n.time}">${formatVideoTime(n.time)}</span>
+        ${mediaIsImage ? '' : `<span class="video-note-time" data-time="${n.time}">${formatVideoTime(n.time)}</span>`}
         <span class="video-note-text">${escapeHtml(n.text)}</span>
       </div>
     `).join('');

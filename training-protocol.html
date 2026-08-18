@@ -72,6 +72,10 @@
   .step-drag-ghost { position: fixed; z-index: 500; pointer-events: none; padding: 8px 14px; border-radius: 10px; background: var(--pra-blue); color: #fff; font-size: .8rem; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transform: translate(-50%, -50%); opacity: .95; }
   .drop-target-hover { transform: translate(-50%, -50%) scale(1.6) !important; box-shadow: 0 0 0 4px rgba(0,155,255,0.35); }
   .step-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
+  /* Student-only — sits in the same top-right corner .step-delete would
+     use, since that button is hidden for a student (!canEdit) anyway. */
+  .step-ask { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 13px; z-index: 2; }
+  .step-ask:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
   .step-plus { position: absolute; width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(140,140,150,0.45); color: #fff; cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background .15s; }
   .step-plus:hover { background: rgba(160,160,170,0.6); }
   .step-plus-right { top: 50%; left: 100%; margin-left: 16px; transform: translateY(-50%); }
@@ -213,6 +217,21 @@
     </div>
   </div>
 
+  <!-- Ask a Question — student-only, posts a preview of this step's media
+       plus their question into their own group chat (see resolvedConvoId). -->
+  <div class="modal-backdrop" id="askQuestionModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Ask a Question</div>
+      <div class="pra-muted" style="font-size:.82rem;margin-bottom:10px">This will post a preview of this step's video/photo along with your question in your group chat.</div>
+      <textarea class="pra-textarea" id="askQuestionInput" rows="4" style="width:100%" placeholder="What's your question about this step?"></textarea>
+      <div id="askQuestionStatus" class="pra-muted" style="font-size:.78rem;margin-top:6px;min-height:1em"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn" id="askQuestionSendBtn" style="flex:1">Send</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('askQuestionModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Saved text templates — admin-authored, coach-searchable -->
   <div class="modal-backdrop" id="templateModal">
     <div class="pra-panel modal-box">
@@ -261,6 +280,11 @@ const params = new URLSearchParams(location.search);
 const targetUserId = params.get('userId');
 const sourceConvoId = params.get('convo');
 let me = null, canEdit = false, steps = [];
+// The conversation "Ask a Question" (student-only) posts into — resolved
+// once by setupBackToChatLink() (same logic the "Back To Chat" button
+// already needs: ?convo= if we arrived from a thread, else this student's
+// own group) and reused here rather than re-deriving it.
+let resolvedConvoId = null;
 // Which step (and whether it's a branch) the currently-open "Add a Step"
 // modal will attach the next step to — set right before opening it (see
 // openAddStepModal), consumed once the type-chooser flow actually commits
@@ -392,6 +416,7 @@ async function setupBackToChatLink() {
       }
     } catch {}
   }
+  resolvedConvoId = convoId;
   const backBtn = document.getElementById('backBtn');
   backBtn.style.display = '';
   backBtn.onclick = () => {
@@ -661,6 +686,7 @@ function render() {
           ${canEdit ? `<button class="step-drag-handle" data-id="${s.id}" title="Drag to move">⠿</button>` : ''}
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
           ${canEdit && s.type === 'text' ? `<button class="step-edit" data-id="${s.id}" title="Edit text">✎</button>` : ''}
+          ${!canEdit && (s.type === 'video' || s.type === 'image') ? `<button class="step-ask" data-id="${s.id}" title="Ask a question about this">?</button>` : ''}
           ${renderStepContent(s)}
         </div>
         ${canEdit && isTip ? `<button class="step-plus step-plus-right" data-parent="${s.id}" data-branch="false" title="Add next step">+</button>` : ''}
@@ -680,6 +706,9 @@ function render() {
   layoutRowHeights();
   drawConnectors();
 
+  world.querySelectorAll('.step-ask').forEach(btn => {
+    btn.onclick = () => openAskQuestionModal(btn.dataset.id);
+  });
   world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
       snapshotBeforeChange();
@@ -1079,6 +1108,39 @@ function setupCanvasPanZoom() {
   });
 }
 
+let askQuestionStepId = null;
+function openAskQuestionModal(stepId) {
+  askQuestionStepId = stepId;
+  document.getElementById('askQuestionInput').value = '';
+  document.getElementById('askQuestionStatus').textContent = '';
+  openModal('askQuestionModal');
+  document.getElementById('askQuestionInput').focus();
+}
+
+async function submitAskQuestion() {
+  const step = steps.find(s => s.id === askQuestionStepId);
+  const question = document.getElementById('askQuestionInput').value.trim();
+  const status = document.getElementById('askQuestionStatus');
+  if (!step) { status.textContent = 'That step no longer exists.'; return; }
+  if (!question) { status.textContent = 'Type a question first.'; return; }
+  if (!resolvedConvoId) { status.textContent = "Couldn't find your group chat — try again from the chat tab."; return; }
+  const btn = document.getElementById('askQuestionSendBtn');
+  btn.disabled = true;
+  status.textContent = 'Sending…';
+  const r = await fetch('/api/chat/conversations/' + resolvedConvoId + '/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: 'Question: ' + question,
+      driveFileId: step.driveFileId,
+      mediaType: step.type,
+      videoNotes: [{ time: 0, text: question }],
+    }),
+  });
+  btn.disabled = false;
+  if (!r.ok) { status.textContent = 'Could not send — try again.'; return; }
+  closeModal('askQuestionModal');
+}
+
 function renderStepContent(s) {
   if (s.type === 'video') {
     return `<video data-src="/api/chat/media/${s.driveFileId}#t=0.5" controls loop preload="metadata" playsinline></video>`;
@@ -1198,6 +1260,8 @@ function wireModals() {
     closeModal('chooseTypeModal');
     await commitNewStep({ type: 'day', dayNumber: nextDayNumber() });
   };
+
+  document.getElementById('askQuestionSendBtn').onclick = submitAskQuestion;
 
   let templateSearchTimer;
   document.getElementById('templateSearchInput').addEventListener('input', (e) => {
