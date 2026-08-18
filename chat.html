@@ -341,6 +341,15 @@
   #threadBody.drag-over { outline: 2px dashed var(--pra-blue); outline-offset: -8px; background: rgba(0,155,255,0.05); }
   .picker-panel.show { display: block; }
   .emoji-tabs { display: flex; gap: 3px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--pra-border); }
+  /* Desktop gets a wider panel + wrapping tabs instead of a horizontal
+     scrollbar — there's a mouse and screen room to spare, so a second tab
+     row reads better than forcing a scroll to reach "Popular"/whichever
+     category sits at the end. Mobile keeps the narrow scrolling strip,
+     where width is the scarce resource and swiping is natural anyway. */
+  @media (hover: hover) {
+    #emojiPanel { width: 400px; }
+    #emojiPanel .emoji-tabs { flex-wrap: wrap; overflow-x: visible; }
+  }
   .emoji-tab { flex-shrink: 0; font-size: 1.15rem; padding: 3px 7px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
   .emoji-tab.active { border-color: var(--pra-blue); background: var(--pra-blue-dim); }
   .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-height: 220px; overflow-y: auto; }
@@ -872,6 +881,10 @@
 
 <script>
 const EMOJI_CATEGORIES = {
+  // First key = default-open tab (see setupEmojiPicker's `names[0]`), and
+  // its own first emoji becomes the tab's icon — the ninja here is doing
+  // double duty as both.
+  Popular: ['🥷','💪','🥋','😊','😆','🤣','😁','😄','❤️','🤯','😲','😎','🤙','✋','🦾','🧠','🔥','⚡','⭐','💯','✅','🏆','🥇','🤸‍♂️','🤸‍♀️','✈️'],
   Smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
   Gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🙏','✍️','💅','🤳','💪','🦾','🦵','🦿','🦶','👣','👀','👁️','🧠','🦷','🦴'],
   Hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','💯','✅','❌','⭐','🌟','✨','🔥','💦','💥','⚡'],
