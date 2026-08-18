@@ -30,7 +30,12 @@
      width, without the 100vw-includes-scrollbar overflow that trips up —
      the negative margins alone pull both edges out to the viewport edge
      and the block naturally fills the gap between them. */
-  .protocol-canvas { position: relative; overflow: hidden; touch-action: none; border-top: 1px solid var(--pra-border); border-bottom: 1px solid var(--pra-border); background: rgba(255,255,255,0.015); height: calc(100vh - 230px); min-height: 440px; margin-top: 24px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); cursor: grab; }
+  /* Height is set from JS (see fitCanvasToView) — the header's real height
+     (undo/redo, save/load-template, back-to-chat) has grown since this
+     hardcoded calc(100vh - 230px) guess was written, so it's stopped
+     matching reality; this is just an unstyled fallback for the instant
+     before JS runs. */
+  .protocol-canvas { position: relative; overflow: hidden; touch-action: none; border-top: 1px solid var(--pra-border); border-bottom: 1px solid var(--pra-border); background: rgba(255,255,255,0.015); height: calc(100vh - 230px); margin-top: 24px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); cursor: grab; }
   .protocol-canvas.dragging { cursor: grabbing; }
   .protocol-world, .protocol-connectors, .protocol-insert-layer { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
   .protocol-connectors, .protocol-insert-layer { overflow: visible; pointer-events: none; }
@@ -742,7 +747,18 @@ function render() {
     v.addEventListener('loadedmetadata', () => { layoutRowHeights(); drawConnectors(); }, { once: true });
   });
 
-  if (!canvasInitialized) { canvasInitialized = true; fitCanvasToView(); }
+  if (!canvasInitialized) {
+    canvasInitialized = true;
+    fitCanvasToView();
+    // fitCanvasToView() measures overflow off the PREVIOUS layout, so the
+    // very first call (previous layout = the unstyled CSS fallback) lands
+    // close but not exact. It's self-correcting — a second call measures
+    // against its own just-applied height and converges exactly — so settle
+    // once more shortly after rather than leaving a residual few px of
+    // overflow on first load. setTimeout, not requestAnimationFrame — rAF
+    // can be throttled on a backgrounded/non-visible tab and never fire.
+    setTimeout(fitCanvasToView, 50);
+  }
 }
 
 // A gap between rows generous enough for a branch elbow's vertical drop
@@ -852,6 +868,27 @@ function applyCanvasTransform() {
 }
 function fitCanvasToView() {
   const canvasEl = document.getElementById('protocolCanvas');
+  // The CSS height (calc(100vh - 230px)) assumes a fixed header height
+  // that's gone stale as the header grew (undo/redo, save/load-template,
+  // back-to-chat) — on any viewport where the real header is taller than
+  // that guess, or the viewport itself is short, the canvas's bottom edge
+  // ran off the bottom of the screen. Measure the header's ACTUAL rendered
+  // height instead of guessing, and give the canvas exactly what's left.
+  const rectBefore = canvasEl.getBoundingClientRect();
+  // Reserve whatever sits below the canvas's current bottom edge, measured
+  // as raw overflow rather than enumerated element-by-element — enumerating
+  // (wrap's own padding, the upload-status line) missed a fixed mobile
+  // bottom nav bar + its layout spacer that a shared header script injects
+  // as a sibling of .wrap, outside it entirely, so it was never counted.
+  // Reading straight off scrollHeight picks up anything down there
+  // regardless of where in the DOM it actually lives.
+  const belowCanvas = Math.max(0, document.documentElement.scrollHeight - rectBefore.bottom);
+  // 150px floor — on a short viewport there isn't always 300+px of room
+  // left after the header, and forcing that much just pushed the page into
+  // overflow instead of letting the canvas (which already scales its own
+  // content to fit) shrink to whatever's actually left.
+  canvasEl.style.height = Math.max(150, window.innerHeight - rectBefore.top - belowCanvas - 4) + 'px';
+
   const world = document.getElementById('protocolWorld');
   const rect = canvasEl.getBoundingClientRect();
   const w = parseFloat(world.style.width) || 1, h = parseFloat(world.style.height) || 1;
@@ -860,6 +897,17 @@ function fitCanvasToView() {
   canvasY = 24;
   applyCanvasTransform();
 }
+// fitCanvasToView() previously only ever ran once, right after the initial
+// load (see canvasInitialized below) — resizing the actual browser window
+// afterward, or the admin device-preview strip's Desktop/Tablet/Mobile
+// buttons (which resize .pra-root by toggling a CSS class, not by
+// resizing the window itself, so a plain "resize" listener alone misses
+// it — same fix already used for users-map.html's fitMapBox), left the
+// canvas stuck at whatever scale/position fit the FIRST size it ever saw,
+// cutting content off the screen at any other size.
+window.addEventListener('resize', () => { if (canvasInitialized) fitCanvasToView(); });
+const protocolRootEl = document.querySelector('.pra-root');
+if (protocolRootEl) new ResizeObserver(() => { if (canvasInitialized) fitCanvasToView(); }).observe(protocolRootEl);
 // Grabbing a card's drag handle picks the step up and shows a small pill
 // following the pointer; releasing over any + (mid-connector, add-next,
 // add-below) or an empty placeholder drops it there. Uses pointer events

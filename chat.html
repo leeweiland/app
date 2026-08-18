@@ -700,7 +700,6 @@
       <div class="pra-h2" style="margin-bottom:4px">Kickoff / Intake Form</div>
       <div class="pra-muted" id="intakeFormSubtitle" style="font-size:.78rem;margin-bottom:12px"></div>
       <div class="intake-locked-banner" id="intakeLockedBanner" style="display:none"></div>
-      <a class="pra-link" id="intakeFormDocLink" href="#" target="_blank" rel="noopener" style="display:none;font-size:.76rem;margin-bottom:12px">View in Google Docs →</a>
       <div id="intakeFormFields"></div>
       <div class="pra-muted" id="intakeFormStatus" style="font-size:.76rem;margin-top:10px;min-height:1em"></div>
       <button class="pra-btn" style="margin-top:14px;width:100%" id="intakeFormSaveBtn">Submit</button>
@@ -717,7 +716,6 @@
     <div class="pra-panel modal-box modal-box-wide">
       <div class="pra-h2" style="margin-bottom:4px">Coach Notes</div>
       <div class="pra-muted" id="staffNotesSubtitle" style="font-size:.76rem;margin-bottom:6px"></div>
-      <a class="pra-link" id="staffNotesDocLink" href="#" target="_blank" rel="noopener" style="display:none;font-size:.76rem;margin-bottom:10px">View in Google Docs →</a>
       <div id="staffNotesFormFields"></div>
       <div class="pra-muted" id="staffNotesStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
       <button class="pra-btn" style="margin-top:10px;width:100%" id="staffNotesSaveBtn">Add Note</button>
@@ -767,7 +765,7 @@
   <div class="modal-backdrop" id="favoritesModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">My Favorites</div>
-      <div id="favoritesGrid"></div>
+      <div class="media-grid" id="favoritesGrid"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('favoritesModal')">Close</button>
     </div>
   </div>
@@ -1639,7 +1637,6 @@ async function openIntakeFormModal() {
   if (!currentThreadStudent) return;
   document.getElementById('intakeFormSubtitle').textContent = 'For ' + currentThreadStudent.first + ' ' + currentThreadStudent.last;
   document.getElementById('intakeFormStatus').textContent = 'Loading…';
-  document.getElementById('intakeFormDocLink').style.display = 'none';
   renderIntakeFields({}, true);
   openModal('intakeFormModal');
 
@@ -1659,8 +1656,6 @@ async function openIntakeFormModal() {
   } else {
     banner.style.display = 'none';
   }
-  const docLink = document.getElementById('intakeFormDocLink');
-  if (form?.driveDocUrl) { docLink.href = form.driveDocUrl; docLink.style.display = ''; }
   document.getElementById('intakeFormStatus').textContent = '';
   document.getElementById('intakeFormSaveBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('intakeFormUnlockBtn').style.display = (locked && isStaffMe()) ? '' : 'none';
@@ -1743,15 +1738,12 @@ async function openStaffNotesModal() {
   document.getElementById('staffNotesSubtitle').textContent = 'For ' + currentThreadStudent.first + ' ' + currentThreadStudent.last;
   document.getElementById('staffNotesStatus').textContent = 'Loading…';
   renderNoteFormFields();
-  document.getElementById('staffNotesDocLink').style.display = 'none';
   document.getElementById('staffNotesEntries').innerHTML = '';
   openModal('staffNotesModal');
 
   const r = await fetch('/api/chat/notes/' + currentThreadStudent.id);
   const d = await r.json();
   renderStaffNotesEntries(d.notes?.entries || []);
-  const docLink = document.getElementById('staffNotesDocLink');
-  if (d.notes?.driveDocUrl) { docLink.href = d.notes.driveDocUrl; docLink.style.display = ''; }
   document.getElementById('staffNotesStatus').textContent = '';
 }
 
@@ -1771,8 +1763,6 @@ document.getElementById('staffNotesSaveBtn').addEventListener('click', async () 
   if (!r.ok) { status.textContent = d.error || 'Could not save.'; return; }
   renderNoteFormFields();
   renderStaffNotesEntries(d.notes.entries);
-  const docLink = document.getElementById('staffNotesDocLink');
-  if (d.notes.driveDocUrl) { docLink.href = d.notes.driveDocUrl; docLink.style.display = ''; }
   status.textContent = 'Added.';
 });
 
@@ -3376,6 +3366,17 @@ async function saveEditMessage(mid, text) {
 // ── Modals ───────────────────────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
+
+// Kickoff/Notes/Favorites/Shared-Media all get click-the-backdrop-to-close
+// (clicking the dark overlay outside the panel itself, not the panel's own
+// content) — these four are read/browse-heavy panels people bounce in and
+// out of, unlike e.g. a destructive confirm dialog where an accidental
+// outside click closing it would be more annoying than helpful.
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', (e) => {
+    if (e.target.id === id) closeModal(id);
+  });
+});
 
 document.getElementById('newGroupBtn').onclick = async () => {
   await loadContacts();
