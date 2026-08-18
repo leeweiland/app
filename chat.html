@@ -57,8 +57,11 @@
      own list and the sent bubble's list (same row/time/text shape, just
      different containers/backgrounds around them). ── */
   .video-note-row { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; }
-  .video-note-time { flex-shrink: 0; color: var(--pra-blue); font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
-  .video-note-time:hover { color: #fff; }
+  /* White, not the usual blue accent — a "mine" bubble's own background IS
+     that same blue, which made the timestamp unreadable on your own sent
+     replies. */
+  .video-note-time { flex-shrink: 0; color: #fff; font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+  .video-note-time:hover { opacity: .75; }
   .video-note-text { word-break: break-word; flex: 1; }
   .video-note-remove { flex-shrink: 0; background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .9rem; padding: 0 2px; line-height: 1; }
   .video-note-remove:hover { color: #ff5c5c; }
@@ -2731,7 +2734,9 @@ function escapeHtml(s) {
     if (!vid) return;
     if (!vid.src && vid.dataset.src) vid.src = vid.dataset.src;
     const seekTo = Number(timeEl.dataset.time) || 0;
-    const seek = () => { vid.currentTime = seekTo; vid.play(); };
+    // Jump there and hold on that frame — not autoplay from there — so the
+    // moment the note is actually about is what's on screen.
+    const seek = () => { vid.currentTime = seekTo; vid.pause(); };
     if (vid.readyState >= 1) seek(); else vid.addEventListener('loadedmetadata', seek, { once: true });
   });
   document.getElementById('lightboxClose').onclick = close;
