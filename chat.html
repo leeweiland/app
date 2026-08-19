@@ -400,14 +400,23 @@
   .camera-modal { position: fixed; inset: 0; background: #000; z-index: 200; display: none; }
   .camera-modal.show { display: block; }
   .camera-screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
-  #cameraPreviewVideo, #cameraReviewVideo { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+  /* Shoot screen has nothing below the preview competing for space, so it
+     fills the whole screen. The review screen does — trim controls and the
+     Send row are real siblings below it, not an overlay — so a portrait
+     (9:16) clip forcing height:100% pushed both off the bottom of the
+     screen entirely (confirmed live: Send was there, just unreachable).
+     flex:1 + min-height:0 lets it shrink to whatever's actually left after
+     its siblings take their share; object-fit:contain keeps the full
+     frame in view at that size instead of cropping it. */
+  #cameraPreviewVideo { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+  #cameraReviewVideo { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: contain; background: #000; display: block; }
   /* Selfie mode mirrors the LIVE PREVIEW only (the natural "looking in a
      mirror" feel) — the frame actually captured/recorded is read straight
      off the unmirrored video element via canvas/MediaRecorder, so a coach
      reviewing the clip still sees the student's real left/right, which
      matters for form feedback. */
   #cameraPreviewVideo.mirrored { transform: scaleX(-1); }
-  #cameraReviewImage { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  #cameraReviewImage { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: contain; background: #000; display: block; }
   .camera-close-btn, .camera-flip-btn { position: absolute; top: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.45); color: #fff; font-size: 1.1rem; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
   .camera-close-btn { left: 16px; }
   .camera-flip-btn { right: 16px; font-size: 1.3rem; }
@@ -3074,13 +3083,14 @@ function setupComposer() {
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
   // `pointer: coarse` is the standard touch-vs-desktop signal, used below
-  // for Enter-to-send. Students/users on touch also get a dedicated camera
-  // icon ALONGSIDE the paperclip (not replacing it, per feedback) — it
-  // still needs the same native permission as the paperclip's own "Take
-  // Photo" option, pending a rebuild, but there's no reason to hide the
-  // entry point in the meantime.
+  // for Enter-to-send. Everyone on touch gets a dedicated camera icon
+  // ALONGSIDE the paperclip (not student-only — that gating hid it during
+  // testing from a staff account, and the video-upload trim flow below
+  // isn't staff-gated either). Still needs the same native permission as
+  // the paperclip's own "Take Photo" option, pending a rebuild, but
+  // there's no reason to hide the entry point in the meantime.
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
-  if (isTouchDevice && !isStaffMe()) cameraCaptureBtn.style.display = '';
+  if (isTouchDevice) cameraCaptureBtn.style.display = '';
   cameraCaptureBtn.onclick = openCameraCapture;
 
   // Same panel serves both composing and reacting — reactingMessageId (set
@@ -3154,11 +3164,11 @@ function setupComposer() {
     const files = Array.from(fileInput.files || []);
     fileInput.value = '';
     if (!files.length) return;
-    // Students/users get a trim step before a video they picked from their
-    // library actually sends — same reasoning as the (currently unusable,
-    // pending a native rebuild) camera flow's own trim step, just entered
-    // from the library picker instead of a live shoot. Staff, and any
-    // non-video picks, keep the plain staged-preview flow.
+    // Anyone picking a video gets a trim step before it sends — staff
+    // included (this isn't student-only; that scoping was leftover from
+    // the earlier camera-icon logic and was hiding the trim panel for
+    // whoever tested it from their own staff account). Non-video picks
+    // keep the plain staged-preview flow either way.
     //
     // iOS's file picker doesn't always set a MIME type on the File it hands
     // back (empty f.type) depending on where the video came from (iCloud,
@@ -3168,7 +3178,7 @@ function setupComposer() {
     // filename extension catches those.
     const isVideoFile = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|3gp|mkv)$/i.test(f.name || '');
     const videoIdx = files.findIndex(isVideoFile);
-    if (!isStaffMe() && videoIdx !== -1) {
+    if (videoIdx !== -1) {
       openUploadTrimFlow(files[videoIdx]);
       files.splice(videoIdx, 1);
     }
