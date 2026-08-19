@@ -417,7 +417,16 @@
      matters for form feedback. */
   #cameraPreviewVideo.mirrored { transform: scaleX(-1); }
   #cameraReviewImage { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: contain; background: #000; display: block; }
-  .camera-close-btn, .camera-flip-btn { position: absolute; top: 16px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.45); color: #fff; font-size: 1.1rem; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
+  /* max(16px, env(safe-area-inset-top)) — this overlay is edge-to-edge
+     (.camera-modal is inset:0) with no safe-area padding at all, so on a
+     notch/Dynamic Island iPhone these sat UNDER the sensor housing: not
+     just visually cut off, but on Dynamic Island devices iOS itself
+     intercepts touches over that area for its own UI before the WebView
+     ever sees them — which is why "too high" and "the X doesn't do
+     anything" were the same bug. env() is 0 on devices without a cutout
+     (including Android), so this is a no-op there — same fix needed on
+     both platforms, but only actually changes anything on iOS. */
+  .camera-close-btn, .camera-flip-btn { position: absolute; top: max(16px, env(safe-area-inset-top)); width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.45); color: #fff; font-size: 1.1rem; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; }
   .camera-close-btn { left: 16px; }
   .camera-flip-btn { right: 16px; font-size: 1.3rem; }
   .camera-mode-toggle { position: absolute; bottom: 118px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: rgba(0,0,0,0.45); border-radius: 999px; padding: 4px; z-index: 2; }
@@ -426,13 +435,17 @@
   .camera-shutter-btn { position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); width: 72px; height: 72px; border-radius: 50%; background: transparent; border: 4px solid #fff; cursor: pointer; z-index: 2; }
   .camera-shutter-btn::after { content: ''; display: block; width: 56px; height: 56px; margin: 4px auto; border-radius: 50%; background: #fff; transition: border-radius .15s, background .15s; }
   .camera-shutter-btn.recording::after { border-radius: 10px; background: #ff3b3b; width: 32px; height: 32px; }
-  .camera-record-timer { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: rgba(255,59,59,0.85); color: #fff; font-size: .82rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; z-index: 2; }
+  .camera-record-timer { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: rgba(255,59,59,0.85); color: #fff; font-size: .82rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; z-index: 2; }
   /* Handwriting-font step callouts — a plain label, no arrow (removed per
      feedback: felt cluttered, and the label alone next to the thing it
      describes reads clearly enough on its own). */
   .camera-handwritten { font-family: 'Caveat', cursive; font-size: 1.7rem; font-weight: 700; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.7); line-height: 1.1; }
   .camera-callout { position: absolute; z-index: 2; pointer-events: none; }
-  .camera-callout-step1 { bottom: 128px; left: 50%; transform: translateX(-50%); text-align: center; width: 220px; }
+  /* Was bottom:128px — only 10px above the Photo/Video toggle (bottom:118px,
+     ~38px tall), so the callout text sat directly on top of it, obscuring
+     the toggle even though pointer-events:none meant taps still reached it
+     underneath. Pushed up clear of the toggle's top edge. */
+  .camera-callout-step1 { bottom: 180px; left: 50%; transform: translateX(-50%); text-align: center; width: 220px; }
   .camera-review-actions { position: relative; padding: 18px 20px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
   .camera-callout-step3 { position: static; flex: 1; text-align: center; }
   .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
