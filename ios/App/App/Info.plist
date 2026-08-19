@@ -66,5 +66,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Required for chat.html's in-app camera capture (students/users on
+	     mobile) to call getUserMedia({video, audio}) from the WebView —
+	     without these, iOS denies the request outright with no prompt at
+	     all rather than asking the user. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Used to record your training clips directly in the app.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Used to record audio with your training clips.</string>
 </dict>
 </plist>
