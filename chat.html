@@ -921,8 +921,8 @@
        rename-and-favorite flow above. -->
   <div class="modal-backdrop" id="publishModal">
     <div class="pra-panel modal-box modal-box-wide">
-      <div class="pra-h2" style="margin-bottom:4px">Save & Publish to Powerbatics</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Trim it, label it, and Save — tracking, vertical reframing, captions, and scheduling all happen automatically.</div>
+      <div class="pra-h2" style="margin-bottom:4px">Save Training Clip</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Trim, Label, Save ex. FIRST NAME LAST NAME LOCATION ELEMENT KATA LEVEL APPARATUS MOVES. PATRICK KELLEHER FRANCE NINJA STRENGTH KATA LEVEL 4 BAR MUSCLE UP, etc.</div>
 
       <video id="publishSourceVideo" playsinline style="max-width:100%;max-height:60vh;width:auto;height:auto;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
       <div class="camera-trim-wrap" style="padding:10px 0 0">
@@ -3917,7 +3917,7 @@ async function runPublishSave() {
 
   await runPublishTracking(); // best-effort — leaves publishKeyframes null on failure, backend falls back to a center crop
 
-  status.textContent = 'Saving & publishing… this can take a minute.';
+  status.textContent = 'Saving…';
   try {
     const r = await fetch('/api/social-video/save-and-publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3931,18 +3931,21 @@ async function runPublishSave() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Could not save.');
     if (!d.published) {
-      status.textContent = `Saved to Drive, but publishing failed: ${d.error || 'unknown error'}`;
+      status.textContent = `Saved to Drive. ${d.error || 'Publish failed.'}`;
       return;
     }
     const failed = (d.results || []).filter(x => !x.ok);
     if (failed.length) {
-      status.textContent = `Saved. Scheduled ${d.results.length - failed.length}/${d.results.length} for ${d.scheduledDay} — ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
+      status.textContent = `Saved to Drive. Published with errors: ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
     } else {
-      status.textContent = `✓ Saved and scheduled on ${d.results.length} platform${d.results.length > 1 ? 's' : ''} for ${d.scheduledDay}.`;
+      status.textContent = 'Saved to Drive. Published.';
       setTimeout(() => closeModal('publishModal'), 2500);
     }
   } catch (e) {
-    status.textContent = '✗ ' + e.message;
+    // Reaching here means the save itself failed (a non-200 response, or a
+    // network error) — the publish-only failure paths above already say
+    // "Saved to Drive." on their own since the save step succeeded there.
+    status.textContent = e.message;
   } finally {
     btn.disabled = false;
   }
