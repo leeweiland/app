@@ -1411,9 +1411,14 @@ function buildDirectory() {
   );
   contacts.filter(c => !dmContactIds.has(c.id)).forEach(c => {
     items.push({
+      // No conversation exists yet, so there's no conversation createdAt to
+      // fall back on the way real empty conversations do (see the
+      // c.lastMessage?.createdAt || c.createdAt line above) -- the
+      // contact's own account creation date stands in until pinning/
+      // favoriting (or a real message) creates the conversation for real.
       key: 'u:' + c.id, contactId: c.id, virtual: true,
       name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
-      preview: 'No messages yet', timestamp: null,
+      preview: 'No messages yet', timestamp: c.createdAt,
     });
   });
   items.sort((a, b) => {
@@ -1449,8 +1454,11 @@ function convoItemHtml(i) {
   // every row, whether or not a given row actually has that icon or a count.
   const canToggleChannel = !i.virtual && i.isGroup && isAdminMe() && (i.isChannel || !i.hasClient);
   const channelBtn = `<button class="convo-channel-btn ${i.isChannel ? 'on' : ''}" data-channel-id="${i.convoId || ''}" data-channel-on="${i.isChannel ? '0' : '1'}" title="${i.isChannel ? 'Remove from channels' : 'Mark as channel'}" style="${canToggleChannel ? '' : 'visibility:hidden'}">#</button>`;
-  const pinBtn = `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId || ''}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}" style="${i.virtual ? 'visibility:hidden' : ''}">${PIN_ICON}</button>`;
-  const favBtn = `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId || ''}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}" style="${i.virtual ? 'visibility:hidden' : ''}">${STAR_ICON}</button>`;
+  // Pin/fav are clickable even on a virtual (no-conversation-yet) row --
+  // wireConvoItems lazily creates the real DM behind the scenes first, same
+  // conversation POST startConvo() uses, just without navigating into it.
+  const pinBtn = `<button class="convo-pin-btn ${i.pinned ? 'on' : ''}" data-pin-id="${i.convoId || ''}" data-pin-on="${i.pinned ? '0' : '1'}" title="${i.pinned ? 'Unpin' : 'Pin to top'}">${PIN_ICON}</button>`;
+  const favBtn = `<button class="convo-fav-btn ${i.favorite ? 'on' : ''}" data-fav-id="${i.convoId || ''}" data-fav-on="${i.favorite ? '0' : '1'}" title="${i.favorite ? 'Remove from favorites' : 'Add to favorites'}">${STAR_ICON}</button>`;
   // Once there's nothing left to count (you've read everything, or you
   // sent the last message yourself), the badge's slot doesn't just go
   // empty — if YOUR last message has a status, its read-receipt tick
@@ -1498,6 +1506,20 @@ function convoItemHtml(i) {
   `;
 }
 
+// Pinning/favoriting a virtual (no-conversation-yet) row needs a real
+// conversation id to act on -- same POST startConvo() uses to create a DM,
+// just without the openConvo() navigation, since this is a quick action
+// from the list, not "open this thread".
+async function ensureConvoId(item) {
+  if (!item.virtual) return item.convoId;
+  const r = await fetch('/api/chat/conversations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'dm', otherUserId: item.contactId })
+  });
+  const d = await r.json();
+  return d.conversation?.id || null;
+}
+
 function wireConvoItems(wrap, items) {
   wrap.querySelectorAll('.convo-item').forEach(el => {
     const item = items.find(i => i.key === el.dataset.key);
@@ -1518,8 +1540,11 @@ function wireConvoItems(wrap, items) {
   wrap.querySelectorAll('.convo-fav-btn').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
+      const item = items.find(i => i.key === btn.closest('.convo-item')?.dataset.key);
       const favorite = btn.dataset.favOn === '1';
-      await fetch(`/api/chat/conversations/${btn.dataset.favId}/favorite`, {
+      const convoId = item ? await ensureConvoId(item) : btn.dataset.favId;
+      if (!convoId) return;
+      await fetch(`/api/chat/conversations/${convoId}/favorite`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite })
       });
       await loadConversations();
@@ -1528,8 +1553,11 @@ function wireConvoItems(wrap, items) {
   wrap.querySelectorAll('.convo-pin-btn').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
+      const item = items.find(i => i.key === btn.closest('.convo-item')?.dataset.key);
       const pinned = btn.dataset.pinOn === '1';
-      await fetch(`/api/chat/conversations/${btn.dataset.pinId}/pin`, {
+      const convoId = item ? await ensureConvoId(item) : btn.dataset.pinId;
+      if (!convoId) return;
+      await fetch(`/api/chat/conversations/${convoId}/pin`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned })
       });
       await loadConversations();
