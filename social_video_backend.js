@@ -234,11 +234,29 @@ async function makeDriveFilePublic(fileId, accessToken) {
 const METRICOOL_BASE = "https://app.metricool.com/api";
 const NETWORK_TYPE_MAP = { fb: "facebook", ig: "instagram", yt: "youtube", tt: "tiktok", li: "linkedin", x: "twitter", fbs: "facebook", igs: "instagram" };
 
+// HTTP header values must be Latin1 — Node's fetch() throws an opaque
+// "Cannot convert argument to a ByteString" TypeError (no var name, just a
+// char index) if any of these env vars were copy-pasted with a stray
+// smart-quote/bullet/etc from somewhere. Check up front so a bad Railway env
+// var points straight at itself instead of surfacing as a mystery crash deep
+// in a Metricool fetch call.
+function assertHeaderSafe(varName, value) {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code > 255) {
+      throw new Error(`${varName} contains an invalid character ("${value[i]}", code ${code}) at position ${i} — likely a copy-paste artifact. Re-copy the value from Metricool and re-save it in Railway's env vars.`);
+    }
+  }
+}
+
 function metricoolAuth() {
   const apiKey = process.env.METRICOOL_API_KEY;
   const userId = process.env.METRICOOL_USER_ID;
   const blogId = process.env.METRICOOL_PB_BLOG_ID;
   if (!apiKey || !userId || !blogId) throw new Error("Metricool isn't configured — set METRICOOL_API_KEY, METRICOOL_USER_ID, METRICOOL_PB_BLOG_ID.");
+  assertHeaderSafe("METRICOOL_API_KEY", apiKey);
+  assertHeaderSafe("METRICOOL_USER_ID", userId);
+  assertHeaderSafe("METRICOOL_PB_BLOG_ID", blogId);
   return { apiKey, userId, blogId };
 }
 
