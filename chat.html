@@ -3471,10 +3471,23 @@ async function startCameraStream() {
     // prompt) the moment someone taps over to Video mode.
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing }, audio: true });
   } catch (e) {
-    document.getElementById('cameraSendStatus').textContent = '';
-    alert("Couldn't access the camera — check your browser/app camera permission and try again.");
-    closeCameraCapture();
-    return;
+    console.error('[camera] getUserMedia(video+audio) failed:', e.name, e.message);
+    // Android/Capacitor's permission bridge grants/denies the whole
+    // requested batch together — if only the microphone got denied (a
+    // separate OS permission from camera), the entire call fails even
+    // though camera access itself is fine. Retry video-only so a real
+    // camera/permission problem isn't confused with "just no audio," and
+    // so a clip can still be captured (silently) in that case.
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing } });
+      console.warn('[camera] video-only succeeded — audio permission is likely the actual problem.');
+    } catch (e2) {
+      console.error('[camera] getUserMedia(video only) also failed:', e2.name, e2.message);
+      document.getElementById('cameraSendStatus').textContent = '';
+      alert(`Couldn't access the camera (${e2.name || e.name || 'unknown error'}) — check your device's Camera/Microphone permission for this app in Settings and try again.`);
+      closeCameraCapture();
+      return;
+    }
   }
   preview.srcObject = cameraStream;
   preview.classList.toggle('mirrored', cameraFacing === 'user');
