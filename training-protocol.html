@@ -32,7 +32,7 @@
   .protocol-head-row > :first-child { justify-self: start; }
   .protocol-head-row > :last-child { justify-self: end; }
   .protocol-head-controls-left, .protocol-head-controls-right { display: flex; align-items: center; gap: 10px; }
-  .client-name { font-size: .95rem; color: var(--pra-dim); text-align: center; }
+  .client-name { font-family: var(--font-secondary); font-size: .95rem; color: #fff; text-align: center; }
   .back-to-chat-btn { flex-shrink: 0; padding: 5px 14px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .8rem; cursor: pointer; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .view-mode-toggle { display: flex; gap: 6px; }
@@ -47,7 +47,9 @@
      rather than interleaving. Plain document flow, not the canvas's
      pan/zoom transform, so it's responsive for free — no fitCanvasToView
      equivalent needed here. */
-  .protocol-page { max-width: 640px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 16px; }
+  .page-day-select-row { max-width: 640px; margin: 20px auto 0; display: flex; justify-content: center; }
+  .page-day-select-row .pra-select { width: auto; min-width: 160px; }
+  .protocol-page { max-width: 640px; margin: 16px auto 0; display: flex; flex-direction: column; gap: 16px; }
   .page-day-heading { text-align: center; font-family: var(--font-secondary); font-size: 1.5rem; font-weight: 700; color: var(--pra-blue); padding-top: 18px; border-top: 1px solid var(--pra-border); }
   .protocol-page > .page-day-heading:first-child { border-top: none; padding-top: 0; }
   .page-step-card { padding: 14px 16px; }
@@ -204,6 +206,11 @@
       <svg class="protocol-connectors" id="protocolConnectors"></svg>
       <div class="protocol-world" id="protocolWorld"></div>
       <div class="protocol-insert-layer" id="protocolInsertLayer"></div>
+    </div>
+    <div class="page-day-select-row" id="pageDaySelectRow" style="display:none">
+      <select class="pra-select" id="pageDaySelect">
+        <option value="all">All Days</option>
+      </select>
     </div>
     <div class="protocol-page" id="protocolPage" style="display:none"></div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
@@ -613,10 +620,44 @@ function linearStepOrder(list) {
   return out;
 }
 
+// "all" or a specific day step's id — set by the pageDaySelect dropdown,
+// re-applied every renderPageView() call so it survives edits/re-renders.
+let pageSelectedDay = 'all';
+
+function syncPageDaySelectOptions(order) {
+  const select = document.getElementById('pageDaySelect');
+  const days = order.filter(s => s.type === 'day');
+  // Rebuilding on every render (rather than diffing) is simplest and cheap
+  // — there's never more than a handful of days — but it'd reset the
+  // dropdown to its first option on every keystroke elsewhere if not for
+  // this: preserve the current selection unless the day it pointed at no
+  // longer exists (deleted), in which case fall back to "All Days".
+  const stillExists = pageSelectedDay === 'all' || days.some(d => d.id === pageSelectedDay);
+  if (!stillExists) pageSelectedDay = 'all';
+  select.innerHTML = '<option value="all">All Days</option>' +
+    days.map(d => `<option value="${d.id}" ${d.id === pageSelectedDay ? 'selected' : ''}>Day ${d.dayNumber}</option>`).join('');
+  // Visibility itself is applyViewModeDisplay()'s call, not this one — it
+  // also has to account for viewMode/hasSteps, which this function doesn't
+  // know about.
+}
+
 function renderPageView() {
   const container = document.getElementById('protocolPage');
   const order = linearStepOrder(steps).filter(s => s.type !== 'placeholder');
-  container.innerHTML = order.map(s => {
+  syncPageDaySelectOptions(order);
+
+  let visible = order;
+  if (pageSelectedDay !== 'all') {
+    const startIdx = order.findIndex(s => s.id === pageSelectedDay);
+    const afterStart = order.slice(startIdx + 1);
+    // Everything up to (not including) the next Day heading — or the rest
+    // of the protocol if this is the last day.
+    let endOffset = afterStart.findIndex(s => s.type === 'day');
+    if (endOffset === -1) endOffset = afterStart.length;
+    visible = [order[startIdx], ...afterStart.slice(0, endOffset)];
+  }
+
+  container.innerHTML = visible.map(s => {
     if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}</div>`;
     return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
   }).join('');
@@ -732,6 +773,12 @@ function applyViewModeDisplay() {
   const hasSteps = !!steps.length;
   document.getElementById('protocolCanvas').style.display = (hasSteps && viewMode === 'flow') ? 'block' : 'none';
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
+  // The day-select row also needs at least one <option value="day-id">
+  // (see syncPageDaySelectOptions, called from renderPageView) — hidden
+  // here regardless of that so it never flashes visible for a beat in
+  // flow view or on an empty protocol.
+  document.getElementById('pageDaySelectRow').style.display =
+    (hasSteps && viewMode === 'page' && document.getElementById('pageDaySelect').options.length > 1) ? 'flex' : 'none';
 }
 function setViewMode(mode) {
   viewMode = mode;
@@ -753,6 +800,10 @@ function setupViewModeToggle() {
   document.querySelectorAll('.view-mode-btn').forEach(btn => {
     btn.onclick = () => setViewMode(btn.dataset.mode);
   });
+  document.getElementById('pageDaySelect').onchange = (e) => {
+    pageSelectedDay = e.target.value;
+    renderPageView();
+  };
 }
 
 function render() {
