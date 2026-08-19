@@ -78,11 +78,11 @@
   .convo-time-row { display: flex; align-items: center; gap: 5px; }
   .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
   .convo-time.has-unread { color: #39ff14; font-weight: 700; }
-  /* Same badge rendered in both spots (convoItemHtml) -- name-side by
-     default (desktop has room), side-of-time under the mobile container
-     query below, so the name column can ellipsis instead of squeezing a
-     "Mauricio Zapata Group" + badge into a phone-width sidebar. */
-  .convo-side-badge { display: none; }
+  /* Badge lives next to the time, not the name -- .sidebar is resizable
+     (320px default) independent of the overall window/app width, so
+     "desktop vs mobile" (pra-app container) was the wrong signal: a wide
+     desktop window with the default-width sidebar hit the exact same
+     "Mauricio Zapata Group" + badge overflow the mobile-only fix targeted. */
   /* # / pin / star / count always render in this fixed order — hidden
      (visibility, not display) rather than omitted when a row doesn't have
      one, so every row's icons and count line up in the same columns. */
@@ -598,8 +598,6 @@
     .back-btn { display: inline-flex; }
     .bubble-row { max-width: 82%; }
     .picker-panel { width: calc(100cqi - 32px); left: 8px; }
-    .convo-name-badge { display: none; }
-    .convo-side-badge { display: inline-flex; }
   }
   /* Levels modal's chip cards — same visual language/pattern as the
      Strength Ninjas map popup and the Levels page (levels.html). */
@@ -1471,12 +1469,10 @@ function convoItemHtml(i) {
   const unreadBadge = `<div class="convo-unread-badge${(i.unreadCount > 0 || showReceiptTick) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
   const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
-  // Rendered in two spots, one hidden by container query below: next to
-  // the name (desktop, room to spare) or next to the time, above the pin
-  // row (mobile — a "Mauricio Zapata Group" + badge next to the name just
-  // doesn't fit a phone-width sidebar without truncating the name itself).
+  // Next to the time, above the pin row -- not next to the name, which
+  // truncates on the (resizable, 320px-default) sidebar long before the
+  // window itself is anywhere near mobile-narrow.
   const badge = roleBadgeHtml(i.avatarUser);
-  const nameBadge = badge ? `<span class="convo-name-badge">${badge}</span>` : '';
   const sideBadge = badge ? `<span class="convo-side-badge">${badge}</span>` : '';
   const isSelected = bulkSelectMode && bulkSelected.has(i.key);
   const checkbox = bulkSelectMode
@@ -1487,7 +1483,7 @@ function convoItemHtml(i) {
       ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${pinnedMark}${i.name}${nameBadge}</div>
+        <div class="convo-name">${pinnedMark}${i.name}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       <div class="convo-side">
