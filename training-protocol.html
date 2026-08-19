@@ -7,7 +7,11 @@
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
+  /* Bottom padding stays small on purpose -- fitCanvasToView() reserves
+     room for whatever's really below the canvas (including this), so a
+     generous 60px here just became 60px of dead reserved space the canvas
+     itself couldn't use, on every load. */
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 12px; }
   .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .icon-btn:disabled { opacity: .3; cursor: default; }
@@ -18,6 +22,24 @@
   .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
   .back-to-chat-btn { display: block; margin: 10px auto 0; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .82rem; cursor: pointer; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
+  .view-mode-toggle { display: flex; justify-content: center; gap: 6px; }
+  .view-mode-btn { padding: 5px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-family: var(--font-primary); font-weight: 700; font-size: .78rem; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+  .view-mode-btn.active { color: var(--pra-blue); border-color: var(--pra-blue); background: var(--pra-blue-dim); }
+  @media (hover: hover) { .view-mode-btn:not(.active):hover { color: #fff; border-color: var(--pra-dim); } }
+  /* Page view -- the flow graph flattened into a single scrolling column
+     (see linearStepOrder): a step's "right" neighbor renders below it, and
+     a step's own below-branch subtree finishes in full before its right
+     neighbor even starts, so "the next column over" (e.g. Day 2) always
+     lands underneath everything nested under the column before it (Day 1)
+     rather than interleaving. Plain document flow, not the canvas's
+     pan/zoom transform, so it's responsive for free — no fitCanvasToView
+     equivalent needed here. */
+  .protocol-page { max-width: 640px; margin: 24px auto 0; display: flex; flex-direction: column; gap: 16px; }
+  .page-day-heading { text-align: center; font-family: var(--font-secondary); font-size: 1.5rem; font-weight: 700; color: var(--pra-blue); padding-top: 18px; border-top: 1px solid var(--pra-border); }
+  .protocol-page > .page-day-heading:first-child { border-top: none; padding-top: 0; }
+  .page-step-card { padding: 14px 16px; }
+  .page-step-card video, .page-step-card img { width: 100%; border-radius: 8px; display: block; background: #000; }
+  .page-step-card .step-text { font-size: .92rem; line-height: 1.6; white-space: pre-wrap; max-height: none; margin-top: 0; }
   /* Node-graph canvas — a main horizontal chain of steps (left to right),
      with branches (started below any media step) hanging on their own row
      below the branch point and flowing right with their own steps, same as
@@ -144,7 +166,10 @@
       <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
       <div class="protocol-head-titles">
         <div class="client-name" id="clientName">Loading…</div>
-        <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:0;font-family:var(--font-secondary)">Custom Training Protocol</div>
+        <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
+          <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow">Flow</button>
+          <button class="view-mode-btn" id="pageViewBtn" data-mode="page">Page</button>
+        </div>
         <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
       </div>
       <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
@@ -160,6 +185,7 @@
       <div class="protocol-world" id="protocolWorld"></div>
       <div class="protocol-insert-layer" id="protocolInsertLayer"></div>
     </div>
+    <div class="protocol-page" id="protocolPage" style="display:none"></div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
   </div>
 
@@ -295,6 +321,7 @@ let pendingStepTarget = null;
 // textStepSaveBtn and the .step-edit wiring in render().
 let editingStepId = null;
 let canvasInitialized = false;
+let viewMode = 'flow'; // 'flow' | 'page' — see setViewMode/renderPageView
 
 // Undo/redo — every mutation calls snapshotBeforeChange() BEFORE touching
 // `steps`, so the stack holds pre-change states to roll back to. Capped so
@@ -376,6 +403,7 @@ async function init() {
   setupCanvasPanZoom();
   setupStepDrag();
   setupProtocolTemplates();
+  setupViewModeToggle();
   await loadSteps();
   wireModals();
   await setupBackToChatLink();
@@ -532,6 +560,35 @@ function computeLayout(list) {
   return pos;
 }
 
+// Page view's linear order — a depth-first walk that finishes a step's
+// entire below-branch subtree (its own row-chain, and whatever hangs below
+// each of THOSE steps, recursively) before moving on to its right/primary
+// neighbor. That's what makes "the next column over" (e.g. Day 2) land
+// underneath everything nested under the column before it (Day 1) instead
+// of interleaving the two Days' sub-steps.
+function linearStepOrder(list) {
+  const out = [];
+  function visit(node) {
+    out.push(node);
+    const below = branchChildrenOf(list, node)[0];
+    if (below) visit(below);
+    const next = primaryChildOf(list, node);
+    if (next) visit(next);
+  }
+  list.filter(s => !s.parentId).forEach(visit);
+  return out;
+}
+
+function renderPageView() {
+  const container = document.getElementById('protocolPage');
+  const order = linearStepOrder(steps).filter(s => s.type !== 'placeholder');
+  container.innerHTML = order.map(s => {
+    if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}</div>`;
+    return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
+  }).join('');
+  container.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+}
+
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
 
 // Every step has at most one "right" child (continue this row) and one
@@ -634,20 +691,52 @@ async function moveStepTo(stepId, target) {
   await saveSteps();
 }
 
+// Shows whichever of canvas/page matches viewMode (and hides the other) —
+// called on every render() and every toggle click, so switching views never
+// has to guess whether the other one's content is stale.
+function applyViewModeDisplay() {
+  const hasSteps = !!steps.length;
+  document.getElementById('protocolCanvas').style.display = (hasSteps && viewMode === 'flow') ? 'block' : 'none';
+  document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
+}
+function setViewMode(mode) {
+  viewMode = mode;
+  document.querySelectorAll('.view-mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+  if (mode === 'flow') {
+    // layoutRowHeights/drawConnectors measure real DOM heights, which read
+    // as 0 while the canvas sits display:none — re-running render() (rather
+    // than just flipping visibility back on) redoes that measurement for
+    // real now that it's visible again, in case an undo/redo happened while
+    // page view was showing (page view itself has no editing controls, but
+    // the header's undo/redo buttons work regardless of which view is up).
+    render();
+    if (canvasInitialized) fitCanvasToView();
+  } else {
+    applyViewModeDisplay();
+  }
+}
+function setupViewModeToggle() {
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.onclick = () => setViewMode(btn.dataset.mode);
+  });
+}
+
 function render() {
   const emptyHint = document.getElementById('emptyHint');
-  const canvas = document.getElementById('protocolCanvas');
   const firstBtn = document.getElementById('addFirstStepBtn');
   firstBtn.style.display = canEdit ? '' : 'none';
   firstBtn.onclick = () => openAddStepModal({ parentId: null, isBranchRoot: false, mode: 'continue' });
 
   if (!steps.length) {
     emptyHint.style.display = 'block';
-    canvas.style.display = 'none';
+    document.getElementById('viewModeToggle').style.display = 'none';
+    applyViewModeDisplay();
     return;
   }
   emptyHint.style.display = 'none';
-  canvas.style.display = 'block';
+  document.getElementById('viewModeToggle').style.display = '';
+  renderPageView();
+  applyViewModeDisplay();
 
   const world = document.getElementById('protocolWorld');
   const svg = document.getElementById('protocolConnectors');
@@ -904,14 +993,22 @@ function fitCanvasToView() {
   // ran off the bottom of the screen. Measure the header's ACTUAL rendered
   // height instead of guessing, and give the canvas exactly what's left.
   const rectBefore = canvasEl.getBoundingClientRect();
-  // Reserve whatever sits below the canvas's current bottom edge, measured
-  // as raw overflow rather than enumerated element-by-element — enumerating
-  // (wrap's own padding, the upload-status line) missed a fixed mobile
-  // bottom nav bar + its layout spacer that a shared header script injects
-  // as a sibling of .wrap, outside it entirely, so it was never counted.
-  // Reading straight off scrollHeight picks up anything down there
-  // regardless of where in the DOM it actually lives.
-  const belowCanvas = Math.max(0, document.documentElement.scrollHeight - rectBefore.bottom);
+  // Reserve exactly what's really below the canvas, measured element by
+  // element (wrap's own bottom padding, the upload-status line, and a
+  // fixed mobile bottom nav bar's layout spacer — a sibling of .wrap a
+  // shared header script injects, outside it entirely) rather than
+  // inferring it from document.documentElement.scrollHeight minus the
+  // canvas's current bottom edge. That measurement turned out to shift
+  // depending on the canvas's OWN current height (some interaction between
+  // its transformed/absolutely-positioned world content and how the
+  // document's total scroll height gets computed), so a resize or
+  // orientation change could feed a wrong height right back in as the next
+  // call's baseline and never actually converge — direct, independent
+  // measurements can't have that problem.
+  const wrapPaddingBottom = parseFloat(getComputedStyle(canvasEl.parentElement).paddingBottom) || 0;
+  const statusHeight = document.getElementById('uploadStatusMsg').getBoundingClientRect().height;
+  const bottomBarSpacer = document.getElementById('chat-app-bottom-bar-spacer');
+  const belowCanvas = wrapPaddingBottom + statusHeight + (bottomBarSpacer ? bottomBarSpacer.getBoundingClientRect().height : 0);
   // 150px floor — on a short viewport there isn't always 300+px of room
   // left after the header, and forcing that much just pushed the page into
   // overflow instead of letting the canvas (which already scales its own
@@ -937,6 +1034,18 @@ function fitCanvasToView() {
 window.addEventListener('resize', () => { if (canvasInitialized) fitCanvasToView(); });
 const protocolRootEl = document.querySelector('.pra-root');
 if (protocolRootEl) new ResizeObserver(() => { if (canvasInitialized) fitCanvasToView(); }).observe(protocolRootEl);
+// Belt-and-suspenders for an actual device rotation specifically (as
+// opposed to a plain window resize): some WebView versions report
+// window.innerWidth/innerHeight a beat late relative to when
+// 'orientationchange' fires, mid-rotation-animation — same reasoning as
+// the initial-load "settle once more shortly after" call below, applied
+// here too, now that fitCanvasToView() no longer has a stale-state bug to
+// make a wrong mid-transition read stick around uncorrected.
+window.addEventListener('orientationchange', () => {
+  if (!canvasInitialized) return;
+  fitCanvasToView();
+  setTimeout(fitCanvasToView, 300);
+});
 // Grabbing a card's drag handle picks the step up and shows a small pill
 // following the pointer; releasing over any + (mid-connector, add-next,
 // add-below) or an empty placeholder drops it there. Uses pointer events
