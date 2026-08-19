@@ -43,6 +43,16 @@ workflows:
           # every uploaded build "Missing Compliance" and requiring someone
           # to manually answer the encryption questionnaire each time.
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" ios/App/App/Info.plist
+          # Camera/mic usage descriptions — without these, iOS crashes the
+          # app outright (not a graceful permission-denial) the moment
+          # anything touches getUserMedia or the file picker's "Take Photo
+          # or Video" option. These were hand-added straight to ios/'s
+          # Info.plist once before, but rm -rf ios + cap add ios above wipes
+          # that every build and ios-config/ has no Info.plist template to
+          # restore it from — adding them here the same way as the
+          # encryption-exemption line above so they survive every build.
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Used to record your training clips directly in the app.'" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Used to record audio with your training clips.'" ios/App/App/Info.plist
           gem install xcodeproj --no-document
           # A real Unix timestamp instead of $CM_BUILD_NUMBER — that
           # variable came out empty when this ran (confirmed by the
