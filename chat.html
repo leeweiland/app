@@ -3781,11 +3781,26 @@ async function openPublishModal(fileId, suggestedName) {
   publishTrimStart = 0;
   publishTrimEnd = video.duration;
   renderPublishTrim();
-  // loadedmetadata only guarantees dimensions/duration, not a decoded frame
-  // — WebKit (iOS WKWebView included) shows solid black until something
-  // actually seeks or plays. Nudge forward a hair so the first frame paints
-  // immediately instead of leaving a black box until the user acts.
-  video.currentTime = 0.05;
+  // loadedmetadata only guarantees dimensions/duration, not a decoded frame —
+  // WebKit (iOS WKWebView included) shows solid black until something
+  // actually decodes and paints one. A bare currentTime nudge isn't reliable
+  // this early (often no frame data has even downloaded yet at
+  // loadedmetadata) — briefly playing (muted, so it's allowed without
+  // waiting on the original click's gesture window) then immediately
+  // pausing forces a real decode+paint, which a seek alone doesn't
+  // guarantee.
+  const wasMuted = video.muted;
+  video.muted = true;
+  try {
+    await video.play();
+    video.pause();
+  } catch (e) {
+    // Some engines still refuse programmatic play here — fall back to a
+    // plain seek nudge, which at least helps on browsers that don't need
+    // the play/pause trick.
+    video.currentTime = 0.05;
+  }
+  video.muted = wasMuted;
 
   openModal('publishModal');
 }
