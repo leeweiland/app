@@ -226,8 +226,8 @@
 .pra-avatar.role-gym { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
 /* Same green, dimmed -- a student shown as an individual (DM, thread
    header, contact row, profile card) rather than as a group-chat icon. */
-.pra-avatar.role-online-solo { border-color: #1f8a1f; box-shadow: 0 0 0 2px rgba(31,138,31,.35), 0 0 6px 1px rgba(31,138,31,.5); }
-.pra-avatar.role-gym-solo { border-color: #1f8a1f; box-shadow: 0 0 0 2px rgba(31,138,31,.35), 0 0 6px 1px rgba(31,138,31,.5); }
+.pra-avatar.role-online-solo { border-color: #104510; box-shadow: 0 0 0 2px rgba(16,69,16,.35), 0 0 6px 1px rgba(16,69,16,.5); }
+.pra-avatar.role-gym-solo { border-color: #104510; box-shadow: 0 0 0 2px rgba(16,69,16,.35), 0 0 6px 1px rgba(16,69,16,.5); }
 .pra-avatar.role-user { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35), 0 0 10px 2px rgba(255,255,255,.6); }
 .pra-avatar.role-group { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
 
