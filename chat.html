@@ -852,7 +852,7 @@
       <div class="camera-trim-wrap" id="cameraTrimWrap" style="display:none">
         <div class="camera-callout camera-callout-step2">
           <svg class="hand-arrow" viewBox="0 0 46 34"><path d="M4 4 Q6 22 23 28 T42 26" marker-end="url(#handArrowHead2)"/><defs><marker id="handArrowHead2" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
-          <div class="camera-handwritten">Step 2: Trim your training clip.</div>
+          <div class="camera-handwritten" id="cameraTrimStepLabel">Step 2: Trim your training clip.</div>
         </div>
         <div class="camera-trim-track" id="cameraTrimTrack">
           <div class="camera-trim-range" id="cameraTrimRange"></div>
@@ -864,7 +864,7 @@
         <button class="pra-btn pra-btn-ghost" id="cameraRetakeBtn" type="button">Retake</button>
         <div class="camera-callout camera-callout-step3">
           <svg class="hand-arrow" viewBox="0 0 54 40"><path d="M50 4 Q40 4 27 20 T6 34" marker-end="url(#handArrowHead3)"/><defs><marker id="handArrowHead3" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
-          <div class="camera-handwritten">Step 3: Send your training clip with your Coach.</div>
+          <div class="camera-handwritten" id="cameraSendStepLabel">Step 3: Send your training clip with your Coach.</div>
         </div>
         <button class="pra-btn" id="cameraSendBtn" type="button">Send</button>
       </div>
@@ -3081,22 +3081,17 @@ function setupComposer() {
   const gifBtn = document.getElementById('gifBtn');
   const templatesBtn = document.getElementById('templatesBtn');
   const attachBtn = document.getElementById('attachBtn');
-  const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
   const fileInput = document.getElementById('fileInput');
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
-  // `pointer: coarse` is the standard touch-vs-desktop signal (also used
-  // below for Enter-to-send). On touch, students/users get a camera-only
-  // icon instead of the paperclip — coaches/admins keep the paperclip
-  // either way, since drag-and-drop above already covers their case and
-  // they're overwhelmingly on desktop anyway.
+  // `pointer: coarse` is the standard touch-vs-desktop signal, used below
+  // for Enter-to-send. (The in-app camera-only icon that used to replace
+  // the paperclip here on touch devices was reverted — it needs a native
+  // permission the app isn't rebuilt with yet. The paperclip covers
+  // everyone again; a video picked from the library gets the trim/send
+  // flow below instead of camera capture's shoot step.)
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
-  if (isTouchDevice && !isStaffMe()) {
-    attachBtn.style.display = 'none';
-    cameraCaptureBtn.style.display = '';
-  }
-  cameraCaptureBtn.onclick = openCameraCapture;
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by the .react-trigger handler above) decides which one a pick means.
@@ -3166,9 +3161,20 @@ function setupComposer() {
   // already sent. Now every attach path (picker, paste, drag-drop below)
   // funnels through one staged-preview → explicit Send/Enter flow.
   fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) pendingPasteFiles.push(...fileInput.files);
+    const files = Array.from(fileInput.files || []);
     fileInput.value = '';
-    renderPastePreview();
+    if (!files.length) return;
+    // Students/users get a trim step before a video they picked from their
+    // library actually sends — same reasoning as the (currently unusable,
+    // pending a native rebuild) camera flow's own trim step, just entered
+    // from the library picker instead of a live shoot. Staff, and any
+    // non-video picks, keep the plain staged-preview flow.
+    const videoIdx = files.findIndex(f => f.type.startsWith('video/'));
+    if (!isStaffMe() && videoIdx !== -1) {
+      openUploadTrimFlow(files[videoIdx]);
+      files.splice(videoIdx, 1);
+    }
+    if (files.length) { pendingPasteFiles.push(...files); renderPastePreview(); }
   });
 
   // Staff-only drag-and-drop of media straight into the thread — same
@@ -3335,7 +3341,24 @@ async function openCameraCapture() {
   document.getElementById('cameraCaptureModal').classList.add('show');
   cameraShootMode = 'photo';
   setCameraShootMode('photo');
+  document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim your training clip.';
+  document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip with your Coach.';
+  document.getElementById('cameraRetakeBtn').style.display = '';
   await startCameraStream();
+}
+
+// Entry point for a video picked from the file library (paperclip) instead
+// of shot live — skips straight to the review/trim screen and renumbers
+// the callouts down to Step 1/2 since there's no shoot step here. Reuses
+// the same review screen, trim track, and send logic as the live-shoot
+// flow; only the labels, Retake button, and starting screen differ.
+function openUploadTrimFlow(file) {
+  document.getElementById('cameraCaptureModal').classList.add('show');
+  document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim your training clip.';
+  document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send your training clip with your Coach.';
+  document.getElementById('cameraRetakeBtn').style.display = 'none';
+  cameraCapturedBlob = file;
+  showCameraReviewVideo(file);
 }
 
 function closeCameraCapture() {
