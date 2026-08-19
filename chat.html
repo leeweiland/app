@@ -1464,7 +1464,7 @@ function convoItemHtml(i) {
       ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${pinnedMark}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${pinnedMark}${i.name}${roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       <div class="convo-side">
@@ -1717,7 +1717,7 @@ async function openConvo(id) {
   const convo = conversations.find(c => c.id === id);
   const threadAvatarEl = document.getElementById('threadAvatar');
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
-  const threadOtherUser = convo.type === 'dm' ? convoAvatarUser(convo) : null;
+  const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
   document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser);
   const groupMembersEl = document.getElementById('threadGroupMembers');
