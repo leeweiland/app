@@ -17,7 +17,13 @@
      scrolling mechanism the disabled flag doesn't touch. */
   html { height: 100%; overflow: hidden; }
   body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; height: var(--app-vh, 100dvh); overflow: hidden; }
-  .pra-root { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* position:absolute + inset:0 (against body's own fixed/inset:0 box)
+     instead of height:100% -- guarantees .pra-root's hit-testable box is
+     pixel-exact full-viewport on all four edges, so wheel-scroll works no
+     matter where over the page the cursor is, not just directly over
+     visible content. height:100% only pins vertical size; it doesn't force
+     the box to claim the full horizontal area the same explicit way. */
+  .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
   .controls { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
   #searchInput { flex: 1; min-width: 220px; }
