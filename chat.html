@@ -73,10 +73,10 @@
   .convo-item:hover { background: rgba(255,255,255,0.03); }
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
-  .convo-name { font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
   .convo-time-row { display: flex; align-items: center; gap: 5px; }
-  .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
+  .convo-time { font-family: Arial, sans-serif; font-weight: 400; font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
   .convo-time.has-unread { color: #39ff14; font-weight: 700; }
   /* Badge lives next to the time, not the name -- .sidebar is resizable
      (320px default) independent of the overall window/app width, so
@@ -95,7 +95,7 @@
      a number. */
   .convo-unread-badge.ticks-only { background: transparent; padding: 0; min-width: 0; height: auto; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
-  .convo-preview { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .convo-preview { font-family: Arial, sans-serif; font-weight: 400; font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
   .convo-preview-appt { color: #39ff14; }
   .empty-hint { padding: 24px 16px; color: var(--pra-dim); font-size: .82rem; text-align: center; }
@@ -207,7 +207,7 @@
   @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
   .bubble-row { display: flex; gap: 8px; max-width: 62%; }
   .bubble-row.mine { align-self: flex-end; flex-direction: row-reverse; }
-  .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; line-height: 1.4; word-break: break-word; }
+  .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; font-weight: 400; line-height: 1.4; word-break: break-word; color: #d4d4d8; }
   .bubble-row.mine .bubble { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .bubble.gif img, .bubble.media img, .bubble.media video { max-width: 260px; max-height: 320px; border-radius: 10px; display: block; object-fit: contain; }
   .bubble.media { padding: 5px; position: relative; }
