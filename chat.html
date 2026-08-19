@@ -1421,6 +1421,7 @@ function buildDirectory() {
   });
   items.sort((a, b) => {
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
     if (a.timestamp) return -1;
     if (b.timestamp) return 1;
