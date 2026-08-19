@@ -6,7 +6,18 @@
 <title>Profile — PRA Chat</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
-  body { margin: 0; }
+  /* iOS's native WKWebView page scroll is disabled app-wide
+     (capacitor.config.json ios.scrollEnabled:false — needed to stop the
+     whole page dragging around on chat.html, which never used native
+     scroll to begin with). That silently broke every OTHER page like this
+     one that just let the body scroll normally — nothing could undo it
+     from CSS once disabled natively. Same fix as chat.html: pin html/body
+     so nothing relies on native scroll, and let .pra-root do its own
+     overflow-y:auto instead, which is a separate (WebKit, not native)
+     scrolling mechanism the disabled flag doesn't touch. */
+  html { height: 100%; overflow: hidden; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; height: var(--app-vh, 100dvh); overflow: hidden; }
+  .pra-root { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 32px 20px 60px; }
   .profile-card { padding: 32px; text-align: center; }
   .avatar-lg { width: 100px; height: 100px; margin: 0 auto 16px; font-size: 2.2rem; }
