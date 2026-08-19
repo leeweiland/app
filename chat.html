@@ -3781,6 +3781,11 @@ async function openPublishModal(fileId, suggestedName) {
   publishTrimStart = 0;
   publishTrimEnd = video.duration;
   renderPublishTrim();
+  // loadedmetadata only guarantees dimensions/duration, not a decoded frame
+  // — WebKit (iOS WKWebView included) shows solid black until something
+  // actually seeks or plays. Nudge forward a hair so the first frame paints
+  // immediately instead of leaving a black box until the user acts.
+  video.currentTime = 0.05;
 
   openModal('publishModal');
 }

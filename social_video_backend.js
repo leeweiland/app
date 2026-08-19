@@ -488,6 +488,10 @@ export async function handleSocialVideoRequest(req, res, url) {
       publish.results = results;
     } catch (e) {
       publish.error = e.message;
+      // No stack trace was being logged for this — meant every failure here
+      // (like the ByteString/header-encoding bug) surfaced only as a bare
+      // message with no way to tell which call inside this block threw it.
+      console.error("[save-and-publish] publish step failed:", e.stack || e);
     } finally {
       [tmpIn, tmpTrimmed, tmpVertical].forEach(f => { try { unlinkSync(f); } catch {} });
       // Discard the vertical copy regardless of how far publishing got —
