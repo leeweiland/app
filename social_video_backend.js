@@ -143,16 +143,31 @@ export async function generateCaptions({ description }) {
 
 // ── Vertical reframe (ffmpeg, ported from root server.js's buildDynamicCrop) ──
 // Downsamples keyframes to ≤40 control points so the ffmpeg filter expression
-// stays a sane length, then builds a piecewise-linear crop x/y expression —
-// unchanged from the original algorithm, just re-hosted.
-function buildDynamicCrop(kfs, vw, vh, fW, fH, startTime) {
+// stays a sane length, then builds a piecewise-linear crop x/y expression.
+//
+// Bug fixed here vs. the original port: cropW/cropH used to be derived from
+// frameW/frameH (240/426) directly — but those are a client-side design-
+// space reference for the UI's pan-limit math, not literal pixel dimensions
+// in the SOURCE video's own coordinate space. Using them as if they were
+// produced a crop window only ~200px wide regardless of the real video's
+// resolution — an extreme, blown-out zoom on any real (1080p+) clip. Fixed
+// by deriving a "base" 9:16 crop from the real vw/vh first (identical math
+// to the static-crop branch below), then zooming IN from that by dividing
+// by each keyframe's scale — the offsetX/offsetY math was already correct
+// (the /s there cancels out against how offsetX was computed client-side),
+// only the crop window's SIZE was wrong.
+function buildDynamicCrop(kfs, vw, vh, outW, outH, startTime) {
   const MAX_KFS = 40;
   const sampled = kfs.length > MAX_KFS
     ? kfs.filter((_, i) => i === 0 || i === kfs.length - 1 || i % Math.ceil(kfs.length / MAX_KFS) === 0)
     : kfs;
+  const targetAspect = outW / outH;
+  let baseCropW, baseCropH;
+  if (vw / vh > targetAspect) { baseCropH = vh; baseCropW = Math.round(vh * targetAspect); }
+  else { baseCropW = vw; baseCropH = Math.round(vw / targetAspect); }
   const s = (sampled[0]?.scale || 100) / 100;
-  const cropW = Math.min(Math.round(fW / s), vw);
-  const cropH = Math.min(Math.round(fH / s), vh);
+  const cropW = Math.min(Math.round(baseCropW / s), vw);
+  const cropH = Math.min(Math.round(baseCropH / s), vh);
   const maxCX = Math.max(0, vw - cropW);
   const maxCY = Math.max(0, vh - cropH);
   const pts = sampled.map(kf => ({
@@ -176,14 +191,20 @@ function buildDynamicCrop(kfs, vw, vh, fW, fH, startTime) {
   return { cropW, cropH, xExpr: mkExpr("x", maxCX), yExpr: mkExpr("y", maxCY) };
 }
 
-// keyframes: [{time, scale, offsetX, offsetY}, ...] from the client-side
-// tracker (see the favorite-modal's runAutoTrack), or omitted entirely for a
-// plain static center crop (subject wasn't tracked / video has no tracking).
-export function reframeVideoVertical(inputPath, outputPath, { videoWidth, videoHeight, frameW = 240, frameH = 426, startTime = 0, keyframes, squareMode = false }) {
+// Vertical source footage (already taller than wide) doesn't need cropping
+// at all — passed straight through with a stream copy (fast, lossless).
+// Horizontal footage gets reframed into 9:16 — AI-tracked (buildDynamicCrop,
+// now fixed) if keyframes came from the client's subject tracker, else a
+// plain static center crop.
+export function reframeVideoVertical(inputPath, outputPath, { videoWidth, videoHeight, startTime = 0, keyframes, squareMode = false }) {
+  if (videoWidth <= videoHeight) {
+    execFileSync(ffmpegPath, ["-y", "-i", inputPath, "-c", "copy", "-movflags", "+faststart", outputPath], { stdio: ["pipe", "pipe", "pipe"], timeout: 120000 });
+    return;
+  }
   const outW = 1080, outH = squareMode ? 1080 : 1920;
   let cropW, cropH, xExpr, yExpr;
   if (keyframes && keyframes.length >= 2) {
-    ({ cropW, cropH, xExpr, yExpr } = buildDynamicCrop(keyframes, videoWidth, videoHeight, frameW, frameH, startTime));
+    ({ cropW, cropH, xExpr, yExpr } = buildDynamicCrop(keyframes, videoWidth, videoHeight, outW, outH, startTime));
   } else {
     const targetAspect = outW / outH;
     if (videoWidth / videoHeight > targetAspect) { cropH = videoHeight; cropW = Math.round(videoHeight * targetAspect); }
@@ -303,20 +324,39 @@ export async function getScheduledPosts(startDate, endDate) {
   return data.data || [];
 }
 
-// "Next open day" = earliest future calendar day (Metricool's own displayed
-// date, per each post's own timezone) with ZERO Powerbatics posts scheduled
-// on any platform — per Lee's explicit choice of "shared day for everything"
-// over independently checking each platform.
+// en-CA formats as YYYY-MM-DD — matches the literal date portion Metricool
+// posts are submitted/echoed with, given every post below is scheduled at a
+// fixed America/Anchorage wall-clock time.
+function anchorageDateStr(date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Anchorage" }).format(date);
+}
+function addDaysToDateStr(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+// "Next open day" = earliest future ANCHORAGE calendar day with ZERO
+// Powerbatics posts scheduled on any platform — per Lee's explicit choice of
+// "shared day for everything" over independently checking each platform.
+// Previously computed "tomorrow" off a UTC midnight boundary while every
+// post is actually scheduled at a fixed America/Anchorage wall-clock time —
+// those two clocks can disagree about which calendar day "today"/"tomorrow"
+// even is by up to ~9 hours, which was producing wrong/colliding days.
 export async function findNextOpenDay({ withinDays = 30 } = {}) {
-  const start = new Date(); start.setUTCDate(start.getUTCDate() + 1); start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start); end.setUTCDate(end.getUTCDate() + withinDays);
+  const startDay = addDaysToDateStr(anchorageDateStr(new Date()), 1);
+  // getScheduledPosts just needs a real Date range to query Metricool with —
+  // padded a day either side since it's only fetching a candidate window,
+  // not itself the source of truth for which day something lands on.
+  const start = new Date(startDay + "T00:00:00Z");
+  const end = new Date(start); end.setUTCDate(end.getUTCDate() + withinDays + 1);
   const posts = await getScheduledPosts(start, end);
   const bookedDays = new Set(posts.map(p => (p.publicationDate?.dateTime || "").slice(0, 10)));
-  const d = new Date(start);
+  let day = startDay;
   for (let i = 0; i < withinDays; i++) {
-    const key = d.toISOString().slice(0, 10);
-    if (!bookedDays.has(key)) return key; // YYYY-MM-DD
-    d.setUTCDate(d.getUTCDate() + 1);
+    if (!bookedDays.has(day)) return day; // YYYY-MM-DD
+    day = addDaysToDateStr(day, 1);
   }
   return null;
 }
@@ -330,7 +370,12 @@ export function buildMetricoolPostBody({ platformId, accountId, text, title, med
     text: platformId === "fb" && title ? (text ? `${title}\n\n${text}` : title) : (text || ""),
     media: mediaUrl ? [mediaUrl] : [],
     saveExternalMediaFiles: true,
-    publicationDate: { dateTime: dateTimeStr, timezone: "UTC" },
+    // dateTimeStr is always a literal "T03:00:00" wall-clock string — tagging
+    // it timezone:"UTC" was scheduling it at 3am UTC, i.e. ~6-7pm the
+    // PREVIOUS day in Anchorage, not "3am Anchorage" as intended. That also
+    // explains the day-collision bug: findNextOpenDay's bookedDays came back
+    // shifted a day from what the calendar actually shows.
+    publicationDate: { dateTime: dateTimeStr, timezone: "America/Anchorage" },
     autoPublish: true,
   };
   if (networkType === "instagram") body.instagramData = { type: platformId === "igs" ? "STORY" : "REEL" };
@@ -488,11 +533,12 @@ export async function handleSocialVideoRequest(req, res, url) {
       const captions = await generateCaptions({ description: label.trim() });
       const accounts = await getPbConnectedAccounts();
       // "All available accounts" = every network this brand actually has
-      // connected — not a fixed list, and not the Story sub-variants
-      // (those are post-types on top of an account, not accounts of their
-      // own), matching "post to all available accounts" literally.
+      // connected — plus the FB/IG Story variant riding along on the same
+      // connected account, per Lee's explicit scoping decision to keep
+      // FB/IG Stories in (only YouTube Community posts were dropped).
       const networkToPlatform = { facebook: "fb", instagram: "ig", youtube: "yt", tiktok: "tt", linkedin: "li", twitter: "x" };
-      const platformIds = Object.entries(accounts).filter(([, id]) => !!id).map(([net]) => networkToPlatform[net]).filter(Boolean);
+      const storyPlatform = { facebook: "fbs", instagram: "igs" };
+      const platformIds = Object.entries(accounts).filter(([, id]) => !!id).flatMap(([net]) => [networkToPlatform[net], storyPlatform[net]].filter(Boolean));
 
       const day = await findNextOpenDay({});
       if (!day) throw new Error("Could not find an open day to schedule on");
@@ -501,7 +547,10 @@ export async function handleSocialVideoRequest(req, res, url) {
       const results = [];
       for (const platformId of platformIds) {
         const accountId = accounts[NETWORK_TYPE_MAP[platformId]];
-        const plat = captions[platformId] || {};
+        // Stories reuse their parent platform's caption — CAPTION_PLATFORMS
+        // has no separate fbs/igs entry (a Story doesn't need its own).
+        const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
+        const plat = captions[captionKey] || {};
         const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr });
         try {
           await schedulePost(postBody);

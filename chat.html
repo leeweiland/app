@@ -3939,7 +3939,10 @@ async function runPublishSave() {
   if (!label) { status.textContent = 'Give it a label first.'; return; }
   btn.disabled = true;
 
-  await runPublishTracking(); // best-effort — leaves publishKeyframes null on failure, backend falls back to a center crop
+  // Vertical source video is never cropped (see reframeVideoVertical) —
+  // tracking it would just be wasted TF.js load + per-frame detection time
+  // for output the server would never use anyway.
+  if (publishVideoWidth > publishVideoHeight) await runPublishTracking();
 
   status.textContent = 'Saving…';
   try {
