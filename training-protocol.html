@@ -19,8 +19,9 @@
   .icon-btn svg { width: 18px; height: 18px; }
   .protocol-head { display: flex; align-items: center; gap: 12px; }
   .protocol-head-titles { flex: 1; min-width: 0; }
-  .client-name { text-align: center; font-size: .95rem; color: var(--pra-dim); margin-bottom: 4px; }
-  .back-to-chat-btn { display: block; margin: 10px auto 0; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .82rem; cursor: pointer; transition: color .15s, border-color .15s; }
+  .client-name-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 8px; }
+  .client-name { font-size: .95rem; color: var(--pra-dim); }
+  .back-to-chat-btn { flex-shrink: 0; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .82rem; cursor: pointer; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .view-mode-toggle { display: flex; justify-content: center; gap: 6px; }
   .view-mode-btn { padding: 5px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-family: var(--font-primary); font-weight: 700; font-size: .78rem; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
@@ -165,12 +166,14 @@
       <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
       <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
       <div class="protocol-head-titles">
-        <div class="client-name" id="clientName">Loading…</div>
+        <div class="client-name-row">
+          <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
+          <div class="client-name" id="clientName">Loading…</div>
+        </div>
         <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow">Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page">Page</button>
         </div>
-        <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
       </div>
       <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
       <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
@@ -566,14 +569,28 @@ function computeLayout(list) {
 // neighbor. That's what makes "the next column over" (e.g. Day 2) land
 // underneath everything nested under the column before it (Day 1) instead
 // of interleaving the two Days' sub-steps.
+function isLeaf(list, step) { return !primaryChildOf(list, step) && !branchChildrenOf(list, step)[0]; }
+
 function linearStepOrder(list) {
   const out = [];
   function visit(node) {
     out.push(node);
-    const below = branchChildrenOf(list, node)[0];
-    if (below) visit(below);
     const next = primaryChildOf(list, node);
-    if (next) visit(next);
+    const below = branchChildrenOf(list, node)[0];
+    // A right-child with no children of its own (a plain caption next to
+    // a video, "10 seconds" next to a rep count) reads as one inline unit
+    // with its parent -- pull it in immediately, right after the step it
+    // annotates, before moving down to the next step in this column.
+    // A right-child that itself has content hanging off it (Day 2, with
+    // its own whole below-chain) is a new section, not an annotation --
+    // same as before, it still has to wait for this entire column (Day
+    // 1's full below-chain) to finish first, or "the next column over"
+    // would land in the middle of the column before it instead of under
+    // it whole.
+    const nextIsLeaf = next && isLeaf(list, next);
+    if (nextIsLeaf) visit(next);
+    if (below) visit(below);
+    if (next && !nextIsLeaf) visit(next);
   }
   list.filter(s => !s.parentId).forEach(visit);
   return out;
