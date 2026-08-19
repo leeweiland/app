@@ -3775,6 +3775,12 @@ async function openPublishModal(fileId, suggestedName) {
 
   const video = document.getElementById('publishSourceVideo');
   video.src = '/api/chat/media/' + fileId;
+  // Open the modal BEFORE loading/decoding anything — .modal-backdrop is
+  // display:none until this runs, and WebKit doesn't paint (or reliably
+  // even decode) a frame for a hidden video element. The play/pause trick
+  // below silently did nothing when it ran first against a still-hidden
+  // video, which is why the black screen came back.
+  openModal('publishModal');
   await new Promise((resolve) => video.addEventListener('loadedmetadata', resolve, { once: true }));
   publishVideoWidth = video.videoWidth || 1920;
   publishVideoHeight = video.videoHeight || 1080;
@@ -3801,8 +3807,6 @@ async function openPublishModal(fileId, suggestedName) {
     video.currentTime = 0.05;
   }
   video.muted = wasMuted;
-
-  openModal('publishModal');
 }
 
 // ── AI motion tracking (TF.js + COCO-SSD, ported from social-video.html) ───
