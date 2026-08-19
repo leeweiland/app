@@ -3624,7 +3624,19 @@ function startCameraRecording() {
   cameraRecorder = new MediaRecorder(cameraStream, mimeType ? { mimeType } : undefined);
   cameraRecorder.ondataavailable = (e) => { if (e.data.size) cameraRecordedChunks.push(e.data); };
   cameraRecorder.onstop = () => {
-    const blob = new Blob(cameraRecordedChunks, { type: cameraRecorder.mimeType || 'video/webm' });
+    // The type we explicitly requested (and already confirmed supported via
+    // isTypeSupported) is more trustworthy than cameraRecorder.mimeType,
+    // which WebKit has been known to report empty even after a real type
+    // was negotiated — and 'video/webm' as a blind final fallback is flat
+    // wrong on iOS/Safari specifically: it has no VP8/VP9 encoder and can
+    // never actually produce webm, so that fallback was mislabeling real
+    // MP4 bytes as webm. That survives all the way to the server's
+    // video-vs-image classification and the stored Content-Type — playing
+    // fine immediately via the same-session blob: URL (which many browsers
+    // sniff rather than trust the label for) but breaking once served back
+    // from storage with the wrong Content-Type, which is what showed up as
+    // a broken "?" bubble instead of the video after it was actually sent.
+    const blob = new Blob(cameraRecordedChunks, { type: mimeType || cameraRecorder.mimeType || 'video/mp4' });
     cameraCapturedBlob = blob;
     cameraCapturedIsVideo = true;
     showCameraReviewVideo(blob);
