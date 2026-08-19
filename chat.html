@@ -442,7 +442,14 @@
      — the handles/playhead position themselves as percentages of the
      zoomed width, same math either way, so nothing else needs to know
      zoom happened. */
-  .camera-trim-track-clip { overflow-x: auto; overflow-y: hidden; border-radius: 8px; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
+  /* touch-action:none — panning is handled manually in JS (scrollLeft),
+     same as zoom, so nothing is left for the browser's own gesture
+     recognizer to claim. touch-action:pan-x here previously let iOS decide
+     early whether a two-finger touch "was" a horizontal pan and route it
+     to native scrolling before JS ever saw the second finger, which is why
+     pinch-zoom only worked for a roughly-horizontal pinch and not a
+     vertical or diagonal one. */
+  .camera-trim-track-clip { overflow-x: auto; overflow-y: hidden; border-radius: 8px; touch-action: none; -webkit-overflow-scrolling: touch; }
   .camera-trim-track { position: relative; height: 46px; width: calc(var(--trim-zoom, 1) * 100%); min-width: 100%; border-radius: 8px; background: rgba(255,255,255,0.12); touch-action: none; }
   .camera-trim-range { position: absolute; top: 0; bottom: 0; background: rgba(0,155,255,0.35); border-top: 2px solid var(--pra-blue); border-bottom: 2px solid var(--pra-blue); }
   .camera-trim-playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 1; }
@@ -3368,9 +3375,17 @@ function setupCameraCapture() {
   // scales --trim-zoom (a plain width multiplier) rather than anything
   // video-related, so the existing percentage-based handle/playhead/range
   // positioning keeps working unchanged; only the physical track width
-  // (and the clip container's own scroll position) changes.
+  // (and the clip container's own scroll position) changes. Distance is
+  // plain Euclidean (Math.hypot), so it already responds to a pinch at any
+  // angle — vertical, horizontal, diagonal, doesn't matter. Panning is
+  // handled manually here too (single finger, via scrollLeft) since
+  // touch-action:none on the container hands the browser nothing to do
+  // gestures with on its own — needed so iOS can't pre-decide a two-finger
+  // touch "is" a horizontal pan before JS sees the second finger, which is
+  // what limited pinch-zoom to roughly-horizontal gestures before.
   const trimClip = document.getElementById('cameraTrimTrackClip');
   const MIN_ZOOM = 1, MAX_ZOOM = 8;
+  let cameraTrimPanStartX = null, cameraTrimPanStartScrollLeft = 0;
   function pinchDistance(touches) {
     const [a, b] = touches;
     return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
@@ -3379,17 +3394,26 @@ function setupCameraCapture() {
     if (e.touches.length === 2) {
       cameraTrimPinchStartDist = pinchDistance(e.touches);
       cameraTrimPinchStartZoom = cameraTrimZoom;
+      cameraTrimPanStartX = null; // a second finger landing mid-pan hands off to pinch instead
+    } else if (e.touches.length === 1) {
+      cameraTrimPanStartX = e.touches[0].clientX;
+      cameraTrimPanStartScrollLeft = trimClip.scrollLeft;
     }
   }, { passive: true });
   trimClip.addEventListener('touchmove', (e) => {
-    if (e.touches.length !== 2 || cameraTrimPinchStartDist == null) return;
-    e.preventDefault();
-    const dist = pinchDistance(e.touches);
-    cameraTrimZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cameraTrimPinchStartZoom * (dist / cameraTrimPinchStartDist)));
-    track.style.setProperty('--trim-zoom', cameraTrimZoom);
+    if (e.touches.length === 2 && cameraTrimPinchStartDist != null) {
+      e.preventDefault();
+      const dist = pinchDistance(e.touches);
+      cameraTrimZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cameraTrimPinchStartZoom * (dist / cameraTrimPinchStartDist)));
+      track.style.setProperty('--trim-zoom', cameraTrimZoom);
+    } else if (e.touches.length === 1 && cameraTrimPanStartX != null) {
+      e.preventDefault();
+      trimClip.scrollLeft = cameraTrimPanStartScrollLeft - (e.touches[0].clientX - cameraTrimPanStartX);
+    }
   }, { passive: false });
   trimClip.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) cameraTrimPinchStartDist = null;
+    if (e.touches.length === 0) cameraTrimPanStartX = null;
   });
 }
 
