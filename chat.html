@@ -75,8 +75,14 @@
   .convo-meta { min-width: 0; flex: 1; }
   .convo-name { font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
+  .convo-time-row { display: flex; align-items: center; gap: 5px; }
   .convo-time { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
   .convo-time.has-unread { color: #39ff14; font-weight: 700; }
+  /* Same badge rendered in both spots (convoItemHtml) -- name-side by
+     default (desktop has room), side-of-time under the mobile container
+     query below, so the name column can ellipsis instead of squeezing a
+     "Mauricio Zapata Group" + badge into a phone-width sidebar. */
+  .convo-side-badge { display: none; }
   /* # / pin / star / count always render in this fixed order — hidden
      (visibility, not display) rather than omitted when a row doesn't have
      one, so every row's icons and count line up in the same columns. */
@@ -592,6 +598,8 @@
     .back-btn { display: inline-flex; }
     .bubble-row { max-width: 82%; }
     .picker-panel { width: calc(100cqi - 32px); left: 8px; }
+    .convo-name-badge { display: none; }
+    .convo-side-badge { display: inline-flex; }
   }
   /* Levels modal's chip cards — same visual language/pattern as the
      Strength Ninjas map popup and the Levels page (levels.html). */
@@ -1455,6 +1463,13 @@ function convoItemHtml(i) {
   const unreadBadge = `<div class="convo-unread-badge${(i.unreadCount > 0 || showReceiptTick) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
   const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
+  // Rendered in two spots, one hidden by container query below: next to
+  // the name (desktop, room to spare) or next to the time, above the pin
+  // row (mobile — a "Mauricio Zapata Group" + badge next to the name just
+  // doesn't fit a phone-width sidebar without truncating the name itself).
+  const badge = roleBadgeHtml(i.avatarUser);
+  const nameBadge = badge ? `<span class="convo-name-badge">${badge}</span>` : '';
+  const sideBadge = badge ? `<span class="convo-side-badge">${badge}</span>` : '';
   const isSelected = bulkSelectMode && bulkSelected.has(i.key);
   const checkbox = bulkSelectMode
     ? `<div class="convo-select-checkbox"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
@@ -1464,11 +1479,14 @@ function convoItemHtml(i) {
       ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${pinnedMark}${i.name}${roleBadgeHtml(i.avatarUser)}</div>
+        <div class="convo-name">${pinnedMark}${i.name}${nameBadge}</div>
         <div class="convo-preview">${i.preview}</div>
       </div>
       <div class="convo-side">
-        <div class="convo-time${i.unread ? ' has-unread' : ''}">${timeLabel}</div>
+        <div class="convo-time-row">
+          ${sideBadge}
+          <div class="convo-time${i.unread ? ' has-unread' : ''}">${timeLabel}</div>
+        </div>
         <div class="convo-actions-row">
           ${channelBtn}
           ${pinBtn}
