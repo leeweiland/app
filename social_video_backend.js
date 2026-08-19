@@ -362,112 +362,128 @@ export async function handleSocialVideoRequest(req, res, url) {
     }
   }
 
-  if (p === "/api/social-video/generate-caption" && req.method === "POST") {
-    try {
-      const body = await readJsonBody(req);
-      const captions = await generateCaptions({ description: body.description || "" });
-      sendJson(res, 200, { captions, platforms: CAPTION_PLATFORMS });
-    } catch (e) {
-      sendJson(res, 500, { error: e.message });
-    }
-    return true;
-  }
+  // The entire favorite-and-publish pipeline behind one call — a coach only
+  // ever trims and labels a clip, everything else (tracking, vertical
+  // reframe, captions, finding an open day, scheduling to every connected
+  // platform) happens automatically here. Two Drive artifacts come out of
+  // this: the trimmed clip in its ORIGINAL orientation, saved permanently
+  // under the coach's label (this is "the favorite"), and a vertical
+  // reframed copy that only exists long enough for Metricool to ingest it
+  // before being deleted — Metricool copies the media into its own storage
+  // on schedule (saveExternalMediaFiles:true in the post body), so nothing
+  // is lost by discarding our temp copy afterward.
+  if (p === "/api/social-video/save-and-publish" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const { driveFileId, trimStart, trimEnd, label, videoWidth, videoHeight, keyframes } = body;
+    if (!driveFileId) return void sendJson(res, 400, { error: "driveFileId required" });
+    if (!label || !label.trim()) return void sendJson(res, 400, { error: "Label required" });
 
-  if (p === "/api/social-video/next-open-day" && req.method === "GET") {
-    try {
-      const day = await findNextOpenDay({});
-      sendJson(res, 200, { day });
-    } catch (e) {
-      sendJson(res, 500, { error: e.message });
-    }
-    return true;
-  }
+    const accessToken = await getDriveAccessToken();
+    const { tmpdir } = await import("os");
+    const { randomUUID } = await import("crypto");
+    const { uploadStreamToDrive } = await import("./chat_backend.js");
+    const { createReadStream } = await import("fs");
+    const ts = randomUUID();
+    const tmpIn = join(tmpdir(), `sv_in_${ts}.mp4`);
+    const tmpTrimmed = join(tmpdir(), `sv_trim_${ts}.mp4`);
+    const tmpVertical = join(tmpdir(), `sv_vert_${ts}.mp4`);
+    let savedFileId = null, tempVerticalFileId = null;
 
-  if (p === "/api/social-video/reframe" && req.method === "POST") {
-    // Downloads the source clip from Drive (chat-app's own Drive folder —
-    // the favorited video is already a chat message's driveFileId, no
-    // separate brand-token juggling needed the way the original did),
-    // trims + vertically reframes it, re-uploads the result, and returns
-    // its new driveFileId. Does NOT touch Metricool — scheduling is a
-    // separate, explicit step.
     try {
-      const body = await readJsonBody(req);
-      const { driveFileId, trimStart, trimEnd, videoWidth, videoHeight, keyframes, squareMode } = body;
-      if (!driveFileId) return void sendJson(res, 400, { error: "driveFileId required" });
-      const accessToken = await getDriveAccessToken();
       const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!dlRes.ok) throw new Error(`Drive download failed: ${dlRes.status}`);
-      const buf = Buffer.from(await dlRes.arrayBuffer());
-      const { tmpdir } = await import("os");
-      const { randomUUID } = await import("crypto");
-      const ts = randomUUID();
-      const tmpIn = join(tmpdir(), `sv_in_${ts}.mp4`);
-      const tmpTrimmed = join(tmpdir(), `sv_trim_${ts}.mp4`);
-      const tmpOut = join(tmpdir(), `sv_out_${ts}.mp4`);
-      writeFileSync(tmpIn, buf);
-      try {
-        let sourcePath = tmpIn;
-        if (Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart) {
-          execFileSync(ffmpegPath, [
-            "-y", "-ss", String(Math.max(0, trimStart)), "-i", tmpIn,
-            "-t", String(Math.max(0.1, trimEnd - trimStart)),
-            "-c:v", "libx264", "-c:a", "aac", "-preset", "veryfast", "-avoid_negative_ts", "make_zero",
-            tmpTrimmed,
-          ], { stdio: ["pipe", "pipe", "pipe"], timeout: 60000 });
-          sourcePath = tmpTrimmed;
-        }
-        reframeVideoVertical(sourcePath, tmpOut, {
-          videoWidth: videoWidth || 1920, videoHeight: videoHeight || 1080,
-          startTime: Number(trimStart) || 0, keyframes, squareMode: !!squareMode,
-        });
-        const { uploadStreamToDrive } = await import("./chat_backend.js");
-        const { createReadStream } = await import("fs");
-        const cfg = readJson("chat_admin_config.json", {});
-        const result = await uploadStreamToDrive(createReadStream(tmpOut), {
-          name: `POWERBATICS VERTICAL ${Date.now()}.mp4`,
-          mimeType: "video/mp4",
-          folderId: cfg.favoritesFolderId || cfg.chatVideosFolderId,
-          accessToken,
-        });
-        const publicMediaUrl = await makeDriveFilePublic(result.id, accessToken);
-        sendJson(res, 200, { driveFileId: result.id, publicMediaUrl });
-      } finally {
-        [tmpIn, tmpTrimmed, tmpOut].forEach(f => { try { unlinkSync(f); } catch {} });
-      }
-    } catch (e) {
-      sendJson(res, 500, { error: e.message });
-    }
-    return true;
-  }
+      writeFileSync(tmpIn, Buffer.from(await dlRes.arrayBuffer()));
 
-  if (p === "/api/social-video/schedule" && req.method === "POST") {
-    // The real publish step — schedules the ALREADY-REFRAMED clip (its
-    // Drive file must already be publicly-fetchable for Metricool to pull
-    // it as `media`) across whichever platforms the coach picked.
+      // Trim — this is required, not optional, since the saved-to-Drive
+      // file IS the trimmed clip (untrimmed start/end just means "keep the
+      // whole thing," not "skip trimming").
+      const start = Number.isFinite(trimStart) ? Math.max(0, trimStart) : 0;
+      const end = Number.isFinite(trimEnd) && trimEnd > start ? trimEnd : null;
+      execFileSync(ffmpegPath, [
+        "-y", "-ss", String(start), "-i", tmpIn,
+        ...(end ? ["-t", String(end - start)] : []),
+        "-c:v", "libx264", "-c:a", "aac", "-preset", "veryfast", "-avoid_negative_ts", "make_zero",
+        tmpTrimmed,
+      ], { stdio: ["pipe", "pipe", "pipe"], timeout: 60000 });
+
+      // Save the trimmed clip permanently — this must succeed before
+      // anything else; if publishing fails downstream, the coach still has
+      // their labeled clip safely in Drive either way.
+      const cfg = readJson("chat_admin_config.json", {});
+      const saveResult = await uploadStreamToDrive(createReadStream(tmpTrimmed), {
+        name: label.trim().slice(0, 200) + ".mp4",
+        mimeType: "video/mp4",
+        folderId: cfg.favoritesFolderId || cfg.chatVideosFolderId,
+        accessToken,
+      });
+      savedFileId = saveResult.id;
+    } catch (e) {
+      [tmpIn, tmpTrimmed, tmpVertical].forEach(f => { try { unlinkSync(f); } catch {} });
+      return void sendJson(res, 500, { error: "Could not save clip: " + e.message });
+    }
+
+    // From here on, a failure still reports success on the save (already
+    // done above) — publishing is best-effort on top of it.
+    const publish = { published: false };
     try {
-      const body = await readJsonBody(req);
-      const { driveFileId, mediaUrl, captions, platformIds, dateTimeStr } = body;
-      if (!mediaUrl) return void sendJson(res, 400, { error: "mediaUrl required (a URL Metricool can fetch — see notes)" });
-      if (!Array.isArray(platformIds) || !platformIds.length) return void sendJson(res, 400, { error: "platformIds required" });
+      reframeVideoVertical(tmpTrimmed, tmpVertical, {
+        videoWidth: videoWidth || 1920, videoHeight: videoHeight || 1080,
+        startTime: 0, keyframes,
+      });
+      const cfg = readJson("chat_admin_config.json", {});
+      const vertResult = await uploadStreamToDrive(createReadStream(tmpVertical), {
+        name: `POWERBATICS VERTICAL ${Date.now()}.mp4`,
+        mimeType: "video/mp4",
+        folderId: cfg.favoritesFolderId || cfg.chatVideosFolderId,
+        accessToken,
+      });
+      tempVerticalFileId = vertResult.id;
+      const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
+
+      const captions = await generateCaptions({ description: label.trim() });
       const accounts = await getPbConnectedAccounts();
+      // "All available accounts" = every network this brand actually has
+      // connected — not a fixed list, and not the Story sub-variants
+      // (those are post-types on top of an account, not accounts of their
+      // own), matching "post to all available accounts" literally.
+      const networkToPlatform = { facebook: "fb", instagram: "ig", youtube: "yt", tiktok: "tt", linkedin: "li", twitter: "x" };
+      const platformIds = Object.entries(accounts).filter(([, id]) => !!id).map(([net]) => networkToPlatform[net]).filter(Boolean);
+
+      const day = await findNextOpenDay({});
+      if (!day) throw new Error("Could not find an open day to schedule on");
+      const dateTimeStr = day + "T03:00:00";
+
       const results = [];
       for (const platformId of platformIds) {
-        const networkType = NETWORK_TYPE_MAP[platformId];
-        const accountId = accounts[networkType];
-        if (!accountId) { results.push({ platformId, error: `No connected ${networkType} account found` }); continue; }
-        const plat = captions?.[platformId.replace(/s$/, "")] || {}; // fbs/igs share fb/ig's caption
-        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl, dateTimeStr });
+        const accountId = accounts[NETWORK_TYPE_MAP[platformId]];
+        const plat = captions[platformId] || {};
+        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr });
         try {
-          const r = await schedulePost(postBody);
-          results.push({ platformId, ok: true, result: r });
+          await schedulePost(postBody);
+          results.push({ platformId, ok: true });
         } catch (e) {
           results.push({ platformId, ok: false, error: e.message });
         }
       }
-      sendJson(res, 200, { results });
+      publish.published = true;
+      publish.scheduledDay = day;
+      publish.results = results;
     } catch (e) {
-      sendJson(res, 500, { error: e.message });
+      publish.error = e.message;
+    } finally {
+      [tmpIn, tmpTrimmed, tmpVertical].forEach(f => { try { unlinkSync(f); } catch {} });
+      // Discard the vertical copy regardless of how far publishing got —
+      // Metricool already has its own copy of anything it successfully
+      // ingested, and a half-published temp file has no other use.
+      if (tempVerticalFileId) {
+        try {
+          const delToken = await getDriveAccessToken();
+          await fetch(`https://www.googleapis.com/drive/v3/files/${tempVerticalFileId}`, { method: "DELETE", headers: { Authorization: `Bearer ${delToken}` } });
+        } catch (e) { console.error("[save-and-publish] couldn't discard temp vertical file:", e.message); }
+      }
     }
+
+    sendJson(res, 200, { savedFileId, ...publish });
     return true;
   }
 

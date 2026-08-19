@@ -205,6 +205,10 @@
   .bubble-row.mine .bubble { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .bubble.gif img, .bubble.media img, .bubble.media video { max-width: 260px; max-height: 320px; border-radius: 10px; display: block; object-fit: contain; }
   .bubble.media { padding: 5px; position: relative; }
+  .optimistic-bubble { opacity: .92; }
+  .optimistic-overlay { position: absolute; inset: 5px; border-radius: 10px; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; }
+  .optimistic-pct { color: #fff; font-size: .8rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.6); padding: 0 12px; text-align: center; }
+  .optimistic-overlay-error { background: rgba(120,0,0,0.55); }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; }
   /* Inline-block (not inline) so vertical-align actually applies — a plain
@@ -414,34 +418,29 @@
   .camera-shutter-btn::after { content: ''; display: block; width: 56px; height: 56px; margin: 4px auto; border-radius: 50%; background: #fff; transition: border-radius .15s, background .15s; }
   .camera-shutter-btn.recording::after { border-radius: 10px; background: #ff3b3b; width: 32px; height: 32px; }
   .camera-record-timer { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: rgba(255,59,59,0.85); color: #fff; font-size: .82rem; font-weight: 700; padding: 4px 12px; border-radius: 999px; z-index: 2; }
-  /* Hand-drawn callouts — a rough curved arrow (plain SVG stroke, not an
-     asset) plus a handwriting-font label, pointing at whatever this step
-     wants the student looking at next. */
+  /* Handwriting-font step callouts — a plain label, no arrow (removed per
+     feedback: felt cluttered, and the label alone next to the thing it
+     describes reads clearly enough on its own). */
   .camera-handwritten { font-family: 'Caveat', cursive; font-size: 1.7rem; font-weight: 700; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.7); line-height: 1.1; }
-  .hand-arrow path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
   .camera-callout { position: absolute; z-index: 2; pointer-events: none; }
-  .camera-callout-step1 { bottom: 128px; left: 50%; transform: translateX(calc(-50% + 90px)); text-align: right; width: 170px; }
-  .camera-callout-step1 .hand-arrow { width: 60px; height: 50px; margin-left: auto; }
+  .camera-callout-step1 { bottom: 128px; left: 50%; transform: translateX(-50%); text-align: center; width: 220px; }
   .camera-review-actions { position: relative; padding: 18px 20px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
   .camera-callout-step3 { position: static; flex: 1; text-align: center; }
-  .camera-callout-step3 .hand-arrow { width: 54px; height: 40px; display: block; margin: 0 auto -6px; }
   .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
   .camera-callout-step2 { position: static; margin-bottom: 4px; }
-  .camera-callout-step2 .hand-arrow { width: 46px; height: 34px; }
-  .camera-trim-track { position: relative; height: 46px; border-radius: 8px; background: rgba(255,255,255,0.12); overflow: hidden; touch-action: none; }
+  /* Pinch-to-zoom widens the track's own content (via --trim-zoom, a plain
+     scale multiplier on width) inside a horizontally-scrolling clip region
+     — the handles/playhead position themselves as percentages of the
+     zoomed width, same math either way, so nothing else needs to know
+     zoom happened. */
+  .camera-trim-track-clip { overflow-x: auto; overflow-y: hidden; border-radius: 8px; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
+  .camera-trim-track { position: relative; height: 46px; width: calc(var(--trim-zoom, 1) * 100%); min-width: 100%; border-radius: 8px; background: rgba(255,255,255,0.12); touch-action: none; }
   .camera-trim-range { position: absolute; top: 0; bottom: 0; background: rgba(0,155,255,0.35); border-top: 2px solid var(--pra-blue); border-bottom: 2px solid var(--pra-blue); }
-  .camera-trim-handle { position: absolute; top: 0; bottom: 0; width: 18px; background: var(--pra-blue); border-radius: 6px; cursor: ew-resize; touch-action: none; }
+  .camera-trim-playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 1; }
+  .camera-trim-handle { position: absolute; top: 0; bottom: 0; width: 18px; background: var(--pra-blue); border-radius: 6px; cursor: ew-resize; touch-action: none; z-index: 2; }
   .camera-trim-handle::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 3px; height: 16px; background: rgba(255,255,255,0.8); border-radius: 2px; }
   .camera-trim-handle-start { left: 0; }
   .camera-trim-handle-end { right: 0; }
-
-  .publish-platform-checks { display: flex; flex-wrap: wrap; gap: 8px; }
-  .publish-platform-check { display: flex; align-items: center; gap: 5px; font-size: .82rem; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--pra-border); cursor: pointer; }
-  .publish-platform-check input { margin: 0; }
-  .publish-caption-field { border: 1px solid var(--pra-border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
-  .publish-caption-field-label { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 4px; }
-  .publish-caption-field input, .publish-caption-field textarea { width: 100%; margin-bottom: 4px; }
-  .publish-caption-field textarea { resize: vertical; min-height: 44px; font-family: inherit; }
 
   /* ── Modal (contacts / group / search / media) ── */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
@@ -840,7 +839,6 @@
         <button class="camera-mode-opt" id="cameraModeVideoBtn" type="button">Video</button>
       </div>
       <div class="camera-callout camera-callout-step1">
-        <svg class="hand-arrow" viewBox="0 0 60 50"><path d="M6 6 Q10 34 30 40 T54 34" marker-end="url(#handArrowHead)"/><defs><marker id="handArrowHead" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#fff"/></marker></defs></svg>
         <div class="camera-handwritten">Step 1: Shoot your training clip.</div>
       </div>
       <button class="camera-shutter-btn" id="cameraShutterBtn" title="Capture"></button>
@@ -851,20 +849,21 @@
       <button class="camera-close-btn" id="cameraReviewCloseBtn" title="Cancel">✕</button>
       <div class="camera-trim-wrap" id="cameraTrimWrap" style="display:none">
         <div class="camera-callout camera-callout-step2">
-          <svg class="hand-arrow" viewBox="0 0 46 34"><path d="M4 4 Q6 22 23 28 T42 26" marker-end="url(#handArrowHead2)"/><defs><marker id="handArrowHead2" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
           <div class="camera-handwritten" id="cameraTrimStepLabel">Step 2: Trim your training clip.</div>
         </div>
-        <div class="camera-trim-track" id="cameraTrimTrack">
-          <div class="camera-trim-range" id="cameraTrimRange"></div>
-          <div class="camera-trim-handle camera-trim-handle-start" id="cameraTrimStartHandle"></div>
-          <div class="camera-trim-handle camera-trim-handle-end" id="cameraTrimEndHandle"></div>
+        <div class="camera-trim-track-clip" id="cameraTrimTrackClip">
+          <div class="camera-trim-track" id="cameraTrimTrack">
+            <div class="camera-trim-range" id="cameraTrimRange"></div>
+            <div class="camera-trim-playhead" id="cameraTrimPlayhead"></div>
+            <div class="camera-trim-handle camera-trim-handle-start" id="cameraTrimStartHandle"></div>
+            <div class="camera-trim-handle camera-trim-handle-end" id="cameraTrimEndHandle"></div>
+          </div>
         </div>
       </div>
       <div class="camera-review-actions">
         <button class="pra-btn pra-btn-ghost" id="cameraRetakeBtn" type="button">Retake</button>
         <div class="camera-callout camera-callout-step3">
-          <svg class="hand-arrow" viewBox="0 0 54 40"><path d="M50 4 Q40 4 27 20 T6 34" marker-end="url(#handArrowHead3)"/><defs><marker id="handArrowHead3" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#fff"/></marker></defs></svg>
-          <div class="camera-handwritten" id="cameraSendStepLabel">Step 3: Send your training clip with your Coach.</div>
+          <div class="camera-handwritten" id="cameraSendStepLabel">Step 3: Send your training clip to your Coach.</div>
         </div>
         <button class="pra-btn" id="cameraSendBtn" type="button">Send</button>
       </div>
@@ -899,13 +898,15 @@
     </div>
   </div>
 
-  <!-- Publish to Powerbatics — video favorites only. Trim -> AI track/reframe
-       -> AI captions -> schedule to Metricool. Images keep the plain
-       rename-and-favorite flow above; this is the richer video-only pipeline. -->
+  <!-- Publish to Powerbatics — video favorites only. Everything past trim
+       and label is automatic (tracking, vertical reframe, captions, next-
+       open-day scheduling to every connected platform) — a coach only
+       trims, types a label, and clicks Save. Images keep the plain
+       rename-and-favorite flow above. -->
   <div class="modal-backdrop" id="publishModal">
     <div class="pra-panel modal-box modal-box-wide">
-      <div class="pra-h2" style="margin-bottom:4px">Publish to Powerbatics</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Trim the clip, optionally track the subject so the vertical crop follows them, write captions, then schedule.</div>
+      <div class="pra-h2" style="margin-bottom:4px">Save & Publish to Powerbatics</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Trim it, label it, and Save — tracking, vertical reframing, captions, and scheduling all happen automatically.</div>
 
       <video id="publishSourceVideo" playsinline style="width:100%;border-radius:10px;background:#000;display:block;max-height:280px;object-fit:contain"></video>
       <div class="camera-trim-wrap" style="padding:10px 0 0">
@@ -916,31 +917,17 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:12px;align-items:center">
-        <button class="pra-btn pra-btn-ghost" id="publishTrackBtn" type="button" style="flex:1">Track Subject (AI)</button>
-        <div class="pra-muted" id="publishTrackStatus" style="font-size:.78rem;flex:1"></div>
-      </div>
-
       <div style="margin-top:14px">
-        <label class="pra-label">What's happening in this clip? (helps AI write the caption)</label>
-        <input class="pra-input" id="publishDescInput" placeholder="e.g. student drilling muscle-up transition"/>
-      </div>
-      <button class="pra-btn pra-btn-ghost" id="publishCaptionBtn" type="button" style="width:100%;margin-top:8px">Generate Captions (AI)</button>
-      <div id="publishCaptionFields" style="margin-top:10px"></div>
-
-      <div style="margin-top:14px">
-        <label class="pra-label">Platforms</label>
-        <div id="publishPlatformChecks" class="publish-platform-checks"></div>
+        <label class="pra-label">Label (also saved as the Drive filename)</label>
+        <input class="pra-input" id="publishLabelInput" placeholder="e.g. FIRST LAST GYM MUSCLE UP TRANSITION" maxlength="200"/>
       </div>
 
-      <div class="pra-muted" id="publishScheduleDate" style="font-size:.82rem;margin-top:10px"></div>
-      <div class="pra-muted" id="publishStatus" style="font-size:.78rem;margin-top:6px;min-height:1em"></div>
+      <div class="pra-muted" id="publishStatus" style="font-size:.78rem;margin-top:10px;min-height:1em"></div>
 
       <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="pra-btn pra-btn-ghost" id="publishReframeBtn" type="button" style="flex:1">Reframe & Prepare</button>
-        <button class="pra-btn" id="publishScheduleBtn" type="button" style="flex:1" disabled>Schedule to Powerbatics</button>
+        <button class="pra-btn" id="publishSaveBtn" type="button" style="flex:1">Save</button>
       </div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('publishModal')">Cancel</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="publishCancelBtn" type="button">Cancel</button>
     </div>
   </div>
 
@@ -3081,17 +3068,20 @@ function setupComposer() {
   const gifBtn = document.getElementById('gifBtn');
   const templatesBtn = document.getElementById('templatesBtn');
   const attachBtn = document.getElementById('attachBtn');
+  const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
   const fileInput = document.getElementById('fileInput');
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
   // `pointer: coarse` is the standard touch-vs-desktop signal, used below
-  // for Enter-to-send. (The in-app camera-only icon that used to replace
-  // the paperclip here on touch devices was reverted — it needs a native
-  // permission the app isn't rebuilt with yet. The paperclip covers
-  // everyone again; a video picked from the library gets the trim/send
-  // flow below instead of camera capture's shoot step.)
+  // for Enter-to-send. Students/users on touch also get a dedicated camera
+  // icon ALONGSIDE the paperclip (not replacing it, per feedback) — it
+  // still needs the same native permission as the paperclip's own "Take
+  // Photo" option, pending a rebuild, but there's no reason to hide the
+  // entry point in the meantime.
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+  if (isTouchDevice && !isStaffMe()) cameraCaptureBtn.style.display = '';
+  cameraCaptureBtn.onclick = openCameraCapture;
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by the .react-trigger handler above) decides which one a pick means.
@@ -3169,7 +3159,15 @@ function setupComposer() {
     // pending a native rebuild) camera flow's own trim step, just entered
     // from the library picker instead of a live shoot. Staff, and any
     // non-video picks, keep the plain staged-preview flow.
-    const videoIdx = files.findIndex(f => f.type.startsWith('video/'));
+    //
+    // iOS's file picker doesn't always set a MIME type on the File it hands
+    // back (empty f.type) depending on where the video came from (iCloud,
+    // certain library sources) — confirmed live: this silently failed the
+    // type.startsWith('video/') check and fell through to the plain attach
+    // flow instead of opening the trim panel at all. Falling back to the
+    // filename extension catches those.
+    const isVideoFile = (f) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|3gp|mkv)$/i.test(f.name || '');
+    const videoIdx = files.findIndex(isVideoFile);
     if (!isStaffMe() && videoIdx !== -1) {
       openUploadTrimFlow(files[videoIdx]);
       files.splice(videoIdx, 1);
@@ -3295,12 +3293,20 @@ let cameraFacing = 'user';
 let cameraShootMode = 'photo';
 let cameraRecorder = null;
 let cameraRecordedChunks = [];
-let cameraCapturedBlob = null; // the photo Blob, or the recorded video Blob
+let cameraCapturedBlob = null; // the photo Blob, or the recorded/picked video Blob
+// Tracked explicitly rather than sniffed from cameraCapturedBlob.type —
+// confirmed live that iOS's file picker sometimes hands back a video File
+// with an empty type string (depending on where it came from in Photos),
+// which silently broke every .type.startsWith('video/') check downstream.
+let cameraCapturedIsVideo = false;
 let cameraRecordStart = 0;
 let cameraRecordTimerHandle = null;
 let cameraTrimDragging = null; // 'start' | 'end' | null
 let cameraTrimStart = 0;
 let cameraTrimEnd = 0;
+let cameraTrimZoom = 1; // 1 = fit the clip container, higher = pinched-in for finer trim precision
+let cameraTrimPinchStartDist = null;
+let cameraTrimPinchStartZoom = 1;
 
 function setupCameraCapture() {
   document.getElementById('cameraCloseBtn').onclick = closeCameraCapture;
@@ -3335,6 +3341,46 @@ function setupCameraCapture() {
     video.currentTime = cameraTrimDragging === 'start' ? cameraTrimStart : cameraTrimEnd;
   });
   window.addEventListener('pointerup', () => { cameraTrimDragging = null; });
+
+  // Preview loops the TRIMMED range only, not the whole clip — jumps back
+  // to the start handle the instant playback reaches the end handle. Wired
+  // once here (not inside showCameraReviewVideo, which runs again on every
+  // new capture/retake) since #cameraReviewVideo is one persistent element
+  // reused across those — attaching per-show would pile up duplicate
+  // listeners instead of replacing the old one.
+  const reviewVideo = document.getElementById('cameraReviewVideo');
+  reviewVideo.addEventListener('timeupdate', () => {
+    if (reviewVideo.currentTime >= cameraTrimEnd) reviewVideo.currentTime = cameraTrimStart;
+    renderCameraTrimPlayhead();
+  });
+
+  // Pinch-to-zoom the timeline for finer trim precision on longer clips —
+  // scales --trim-zoom (a plain width multiplier) rather than anything
+  // video-related, so the existing percentage-based handle/playhead/range
+  // positioning keeps working unchanged; only the physical track width
+  // (and the clip container's own scroll position) changes.
+  const trimClip = document.getElementById('cameraTrimTrackClip');
+  const MIN_ZOOM = 1, MAX_ZOOM = 8;
+  function pinchDistance(touches) {
+    const [a, b] = touches;
+    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+  }
+  trimClip.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      cameraTrimPinchStartDist = pinchDistance(e.touches);
+      cameraTrimPinchStartZoom = cameraTrimZoom;
+    }
+  }, { passive: true });
+  trimClip.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || cameraTrimPinchStartDist == null) return;
+    e.preventDefault();
+    const dist = pinchDistance(e.touches);
+    cameraTrimZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cameraTrimPinchStartZoom * (dist / cameraTrimPinchStartDist)));
+    track.style.setProperty('--trim-zoom', cameraTrimZoom);
+  }, { passive: false });
+  trimClip.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) cameraTrimPinchStartDist = null;
+  });
 }
 
 async function openCameraCapture() {
@@ -3342,7 +3388,7 @@ async function openCameraCapture() {
   cameraShootMode = 'photo';
   setCameraShootMode('photo');
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim your training clip.';
-  document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip with your Coach.';
+  document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip to your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = '';
   await startCameraStream();
 }
@@ -3355,9 +3401,10 @@ async function openCameraCapture() {
 function openUploadTrimFlow(file) {
   document.getElementById('cameraCaptureModal').classList.add('show');
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim your training clip.';
-  document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send your training clip with your Coach.';
+  document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send your training clip to your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = 'none';
   cameraCapturedBlob = file;
+  cameraCapturedIsVideo = true;
   showCameraReviewVideo(file);
 }
 
@@ -3433,6 +3480,7 @@ function captureCameraPhoto() {
   canvas.getContext('2d').drawImage(preview, 0, 0);
   canvas.toBlob((blob) => {
     cameraCapturedBlob = blob;
+    cameraCapturedIsVideo = false;
     showCameraReviewPhoto(blob);
   }, 'image/jpeg', 0.9);
 }
@@ -3461,6 +3509,7 @@ function startCameraRecording() {
   cameraRecorder.onstop = () => {
     const blob = new Blob(cameraRecordedChunks, { type: cameraRecorder.mimeType || 'video/webm' });
     cameraCapturedBlob = blob;
+    cameraCapturedIsVideo = true;
     showCameraReviewVideo(blob);
   };
   cameraRecorder.start();
@@ -3490,10 +3539,15 @@ function showCameraReviewVideo(blob) {
   video.style.display = 'block';
   video.src = URL.createObjectURL(blob);
   video.controls = true;
-  video.loop = true;
+  // Looping is handled manually (see the timeupdate listener wired once in
+  // setupCameraCapture) so it loops the TRIMMED range, not the whole clip —
+  // native video.loop only ever knows about the full duration.
+  video.loop = false;
   video.addEventListener('loadedmetadata', () => {
     cameraTrimStart = 0;
     cameraTrimEnd = video.duration;
+    cameraTrimZoom = 1;
+    document.getElementById('cameraTrimTrack').style.setProperty('--trim-zoom', 1);
     renderCameraTrim();
     video.play().catch(() => {});
   }, { once: true });
@@ -3508,6 +3562,14 @@ function renderCameraTrim() {
   document.getElementById('cameraTrimRange').style.width = (endPct - startPct) + '%';
   document.getElementById('cameraTrimStartHandle').style.left = 'calc(' + startPct + '% - 9px)';
   document.getElementById('cameraTrimEndHandle').style.left = 'calc(' + endPct + '% - 9px)';
+  renderCameraTrimPlayhead();
+}
+
+function renderCameraTrimPlayhead() {
+  const video = document.getElementById('cameraReviewVideo');
+  const duration = video.duration || 1;
+  const pct = Math.min(100, Math.max(0, (video.currentTime / duration) * 100));
+  document.getElementById('cameraTrimPlayhead').style.left = pct + '%';
 }
 
 function retakeCameraCapture() {
@@ -3517,15 +3579,29 @@ function retakeCameraCapture() {
 }
 
 async function sendCameraCapture() {
-  if (!cameraCapturedBlob || !activeConvoId) return;
-  const btn = document.getElementById('cameraSendBtn');
   const status = document.getElementById('cameraSendStatus');
-  btn.disabled = true;
-  status.textContent = 'Sending…';
-  const isVideo = cameraCapturedBlob.type.startsWith('video/');
-  const ext = isVideo ? (cameraCapturedBlob.type.includes('mp4') ? '.mp4' : '.webm') : '.jpg';
+  // Was a silent no-op before — indistinguishable from the button simply
+  // not working. Whatever's actually missing, say so instead of doing
+  // nothing.
+  if (!cameraCapturedBlob) { status.textContent = 'Nothing to send — try again.'; return; }
+  if (!activeConvoId) { status.textContent = "Couldn't tell which chat to send this to — close this and try again from the chat."; return; }
+
+  const isVideo = cameraCapturedIsVideo;
+  const nameExt = /\.([a-z0-9]+)$/i.exec(cameraCapturedBlob.name || '')?.[1]?.toLowerCase();
+  const EXT_MIME = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', avi: 'video/x-msvideo', '3gp': 'video/3gpp', mkv: 'video/x-matroska' };
+  // If the browser genuinely never gave this file a type (confirmed on iOS
+  // for some library-picked videos), the multipart upload's Content-Type
+  // for this part would default to application/octet-stream too, not just
+  // the JS-visible .type property — which would make the SERVER'S own
+  // video-vs-image detection wrong, not just this file's local checks.
+  // Re-wrap with an inferred type from the extension before it ever leaves
+  // the browser, rather than relying on a guess purely client-side.
+  const blob = cameraCapturedBlob.type
+    ? cameraCapturedBlob
+    : new Blob([cameraCapturedBlob], { type: (isVideo ? EXT_MIME[nameExt] : null) || (isVideo ? 'video/mp4' : 'image/jpeg') });
+  const ext = isVideo ? (blob.type.includes('mp4') ? '.mp4' : blob.type.includes('quicktime') ? '.mov' : '.webm') : '.jpg';
   const fd = new FormData();
-  fd.append('files', cameraCapturedBlob, 'capture' + ext);
+  fd.append('files', blob, 'capture' + ext);
   // Only sent when the student actually dragged a handle — an untouched
   // full-range selection uploads the raw capture as-is, skipping a
   // pointless server-side re-encode of a clip nobody asked to trim.
@@ -3535,49 +3611,92 @@ async function sendCameraCapture() {
     fd.append('trimStart', String(cameraTrimStart));
     fd.append('trimEnd', String(cameraTrimEnd));
   }
+  const convoId = activeConvoId;
+
+  // Close right away and show the clip in the thread immediately (with a
+  // sending overlay) instead of leaving the coach/student staring at the
+  // modal for however long the upload+trim actually takes — matches every
+  // other chat app's "message appears right away, catches up once it's
+  // actually delivered" convention.
+  const optimistic = addOptimisticMediaBubble(blob, isVideo);
+  closeCameraCapture();
+
   try {
-    const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages', { method: 'POST', body: fd });
-    if (!r.ok) throw new Error();
-    closeCameraCapture();
+    await uploadFormDataWithProgress('/api/chat/conversations/' + convoId + '/messages', fd, (pct) => {
+      optimistic.setProgress(pct);
+    });
+    optimistic.remove();
     refreshThread(true);
-  } catch {
-    status.textContent = 'Could not send — try again.';
-    btn.disabled = false;
+  } catch (e) {
+    console.error('[sendCameraCapture]', e);
+    optimistic.setError('Could not send — try again from the attach icon.');
   }
 }
 
-// ── Publish to Powerbatics (favorite-star on a video) ──────────────────────
-const PUBLISH_PLATFORMS = [
-  { id: 'fb', label: 'Facebook', hasTitle: true, checked: true },
-  { id: 'ig', label: 'Instagram', hasTitle: false, checked: true },
-  { id: 'yt', label: 'YouTube', hasTitle: true, checked: true },
-  { id: 'tt', label: 'TikTok', hasTitle: false, checked: true },
-  { id: 'li', label: 'LinkedIn', hasTitle: false, checked: false },
-  { id: 'x', label: 'X', hasTitle: false, checked: false },
-  { id: 'fbs', label: 'FB Story', hasTitle: false, checked: false },
-  { id: 'igs', label: 'IG Story', hasTitle: false, checked: false },
-];
+// A local-only bubble shown the instant Send is tapped — same markup shape
+// as a real bubble-row (see renderBubble) so it sits in the thread
+// correctly, but never touches currentThreadMessages/lastRenderedMessagesJson
+// since it's not a real message; refreshThread's own re-render (once the
+// upload actually finishes) replaces it with the genuine one.
+function addOptimisticMediaBubble(blob, isVideo) {
+  const threadBody = document.getElementById('threadBody');
+  const url = URL.createObjectURL(blob);
+  const row = document.createElement('div');
+  row.className = 'bubble-row mine';
+  row.innerHTML = `
+    <div>
+      <div class="bubble-wrap">
+        <div class="bubble media optimistic-bubble">
+          ${isVideo ? `<video src="${url}" muted playsinline autoplay loop></video>` : `<img src="${url}"/>`}
+          <div class="optimistic-overlay"><div class="optimistic-pct">Sending…</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+  threadBody.appendChild(row);
+  threadBody.scrollTop = threadBody.scrollHeight;
+  const pctEl = row.querySelector('.optimistic-pct');
+  return {
+    setProgress(pct) { pctEl.textContent = `Sending… ${pct}%`; },
+    setError(msg) {
+      row.querySelector('.optimistic-overlay').classList.add('optimistic-overlay-error');
+      pctEl.textContent = msg;
+    },
+    remove() { row.remove(); URL.revokeObjectURL(url); },
+  };
+}
 
+// XHR instead of fetch specifically for this upload — WKWebView (iOS)
+// fetch() has known reliability issues streaming a large multipart body,
+// and fetch gives no upload-progress signal anyway, which matters here
+// since a real recorded clip can take a while over a mobile connection and
+// a frozen-looking "Sending…" reads as broken even when it's still working.
+function uploadFormDataWithProgress(url, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    });
+    xhr.onload = () => { (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('Upload failed: ' + xhr.status)); };
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(formData);
+  });
+}
+
+// ── Publish to Powerbatics (favorite-star on a video) ──────────────────────
+// A coach only trims and labels — tracking, vertical reframe, captions, and
+// scheduling to every connected platform all happen server-side in one call
+// (see /api/social-video/save-and-publish) once Save is clicked.
 let publishSourceFileId = null;
 let publishVideoWidth = 1920, publishVideoHeight = 1080;
 let publishTrimDragging = null;
 let publishTrimStart = 0, publishTrimEnd = 0;
-let publishKeyframes = null; // set once Track Subject finishes
-let publishCaptions = null;  // set once Generate Captions finishes
-let publishReframedResult = null; // { driveFileId, publicMediaUrl } once Reframe & Prepare finishes
-let publishNextOpenDay = null;
+let publishKeyframes = null; // filled in automatically by runPublishTracking before save
 
 function setupPublishModal() {
-  document.getElementById('publishTrackBtn').onclick = runPublishTracking;
-  document.getElementById('publishCaptionBtn').onclick = runPublishCaptionGen;
-  document.getElementById('publishReframeBtn').onclick = runPublishReframe;
-  document.getElementById('publishScheduleBtn').onclick = runPublishSchedule;
-
-  document.getElementById('publishPlatformChecks').innerHTML = PUBLISH_PLATFORMS.map(p => `
-    <label class="publish-platform-check">
-      <input type="checkbox" data-platform="${p.id}" ${p.checked ? 'checked' : ''}/> ${p.label}
-    </label>
-  `).join('');
+  document.getElementById('publishSaveBtn').onclick = runPublishSave;
+  document.getElementById('publishCancelBtn').onclick = () => closeModal('publishModal');
 
   const track = document.getElementById('publishTrimTrack');
   const startHandle = document.getElementById('publishTrimStartHandle');
@@ -3616,14 +3735,9 @@ function renderPublishTrim() {
 async function openPublishModal(fileId, suggestedName) {
   publishSourceFileId = fileId;
   publishKeyframes = null;
-  publishCaptions = null;
-  publishReframedResult = null;
-  document.getElementById('publishDescInput').value = suggestedName || '';
-  document.getElementById('publishCaptionFields').innerHTML = '';
-  document.getElementById('publishTrackStatus').textContent = '';
+  document.getElementById('publishLabelInput').value = suggestedName || '';
   document.getElementById('publishStatus').textContent = '';
-  document.getElementById('publishScheduleDate').textContent = 'Checking next open day…';
-  document.getElementById('publishScheduleBtn').disabled = true;
+  document.getElementById('publishSaveBtn').disabled = false;
 
   const video = document.getElementById('publishSourceVideo');
   video.src = '/api/chat/media/' + fileId;
@@ -3635,15 +3749,6 @@ async function openPublishModal(fileId, suggestedName) {
   renderPublishTrim();
 
   openModal('publishModal');
-
-  fetch('/api/social-video/next-open-day').then(r => r.json()).then(d => {
-    publishNextOpenDay = d.day;
-    document.getElementById('publishScheduleDate').textContent = d.day
-      ? `Will schedule for ${d.day} (next open day across all platforms)`
-      : 'Could not find an open day — try again later.';
-  }).catch(() => {
-    document.getElementById('publishScheduleDate').textContent = "Couldn't reach Metricool to check the schedule.";
-  });
 }
 
 // ── AI motion tracking (TF.js + COCO-SSD, ported from social-video.html) ───
@@ -3677,11 +3782,12 @@ async function ensurePublishTrackModel() {
 const PUBLISH_FRAME_W = 240, PUBLISH_FRAME_H = 426;
 const PUBLISH_TRACK_SCALE = 130; // % zoom — gives room to pan without exposing background
 
+// No dedicated button/status of its own anymore — called automatically by
+// runPublishSave before it saves, with progress written to the shared
+// publishStatus line.
 async function runPublishTracking() {
-  const btn = document.getElementById('publishTrackBtn');
-  const status = document.getElementById('publishTrackStatus');
+  const status = document.getElementById('publishStatus');
   const video = document.getElementById('publishSourceVideo');
-  btn.disabled = true;
   status.textContent = '⏳ loading AI…';
   try {
     const model = await ensurePublishTrackModel();
@@ -3760,113 +3866,46 @@ async function runPublishTracking() {
     }));
     status.textContent = `✓ tracked · ${publishKeyframes.length} keyframes`;
   } catch (e) {
-    status.textContent = '✗ ' + (e.message || 'tracking failed');
-  } finally {
-    btn.disabled = false;
+    // Tracking is a nice-to-have, not a hard requirement — the backend
+    // already falls back to a plain center crop when no keyframes are
+    // sent, so a tracking failure shouldn't block the save.
+    console.error('[publish] tracking failed, falling back to center crop:', e);
+    publishKeyframes = null;
   }
 }
 
-async function runPublishCaptionGen() {
-  const btn = document.getElementById('publishCaptionBtn');
-  const fieldsEl = document.getElementById('publishCaptionFields');
-  btn.disabled = true;
-  fieldsEl.innerHTML = '<div class="pra-muted">Writing…</div>';
-  try {
-    const r = await fetch('/api/social-video/generate-caption', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: document.getElementById('publishDescInput').value.trim() }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Could not generate captions.');
-    publishCaptions = d.captions;
-    renderPublishCaptionFields();
-  } catch (e) {
-    fieldsEl.innerHTML = `<div class="pra-muted">${escapeHtml(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function renderPublishCaptionFields() {
-  const fieldsEl = document.getElementById('publishCaptionFields');
-  const mainPlatforms = [{ id: 'fb', label: 'Facebook', hasTitle: true }, { id: 'ig', label: 'Instagram', hasTitle: false }, { id: 'yt', label: 'YouTube', hasTitle: true }, { id: 'tt', label: 'TikTok', hasTitle: false }, { id: 'li', label: 'LinkedIn', hasTitle: false }, { id: 'x', label: 'X', hasTitle: false }];
-  fieldsEl.innerHTML = mainPlatforms.map(p => {
-    const c = publishCaptions?.[p.id] || {};
-    return `
-      <div class="publish-caption-field" data-cap-platform="${p.id}">
-        <div class="publish-caption-field-label">${p.label}</div>
-        ${p.hasTitle ? `<input class="pra-input" data-cap-title placeholder="Title" value="${escapeHtml(c.title || '')}"/>` : ''}
-        <textarea class="pra-input" data-cap-desc placeholder="Caption">${escapeHtml(c.desc || '')}</textarea>
-      </div>
-    `;
-  }).join('');
-  // Field edits stay live in publishCaptions so Schedule always sends
-  // whatever's currently on screen, not the AI's first draft.
-  fieldsEl.querySelectorAll('[data-cap-platform]').forEach(row => {
-    const id = row.dataset.capPlatform;
-    if (!publishCaptions[id]) publishCaptions[id] = {};
-    const titleEl = row.querySelector('[data-cap-title]');
-    const descEl = row.querySelector('[data-cap-desc]');
-    if (titleEl) titleEl.addEventListener('input', () => { publishCaptions[id].title = titleEl.value; });
-    descEl.addEventListener('input', () => { publishCaptions[id].desc = descEl.value; });
-  });
-}
-
-async function runPublishReframe() {
-  const btn = document.getElementById('publishReframeBtn');
+async function runPublishSave() {
+  const btn = document.getElementById('publishSaveBtn');
   const status = document.getElementById('publishStatus');
+  const label = document.getElementById('publishLabelInput').value.trim();
+  if (!label) { status.textContent = 'Give it a label first.'; return; }
   btn.disabled = true;
-  status.textContent = 'Reframing…';
+
+  await runPublishTracking(); // best-effort — leaves publishKeyframes null on failure, backend falls back to a center crop
+
+  status.textContent = 'Saving & publishing… this can take a minute.';
   try {
-    const r = await fetch('/api/social-video/reframe', {
+    const r = await fetch('/api/social-video/save-and-publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         driveFileId: publishSourceFileId,
         videoWidth: publishVideoWidth, videoHeight: publishVideoHeight,
         trimStart: publishTrimStart, trimEnd: publishTrimEnd,
-        keyframes: publishKeyframes || undefined,
+        label, keyframes: publishKeyframes || undefined,
       }),
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Could not reframe.');
-    publishReframedResult = d;
-    status.textContent = '✓ Ready to schedule.';
-    document.getElementById('publishScheduleBtn').disabled = false;
-  } catch (e) {
-    status.textContent = '✗ ' + e.message;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function runPublishSchedule() {
-  const btn = document.getElementById('publishScheduleBtn');
-  const status = document.getElementById('publishStatus');
-  if (!publishReframedResult) { status.textContent = 'Reframe & Prepare first.'; return; }
-  if (!publishNextOpenDay) { status.textContent = "Don't have a schedule date yet — try again."; return; }
-  const platformIds = Array.from(document.querySelectorAll('#publishPlatformChecks input:checked')).map(el => el.dataset.platform);
-  if (!platformIds.length) { status.textContent = 'Pick at least one platform.'; return; }
-  btn.disabled = true;
-  status.textContent = 'Scheduling…';
-  try {
-    const r = await fetch('/api/social-video/schedule', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        driveFileId: publishReframedResult.driveFileId,
-        mediaUrl: publishReframedResult.publicMediaUrl,
-        captions: publishCaptions || {},
-        platformIds,
-        dateTimeStr: publishNextOpenDay + 'T03:00:00',
-      }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Could not schedule.');
+    if (!r.ok) throw new Error(d.error || 'Could not save.');
+    if (!d.published) {
+      status.textContent = `Saved to Drive, but publishing failed: ${d.error || 'unknown error'}`;
+      return;
+    }
     const failed = (d.results || []).filter(x => !x.ok);
     if (failed.length) {
-      status.textContent = `Scheduled ${d.results.length - failed.length}/${d.results.length} — ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
+      status.textContent = `Saved. Scheduled ${d.results.length - failed.length}/${d.results.length} for ${d.scheduledDay} — ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
     } else {
-      status.textContent = `✓ Scheduled on ${platformIds.length} platform${platformIds.length > 1 ? 's' : ''} for ${publishNextOpenDay}.`;
-      setTimeout(() => closeModal('publishModal'), 2000);
+      status.textContent = `✓ Saved and scheduled on ${d.results.length} platform${d.results.length > 1 ? 's' : ''} for ${d.scheduledDay}.`;
+      setTimeout(() => closeModal('publishModal'), 2500);
     }
   } catch (e) {
     status.textContent = '✗ ' + e.message;
