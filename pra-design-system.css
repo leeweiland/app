@@ -57,6 +57,14 @@
   z-index: -1;
   background: var(--pra-black);
   overflow: hidden;
+  /* Purely decorative (animated blur circles, z-index:-1) -- but being
+     position:fixed, it was still a valid wheel-event hit target over any
+     empty area, and browsers scroll-chain a fixed element's wheel events to
+     the document root rather than to its DOM parent's overflow:auto (even
+     though .pra-bg is nested inside .pra-root). That silently ate scroll
+     input everywhere except directly over real in-flow content. Excluding
+     it from hit-testing lets those points resolve to .pra-root itself. */
+  pointer-events: none;
 }
 .pra-bg::before, .pra-bg::after {
   content: '';
