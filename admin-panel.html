@@ -34,6 +34,15 @@
      ellipsis) so nothing gets cut off — the zoom link is the one exception,
      kept just wide enough for its "Zoom" header since the full URL already
      lives in the input's title tooltip and isn't useful to see inline. */
+  /* Frozen Name/Email columns, Google-Sheets-style, so you can still see
+     who you're editing while scrolling right through Role/Zoom/Archived/etc.
+     Left offset for the 2nd column is set as --sticky-col-1-w by
+     syncStickyColWidth() (measured, not hardcoded, since the Name cell's
+     width isn't fixed) every time the table re-renders. */
+  .sticky-col { position: sticky; z-index: 2; background: var(--pra-panel); }
+  th.sticky-col { z-index: 3; }
+  .sticky-col-1 { left: 0; }
+  .sticky-col-2 { left: var(--sticky-col-1-w, 0px); box-shadow: 3px 0 6px -3px rgba(0,0,0,.5); }
   td .zoom-link-input { width: 46px; box-sizing: border-box; font-size: .76rem; padding: 5px 7px; }
   td .pra-input:not(.zoom-link-input), td .role-select { box-sizing: border-box; font-size: .76rem; padding: 5px 7px; }
   td .pra-btn, td .pra-btn-ghost { font-size: .7rem; padding: 5px 8px; white-space: nowrap; }
@@ -655,12 +664,12 @@ function sortUsers(list) {
   });
 }
 
-function sortHeader(label, key) {
+function sortHeader(label, key, extraClass) {
   const isActive = usersSortKey === key;
   const upColor = isActive && usersSortDir === 'asc' ? 'var(--pra-blue)' : '#fff';
   const downColor = isActive && usersSortDir === 'desc' ? 'var(--pra-blue)' : '#fff';
   return `
-    <th>
+    <th class="${extraClass || ''}">
       <span style="display:inline-flex;align-items:center;gap:5px">
         ${label}
         <span class="sort-arrows" data-key="${key}" style="display:inline-flex;flex-direction:column;line-height:.6;cursor:pointer;user-select:none;padding:6px 4px">
@@ -670,6 +679,17 @@ function sortHeader(label, key) {
       </span>
     </th>
   `;
+}
+
+// The Name column's width isn't fixed (table-layout:auto sizes it to
+// content), so the frozen Email column's left offset can't be a hardcoded
+// px value -- measure the rendered Name cell and expose it as a CSS var
+// the .sticky-col-2 rule reads.
+function syncStickyColWidth() {
+  const col1 = document.querySelector('#usersTableWrap .sticky-col-1');
+  const table = document.querySelector('#usersTableWrap table');
+  if (!col1 || !table) return;
+  table.style.setProperty('--sticky-col-1-w', col1.getBoundingClientRect().width + 'px');
 }
 
 function renderUsers() {
@@ -685,11 +705,11 @@ function renderUsers() {
 
   const rows = pageUsers.map(u => `
     <tr style="${u.archived ? 'opacity:.5' : ''}">
-      <td style="display:flex;gap:4px">
+      <td class="sticky-col sticky-col-1" style="display:flex;gap:4px">
         <input class="pra-input inline-edit" data-id="${u.id}" data-field="first" value="${escapeAttr(u.first)}" style="width:64px" placeholder="First"/>
         <input class="pra-input inline-edit" data-id="${u.id}" data-field="last" value="${escapeAttr(u.last)}" style="width:84px" placeholder="Last"/>
       </td>
-      <td><input class="pra-input inline-edit" data-id="${u.id}" data-field="email" type="email" value="${escapeAttr(u.email)}"/></td>
+      <td class="sticky-col sticky-col-2"><input class="pra-input inline-edit" data-id="${u.id}" data-field="email" type="email" value="${escapeAttr(u.email)}"/></td>
       <td><input class="pra-input inline-edit" data-id="${u.id}" data-field="phone" type="tel" value="${escapeAttr(u.phone || '')}"/></td>
       <td>
         <select class="role-select" data-id="${u.id}">
@@ -732,11 +752,12 @@ function renderUsers() {
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name')}${sortHeader('Email', 'email')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name', 'sticky-col sticky-col-1')}${sortHeader('Email', 'email', 'sticky-col sticky-col-2')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
   ` : '<div class="pra-muted" style="text-align:center;padding:20px 0">No users match.</div>';
+  syncStickyColWidth();
 
   document.querySelectorAll('.sort-arrows').forEach(el => {
     // Whole up/down icon is one click target — no need to land precisely on
