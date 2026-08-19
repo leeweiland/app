@@ -2826,15 +2826,19 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // ─── Gym + Online skill levels (combined, searchable) ─────────────────
-    // Internal to staff — coaches/admins can see everyone's levels
-    // (including each other's), but a client should never see levels data,
-    // not even their own, through this endpoint.
+    // Levels are visible to any signed-in viewer, same as /api/chat/users-map
+    // and /api/chat/levels/lookup — only `last` name stays staff-only (except
+    // on your own entry), and only coaches/admins can edit (/levels/update).
     if (p === "/api/chat/levels" && req.method === "GET") {
-      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         const enriched = await enrichLevelsPeople(people);
-        return sendJson(res, 200, { people: enriched, categories: LEVELS_CATEGORIES });
+        const visible = isStaff(user) ? enriched : enriched.map(p => {
+          if (nameKey(p.first, p.last) === nameKey(user.first, user.last)) return p;
+          const { last, ...rest } = p;
+          return rest;
+        });
+        return sendJson(res, 200, { people: visible, categories: LEVELS_CATEGORIES });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
@@ -2854,10 +2858,10 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { ok: true });
     }
 
-    // Own levels, read-only — matched by the logged-in user's own name.
-    // Internal to staff, same as /api/chat/levels above.
+    // Own levels, read-only — matched by the logged-in user's own name. Open
+    // to everyone (it's always just your own data, never gated by name-
+    // redaction since there's no last name to hide from yourself).
     if (p === "/api/chat/levels/me" && req.method === "GET") {
-      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       try {
         const people = await fetchAllLevels();
         const entries = findLevelsEntries(people, user.first, user.last);
