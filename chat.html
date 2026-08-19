@@ -1251,7 +1251,15 @@ function avatarHtml(u) {
 // color, same permissions/behaviors everywhere, just tracking which
 // program someone's actually enrolled in.
 function isClientRole(role) { return role === 'online' || role === 'gym'; }
-function avatarRoleClass(u) { return u?.role ? ' role-' + (u.role === 'admin2' ? 'admin' : u.role) : ''; }
+// Group-chat icons keep the bright neon-green client glow; that same
+// online/gym student shown as an individual (DM row, thread header,
+// contact row, forward picker, profile card) gets a dimmer "-solo" variant
+// instead, so a group tile still pops at a glance next to a 1:1 thread.
+function avatarRoleClass(u, isGroup) {
+  if (!u?.role) return '';
+  const role = u.role === 'admin2' ? 'admin' : u.role;
+  return ' role-' + role + (isClientRole(role) && !isGroup ? '-solo' : '');
+}
 function roleBadgeHtml(u) {
   if (u?.role === 'admin') return '<span class="role-tag role-tag-admin">Admin</span>';
   if (u?.role === 'admin2') return '<span class="role-tag role-tag-admin">Admin</span>';
@@ -1454,7 +1462,7 @@ function convoItemHtml(i) {
   return `
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}">
       ${checkbox}
-      <div class="pra-avatar${avatarRoleClass(i.avatarUser)}">${avatarHtml(i.avatarUser)}</div>
+      <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
         <div class="convo-name">${pinnedMark}${i.name}${i.isGroup ? '' : roleBadgeHtml(i.avatarUser)}</div>
         <div class="convo-preview">${i.preview}</div>
@@ -1710,7 +1718,7 @@ async function openConvo(id) {
   const threadAvatarEl = document.getElementById('threadAvatar');
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convo.type === 'dm' ? convoAvatarUser(convo) : null;
-  threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo));
+  threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
   document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
@@ -4335,7 +4343,7 @@ async function openForwardModal(mid) {
     const name = c.type === 'group' ? (c.name || 'Group') : (other ? `${other.first} ${other.last}` : 'Unknown');
     const avatarUser = c.type === 'group' ? convoAvatarUser(c) : other;
     return `<div class="forward-convo-row" data-convo-id="${c.id}">
-      <div class="pra-avatar${avatarUser ? avatarRoleClass(avatarUser) : ''}">${avatarUser ? avatarHtml(avatarUser) : '#'}</div>
+      <div class="pra-avatar${avatarUser ? avatarRoleClass(avatarUser, c.type === 'group') : ''}">${avatarUser ? avatarHtml(avatarUser) : '#'}</div>
       <div>${escapeHtml(name)}</div>
     </div>`;
   }).join('') || '<div class="empty-hint">No conversations to forward to.</div>';
