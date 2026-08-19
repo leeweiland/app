@@ -221,7 +221,12 @@ async function makeDriveFilePublic(fileId, accessToken) {
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ role: "reader", type: "anyone" }),
   });
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  // confirm=t skips Google's "can't scan this file for viruses" interstitial
+  // HTML page that Drive serves instead of the actual bytes for larger
+  // files — without it, Metricool's saveExternalMediaFiles fetch could get
+  // that warning page back instead of the video. Matches the URL format the
+  // already-working root server.js social-video publish flow uses.
+  return `https://drive.google.com/uc?id=${fileId}&export=download&confirm=t`;
 }
 
 // ── Metricool ────────────────────────────────────────────────────────────
@@ -378,6 +383,28 @@ export async function handleSocialVideoRequest(req, res, url) {
       sendJson(res, 200, { ok: true });
       return true;
     }
+  }
+
+  // Staff-only diagnostic — reports whether the credentials THIS RUNNING
+  // PROCESS actually has loaded contain a non-Latin1 character (the class of
+  // bug behind the recurring "Cannot convert argument to a ByteString"
+  // publish failure), without ever exposing the secret values themselves.
+  // Exists because local testing with the same-looking key values kept
+  // passing while production kept failing identically — this checks the
+  // live env directly instead of guessing from outside it.
+  if (p === "/api/social-video/env-check" && req.method === "GET") {
+    const names = ["METRICOOL_API_KEY", "METRICOOL_USER_ID", "METRICOOL_PB_BLOG_ID", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
+    const report = names.map(name => {
+      const value = process.env[name];
+      if (!value) return { name, present: false };
+      for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        if (code > 255) return { name, present: true, ok: false, badIndex: i, badCharCode: code, length: value.length };
+      }
+      return { name, present: true, ok: true, length: value.length };
+    });
+    sendJson(res, 200, { report });
+    return true;
   }
 
   // The entire favorite-and-publish pipeline behind one call — a coach only
