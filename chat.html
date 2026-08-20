@@ -467,7 +467,10 @@
      underneath. Pushed up clear of the toggle's top edge. */
   .camera-callout-step1 { bottom: 200px; left: 50%; transform: translateX(-50%); text-align: center; width: 220px; }
   .camera-review-actions { position: relative; padding: 18px 20px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
-  .camera-untrimmed-confirm { position: relative; padding: 16px 20px 26px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
+  /* Fixed 26px bottom padding sat under the home-indicator safe area on
+     notched/gesture-nav phones -- the Go Trim/Send row could end up
+     partly behind it instead of fully on-screen. */
+  .camera-untrimmed-confirm { position: relative; padding: 16px 20px max(26px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
   .camera-untrimmed-actions { display: flex; gap: 12px; width: 100%; }
   .camera-untrimmed-actions .pra-btn { flex: 1; }
   /* Permanent outer glow (not just on :hover like .pra-btn) so it reads at
@@ -2524,6 +2527,10 @@ function attachLevelsChipHandlers() {
 function closeConvo() {
   activeConvoId = null;
   reportActiveConversation();
+  // A video message bubble tapped to play keeps playing (audio and all)
+  // behind the sidebar otherwise -- display:none on the thread panel
+  // doesn't pause it, same underlying issue as the camera trimmer's X.
+  document.querySelectorAll('#threadBody video, #lightboxVideo').forEach(v => v.pause());
   document.querySelector('.chat-shell').classList.remove('thread-open'); // mobile: back to the chat list
   document.getElementById('threadWrap').classList.remove('show');
   document.getElementById('noConvo').style.display = 'flex';
