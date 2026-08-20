@@ -470,6 +470,10 @@
   .camera-untrimmed-confirm { position: relative; padding: 16px 20px 26px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
   .camera-untrimmed-actions { display: flex; gap: 12px; width: 100%; }
   .camera-untrimmed-actions .pra-btn { flex: 1; }
+  /* Permanent outer glow (not just on :hover like .pra-btn) so it reads at
+     a glance next to Go Trim's now-solid fill. */
+  .camera-glow-btn { box-shadow: 0 0 14px rgba(0,155,255,.65); }
+  .camera-glow-btn:hover { box-shadow: 0 0 20px rgba(0,155,255,.85); }
   .camera-callout-step3 { position: static; flex: 1; text-align: center; }
   .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
   .camera-callout-step2 { position: static; margin-bottom: 4px; }
@@ -927,8 +931,8 @@
       <div class="camera-untrimmed-confirm" id="cameraUntrimmedConfirm" style="display:none">
         <div class="camera-handwritten">If you didn't trim your video and need to, please do that real quick, it helps your Coaches tremendously. Thanks! 🙂</div>
         <div class="camera-untrimmed-actions">
-          <button class="pra-btn pra-btn-ghost" id="cameraGoTrimBtn" type="button">Go Trim</button>
-          <button class="pra-btn" id="cameraSendAnywayBtn" type="button">Send</button>
+          <button class="pra-btn" id="cameraGoTrimBtn" type="button">Go Trim</button>
+          <button class="pra-btn pra-btn-outline camera-glow-btn" id="cameraSendAnywayBtn" type="button">Send</button>
         </div>
       </div>
       <div class="pra-muted" id="cameraSendStatus" style="text-align:center;font-size:.78rem;min-height:1em;padding-bottom:8px"></div>
@@ -3541,6 +3545,13 @@ function closeCameraCapture() {
   document.getElementById('cameraCaptureModal').classList.remove('show');
   stopCameraStream();
   if (cameraRecorder && cameraRecorder.state !== 'inactive') cameraRecorder.stop();
+  // #cameraReviewVideo is a persistent element (reused across captures, not
+  // torn down) -- display:none on the modal doesn't pause playback, so
+  // without this it kept playing (audio and all) in the background after
+  // the modal visually closed.
+  const reviewVideo = document.getElementById('cameraReviewVideo');
+  reviewVideo.pause();
+  reviewVideo.currentTime = 0;
   resetCameraCaptureState();
 }
 
