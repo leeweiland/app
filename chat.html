@@ -404,7 +404,13 @@
      thread. Two screens inside one overlay (capture, then review/trim/
      send) toggled by display, not two separate modals, so switching
      between them doesn't tear down/rebuild the getUserMedia stream. */
-  .camera-modal { position: fixed; inset: 0; background: #000; z-index: 200; display: none; }
+  /* z-index: 600 (not the original 200) -- chat-header.js's persistent top
+     bar and bottom nav are z-index: 500 (shared across every chat-app
+     page), so on desktop -- where the sidebar layout leaves those bars
+     visible instead of a mobile full-bleed view -- they painted on top of
+     this modal and covered the trim controls. 600 matches .modal-backdrop,
+     this codebase's already-proven "above the header/bottom bars" value. */
+  .camera-modal { position: fixed; inset: 0; background: #000; z-index: 600; display: none; }
   .camera-modal.show { display: block; }
   .camera-screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
   /* Shoot screen has nothing below the preview competing for space, so it
@@ -461,6 +467,9 @@
      underneath. Pushed up clear of the toggle's top edge. */
   .camera-callout-step1 { bottom: 200px; left: 50%; transform: translateX(-50%); text-align: center; width: 220px; }
   .camera-review-actions { position: relative; padding: 18px 20px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
+  .camera-untrimmed-confirm { position: relative; padding: 16px 20px 26px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; background: linear-gradient(0deg, rgba(0,0,0,0.55), transparent); }
+  .camera-untrimmed-actions { display: flex; gap: 12px; width: 100%; }
+  .camera-untrimmed-actions .pra-btn { flex: 1; }
   .camera-callout-step3 { position: static; flex: 1; text-align: center; }
   .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
   .camera-callout-step2 { position: static; margin-bottom: 4px; }
@@ -892,7 +901,7 @@
       <button class="camera-close-btn" id="cameraReviewCloseBtn" title="Cancel">✕</button>
       <div class="camera-trim-wrap" id="cameraTrimWrap" style="display:none">
         <div class="camera-callout camera-callout-step2">
-          <div class="camera-handwritten" id="cameraTrimStepLabel">Step 2: Trim your training clip.</div>
+          <div class="camera-handwritten" id="cameraTrimStepLabel">Step 2: Trim Your Training Clip 👇</div>
         </div>
         <div class="camera-trim-track-clip" id="cameraTrimTrackClip">
           <div class="camera-trim-track" id="cameraTrimTrack">
@@ -903,12 +912,24 @@
           </div>
         </div>
       </div>
-      <div class="camera-review-actions">
+      <div class="camera-review-actions" id="cameraReviewActions">
         <button class="pra-btn pra-btn-ghost" id="cameraRetakeBtn" type="button">Retake</button>
         <div class="camera-callout camera-callout-step3">
           <div class="camera-handwritten" id="cameraSendStepLabel">Step 3: Send your training clip to your Coach.</div>
         </div>
         <button class="pra-btn" id="cameraSendBtn" type="button">Send</button>
+      </div>
+      <!-- Shown instead of the actions above when Send is tapped on a video
+           whose trim handles were never touched -- easy to miss that the
+           trim step is optional-but-encouraged, so this catches it once,
+           right before the clip actually goes out, rather than silently
+           sending the full untrimmed clip. -->
+      <div class="camera-untrimmed-confirm" id="cameraUntrimmedConfirm" style="display:none">
+        <div class="camera-handwritten">If you didn't trim your video and need to, please do that real quick, it helps your Coaches tremendously. Thanks! 🙂</div>
+        <div class="camera-untrimmed-actions">
+          <button class="pra-btn pra-btn-ghost" id="cameraGoTrimBtn" type="button">Go Trim</button>
+          <button class="pra-btn" id="cameraSendAnywayBtn" type="button">Send</button>
+        </div>
       </div>
       <div class="pra-muted" id="cameraSendStatus" style="text-align:center;font-size:.78rem;min-height:1em;padding-bottom:8px"></div>
     </div>
@@ -3405,7 +3426,9 @@ function setupCameraCapture() {
   document.getElementById('cameraModeVideoBtn').onclick = () => setCameraShootMode('video');
   document.getElementById('cameraShutterBtn').onclick = onCameraShutterClick;
   document.getElementById('cameraRetakeBtn').onclick = retakeCameraCapture;
-  document.getElementById('cameraSendBtn').onclick = sendCameraCapture;
+  document.getElementById('cameraSendBtn').onclick = onCameraSendClick;
+  document.getElementById('cameraGoTrimBtn').onclick = () => showUntrimmedConfirm(false);
+  document.getElementById('cameraSendAnywayBtn').onclick = () => { showUntrimmedConfirm(false); sendCameraCapture(); };
 
   const track = document.getElementById('cameraTrimTrack');
   const startHandle = document.getElementById('cameraTrimStartHandle');
@@ -3493,7 +3516,7 @@ async function openCameraCapture() {
   document.getElementById('cameraCaptureModal').classList.add('show');
   cameraShootMode = 'photo';
   setCameraShootMode('photo');
-  document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim your training clip.';
+  document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim Your Training Clip 👇';
   document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip to your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = '';
   await startCameraStream();
@@ -3506,8 +3529,8 @@ async function openCameraCapture() {
 // flow; only the labels, Retake button, and starting screen differ.
 function openUploadTrimFlow(file) {
   document.getElementById('cameraCaptureModal').classList.add('show');
-  document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim your training clip.';
-  document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send your training clip to your Coach.';
+  document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim Your Training Clip 👇';
+  document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send Your Training Clip To Your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = 'none';
   cameraCapturedBlob = file;
   cameraCapturedIsVideo = true;
@@ -3528,6 +3551,7 @@ function resetCameraCaptureState() {
   document.getElementById('cameraScreenReview').style.display = 'none';
   document.getElementById('cameraSendStatus').textContent = '';
   document.getElementById('cameraSendBtn').disabled = false;
+  showUntrimmedConfirm(false);
 }
 
 function stopCameraStream() {
@@ -3709,6 +3733,24 @@ function retakeCameraCapture() {
   startCameraStream();
 }
 
+// An untouched full-range selection means the student never dragged a
+// handle -- same threshold sendCameraCapture() itself uses to decide
+// whether to send trim points to the server at all, reused here so "did
+// they trim" means the same thing in both places.
+function isVideoTrimmed() {
+  if (!cameraCapturedIsVideo) return true;
+  const video = document.getElementById('cameraReviewVideo');
+  return cameraTrimStart > 0.05 || cameraTrimEnd < (video.duration - 0.05);
+}
+function showUntrimmedConfirm(show) {
+  document.getElementById('cameraReviewActions').style.display = show ? 'none' : '';
+  document.getElementById('cameraUntrimmedConfirm').style.display = show ? 'flex' : 'none';
+}
+function onCameraSendClick() {
+  if (!isVideoTrimmed()) { showUntrimmedConfirm(true); return; }
+  sendCameraCapture();
+}
+
 async function sendCameraCapture() {
   const status = document.getElementById('cameraSendStatus');
   // Was a silent no-op before — indistinguishable from the button simply
@@ -3736,8 +3778,7 @@ async function sendCameraCapture() {
   // Only sent when the student actually dragged a handle — an untouched
   // full-range selection uploads the raw capture as-is, skipping a
   // pointless server-side re-encode of a clip nobody asked to trim.
-  const video = document.getElementById('cameraReviewVideo');
-  const isTrimmed = isVideo && (cameraTrimStart > 0.05 || cameraTrimEnd < (video.duration - 0.05));
+  const isTrimmed = isVideo && isVideoTrimmed();
   if (isTrimmed) {
     fd.append('trimStart', String(cameraTrimStart));
     fd.append('trimEnd', String(cameraTrimEnd));
