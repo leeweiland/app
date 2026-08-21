@@ -827,7 +827,13 @@
   <div class="modal-backdrop" id="videoReplyModal">
     <div class="pra-panel modal-box modal-box-wide" style="text-align:left">
       <div class="pra-h2" style="margin-bottom:10px">Reply with Timestamped Notes</div>
-      <video id="videoReplyPlayer" controls playsinline style="width:100%;border-radius:10px;background:#000;display:block"></video>
+      <!-- max-height (not just width:100%) matters specifically for a
+           vertical/portrait clip — uncapped, a 9:16 video scaled to this
+           modal's ~580px width renders 1000px+ tall, pushing the note
+           input and Send button far below the fold and forcing a scroll
+           just to review-and-comment on one clip. object-fit:contain keeps
+           the whole frame visible at whatever size actually fits. -->
+      <video id="videoReplyPlayer" controls playsinline style="max-width:100%;max-height:45vh;width:auto;height:auto;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
       <div id="videoReplyNotesList" style="margin:12px 0"></div>
       <div style="display:flex;gap:8px;align-items:flex-end">
         <div style="flex:1">
