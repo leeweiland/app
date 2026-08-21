@@ -3448,7 +3448,16 @@ export async function handleChatRequest(req, res, url) {
       } else {
         const other = users.find(u => u.id === body.otherUserId);
         if (!other) return sendJson(res, 400, { error: "Unknown user" });
-        if (!canCreateDm(user, other)) return sendJson(res, 403, { error: "You can only chat with coaches" });
+        // Written back when only a client could ever hit this — now a
+        // coach can too (see canCreateDm's comment), and "you can only chat
+        // with coaches" makes no sense said to a coach.
+        if (!canCreateDm(user, other)) {
+          return sendJson(res, 403, {
+            error: isStaff(user)
+              ? "Coaches reach students through the shared group chat, not a direct message."
+              : "You can only chat with coaches.",
+          });
+        }
         const convos = readJson(CONVOS_FILE, []);
         const existing = convos.find(c => c.type === "dm" && c.participantIds.includes(user.id) && c.participantIds.includes(other.id));
         if (existing) return sendJson(res, 200, { conversation: existing });

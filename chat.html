@@ -2372,7 +2372,18 @@ async function openLevelsModal(otherUser) {
   document.getElementById('levelsMsg').textContent = 'Loading…';
   document.getElementById('levelsBody').innerHTML = '';
   renderLevelsAccountActions(otherUser);
-  document.getElementById('levelsMessageBtn').onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
+  // Coaches can't start a 1:1 with a client — canCreateDm() on the server
+  // already enforces this (coaching happens in the shared group instead),
+  // but this button had no idea: it always tried, the server correctly
+  // 403'd, and startConvo() swallowed that with zero feedback — a coach
+  // clicking Message on a student just saw the modal close and nothing
+  // happen. Hide the button in that exact case instead of offering an
+  // action that's silently guaranteed to fail. Admins are unaffected — they
+  // can still DM anyone, same as the server allows.
+  const msgBtn = document.getElementById('levelsMessageBtn');
+  const coachCantDmThisTarget = LEVELS_QUICK_ROLES.includes(otherUser.role) && !isSelf && isStaffMe() && !isAdminMe();
+  msgBtn.style.display = coachCantDmThisTarget ? 'none' : '';
+  msgBtn.onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
   document.getElementById('levelsAvatarEditBadge').style.display = isSelf ? '' : 'none';
   openModal('levelsModal');
 
