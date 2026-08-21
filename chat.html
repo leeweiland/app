@@ -209,6 +209,11 @@
   .bubble-row.mine { align-self: flex-end; flex-direction: row-reverse; }
   .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; font-weight: 400; line-height: 1.4; word-break: break-word; color: #d4d4d8; }
   .bubble-row.mine .bubble { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  /* A message that's ENTIRELY emoji (see isEmojiOnlyText) renders like
+     WhatsApp — no bubble box, ~4x the normal text size — instead of a tiny
+     emoji cramped inside a colored pill. */
+  .bubble.emoji-only { background: transparent; border-color: transparent; padding: 4px 2px; font-size: 3.4rem; line-height: 1.15; }
+  .bubble-row.mine .bubble.emoji-only { background: transparent; border-color: transparent; }
   .bubble.gif img, .bubble.media img, .bubble.media video { max-width: 260px; max-height: 320px; border-radius: 10px; display: block; object-fit: contain; }
   .bubble.media { padding: 5px; position: relative; }
   .optimistic-bubble { opacity: .92; }
@@ -2814,6 +2819,18 @@ function replyQuoteHtml(m, convo) {
   return `<div class="bubble-reply-quote">${senderName ? `<div class="bubble-reply-quote-sender">${escapeHtml(senderName)}</div>` : ''}<div class="bubble-reply-quote-text">${replySnippet(original)}</div></div>`;
 }
 
+// \p{Extended_Pictographic} matches real emoji glyphs specifically — unlike
+// \p{Emoji}, it excludes plain digits/#/* (which are technically
+// "Emoji=Yes" via keycap sequences), so a message like "5" doesn't
+// false-positive as emoji-only. Strips every emoji-related code point
+// (the pictographs themselves, skin-tone modifiers, ZWJ joiners, the
+// variation selector, and whitespace) and checks nothing real is left.
+function isEmojiOnlyText(text) {
+  if (!text) return false;
+  const stripped = text.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F\s]/gu, '');
+  return stripped.length === 0 && /\p{Extended_Pictographic}/u.test(text);
+}
+
 // Reply/forward are available to any user on any real message (not just
 // staff, and not on appointment/system bubbles) — the "⋯" always renders
 // when canReplyForward is true, edit/delete are additionally gated by
@@ -2878,7 +2895,8 @@ function renderBubble(m, convo) {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
     const editDelete = canAct ? `<button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
     const actions = msgActionsHtml(m.id, canAct, canReplyForward, editDelete);
-    content = `<div class="bubble" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${escapeHtml(m.text)}${edited}</div>`;
+    const emojiOnlyCls = isEmojiOnlyText(m.text) ? ' emoji-only' : '';
+    content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${escapeHtml(m.text)}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
         <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
