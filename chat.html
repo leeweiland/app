@@ -3181,6 +3181,48 @@ function escapeHtml(s) {
 })();
 
 // ── Composer ─────────────────────────────────────────────────────────────
+// Classic text-emoticon -> emoji auto-conversion (":-)" -> "🙂"), same idea
+// as iMessage/Slack — converts the instant the pattern is completed, no
+// trailing space needed. Order doesn't matter for correctness here (none of
+// these patterns are suffixes of each other), but longer variants are
+// listed first anyway as a readability convention.
+const EMOTICON_MAP = [
+  [':-)', '🙂'], [':)', '🙂'],
+  [':-D', '😄'], [':D', '😄'],
+  [':-(', '🙁'], [':(', '🙁'],
+  [';-)', '😉'], [';)', '😉'],
+  [':-P', '😛'], [':P', '😛'], [':-p', '😛'], [':p', '😛'],
+  [":'(", '😢'],
+  [':-O', '😮'], [':O', '😮'], [':-o', '😮'], [':o', '😮'],
+  ['</3', '💔'], ['<3', '❤️'],
+  [':-|', '😐'], [':|', '😐'],
+  ['xD', '😆'], ['XD', '😆'],
+  [':-*', '😘'], [':*', '😘'],
+  ['8-)', '😎'], ['8)', '😎'],
+  ['>:(', '😠'],
+  [':-/', '😕'], [':/', '😕'],
+];
+// Converts the emoticon immediately before the caret, if any, and returns
+// true if it did. Requires whitespace (or start-of-message) right before
+// the pattern so this doesn't fire mid-word or mid-URL.
+function convertEmoticonAtCaret(el) {
+  if (el.selectionStart !== el.selectionEnd) return false;
+  const pos = el.selectionStart;
+  const value = el.value;
+  const before = value.slice(0, pos);
+  for (const [pattern, emoji] of EMOTICON_MAP) {
+    if (!before.endsWith(pattern)) continue;
+    const start = pos - pattern.length;
+    const charBefore = value[start - 1];
+    if (start > 0 && charBefore !== undefined && !/\s/.test(charBefore)) continue;
+    el.value = before.slice(0, start) + emoji + value.slice(pos);
+    const newPos = start + emoji.length;
+    el.setSelectionRange(newPos, newPos);
+    return true;
+  }
+  return false;
+}
+
 function setupComposer() {
   const textInput = document.getElementById('textInput');
   const sendBtn = document.getElementById('sendBtn');
@@ -3362,7 +3404,8 @@ function setupComposer() {
       }
     });
   }
-  textInput.addEventListener('input', () => {
+  textInput.addEventListener('input', (e) => {
+    if (!e.isComposing) convertEmoticonAtCaret(textInput);
     textInput.style.height = 'auto';
     textInput.style.height = textInput.scrollHeight + 'px';
   });
