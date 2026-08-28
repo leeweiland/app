@@ -503,6 +503,11 @@
      that don't understand the dvh line just ignore it and keep the vh one. */
   .modal-box { width: 100%; max-width: 420px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
   .modal-box-wide { max-width: 620px; }
+  /* Publish modal only — a flex column lets the video (flex:1, see its
+     inline style) shrink to whatever room is actually left after the
+     trim track/label/buttons, instead of a fixed vh max-height eating
+     most of the box and pushing the rest of the content past the fold. */
+  .modal-box-flex { display: flex; flex-direction: column; }
   .avatar-wrap { position: relative; }
   .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 26px; height: 26px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
   .avatar-edit-badge:hover { border-color: var(--pra-blue); }
@@ -986,11 +991,15 @@
        trims, types a label, and clicks Save. Images keep the plain
        rename-and-favorite flow above. -->
   <div class="modal-backdrop" id="publishModal">
-    <div class="pra-panel modal-box modal-box-wide">
-      <div class="pra-h2" style="margin-bottom:12px">Save Training Clip</div>
+    <div class="pra-panel modal-box modal-box-wide modal-box-flex">
+      <div class="pra-h2" style="margin-bottom:10px;flex-shrink:0">Save Training Clip</div>
 
-      <video id="publishSourceVideo" playsinline style="max-width:100%;max-height:60vh;width:auto;height:auto;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
-      <div class="camera-trim-wrap" style="padding:10px 0 0">
+      <!-- flex:1 (not a fixed vh max-height) so the video is the element
+           that shrinks to make everything else below it fit on screen
+           without scrolling, instead of eating most of the modal's
+           height budget and pushing the label/buttons past the fold. -->
+      <video id="publishSourceVideo" playsinline style="flex:1 1 auto;min-height:60px;width:100%;max-width:100%;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
+      <div class="camera-trim-wrap" style="padding:8px 0 0;flex-shrink:0">
         <div class="camera-trim-track" id="publishTrimTrack">
           <div class="camera-trim-range" id="publishTrimRange"></div>
           <div class="camera-trim-handle camera-trim-handle-start" id="publishTrimStartHandle"></div>
@@ -998,18 +1007,17 @@
         </div>
       </div>
 
-      <div style="margin-top:14px">
+      <div style="margin-top:10px;flex-shrink:0">
         <label class="pra-label">Label (also saved as the Drive filename)</label>
-        <div class="pra-muted" style="font-size:.78rem;margin:4px 0 8px">Trim, Label, Save ex. FIRST NAME LAST NAME LOCATION ELEMENT KATA LEVEL APPARATUS MOVES. PATRICK KELLEHER FRANCE NINJA STRENGTH KATA LEVEL 4 BAR MUSCLE UP, etc.</div>
-        <input class="pra-input" id="publishLabelInput" placeholder="e.g. FIRST LAST GYM MUSCLE UP TRANSITION" maxlength="200"/>
+        <input class="pra-input" id="publishLabelInput" title="Trim, Label, Save — ex. FIRST NAME LAST NAME LOCATION ELEMENT KATA LEVEL APPARATUS MOVES. PATRICK KELLEHER FRANCE NINJA STRENGTH KATA LEVEL 4 BAR MUSCLE UP, etc." placeholder="e.g. FIRST LAST GYM MUSCLE UP TRANSITION" maxlength="200" style="margin-top:6px"/>
       </div>
 
-      <div class="pra-muted" id="publishStatus" style="font-size:.78rem;margin-top:10px;min-height:1em"></div>
+      <div class="pra-muted" id="publishStatus" style="font-size:.78rem;margin-top:6px;min-height:1em;flex-shrink:0"></div>
 
-      <div style="display:flex;gap:10px;margin-top:14px">
+      <div style="display:flex;gap:10px;margin-top:10px;flex-shrink:0">
         <button class="pra-btn" id="publishSaveBtn" type="button" style="flex:1">Save</button>
       </div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="publishCancelBtn" type="button">Cancel</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;flex-shrink:0" id="publishCancelBtn" type="button">Cancel</button>
     </div>
   </div>
 
@@ -4534,8 +4542,11 @@ document.querySelectorAll('.mab-emoji').forEach(btn => {
 });
 document.getElementById('mabEmojiPlus').onclick = (e) => {
   const mid = actionBarMessageId;
-  closeMsgActionBar(); // full emoji panel takes over — leave the row selected until a pick (or outside click) resolves it
+  // Position while the button is still visible (see mabMoreBtn's handler
+  // for why order matters here) — leave the row selected until a pick
+  // (or outside click) resolves it, the full panel just takes over on top.
   if (mid) toggleEmojiPanel(e.currentTarget, mid);
+  closeMsgActionBar();
 };
 document.getElementById('mabStarBtn').onclick = () => {
   const mid = actionBarMessageId;
@@ -4559,8 +4570,13 @@ document.getElementById('mabReplyBtn').onclick = () => {
 };
 document.getElementById('mabMoreBtn').onclick = (e) => {
   const mid = actionBarMessageId;
-  closeMsgActionBar();
+  // Position while the button (and the bar it's in) is still visible --
+  // closing the bar first collapses it to display:none, so
+  // getBoundingClientRect() on the now-hidden button would read all
+  // zeros and the menu would render off in the top-left corner instead
+  // of anywhere near the bubble.
   openMsgMoreMenu(e.currentTarget, mid);
+  closeMsgActionBar();
 };
 // Tapping anywhere outside the bar/submenu drops the selection — except the
 // long-press gesture's own trailing synthetic click on the row it just
@@ -4766,12 +4782,12 @@ async function saveEditMessage(mid, text) {
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 
-// Kickoff/Notes/Favorites/Shared-Media all get click-the-backdrop-to-close
-// (clicking the dark overlay outside the panel itself, not the panel's own
-// content) — these four are read/browse-heavy panels people bounce in and
-// out of, unlike e.g. a destructive confirm dialog where an accidental
-// outside click closing it would be more annoying than helpful.
-['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal'].forEach(id => {
+// Kickoff/Notes/Favorites/Shared-Media/Publish all get click-the-backdrop-
+// to-close (clicking the dark overlay outside the panel itself, not the
+// panel's own content) — same "bounce in and out, an accidental close
+// isn't costly" reasoning extends to Publish since Cancel already discards
+// the trim with no confirmation of its own.
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
