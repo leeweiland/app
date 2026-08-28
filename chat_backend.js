@@ -2348,6 +2348,14 @@ export async function handleChatRequest(req, res, url) {
           ["content-type", "content-length", "content-range", "accept-ranges"].forEach(h => {
             if (driveRes.headers[h]) passHeaders[h.replace(/(^|-)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase())] = driveRes.headers[h];
           });
+          // A given fileId's bytes never change once sent -- nothing here
+          // ever needs revalidating. No cache header at all before this
+          // meant every view re-fetched the same photo/video through this
+          // proxy (which itself re-fetches from Drive) instead of the
+          // device just reading it back from its own cache. `private`
+          // (not `public`) since access is gated per-request above --
+          // this is safe to keep on THIS device's cache, not a shared one.
+          passHeaders["Cache-Control"] = "private, max-age=31536000, immutable";
           res.writeHead(driveRes.statusCode, passHeaders);
           driveRes.pipe(res);
           driveRes.on("end", resolve);

@@ -69,6 +69,9 @@
   #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
   #videoReplyNotesList .video-note-row { padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
   .video-note-reply .video-note-player { width: 100%; border-radius: 10px; display: block; margin-top: 2px; }
+  /* Same 0x0-collapse issue as .bubble.media img[data-src] above -- only
+     relevant here when this is the image (not video) variant. */
+  img.video-note-player[data-src] { height: 180px; background: rgba(255,255,255,0.04); }
   .video-note-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
   .convo-item:hover { background: rgba(255,255,255,0.03); }
   .convo-item.active { background: var(--pra-blue-dim); }
@@ -215,6 +218,13 @@
   .bubble.emoji-only { background: transparent; border-color: transparent; padding: 4px 2px; font-size: 3.4rem; line-height: 1.15; }
   .bubble-row.mine .bubble.emoji-only { background: transparent; border-color: transparent; }
   .bubble.gif img, .bubble.media img, .bubble.media video { max-width: 260px; max-height: 320px; border-radius: 10px; display: block; object-fit: contain; }
+  /* A src-less <img> (data-src not yet resolved) collapses to a literal
+     0x0 box -- unlike <video>, which keeps its default 300x150 intrinsic
+     size even with no src -- so the lazy-load IntersectionObserver never
+     had any real area to detect as intersecting. This placeholder box
+     gives it one; it reverts to normal img sizing the instant data-src
+     is resolved to a real src (chatMediaLazyObserver removes the attr). */
+  .bubble.media img[data-src] { width: 180px; height: 180px; background: rgba(255,255,255,0.04); }
   .bubble.media { padding: 5px; position: relative; }
   .optimistic-bubble { opacity: .92; }
   .optimistic-overlay { position: absolute; inset: 5px; border-radius: 10px; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; }
@@ -2749,17 +2759,18 @@ async function refreshThread(scrollDown) {
 // without threading it through renderBubble's own call signature.
 let currentThreadMessages = [];
 
-// Video bubbles carry data-src, not src (see renderBubble) — a long
-// conversation full of videos was starting every single one loading the
-// moment it rendered, all competing for bandwidth/connections at once.
-// One shared observer per page load; unobserved right after a video gets
-// its real src since it only needs to load once.
-const chatVideoLazyObserver = new IntersectionObserver((entries) => {
+// Video AND image bubbles carry data-src, not src (see renderBubble) — a
+// long conversation full of media was starting every single one loading
+// the moment it rendered, all competing for bandwidth/connections at once.
+// One shared observer per page load; unobserved right after an element
+// gets its real src since it only needs to load once. Same element works
+// for both <img> and <video> — setting .src is all either one needs.
+const chatMediaLazyObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (!entry.isIntersecting) return;
-    const video = entry.target;
-    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
-    chatVideoLazyObserver.unobserve(video);
+    const el = entry.target;
+    if (el.dataset.src) { el.src = el.dataset.src; el.removeAttribute('data-src'); }
+    chatMediaLazyObserver.unobserve(el);
   });
 }, { root: document.getElementById('threadBody'), rootMargin: '400px' });
 
@@ -2798,7 +2809,7 @@ function renderMessages(messages, forceScrollDown) {
   });
   body.replaceChildren(...finalRows);
 
-  body.querySelectorAll('video[data-src]').forEach(v => chatVideoLazyObserver.observe(v));
+  body.querySelectorAll('video[data-src], img[data-src]').forEach(v => chatMediaLazyObserver.observe(v));
   const newLastMessage = messages[messages.length - 1];
   if (forceScrollDown || wasAtBottom) {
     scrollThreadToBottom(body);
@@ -3015,7 +3026,7 @@ function renderBubble(m, convo) {
     const videoHtml = !mediaFileId
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
-        ? `<img class="video-note-player" src="/api/chat/media/${mediaFileId}"/>`
+        ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
         : `<video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" controls preload="metadata" playsinline></video>`;
     // No timestamp badge on an image note — "time" only means anything for
     // video, and omitting it here also means the seek-on-click handler
@@ -3048,7 +3059,7 @@ function renderBubble(m, convo) {
     </div>`;
   }
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
-  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/></div>`;
+  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
@@ -3175,12 +3186,12 @@ function escapeHtml(s) {
     // Video keeps its native controls for inline play/pause/scrub — only the
     // dedicated expand button opens the lightbox, so clicking play doesn't
     // fight with clicking to go full-frame.
-    if (e.target.tagName === 'IMG') openImage(e.target.src);
+    // Lazy-loaded (see chatMediaLazyObserver) — normally already resolved
+    // by the time either is tappable, but fall back to data-src in case
+    // the observer hasn't fired yet (e.g. rootMargin threshold not yet hit).
+    if (e.target.tagName === 'IMG') openImage(e.target.src || e.target.dataset.src);
     else if (e.target.classList.contains('expand-video-btn')) {
       const vid = e.target.previousElementSibling;
-      // Lazy-loaded (see chatVideoLazyObserver) — normally already resolved
-      // by the time this is tappable, but fall back to data-src in case the
-      // observer hasn't fired yet (e.g. rootMargin threshold not yet hit).
       openVideo(vid.src || vid.dataset.src);
     }
   });
