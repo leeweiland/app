@@ -35,6 +35,8 @@ const RESETS_FILE = "chat_password_resets.json";
 const UPLOAD_COUNTERS_FILE = "chat_upload_counters.json";
 const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
 const FAVORITES_FILE = "chat_favorites.json";
+const BLOCKS_FILE = "chat_blocks.json";
+const REPORTS_FILE = "chat_reports.json";
 const MESSAGE_TEMPLATES_FILE = "chat_message_templates.json";
 const PROTOCOL_STEP_TEMPLATES_FILE = "chat_protocol_step_templates.json";
 // Whole reusable protocols (named, full step graph) a coach can apply to
@@ -1791,6 +1793,22 @@ async function notifyParticipants(conversationId, excludeUserId, payload) {
   if (!convo) return;
   const subs = readJson(PUSH_FILE, []);
   const targets = subs.filter(s => convo.participantIds.includes(s.userId) && s.userId !== excludeUserId && !isViewingConversation(s.userId, conversationId));
+  await sendPushToTargets(targets, payload);
+}
+
+// Guideline 1.2 (UGC safety) requires reports/blocks to notify "the
+// developer" — admins are the closest equivalent this app has to that, so a
+// report fires the exact same push path a new message would, just aimed at
+// every admin/admin2 instead of a conversation's participants.
+async function notifyAdmins(payload) {
+  const users = readJson(USERS_FILE, []);
+  const adminIds = new Set(users.filter(isAdmin).map(u => u.id));
+  const subs = readJson(PUSH_FILE, []);
+  const targets = subs.filter(s => adminIds.has(s.userId));
+  await sendPushToTargets(targets, payload);
+}
+
+async function sendPushToTargets(targets, payload) {
   ensureVapidKeys();
   const fbApp = getFirebaseApp();
   // This whole path used to fail completely silently — no log for a
@@ -2008,8 +2026,14 @@ export async function handleChatRequest(req, res, url) {
       fields = await readJsonBody(req);
     }
 
-    const { first, last, email, phone, password } = fields;
+    const { first, last, email, phone, password, agreedToTerms } = fields;
     if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
+    // Guideline 1.2 requires agreement to no-tolerance terms BEFORE an
+    // account is created — enforced server-side too since the checkbox
+    // itself is just client-side HTML that a direct API call would skip.
+    if (agreedToTerms !== "true" && agreedToTerms !== true) {
+      return sendJson(res, 400, { error: "You must agree to the Terms of Use to create an account" });
+    }
 
     const users = readJson(USERS_FILE, []);
     if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
@@ -2026,6 +2050,11 @@ export async function handleChatRequest(req, res, url) {
       profilePictureFileId: profilePictureFileId || null,
       ip, geo, // geo: { city, region, country, lat, lng } | null — used by the users map
       createdAt: new Date().toISOString(),
+      // Only reachable once the agreedToTerms check above passed, so this
+      // is always "now" -- a durable record of *when* they agreed, not
+      // just that the gate was satisfied at signup (which itself wasn't
+      // being persisted anywhere before this).
+      termsAcceptedAt: new Date().toISOString(),
     };
     users.push(user);
     writeJson(USERS_FILE, users);
@@ -3348,9 +3377,69 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { results });
     }
 
+    // ─── Blocking / reporting (Guideline 1.2 UGC safety) ────────────────
+    // A DM with someone you've blocked is filtered out of your own list
+    // below (blockedUserIds) — group chats are left alone, since blocking is
+    // a 1:1 concept here and yanking someone out of a shared training group
+    // is a coach/admin action, not something blocking should silently do.
+    if (p === "/api/chat/block" && req.method === "POST") {
+      const { userId: blockedId } = await readJsonBody(req);
+      if (!blockedId || blockedId === user.id) return sendJson(res, 400, { error: "Invalid user" });
+      const blocks = readJson(BLOCKS_FILE, []);
+      if (!blocks.some(b => b.blockerId === user.id && b.blockedId === blockedId)) {
+        blocks.push({ id: randomUUID(), blockerId: user.id, blockedId, createdAt: new Date().toISOString() });
+        writeJson(BLOCKS_FILE, blocks);
+      }
+      return sendJson(res, 200, { ok: true });
+    }
+    if (p === "/api/chat/unblock" && req.method === "POST") {
+      const { userId: blockedId } = await readJsonBody(req);
+      const blocks = readJson(BLOCKS_FILE, []);
+      writeJson(BLOCKS_FILE, blocks.filter(b => !(b.blockerId === user.id && b.blockedId === blockedId)));
+      return sendJson(res, 200, { ok: true });
+    }
+    if (p === "/api/chat/blocked" && req.method === "GET") {
+      const blocks = readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id);
+      return sendJson(res, 200, { blockedUserIds: blocks.map(b => b.blockedId) });
+    }
+    // "flag objectionable content" — a message or a user, reported straight
+    // to an admin (see notifyAdmins) plus kept in REPORTS_FILE as a durable
+    // record. No auto-moderation action taken on the reported content itself
+    // (blocking, not reporting, is what actually removes someone from your
+    // own feed) — this just guarantees a human sees it fast.
+    if (p === "/api/chat/report" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const type = body.type === "user" ? "user" : "message";
+      if (!body.targetUserId) return sendJson(res, 400, { error: "targetUserId required" });
+      const reports = readJson(REPORTS_FILE, []);
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === body.targetUserId);
+      let messageSnapshot = null;
+      if (type === "message" && body.messageId) {
+        const msg = readJson(MESSAGES_FILE, []).find(m => m.id === body.messageId);
+        if (msg) messageSnapshot = { type: msg.type, text: msg.text || "", createdAt: msg.createdAt };
+      }
+      const report = {
+        id: randomUUID(), type,
+        reporterId: user.id, targetUserId: body.targetUserId,
+        conversationId: body.conversationId || null, messageId: body.messageId || null,
+        messageSnapshot, reason: (body.reason || "").slice(0, 500),
+        createdAt: new Date().toISOString(),
+      };
+      reports.push(report);
+      writeJson(REPORTS_FILE, reports);
+      notifyAdmins({
+        title: "Content reported",
+        body: `${user.first} ${user.last} reported ${type === "user" ? "a user" : "a message"} from ${target ? `${target.first} ${target.last}` : "someone"}.`,
+      }).catch(e => console.error("[report] admin notify failed:", e.message));
+      return sendJson(res, 200, { ok: true });
+    }
+
     // ─── Conversations ─────────────────────────────────────────────────
     if (p === "/api/chat/conversations" && req.method === "GET") {
-      const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id));
+      const blockedUserIds = new Set(readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id).map(b => b.blockedId));
+      const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id))
+        .filter(c => c.type !== "dm" || !c.participantIds.some(id => blockedUserIds.has(id)));
       const messages = readJson(MESSAGES_FILE, []);
       const users = readJson(USERS_FILE, []);
       const favoriteIds = new Set(user.favoriteConvoIds || []);
@@ -3578,6 +3667,16 @@ export async function handleChatRequest(req, res, url) {
       }
 
       if (sub === "/messages" && req.method === "POST") {
+        // Blocking has to actually stop contact, not just hide the thread
+        // from the blocker's own list above — otherwise the blocked person
+        // could keep messaging into a conversation the blocker can no longer
+        // even see. Group chats aren't blockable (see the block endpoint's
+        // comment), so this only applies to DMs.
+        if (convo.type === "dm") {
+          const otherId = convo.participantIds.find(id => id !== user.id);
+          const blockedByOther = readJson(BLOCKS_FILE, []).some(b => b.blockerId === otherId && b.blockedId === user.id);
+          if (blockedByOther) return sendJson(res, 403, { error: "You can't message this person." });
+        }
         const created = [];
         const ct = req.headers["content-type"] || "";
         if (ct.startsWith("multipart/form-data")) {

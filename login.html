@@ -33,6 +33,9 @@
   }
   .pw-toggle:hover { border-color: var(--pra-blue); background: rgba(0,155,255,0.1); }
   .pw-toggle svg { width: 17px; height: 17px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); }
+  .terms-agree-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; cursor: pointer; }
+  .terms-agree-row input { margin-top: 3px; flex-shrink: 0; }
+  .terms-agree-row span { font-size: .76rem; line-height: 1.4; color: var(--pra-dim); }
 </style>
 </head>
 <body>
@@ -97,6 +100,10 @@
             <button type="button" class="pw-toggle" data-target="suPassword" aria-label="Show password"></button>
           </div>
         </div>
+        <label class="terms-agree-row">
+          <input type="checkbox" id="suAgreeTerms" required/>
+          <span>I agree to the <a class="pra-link" href="/chat-app/terms.html" target="_blank" rel="noopener">Terms of Use</a>, including the no-tolerance policy for objectionable content and abusive behavior.</span>
+        </label>
         <button class="pra-btn" type="submit" style="width:100%;margin-top:8px">CREATE ACCOUNT</button>
       </form>
     </div>
@@ -165,6 +172,7 @@ signupForm.addEventListener('submit', async (e) => {
   fd.append('email', document.getElementById('suEmail').value);
   fd.append('phone', document.getElementById('suPhone').value);
   fd.append('password', document.getElementById('suPassword').value);
+  fd.append('agreedToTerms', document.getElementById('suAgreeTerms').checked ? 'true' : 'false');
   const picFile = document.getElementById('profilePicInput').files[0];
   if (picFile) fd.append('profilePicture', picFile);
   const r = await fetch('/api/auth/signup', { method: 'POST', body: fd });
