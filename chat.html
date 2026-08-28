@@ -232,46 +232,34 @@
 
   /* ── Reactions ── */
   .bubble-wrap { position: relative; display: inline-block; max-width: 100%; }
-  .react-trigger {
-    position: absolute; bottom: -9px; right: -9px; width: 22px; height: 22px; border-radius: 50%;
-    background: var(--pra-panel-2); border: 1px solid var(--pra-border); font-size: 12px; line-height: 1;
-    display: flex; align-items: center; justify-content: center; cursor: pointer;
-    opacity: 0; transition: opacity .15s, border-color .15s; padding: 0;
-  }
-  .react-trigger:hover { border-color: var(--pra-blue); }
-  .bubble-row:hover .react-trigger { opacity: 1; }
-  .bubble-row.mine .react-trigger { left: -9px; right: auto; }
   /* ── Message edit/delete actions ── */
   .appt-delete-btn { position: absolute; top: 6px; right: 8px; background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.5); font-size: .85rem; line-height: 1; padding: 0 2px; }
   .appt-delete-btn:hover { color: #fff; }
-  .msg-actions { display: none; position: absolute; top: -26px; right: 0; gap: 2px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 6px; padding: 2px 4px; z-index: 10; white-space: nowrap; }
-  .bubble-row:hover .msg-actions { display: flex; }
-  .bubble-row.mine .msg-actions { right: auto; left: 0; }
-  .msg-action-btn { background: none; border: none; cursor: pointer; padding: 2px 5px; font-size: .75rem; color: var(--pra-dim); border-radius: 4px; }
-  .msg-action-btn:hover { color: var(--pra-text); background: rgba(255,255,255,0.06); }
-  .msg-action-btn.delete { color: #c0392b; }
-  .msg-action-btn.delete:hover { color: #e74c3c; }
-  /* Reply/forward: a "⋯" in the same hover-revealed row as edit/delete opens
-     a small dropdown on desktop (click, not hover — a hover-only dropdown
-     inside an already-hover-revealed row is a coordination nightmare to
-     keep open while moving the mouse into it). Touch has no hover at all,
-     so a long-press instead marks the row .touch-selected, which forces
-     this whole row visible via CSS and hands reply/forward off to the
-     header buttons instead of this menu (see #replyHeaderBtn). */
-  .bubble-row.touch-selected .msg-actions, .bubble-row.touch-selected .react-trigger, .bubble-row.touch-selected .fav-star-btn, .bubble-row.touch-selected .media-forward-btn { opacity: 1; display: flex; }
+  /* Long-press (touch) / right-click (desktop) marks the row selected —
+     a subtle highlight behind the bubble while #msgActionBar is open for
+     it (see openMsgActionBar/closeMsgActionBar). */
+  .bubble-row.action-selected .bubble, .bubble-row.action-selected .bubble.appt { box-shadow: 0 0 0 2px var(--pra-blue); }
   .msg-more-menu { display: none; position: fixed; z-index: 30; min-width: 120px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
   .msg-more-menu.show { display: block; }
   .msg-more-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 7px 10px; font-size: .8rem; color: var(--pra-text); border-radius: 5px; }
   .msg-more-menu-item:hover { background: rgba(255,255,255,0.06); }
-  /* Persistent forward icon on media bubbles — WhatsApp shows this next to
-     photos/videos without needing a hover/long-press first. */
-  .media-forward-btn {
-    position: absolute; bottom: 9px; right: 9px; z-index: 3; width: 26px; height: 26px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.5); cursor: pointer;
-  }
-  .media-forward-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); }
-  .media-forward-btn svg { width: 14px; height: 14px; }
+  /* ── Message action bar (WhatsApp-style long-press/right-click menu) ──
+     Row 1: quick reactions + "+" for the full emoji panel. Row 2: Star/
+     Forward/Reply/"⋯" — same floating-panel treatment as .msg-more-menu,
+     positioned via positionPickerNear next to whichever bubble it's for. */
+  .msg-action-bar { display: none; position: fixed; z-index: 30; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+  .msg-action-bar.show { display: block; }
+  .mab-row { display: flex; align-items: center; gap: 6px; }
+  .mab-emoji-row { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--pra-border); }
+  .mab-emoji { background: none; border: none; cursor: pointer; font-size: 1.35rem; line-height: 1; padding: 4px; border-radius: 50%; transition: background .15s, transform .1s; }
+  .mab-emoji:hover { background: rgba(255,255,255,0.08); transform: scale(1.15); }
+  .mab-emoji-plus { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-border); color: var(--pra-dim); font-size: 1.1rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .mab-emoji-plus:hover { color: var(--pra-text); border-color: var(--pra-blue); }
+  .mab-actions-row { justify-content: space-between; }
+  .mab-action { width: 34px; height: 34px; border-radius: 50%; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--pra-text); font-size: 1.1rem; }
+  .mab-action:hover { background: rgba(255,255,255,0.08); }
+  .mab-action svg { width: 18px; height: 18px; }
+  .mab-action.starred svg .star-fill { fill: #ffd54a; stroke: #ffd54a; }
   /* Quoted-message block shown above a reply's own content, and the small
      "Forwarded" label shown above a forwarded message's content. */
   .bubble-reply-quote { border-left: 3px solid var(--pra-blue); background: rgba(255,255,255,0.06); border-radius: 4px; padding: 4px 8px; margin-bottom: 5px; font-size: .78rem; opacity: .85; }
@@ -587,23 +575,10 @@
   .expand-video-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .bubble.media img { cursor: zoom-in; }
 
-  /* ── Favorite star (coach/admin only) ──
-     Top-left, not top-right, so it never collides with .expand-video-btn on
-     video bubbles. Hidden until hover UNLESS already favorited (.favorited
-     stays visible always — that's the "star remains on the media" part) —
-     the hover-only state before that is deliberately the plain gray outline
-     star, filled yellow once actually favorited. */
-  .fav-star-btn {
-    position: absolute; top: 9px; left: 9px; z-index: 3; width: 28px; height: 28px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.5); cursor: pointer;
-    opacity: 0; transition: opacity .15s, background .15s, border-color .15s;
-  }
-  .bubble.media:hover .fav-star-btn, .fav-star-btn.favorited { opacity: 1; }
-  .fav-star-btn:hover { background: var(--pra-blue); border-color: var(--pra-blue); }
-  .fav-star-btn svg { width: 15px; height: 15px; }
-  .fav-star-btn .star-fill { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
-  .fav-star-btn.favorited .star-fill { fill: #ffd54a; stroke: #ffd54a; }
+  /* Favoriting (coach/admin only, save media to the content library) now
+     lives in the message action bar's Star button (.mab-action#mabStarBtn)
+     instead of a per-bubble corner button — see openMsgActionBar. */
+  .mab-action svg .star-fill { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 
   /* ── Mobile: one panel at a time, WhatsApp-style, instead of squeezing a
      320px sidebar + thread into a phone screen. @container (not @media) so
@@ -673,6 +648,14 @@
       </div>
       <div class="convo-list" id="convoList"><div class="empty-hint">Loading…</div></div>
     </div>
+    <!-- Long-press (touch) / right-click (desktop) on a sidebar row —
+         see wireConvoContextMenu(). Same floating-menu CSS as msgMoreMenu. -->
+    <div class="msg-more-menu" id="convoActionMenu">
+      <button class="msg-more-menu-item" id="convoActionPinBtn">Pin</button>
+      <button class="msg-more-menu-item" id="convoActionFavBtn">Star</button>
+      <button class="msg-more-menu-item" id="convoActionReportBtn">Report</button>
+      <button class="msg-more-menu-item" id="convoActionBlockBtn" style="color:#ff5c5c">Block</button>
+    </div>
     <div class="sidebar-resizer" id="sidebarResizer"></div>
 
     <div class="main">
@@ -694,13 +677,6 @@
             </div>
           </div>
           <div class="thread-head-icons" id="threadHeadIconsRow">
-            <!-- Mobile only — a long-press on a bubble "selects" it (no
-                 hover to reveal inline icons on touch), and these two take
-                 over the header's icon row for as long as it's selected,
-                 same slot the calendar/media/favorites icons normally live
-                 in. Hidden the rest of the time. -->
-            <button class="icon-btn" id="replyHeaderBtn" title="Reply" style="display:none"></button>
-            <button class="icon-btn" id="forwardHeaderBtn" title="Forward" style="display:none"></button>
             <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
@@ -728,9 +704,33 @@
             <span class="new-msg-pill-arrow">↓</span> New message
           </button>
         </div>
+        <!-- Long-press (touch) / right-click (desktop) on a bubble opens
+             #msgActionBar: row 1 is quick reactions + "+" for the full
+             emoji panel, row 2 is Star/Forward/Reply/"⋯". The "⋯" opens
+             this small menu (Report always available on someone else's
+             message, Edit/Delete for your own if you're staff). See
+             openMsgActionBar() / openMsgMoreMenu(). -->
         <div class="msg-more-menu" id="msgMoreMenu">
-          <button class="msg-more-menu-item" id="msgMoreReplyBtn">Reply</button>
-          <button class="msg-more-menu-item" id="msgMoreForwardBtn">Forward</button>
+          <button class="msg-more-menu-item" id="msgMoreReportBtn">Report</button>
+          <button class="msg-more-menu-item" id="msgMoreEditBtn" style="display:none">Edit</button>
+          <button class="msg-more-menu-item" id="msgMoreDeleteBtn" style="display:none;color:#ff5c5c">Delete</button>
+        </div>
+        <div class="msg-action-bar" id="msgActionBar">
+          <div class="mab-row mab-emoji-row" id="mabEmojiRow">
+            <button class="mab-emoji" data-emoji="👍" title="👍">👍</button>
+            <button class="mab-emoji" data-emoji="❤️" title="❤️">❤️</button>
+            <button class="mab-emoji" data-emoji="😂" title="😂">😂</button>
+            <button class="mab-emoji" data-emoji="😮" title="😮">😮</button>
+            <button class="mab-emoji" data-emoji="😢" title="😢">😢</button>
+            <button class="mab-emoji" data-emoji="🙏" title="🙏">🙏</button>
+            <button class="mab-emoji-plus" id="mabEmojiPlus" title="More reactions">+</button>
+          </div>
+          <div class="mab-row mab-actions-row">
+            <button class="mab-action" id="mabStarBtn" title="Star"></button>
+            <button class="mab-action" id="mabForwardBtn" title="Forward"></button>
+            <button class="mab-action" id="mabReplyBtn" title="Reply"></button>
+            <button class="mab-action" id="mabMoreBtn" title="More">⋯</button>
+          </div>
         </div>
         <div class="composer">
           <div class="reply-preview" id="replyPreview" style="display:none"></div>
@@ -1161,10 +1161,21 @@ let contacts = [];
 let lastPollTime = new Date(0).toISOString();
 let pollTimer = null;
 let reactingMessageId = null;
+// Populated once at init from /api/chat/blocked, kept in sync locally on
+// block/unblock so the sidebar context menu's Block/Unblock label doesn't
+// need a round-trip every time it opens.
+let blockedUserIds = new Set();
+// The most recently rendered sidebar item list -- renderConvoList()'s own
+// `items` is local to that call, but the sidebar's long-press/right-click
+// handler (attached once to the stable #convoList container, not
+// re-attached per render) needs to look up whichever item a given row
+// belongs to at the moment it's pressed, same idea as currentThreadMessages
+// for the message action bar.
+let lastConvoItems = [];
 
 // Position the (single, shared) emoji panel right next to whatever opened
-// it — the composer's 😊 button, or a specific message's react-trigger —
-// instead of always anchoring to one fixed spot.
+// it — the composer's 😊 button, or the message action bar's "+" — instead
+// of always anchoring to one fixed spot.
 function positionPickerNear(panel, anchorEl) {
   const rect = anchorEl.getBoundingClientRect();
   const margin = 8;
@@ -1373,6 +1384,7 @@ async function init() {
   }
 
   await loadContacts();
+  await loadBlockedUsers();
   await loadConversations();
   // Deep link from the Training Protocol page's Back button — reopens
   // whichever conversation sent the coach/admin there. Cache-Control:
@@ -1557,6 +1569,25 @@ async function ensureConvoId(item) {
   return d.conversation?.id || null;
 }
 
+// Shared by the sidebar star/pin icon buttons AND the long-press/right-click
+// context menu — both just flip the item's current state.
+async function toggleConvoFavorite(item) {
+  const convoId = await ensureConvoId(item);
+  if (!convoId) return;
+  await fetch(`/api/chat/conversations/${convoId}/favorite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite: !item.favorite })
+  });
+  await loadConversations();
+}
+async function toggleConvoPinned(item) {
+  const convoId = await ensureConvoId(item);
+  if (!convoId) return;
+  await fetch(`/api/chat/conversations/${convoId}/pin`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: !item.pinned })
+  });
+  await loadConversations();
+}
+
 function wireConvoItems(wrap, items) {
   wrap.querySelectorAll('.convo-item').forEach(el => {
     const item = items.find(i => i.key === el.dataset.key);
@@ -1575,29 +1606,17 @@ function wireConvoItems(wrap, items) {
     };
   });
   wrap.querySelectorAll('.convo-fav-btn').forEach(btn => {
-    btn.onclick = async (e) => {
+    btn.onclick = (e) => {
       e.stopPropagation();
       const item = items.find(i => i.key === btn.closest('.convo-item')?.dataset.key);
-      const favorite = btn.dataset.favOn === '1';
-      const convoId = item ? await ensureConvoId(item) : btn.dataset.favId;
-      if (!convoId) return;
-      await fetch(`/api/chat/conversations/${convoId}/favorite`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ favorite })
-      });
-      await loadConversations();
+      if (item) toggleConvoFavorite(item);
     };
   });
   wrap.querySelectorAll('.convo-pin-btn').forEach(btn => {
-    btn.onclick = async (e) => {
+    btn.onclick = (e) => {
       e.stopPropagation();
       const item = items.find(i => i.key === btn.closest('.convo-item')?.dataset.key);
-      const pinned = btn.dataset.pinOn === '1';
-      const convoId = item ? await ensureConvoId(item) : btn.dataset.pinId;
-      if (!convoId) return;
-      await fetch(`/api/chat/conversations/${convoId}/pin`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned })
-      });
-      await loadConversations();
+      if (item) toggleConvoPinned(item);
     };
   });
   wrap.querySelectorAll('.convo-channel-btn').forEach(btn => {
@@ -1612,6 +1631,112 @@ function wireConvoItems(wrap, items) {
     };
   });
 }
+
+// ── Sidebar contact context menu (long-press / right-click) ─────────────
+// Pin/Star reuse the same toggle helpers as the icon buttons; Report/Block
+// hit the /api/chat/report and /api/chat/block endpoints (Guideline 1.2
+// UGC safety — same backend the message action bar's Report also uses).
+// Hidden for group rows with no single underlying user (a plain "Team"
+// group, not an auto-personal-group) since there's no one person to
+// report or block there.
+async function loadBlockedUsers() {
+  const r = await fetch('/api/chat/blocked');
+  if (!r.ok) return;
+  const d = await r.json();
+  blockedUserIds = new Set(d.blockedUserIds || []);
+}
+
+let convoActionItem = null;
+function convoActionTargetUser(item) {
+  const u = item?.avatarUser;
+  return (u && u.id && u.id !== me.id) ? u : null;
+}
+function openConvoActionMenu(anchorEl, item) {
+  convoActionItem = item;
+  const targetUser = convoActionTargetUser(item);
+  document.getElementById('convoActionPinBtn').textContent = item.pinned ? 'Unpin' : 'Pin';
+  document.getElementById('convoActionFavBtn').textContent = item.favorite ? 'Unstar' : 'Star';
+  document.getElementById('convoActionReportBtn').style.display = targetUser ? '' : 'none';
+  const blockBtn = document.getElementById('convoActionBlockBtn');
+  blockBtn.style.display = targetUser ? '' : 'none';
+  if (targetUser) blockBtn.textContent = blockedUserIds.has(targetUser.id) ? 'Unblock' : 'Block';
+  const menu = document.getElementById('convoActionMenu');
+  positionPickerNear(menu, anchorEl);
+  menu.classList.add('show');
+}
+function closeConvoActionMenu() {
+  document.getElementById('convoActionMenu').classList.remove('show');
+  convoActionItem = null;
+}
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('convoActionMenu');
+  if (!menu.contains(e.target)) menu.classList.remove('show');
+});
+document.getElementById('convoActionPinBtn').onclick = () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  if (item) toggleConvoPinned(item);
+};
+document.getElementById('convoActionFavBtn').onclick = () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  if (item) toggleConvoFavorite(item);
+};
+document.getElementById('convoActionReportBtn').onclick = async () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  const targetUser = convoActionTargetUser(item);
+  if (!targetUser) return;
+  const reason = prompt(`Optional: what's wrong with ${targetUser.first}'s messages? (This goes straight to our team.)`);
+  if (reason === null) return; // cancelled
+  await fetch('/api/chat/report', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'user', targetUserId: targetUser.id, conversationId: item.convoId || null, reason }),
+  });
+  alert('Reported. Our team will review it.');
+};
+document.getElementById('convoActionBlockBtn').onclick = async () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  const targetUser = convoActionTargetUser(item);
+  if (!targetUser) return;
+  const isBlocked = blockedUserIds.has(targetUser.id);
+  if (!isBlocked && !confirm(`Block ${targetUser.first}? They won't be able to message you, and their messages won't show up for you anymore.`)) return;
+  await fetch(isBlocked ? '/api/chat/unblock' : '/api/chat/block', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: targetUser.id }),
+  });
+  if (isBlocked) blockedUserIds.delete(targetUser.id); else blockedUserIds.add(targetUser.id);
+  // Blocking hides the DM from the list entirely (server-side filter) —
+  // if it's the thread currently open, it'd otherwise sit open on a
+  // conversation that just vanished from the sidebar underneath it.
+  if (!isBlocked && item.convoId && activeConvoId === item.convoId) closeConvo();
+  await loadConversations();
+};
+
+// Same long-press-timer pattern as the message thread's (touchstart, 450ms,
+// cancel on move/end) plus a contextmenu listener for desktop right-click —
+// attached once to the stable #convoList container since rows themselves
+// get replaced wholesale on every render.
+(() => {
+  const list = document.getElementById('convoList');
+  let timer = null;
+  list.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('.convo-item');
+    if (!row) return;
+    timer = setTimeout(() => {
+      timer = null;
+      const item = lastConvoItems.find(i => i.key === row.dataset.key);
+      if (item) openConvoActionMenu(row, item);
+    }, 450);
+  }, { passive: true });
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  list.addEventListener('touchmove', cancel, { passive: true });
+  list.addEventListener('touchend', cancel);
+  list.addEventListener('touchcancel', cancel);
+  list.addEventListener('contextmenu', (e) => {
+    const row = e.target.closest('.convo-item');
+    if (!row) return;
+    e.preventDefault();
+    const item = lastConvoItems.find(i => i.key === row.dataset.key);
+    if (item) openConvoActionMenu(row, item);
+  });
+})();
 
 // ── Bulk select (message several chats/groups at once) ──────────────────
 // Selecting several rows and hitting Message does NOT create one new group
@@ -1708,6 +1833,7 @@ function renderConvoList() {
   if (unreadOnlyView) items = items.filter(i => i.unread);
   if (channelsOnlyView) items = items.filter(i => i.isChannel);
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
+  lastConvoItems = items;
   if (!items.length) {
     const msg = channelsOnlyView
       ? (q ? 'No channels match your search.' : 'No channels yet — an admin can mark a group as a channel from Group Info.')
@@ -2288,8 +2414,9 @@ document.getElementById('gymScheduleSaveBtn').addEventListener('click', async ()
   setTimeout(() => closeModal('gymScheduleModal'), 1600);
 });
 
-document.getElementById('replyHeaderBtn').innerHTML = svgReply();
-document.getElementById('forwardHeaderBtn').innerHTML = svgForward();
+document.getElementById('mabReplyBtn').innerHTML = svgReply();
+document.getElementById('mabForwardBtn').innerHTML = svgForward();
+document.getElementById('mabStarBtn').innerHTML = svgStar();
 document.getElementById('scheduleBtn').innerHTML = svgCalendar();
 document.getElementById('scheduleBtn').addEventListener('click', () => {
   const convo = conversations.find(c => c.id === activeConvoId);
@@ -2848,21 +2975,15 @@ function isEmojiOnlyText(text) {
   return stripped.length === 0 && /\p{Extended_Pictographic}/u.test(text);
 }
 
-// Reply/forward are available to any user on any real message (not just
-// staff, and not on appointment/system bubbles) — the "⋯" always renders
-// when canReplyForward is true, edit/delete are additionally gated by
-// canAct so a client sees only "⋯" while a staff member sees the full row.
-function msgActionsHtml(mid, canAct, canReplyForward, extraButtons) {
-  if (!extraButtons && !canReplyForward) return '';
-  const more = canReplyForward ? `<button class="msg-action-btn msg-more-btn" data-mid="${mid}" title="More">⋯</button>` : '';
-  return `<div class="msg-actions">${extraButtons || ''}${more}</div>`;
-}
-
+// Long-press (touch) / right-click (desktop) opens #msgActionBar for
+// whichever bubble it's for — see openMsgActionBar(), which recomputes
+// these same canAct/canReplyForward/canStar flags fresh from
+// currentThreadMessages rather than baking them into per-bubble HTML the
+// way the old hover-revealed corner buttons did.
 function renderBubble(m, convo) {
   const mine = m.senderId === me.id;
   const sender = convo?.participants.find(p => p.id === m.senderId);
   const senderLabel = (!mine && convo?.type === 'group' && sender) ? `<div class="bubble-sender">${sender.first}</div>` : '';
-  const canAct = isStaffMe() && mine;
   const canReplyForward = m.type !== 'appointment';
   const forwardedLabel = m.forwarded ? `<div class="bubble-forwarded-label">➦ Forwarded</div>` : '';
   const replyQuote = canReplyForward ? replyQuoteHtml(m, convo) : '';
@@ -2883,8 +3004,6 @@ function renderBubble(m, convo) {
     // there's no original message to look up.
     const mediaFileId = m.driveFileId || original?.driveFileId;
     const mediaIsImage = m.driveFileId ? m.type === 'image' : original?.type === 'image';
-    const deleteBtn = canAct ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
-    const actions = msgActionsHtml(m.id, canAct, canReplyForward, deleteBtn);
     const videoHtml = !mediaFileId
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
@@ -2902,7 +3021,7 @@ function renderBubble(m, convo) {
     content = `<div class="bubble media video-note-reply">${senderLabel}${forwardedLabel}${videoHtml}<div class="video-note-list">${notesHtml}</div></div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
-        <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
+        <div class="bubble-wrap">${content}</div>
         ${renderReactionChips(m)}
         <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
       </div>
@@ -2910,34 +3029,25 @@ function renderBubble(m, convo) {
   }
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
-    const editDelete = canAct ? `<button class="msg-action-btn edit-btn" title="Edit">✎</button><button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
-    const actions = msgActionsHtml(m.id, canAct, canReplyForward, editDelete);
     const emojiOnlyCls = isEmojiOnlyText(m.text) ? ' emoji-only' : '';
     content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${escapeHtml(m.text)}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
-        <div class="bubble-wrap">${actions}${content}<button class="react-trigger" title="React">😊</button></div>
+        <div class="bubble-wrap">${content}</div>
         ${renderReactionChips(m)}
         <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
       </div>
     </div>`;
   }
-  // GIF keeps the persistent forward icon (a GIF's own "message" IS the
-  // media, sent by URL — there's no separate download/expand affordance to
-  // fall back on the way photos/videos have). Photos and videos dropped it:
-  // Forward already lives one tap away in the triple-dot/long-press menu.
-  const forwardIcon = `<button class="media-forward-btn" data-mid="${m.id}" title="Forward">${svgForward()}</button>`;
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
-  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/>${favStarHtml(m.driveFileId, m.driveFileName, 'image')}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${favStarHtml(m.driveFileId, m.driveFileName, 'video')}</div>`;
+  else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img src="/api/chat/media/${m.driveFileId}"/></div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else content = '';
-  const deleteBtn = (canAct && m.type !== 'appointment') ? `<button class="msg-action-btn delete delete-btn" title="Delete">🗑</button>` : '';
-  const mediaActions = msgActionsHtml(m.id, canAct, canReplyForward, deleteBtn);
   const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
     <div>
-      <div class="bubble-wrap">${mediaActions}${content}<button class="react-trigger" title="React">😊</button></div>
+      <div class="bubble-wrap">${content}</div>
       ${renderReactionChips(m)}
       <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}${readReceiptTicksHtml(m, mine)}</div>
     </div>
@@ -3053,16 +3163,6 @@ function escapeHtml(s) {
   // wholesale re-rendered on every poll, so a directly-bound listener
   // would just get thrown away each cycle).
   document.getElementById('threadBody').addEventListener('click', (e) => {
-    const starBtn = e.target.closest('.fav-star-btn');
-    if (starBtn) {
-      // Video gets the richer trim/track/caption/schedule pipeline (see
-      // openPublishModal below) — its "save to Drive" step supersedes the
-      // plain copy-and-rename flow for video specifically. Images keep the
-      // original simple flow, unchanged.
-      if (starBtn.dataset.favType === 'video') openPublishModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested);
-      else openFavoriteNameModal(starBtn.dataset.favFile, starBtn.dataset.favSuggested);
-      return;
-    }
     if (!e.target.closest('.bubble.media')) return;
     // Video keeps its native controls for inline play/pause/scrub — only the
     // dedicated expand button opens the lightbox, so clicking play doesn't
@@ -3095,19 +3195,12 @@ function escapeHtml(s) {
   document.getElementById('lightboxClose').onclick = close;
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 
-  // Reaction UI — the 😊 trigger on any bubble (text, gif, image, video)
-  // opens the same emoji panel the composer uses (one shared DOM instance —
-  // no need to duplicate the whole emoji list per message), but positioned
-  // right next to whichever trigger opened it. `reactingMessageId` tells the
-  // shared picker's onPick handler (in setupComposer) to send a reaction
-  // instead of inserting text. Clicking an existing chip toggles it off.
+  // Reaction chip toggling (tapping an existing reaction under a bubble) and
+  // the inline edit textarea's Save/Cancel — both independent of the
+  // long-press/right-click action bar. Delete stays delegated here too
+  // since appointment bubbles keep their own always-visible corner button
+  // (.appt-delete-btn, dual-classed .delete-btn) outside the action bar.
   document.getElementById('threadBody').addEventListener('click', (e) => {
-    const trigger = e.target.closest('.react-trigger');
-    if (trigger) {
-      const row = trigger.closest('.bubble-row');
-      toggleEmojiPanel(trigger, row.dataset.mid);
-      return;
-    }
     const chip = e.target.closest('.reaction-chip');
     if (chip) {
       const row = chip.closest('.bubble-row');
@@ -3118,12 +3211,6 @@ function escapeHtml(s) {
     if (deleteBtn) {
       const row = deleteBtn.closest('.bubble-row');
       if (row && confirm('Delete this message?')) deleteMessage(row.dataset.mid);
-      return;
-    }
-    const editBtn = e.target.closest('.edit-btn');
-    if (editBtn) {
-      const row = editBtn.closest('.bubble-row');
-      if (row) startEditMessage(row.dataset.mid);
       return;
     }
     if (e.target.closest('.bubble-edit-save')) {
@@ -3137,31 +3224,27 @@ function escapeHtml(s) {
       refreshThread(false);
       return;
     }
-    const moreBtn = e.target.closest('.msg-more-btn');
-    if (moreBtn) { openMsgMoreMenu(moreBtn, moreBtn.dataset.mid); return; }
-    const forwardBtn = e.target.closest('.media-forward-btn');
-    if (forwardBtn) { openForwardModal(forwardBtn.dataset.mid); return; }
   });
 
-  // Long-press (touch only — desktop already gets hover) selects a bubble:
-  // forces its emoji/star/delete row visible via .touch-selected (see CSS —
-  // there's no hover state to reveal it on a touchscreen) and hands reply/
-  // forward off to the header buttons instead of the inline dropdown, since
-  // a dropdown menu is a much smaller target on a phone than dedicated
-  // header icons.
+  // Long-press (touch) / right-click (desktop) opens the WhatsApp-style
+  // #msgActionBar for that bubble — see openMsgActionBar().
   let longPressTimer = null;
-  let longPressRow = null;
   const threadBodyEl = document.getElementById('threadBody');
   threadBodyEl.addEventListener('touchstart', (e) => {
     const row = e.target.closest('.bubble-row');
     if (!row) return;
-    longPressRow = row;
-    longPressTimer = setTimeout(() => { selectMessageForTouch(row); longPressTimer = null; }, 450);
+    longPressTimer = setTimeout(() => { openMsgActionBar(row, row.dataset.mid); longPressTimer = null; }, 450);
   }, { passive: true });
-  const cancelLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } longPressRow = null; };
+  const cancelLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
   threadBodyEl.addEventListener('touchmove', cancelLongPress, { passive: true });
   threadBodyEl.addEventListener('touchend', cancelLongPress);
   threadBodyEl.addEventListener('touchcancel', cancelLongPress);
+  threadBodyEl.addEventListener('contextmenu', (e) => {
+    const row = e.target.closest('.bubble-row');
+    if (!row) return;
+    e.preventDefault();
+    openMsgActionBar(row, row.dataset.mid);
+  });
 
   // Desktop: ctrl+wheel to zoom (also how trackpad pinch is reported in Chrome/Firefox)
   backdrop.addEventListener('wheel', (e) => {
@@ -3282,7 +3365,7 @@ function setupComposer() {
   cameraCaptureBtn.onclick = openCameraCapture;
 
   // Same panel serves both composing and reacting — reactingMessageId (set
-  // by the .react-trigger handler above) decides which one a pick means.
+  // by openMsgActionBar's emoji-row handlers) decides which one a pick means.
   setupEmojiPicker('emojiTabs', 'emojiGrid', (emoji) => {
     if (reactingMessageId) {
       const mid = reactingMessageId;
@@ -3299,7 +3382,7 @@ function setupComposer() {
   gifBtn.onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); templatesPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadGifs(''); };
   templatesBtn.onclick = () => { templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
   document.addEventListener('click', (e) => {
-    if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.react-trigger')) {
+    if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.mab-emoji-plus')) {
       emojiPanel.classList.remove('show');
       reactingMessageId = null;
     }
@@ -4352,50 +4435,145 @@ async function deleteMessage(mid) {
 // ── Reply / Forward ──────────────────────────────────────────────────────
 let replyingToId = null;
 let moreMenuMessageId = null;
-let touchSelectedRow = null;
+// The bubble currently long-pressed/right-clicked, and which message the
+// action bar (or the "⋯" submenu it hands off to) is for.
+let actionSelectedRow = null;
+let actionBarMessageId = null;
 
+// "⋯" submenu — Report (anyone else's message) / Edit (your own text,
+// staff) / Delete (your own non-appointment message, staff). Opened either
+// from the action bar's mabMoreBtn (leaves the row selected/highlighted
+// underneath) or, in principle, any other anchor.
 function openMsgMoreMenu(anchorEl, mid) {
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m) return;
   moreMenuMessageId = mid;
+  const mine = m.senderId === me.id;
+  const canAct = isStaffMe() && mine;
+  document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
+  document.getElementById('msgMoreEditBtn').style.display = (canAct && m.type === 'text') ? '' : 'none';
+  document.getElementById('msgMoreDeleteBtn').style.display = (canAct && m.type !== 'appointment') ? '' : 'none';
   const menu = document.getElementById('msgMoreMenu');
   positionPickerNear(menu, anchorEl);
   menu.classList.add('show');
 }
-document.addEventListener('click', (e) => {
-  const menu = document.getElementById('msgMoreMenu');
-  if (!menu.contains(e.target) && !e.target.closest('.msg-more-btn')) menu.classList.remove('show');
-});
-document.getElementById('msgMoreReplyBtn').onclick = () => {
+document.getElementById('msgMoreReportBtn').onclick = async () => {
+  const mid = moreMenuMessageId;
   document.getElementById('msgMoreMenu').classList.remove('show');
-  if (moreMenuMessageId) startReply(moreMenuMessageId);
+  clearActionSelection();
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m) return;
+  const reason = prompt("Optional: what's wrong with this message? (Goes straight to our team.)");
+  if (reason === null) return; // cancelled
+  await fetch('/api/chat/report', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'message', targetUserId: m.senderId, conversationId: activeConvoId, messageId: mid, reason }),
+  });
+  alert('Reported. Our team will review it.');
 };
-document.getElementById('msgMoreForwardBtn').onclick = () => {
+document.getElementById('msgMoreEditBtn').onclick = () => {
+  const mid = moreMenuMessageId;
   document.getElementById('msgMoreMenu').classList.remove('show');
-  if (moreMenuMessageId) openForwardModal(moreMenuMessageId);
+  clearActionSelection();
+  if (mid) startEditMessage(mid);
+};
+document.getElementById('msgMoreDeleteBtn').onclick = () => {
+  const mid = moreMenuMessageId;
+  document.getElementById('msgMoreMenu').classList.remove('show');
+  clearActionSelection();
+  if (mid && confirm('Delete this message?')) deleteMessage(mid);
 };
 
-function clearTouchSelection() {
-  if (touchSelectedRow) touchSelectedRow.classList.remove('touch-selected');
-  touchSelectedRow = null;
-  document.getElementById('replyHeaderBtn').style.display = 'none';
-  document.getElementById('forwardHeaderBtn').style.display = 'none';
+// ── Message action bar (long-press / right-click) ───────────────────────
+function setActionSelectedRow(row) {
+  if (actionSelectedRow && actionSelectedRow !== row) actionSelectedRow.classList.remove('action-selected');
+  actionSelectedRow = row;
+  if (row) row.classList.add('action-selected');
 }
-function selectMessageForTouch(row) {
-  clearTouchSelection();
-  touchSelectedRow = row;
-  row.classList.add('touch-selected');
-  const mid = row.dataset.mid;
-  const replyBtn = document.getElementById('replyHeaderBtn');
-  const forwardBtn = document.getElementById('forwardHeaderBtn');
-  replyBtn.style.display = '';
-  forwardBtn.style.display = '';
-  replyBtn.onclick = () => { clearTouchSelection(); startReply(mid); };
-  forwardBtn.onclick = () => { clearTouchSelection(); openForwardModal(mid); };
+// The lighter close — just hides the bar itself, used when handing off to
+// the "⋯" submenu so the row stays visibly selected underneath it.
+function closeMsgActionBar() {
+  document.getElementById('msgActionBar').classList.remove('show');
 }
-// Tapping anywhere else in the thread (not another long-press-in-progress)
-// drops the current selection, same as WhatsApp's tap-away-to-deselect.
-document.getElementById('threadBody').addEventListener('click', (e) => {
-  if (touchSelectedRow && !e.target.closest('.bubble-row')?.isSameNode(touchSelectedRow)) clearTouchSelection();
+// The full close — bar, "⋯" submenu, and the row highlight, all at once.
+function clearActionSelection() {
+  closeMsgActionBar();
+  document.getElementById('msgMoreMenu').classList.remove('show');
+  setActionSelectedRow(null);
+  actionBarMessageId = null;
+  moreMenuMessageId = null;
+}
+function openMsgActionBar(anchorEl, mid) {
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m) return;
+  clearActionSelection();
+  actionBarMessageId = mid;
+  setActionSelectedRow(anchorEl);
+  const mine = m.senderId === me.id;
+  const canAct = isStaffMe() && mine;
+  const canReplyForward = m.type !== 'appointment';
+  const canStar = isStaffMe() && (m.type === 'image' || m.type === 'video');
+
+  const starBtn = document.getElementById('mabStarBtn');
+  starBtn.style.display = canStar ? '' : 'none';
+  if (canStar) starBtn.classList.toggle('starred', favoritedFileIds.has(m.driveFileId));
+  document.getElementById('mabForwardBtn').style.display = canReplyForward ? '' : 'none';
+  document.getElementById('mabReplyBtn').style.display = canReplyForward ? '' : 'none';
+  document.getElementById('mabMoreBtn').style.display = (!mine || canAct) ? '' : 'none';
+
+  const bar = document.getElementById('msgActionBar');
+  positionPickerNear(bar, anchorEl);
+  bar.classList.add('show');
+}
+document.querySelectorAll('.mab-emoji').forEach(btn => {
+  btn.onclick = () => {
+    const mid = actionBarMessageId;
+    clearActionSelection();
+    if (mid) sendReaction(mid, btn.dataset.emoji);
+  };
 });
+document.getElementById('mabEmojiPlus').onclick = (e) => {
+  const mid = actionBarMessageId;
+  closeMsgActionBar(); // full emoji panel takes over — leave the row selected until a pick (or outside click) resolves it
+  if (mid) toggleEmojiPanel(e.currentTarget, mid);
+};
+document.getElementById('mabStarBtn').onclick = () => {
+  const mid = actionBarMessageId;
+  clearActionSelection();
+  const m = currentThreadMessages.find(x => x.id === mid);
+  if (!m) return;
+  // Video gets the richer trim/track/caption/schedule pipeline; images keep
+  // the simple copy-and-rename flow. Same split as the old corner button.
+  if (m.type === 'video') openPublishModal(m.driveFileId, m.driveFileName);
+  else openFavoriteNameModal(m.driveFileId, m.driveFileName);
+};
+document.getElementById('mabForwardBtn').onclick = () => {
+  const mid = actionBarMessageId;
+  clearActionSelection();
+  if (mid) openForwardModal(mid);
+};
+document.getElementById('mabReplyBtn').onclick = () => {
+  const mid = actionBarMessageId;
+  clearActionSelection();
+  if (mid) startReply(mid);
+};
+document.getElementById('mabMoreBtn').onclick = (e) => {
+  const mid = actionBarMessageId;
+  closeMsgActionBar();
+  openMsgMoreMenu(e.currentTarget, mid);
+};
+// Tapping anywhere outside the bar/submenu drops the selection — except the
+// long-press gesture's own trailing synthetic click on the row it just
+// selected (touchend after a long hold still fires one), which would
+// otherwise immediately close what touchstart's timer just opened.
+document.addEventListener('click', (e) => {
+  const bar = document.getElementById('msgActionBar');
+  const menu = document.getElementById('msgMoreMenu');
+  if (bar.contains(e.target) || menu.contains(e.target)) return;
+  if (actionSelectedRow && e.target.closest('.bubble-row')?.isSameNode(actionSelectedRow)) return;
+  if (actionSelectedRow || moreMenuMessageId) clearActionSelection();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearActionSelection(); });
 
 function startReply(mid) {
   const m = currentThreadMessages.find(x => x.id === mid);
@@ -4729,17 +4907,6 @@ async function openMediaGallery() {
 function svgStar() {
   return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path class="star-fill" d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z"/></svg>`;
 }
-// Returns '' for non-staff — called from renderBubble for every image/video
-// message, so the star simply never renders in the DOM for students/users
-// rather than being hidden via CSS (keeps the click-delegation handler
-// below from ever having to re-check permission on click too).
-function favStarHtml(fileId, suggestedName, mediaType) {
-  if (!isStaffMe()) return '';
-  const isFav = favoritedFileIds.has(fileId);
-  const suggestedAttr = suggestedName ? ` data-fav-suggested="${escapeHtml(suggestedName)}"` : '';
-  return `<button class="fav-star-btn${isFav ? ' favorited' : ''}" data-fav-file="${fileId}" data-fav-type="${mediaType}"${suggestedAttr} title="${isFav ? 'Favorited' : 'Favorite this'}">${svgStar()}</button>`;
-}
-
 async function loadFavorites() {
   try {
     const r = await fetch('/api/chat/favorites');
@@ -4780,10 +4947,6 @@ async function submitFavoriteName() {
     const d = await r.json();
     if (!r.ok) { msgEl.textContent = d.error || 'Could not save.'; btn.disabled = false; return; }
     favoritedFileIds.add(pendingFavoriteFileId);
-    document.querySelectorAll(`.fav-star-btn[data-fav-file="${pendingFavoriteFileId}"]`).forEach(el => {
-      el.classList.add('favorited');
-      el.title = 'Favorited';
-    });
     closeModal('favNameModal');
   } catch (e) {
     msgEl.textContent = 'Could not save.';
