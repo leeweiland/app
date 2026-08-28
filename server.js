@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "fs";
 import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import { handleChatRequest } from "./chat_backend.js";
+import { handleChatRequest, getSessionUser } from "./chat_backend.js";
 import { handleBodyAnalysisRequest } from "./body_analysis_backend.js";
 import { handleMovesDictionaryRequest } from "./moves_dictionary_backend.js";
 import { handleSocialVideoRequest } from "./social_video_backend.js";
@@ -43,7 +43,14 @@ createServer(async (req, res) => {
 
   // Serve static files — strip /chat-app/ prefix if present
   let pathname = url.pathname.replace(/^\/chat-app\//, "/");
-  let filePath = join(__dirname, pathname === "/" ? "login.html" : pathname);
+  // Root used to always serve login.html and rely on its own JS to notice
+  // an existing session and redirect -- that fetch only starts once the
+  // login page has already painted, so every launch of the (session-
+  // cookie-carrying) Capacitor app flashed the login screen before landing
+  // on chat.html. Deciding here means the right page is the FIRST thing
+  // that ever paints.
+  const rootPage = pathname === "/" ? (getSessionUser(req) ? "chat.html" : "login.html") : null;
+  let filePath = join(__dirname, rootPage || pathname);
   if (!existsSync(filePath)) {
     res.writeHead(404); res.end("Not found"); return;
   }
