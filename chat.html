@@ -4570,13 +4570,12 @@ document.getElementById('mabReplyBtn').onclick = () => {
 };
 document.getElementById('mabMoreBtn').onclick = (e) => {
   const mid = actionBarMessageId;
-  // Position while the button (and the bar it's in) is still visible --
-  // closing the bar first collapses it to display:none, so
-  // getBoundingClientRect() on the now-hidden button would read all
-  // zeros and the menu would render off in the top-left corner instead
-  // of anywhere near the bubble.
-  openMsgMoreMenu(e.currentTarget, mid);
-  closeMsgActionBar();
+  // Keep the bar open and anchor the submenu to the whole bar (not the
+  // small "..." button itself) so it opens as a visually connected
+  // extension directly under the bar -- anchoring to the button meant
+  // positionPickerNear's viewport-edge clamping could shove it far from
+  // the bar whenever the bar itself sat near the bottom of the screen.
+  openMsgMoreMenu(document.getElementById('msgActionBar'), mid);
 };
 // Tapping anywhere outside the bar/submenu drops the selection — except the
 // long-press gesture's own trailing synthetic click on the row it just
