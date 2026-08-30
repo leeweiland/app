@@ -1192,9 +1192,15 @@ let blockedUserIds = new Set();
 let lastConvoItems = [];
 
 // Position the (single, shared) emoji panel right next to whatever opened
-// it — the composer's 😊 button, or the message action bar's "+" — instead
-// of always anchoring to one fixed spot.
-function positionPickerNear(panel, anchorEl) {
+// it — the composer's 😊 button, the sidebar/message "⋯" menus — instead
+// of always anchoring to one fixed spot. Defaults to opening below the
+// anchor (falling back above if there's no room); preferAbove flips that
+// default, for the message action bar family below, where every one of
+// action-bar/emoji-panel/more-menu anchors to the SAME bubble row and
+// should all land in the SAME "just above the message" spot rather than
+// each sub-button (the "+" , the "⋯") producing its own slightly-different
+// position depending on exactly where within the bar it sits.
+function positionPickerNear(panel, anchorEl, preferAbove) {
   const rect = anchorEl.getBoundingClientRect();
   const margin = 8;
   // visualViewport tracks the keyboard-safe visible area on mobile webviews —
@@ -1219,8 +1225,14 @@ function positionPickerNear(panel, anchorEl) {
   const height = panel.offsetHeight || 340;
   panel.style.visibility = '';
   let left = rect.left - vLeft;
-  let top = rect.bottom - vTop + 6;
-  if (top + height > vTop + vh - margin) top = Math.max(margin, rect.top - vTop - height - 6);
+  let top;
+  if (preferAbove) {
+    top = rect.top - vTop - height - 6;
+    if (top < margin) top = Math.min(vTop + vh - height - margin, rect.bottom - vTop + 6);
+  } else {
+    top = rect.bottom - vTop + 6;
+    if (top + height > vTop + vh - margin) top = Math.max(margin, rect.top - vTop - height - 6);
+  }
   left = Math.min(left, vw - width - margin);
   left = Math.max(margin, left);
   panel.style.top = top + 'px';
@@ -1229,7 +1241,7 @@ function positionPickerNear(panel, anchorEl) {
 
 // Clicking the same trigger that's already open closes it again instead of
 // just repositioning it in place.
-function toggleEmojiPanel(anchorEl, reactMid) {
+function toggleEmojiPanel(anchorEl, reactMid, preferAbove) {
   const panel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const targetMid = reactMid || null;
@@ -1240,7 +1252,7 @@ function toggleEmojiPanel(anchorEl, reactMid) {
   }
   reactingMessageId = targetMid;
   gifPanel.classList.remove('show');
-  positionPickerNear(panel, anchorEl);
+  positionPickerNear(panel, anchorEl, preferAbove);
   panel.classList.add('show');
 }
 
@@ -2774,6 +2786,41 @@ const chatMediaLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { root: document.getElementById('threadBody'), rootMargin: '400px' });
 
+// Updates just the reaction chips and read-receipt tick on an existing,
+// reused bubble row — the two bits of a message that legitimately change
+// on their own after the bubble first renders, without touching the
+// media/content around them. Mirrors renderBubble's own markup exactly:
+// <bubble-row><div>[.bubble-wrap][.reaction-chips?][.bubble-time]</div></bubble-row>.
+function patchVolatileBubbleParts(row, m) {
+  const inner = row.firstElementChild;
+  if (!inner) return;
+  const timeEl = inner.querySelector(':scope > .bubble-time');
+
+  const newChipsHtml = renderReactionChips(m);
+  const chipsEl = inner.querySelector(':scope > .reaction-chips');
+  if (newChipsHtml) {
+    const temp = document.createElement('div');
+    temp.innerHTML = newChipsHtml;
+    if (chipsEl) chipsEl.replaceWith(temp.firstElementChild);
+    else inner.insertBefore(temp.firstElementChild, timeEl);
+  } else if (chipsEl) {
+    chipsEl.remove();
+  }
+
+  if (!timeEl) return;
+  const mine = m.senderId === me.id;
+  const newTicksHtml = readReceiptTicksHtml(m, mine);
+  const existingTicks = timeEl.querySelector('.bubble-ticks');
+  if (newTicksHtml) {
+    const temp = document.createElement('div');
+    temp.innerHTML = newTicksHtml;
+    if (existingTicks) existingTicks.replaceWith(temp.firstElementChild);
+    else timeEl.appendChild(temp.firstElementChild);
+  } else if (existingTicks) {
+    existingTicks.remove();
+  }
+}
+
 // Per-message diffing instead of a wholesale innerHTML rebuild. The 3s poll
 // re-renders on ANY change to the thread — including a delivered/read
 // receipt updating on some other, older message, which happens routinely
@@ -2798,9 +2845,23 @@ function renderMessages(messages, forceScrollDown) {
   body.querySelectorAll(':scope > .bubble-row[data-mid]').forEach(row => existingByMid.set(row.dataset.mid, row));
 
   const finalRows = messages.map(m => {
-    const json = JSON.stringify(m);
+    // reactions/status are excluded from the rebuild-decision snapshot —
+    // both update passively (someone reacts, or a read receipt flips) with
+    // no change to the message's actual content, but including them here
+    // meant EVERY reaction or read-receipt update tore down and rebuilt
+    // the whole bubble — media included, restarting an in-progress video
+    // or re-triggering the lazy-load placeholder on an image that had
+    // already loaded. Reused rows get those two bits patched in place
+    // instead (patchVolatileBubbleParts), same "don't touch the DOM node
+    // if nothing that actually renders differently changed" idea as the
+    // rebuild-skip itself.
+    const { reactions, status, ...structural } = m;
+    const json = JSON.stringify(structural);
     const existing = existingByMid.get(m.id);
-    if (existing && existing.dataset.json === json) return existing;
+    if (existing && existing.dataset.json === json) {
+      patchVolatileBubbleParts(existing, m);
+      return existing;
+    }
     const wrap = document.createElement('div');
     wrap.innerHTML = renderBubble(m, convo);
     const row = wrap.firstElementChild;
@@ -3390,6 +3451,7 @@ function setupComposer() {
       const mid = reactingMessageId;
       reactingMessageId = null;
       emojiPanel.classList.remove('show');
+      clearActionSelection(); // drops the row highlight the "+" left in place
       sendReaction(mid, emoji);
     } else {
       textInput.value += emoji;
@@ -3403,6 +3465,7 @@ function setupComposer() {
   document.addEventListener('click', (e) => {
     if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.mab-emoji-plus')) {
       emojiPanel.classList.remove('show');
+      if (reactingMessageId) clearActionSelection(); // dismissed via outside-click, not a pick
       reactingMessageId = null;
     }
     if (!gifPanel.contains(e.target) && !e.target.closest('#gifBtn')) gifPanel.classList.remove('show');
@@ -4463,7 +4526,7 @@ let actionBarMessageId = null;
 // staff) / Delete (your own non-appointment message, staff). Opened either
 // from the action bar's mabMoreBtn (leaves the row selected/highlighted
 // underneath) or, in principle, any other anchor.
-function openMsgMoreMenu(anchorEl, mid) {
+function openMsgMoreMenu(anchorEl, mid, preferAbove) {
   const m = currentThreadMessages.find(x => x.id === mid);
   if (!m) return;
   moreMenuMessageId = mid;
@@ -4473,7 +4536,7 @@ function openMsgMoreMenu(anchorEl, mid) {
   document.getElementById('msgMoreEditBtn').style.display = (canAct && m.type === 'text') ? '' : 'none';
   document.getElementById('msgMoreDeleteBtn').style.display = (canAct && m.type !== 'appointment') ? '' : 'none';
   const menu = document.getElementById('msgMoreMenu');
-  positionPickerNear(menu, anchorEl);
+  positionPickerNear(menu, anchorEl, preferAbove);
   menu.classList.add('show');
 }
 document.getElementById('msgMoreReportBtn').onclick = async () => {
@@ -4541,7 +4604,7 @@ function openMsgActionBar(anchorEl, mid) {
   document.getElementById('mabMoreBtn').style.display = (!mine || canAct) ? '' : 'none';
 
   const bar = document.getElementById('msgActionBar');
-  positionPickerNear(bar, anchorEl);
+  positionPickerNear(bar, anchorEl, true);
   bar.classList.add('show');
 }
 document.querySelectorAll('.mab-emoji').forEach(btn => {
@@ -4551,13 +4614,16 @@ document.querySelectorAll('.mab-emoji').forEach(btn => {
     if (mid) sendReaction(mid, btn.dataset.emoji);
   };
 });
-document.getElementById('mabEmojiPlus').onclick = (e) => {
+document.getElementById('mabEmojiPlus').onclick = () => {
   const mid = actionBarMessageId;
-  // Position while the button is still visible (see mabMoreBtn's handler
-  // for why order matters here) — leave the row selected until a pick
-  // (or outside click) resolves it, the full panel just takes over on top.
-  if (mid) toggleEmojiPanel(e.currentTarget, mid);
+  const row = actionSelectedRow;
+  // Bar disappears entirely (not left open alongside the full grid — that
+  // read as cluttered/redundant with row 1's quick reactions already
+  // visible) and the panel takes its exact spot: anchored to the SAME row
+  // the bar was, same preferAbove rule, not to the "+" button itself
+  // (whose own position shifts depending on where in the bar it sits).
   closeMsgActionBar();
+  if (mid && row) toggleEmojiPanel(row, mid, true);
 };
 document.getElementById('mabStarBtn').onclick = () => {
   const mid = actionBarMessageId;
@@ -4586,7 +4652,7 @@ document.getElementById('mabMoreBtn').onclick = (e) => {
   // extension directly under the bar -- anchoring to the button meant
   // positionPickerNear's viewport-edge clamping could shove it far from
   // the bar whenever the bar itself sat near the bottom of the screen.
-  openMsgMoreMenu(document.getElementById('msgActionBar'), mid);
+  openMsgMoreMenu(document.getElementById('msgActionBar'), mid, true);
 };
 // Tapping anywhere outside the bar/submenu drops the selection — except the
 // long-press gesture's own trailing synthetic click on the row it just
