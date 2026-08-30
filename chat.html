@@ -1199,6 +1199,7 @@ let lastConvoItems = [];
 function positionPickerNear(panel, anchorEl, preferAbove) {
   const rect = anchorEl.getBoundingClientRect();
   const margin = 8;
+  const gap = 6;
   // visualViewport tracks the keyboard-safe visible area on mobile webviews —
   // window.innerHeight doesn't shrink when the keyboard opens, so using it
   // let the panel get positioned (and clipped) behind the keyboard.
@@ -1212,23 +1213,44 @@ function positionPickerNear(panel, anchorEl, preferAbove) {
   panel.style.right = 'auto';
   panel.style.left = '0px';
   panel.style.top = '0px';
+  // Reset any shrink a previous open left behind before measuring the
+  // panel's natural (CSS-capped) size.
+  panel.style.maxHeight = '';
   // Measure the panel's actual rendered size instead of assuming a fixed
   // 320x340 — CSS shrinks it to the container width on narrow screens, and
   // the stale hardcoded guess is what let it render past the visible edge.
   panel.style.visibility = 'hidden';
   panel.classList.add('show');
   const width = panel.offsetWidth || 320;
-  const height = panel.offsetHeight || 340;
+  const naturalHeight = panel.offsetHeight || 340;
   panel.style.visibility = '';
+
+  // The anchor itself can be taller than the viewport (a big video bubble
+  // long-pressed while mostly scrolled off the bottom) -- clamp to its
+  // on-screen portion so an off-screen edge doesn't push the above/below
+  // math into a spot disconnected from what's actually visible.
+  const visTop = Math.max(rect.top, vTop);
+  const visBottom = Math.min(rect.bottom, vTop + vh);
+  const spaceBelow = (vTop + vh) - visBottom - gap - margin;
+  const spaceAbove = visTop - vTop - gap - margin;
+  const fitsBelow = spaceBelow >= naturalHeight;
+  const fitsAbove = spaceAbove >= naturalHeight;
+  const openAbove = preferAbove
+    ? (fitsAbove || (!fitsBelow && spaceAbove >= spaceBelow))
+    : (!fitsBelow && (fitsAbove || spaceAbove > spaceBelow));
+
+  // Neither direction may have room for the panel's full natural height —
+  // shrink it (it already scrolls internally) to whatever's actually
+  // available on the chosen side instead of letting it overshoot the
+  // viewport edge and get yanked to a spot far from the anchor.
+  const available = openAbove ? spaceAbove : spaceBelow;
+  const height = Math.max(80, Math.min(naturalHeight, available));
+  if (height < naturalHeight) panel.style.maxHeight = height + 'px';
+
+  let top = openAbove ? (visTop - vTop - height - gap) : (visBottom - vTop + gap);
+  top = Math.max(margin, Math.min(top, vh - height - margin));
+
   let left = rect.left - vLeft;
-  let top;
-  if (preferAbove) {
-    top = rect.top - vTop - height - 6;
-    if (top < margin) top = Math.min(vTop + vh - height - margin, rect.bottom - vTop + 6);
-  } else {
-    top = rect.bottom - vTop + 6;
-    if (top + height > vTop + vh - margin) top = Math.max(margin, rect.top - vTop - height - 6);
-  }
   left = Math.min(left, vw - width - margin);
   left = Math.max(margin, left);
   panel.style.top = top + 'px';
