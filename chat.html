@@ -1195,11 +1195,7 @@ let lastConvoItems = [];
 // it — the composer's 😊 button, the sidebar/message "⋯" menus — instead
 // of always anchoring to one fixed spot. Defaults to opening below the
 // anchor (falling back above if there's no room); preferAbove flips that
-// default, for the message action bar family below, where every one of
-// action-bar/emoji-panel/more-menu anchors to the SAME bubble row and
-// should all land in the SAME "just above the message" spot rather than
-// each sub-button (the "+" , the "⋯") producing its own slightly-different
-// position depending on exactly where within the bar it sits.
+// default for a caller that specifically wants the opposite fallback order.
 function positionPickerNear(panel, anchorEl, preferAbove) {
   const rect = anchorEl.getBoundingClientRect();
   const margin = 8;
@@ -4604,7 +4600,7 @@ function openMsgActionBar(anchorEl, mid) {
   document.getElementById('mabMoreBtn').style.display = (!mine || canAct) ? '' : 'none';
 
   const bar = document.getElementById('msgActionBar');
-  positionPickerNear(bar, anchorEl, true);
+  positionPickerNear(bar, anchorEl);
   bar.classList.add('show');
 }
 document.querySelectorAll('.mab-emoji').forEach(btn => {
@@ -4620,10 +4616,10 @@ document.getElementById('mabEmojiPlus').onclick = () => {
   // Bar disappears entirely (not left open alongside the full grid — that
   // read as cluttered/redundant with row 1's quick reactions already
   // visible) and the panel takes its exact spot: anchored to the SAME row
-  // the bar was, same preferAbove rule, not to the "+" button itself
-  // (whose own position shifts depending on where in the bar it sits).
+  // the bar was, not to the "+" button itself (whose own position shifts
+  // depending on where in the bar it sits).
   closeMsgActionBar();
-  if (mid && row) toggleEmojiPanel(row, mid, true);
+  if (mid && row) toggleEmojiPanel(row, mid);
 };
 document.getElementById('mabStarBtn').onclick = () => {
   const mid = actionBarMessageId;
@@ -4652,7 +4648,7 @@ document.getElementById('mabMoreBtn').onclick = (e) => {
   // extension directly under the bar -- anchoring to the button meant
   // positionPickerNear's viewport-edge clamping could shove it far from
   // the bar whenever the bar itself sat near the bottom of the screen.
-  openMsgMoreMenu(document.getElementById('msgActionBar'), mid, true);
+  openMsgMoreMenu(document.getElementById('msgActionBar'), mid);
 };
 // Tapping anywhere outside the bar/submenu drops the selection — except the
 // long-press gesture's own trailing synthetic click on the row it just
