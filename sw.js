@@ -35,7 +35,10 @@ self.addEventListener('notificationclick', (e) => {
   e.waitUntil(
     self.clients.matchAll({ type: 'window' }).then((clients) => {
       const existing = clients.find((c) => c.url.includes('/chat-app/chat.html'));
-      if (existing) return existing.focus();
+      // A tab was almost always already open (this is the common case), but
+      // just focusing it left it wherever it already was -- it needs to
+      // actually navigate for the tap to land on the right conversation.
+      if (existing) return existing.navigate(url).then((c) => c.focus());
       return self.clients.openWindow(url);
     })
   );

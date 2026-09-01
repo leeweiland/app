@@ -5149,6 +5149,14 @@ async function setupNativePush() {
       if (conversationId && conversationId === activeConvoId) refreshThread();
       loadConversations();
     });
+    // Fires when the user actually taps the OS notification (as opposed to
+    // 'pushNotificationReceived' above, which fires when one merely arrives)
+    // -- without this, tapping did nothing but bring the app to the
+    // foreground wherever it already was, never opening the conversation.
+    PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+      const conversationId = action.notification?.data?.conversationId;
+      if (conversationId && conversations.some(c => c.id === conversationId)) openConvo(conversationId);
+    });
     pushDebugToast('Calling register()…');
     await PushNotifications.register();
     pushDebugToast('register() resolved — waiting on OS/APNs for a token now');
