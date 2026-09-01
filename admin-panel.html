@@ -153,6 +153,10 @@
         <input class="pra-input" id="clientNotesFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
+        <label class="pra-label">Video Call Recordings Drive Folder ID (finished call recordings are archived here, then removed from Daily.co)</label>
+        <input class="pra-input" id="callRecordingsFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -909,6 +913,7 @@ async function loadConfig() {
   document.getElementById('favoritesFolderId').value = d.favoritesFolderId || '';
   document.getElementById('intakeFormsFolderId').value = d.intakeFormsFolderId || '';
   document.getElementById('clientNotesFolderId').value = d.clientNotesFolderId || '';
+  document.getElementById('callRecordingsFolderId').value = d.callRecordingsFolderId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -1028,6 +1033,7 @@ async function saveConfig() {
       favoritesFolderId: document.getElementById('favoritesFolderId').value.trim(),
       intakeFormsFolderId: document.getElementById('intakeFormsFolderId').value.trim(),
       clientNotesFolderId: document.getElementById('clientNotesFolderId').value.trim(),
+      callRecordingsFolderId: document.getElementById('callRecordingsFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });

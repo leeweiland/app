@@ -181,6 +181,14 @@
   .bubble.appt a.appt-link { font-size: .72rem; color: var(--pra-blue); display: block; margin-top: 4px; }
   .bubble-row.mine .bubble.appt a.appt-link { color: #fff; text-decoration: underline; }
   .bubble.appt a.appt-zoom-link { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+
+  /* ── Call outcome bubble (WhatsApp-style "Missed call" / duration row) ── */
+  .bubble.call-msg { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); }
+  .bubble.call-msg.missed .call-msg-title { color: #ff6961; }
+  .bubble.call-msg .call-msg-icon svg { width: 18px; height: 18px; overflow: visible; }
+  .bubble.call-msg .call-msg-title { font-weight: 600; font-size: .85rem; }
+  .bubble.call-msg .call-msg-sub { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); }
+  .bubble-row.mine .bubble.call-msg .call-msg-sub { color: rgba(255,255,255,0.7); }
   .schedule-status-row { display: flex; align-items: center; gap: 8px; font-size: .8rem; padding: 6px 0; }
   /* Native date/time inputs default to black text + a black calendar/clock
      icon, invisible against this dark theme — color-scheme flips both to
@@ -1991,6 +1999,7 @@ function previewText(m) {
       start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
     return `<span class="convo-preview-appt"><span class="preview-icon">${svgCalendar()}</span> Upcoming Session</span><div class="convo-preview-sub convo-preview-appt">${when}</div>`;
   }
+  if (m.type === 'call') return `<span class="preview-icon">${svgVideoCam()}</span> ${m.callOutcome === 'missed' ? 'Missed video call' : 'Video call'}`;
   return m.type === 'video' ? 'Video' : 'Photo';
 }
 
@@ -3146,7 +3155,7 @@ function renderBubble(m, convo) {
   const mine = m.senderId === me.id;
   const sender = convo?.participants.find(p => p.id === m.senderId);
   const senderLabel = (!mine && convo?.type === 'group' && sender) ? `<div class="bubble-sender">${sender.first}</div>` : '';
-  const canReplyForward = m.type !== 'appointment';
+  const canReplyForward = m.type !== 'appointment' && m.type !== 'call';
   const forwardedLabel = m.forwarded ? `<div class="bubble-forwarded-label">➦ Forwarded</div>` : '';
   const replyQuote = canReplyForward ? replyQuoteHtml(m, convo) : '';
   let content;
@@ -3205,6 +3214,7 @@ function renderBubble(m, convo) {
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
+  else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
   const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
@@ -3256,6 +3266,25 @@ function renderApptBubble(m, senderLabel, sender) {
       <div class="appt-when">${dateStr} at ${timeStr} · ${m.durationMinutes} min</div>
       ${calLink}
       ${zoomLink}
+    </div>
+  </div>`;
+}
+
+// WhatsApp shows the same underlying event differently depending on which
+// side of it you were on -- the recipient who never answered sees "Missed
+// video call", the caller who placed it sees "No answer" for the exact
+// same call. senderId is always the call's initiator (see
+// createCallMessage server-side), so "mine" here means "I placed this call".
+function renderCallBubble(m, senderLabel) {
+  const mine = m.senderId === me.id;
+  const missed = m.callOutcome === 'missed';
+  const title = missed ? (mine ? 'No answer' : 'Missed video call') : 'Video call';
+  const sub = missed ? '' : formatVideoTime(m.durationSeconds || 0);
+  return `<div class="bubble call-msg${missed ? ' missed' : ''}">${senderLabel}
+    <div class="call-msg-icon">${svgVideoCam()}</div>
+    <div>
+      <div class="call-msg-title">${title}</div>
+      ${sub ? `<div class="call-msg-sub">${sub}</div>` : ''}
     </div>
   </div>`;
 }
@@ -4676,7 +4705,7 @@ function openMsgActionBar(anchorEl, mid) {
   setActionSelectedRow(anchorEl);
   const mine = m.senderId === me.id;
   const canAct = isStaffMe() && mine;
-  const canReplyForward = m.type !== 'appointment';
+  const canReplyForward = m.type !== 'appointment' && m.type !== 'call';
   const canStar = isStaffMe() && (m.type === 'image' || m.type === 'video');
 
   const starBtn = document.getElementById('mabStarBtn');
@@ -5286,6 +5315,12 @@ let callRingTimeout = null;      // give up if a call we started never gets answ
 let localAudioOn = true, localVideoOn = true;
 let pendingIncomingCall = null;  // an offered call not yet accepted/declined
 let pendingIncomingCallName = '';
+// Only the call's initiator holds an is_owner meeting token (see
+// createDailyMeetingToken server-side), the permission Daily's recording
+// controls require -- true only once THIS client has actually called
+// startRecording, so closeCallScreen knows whether it's the one that
+// needs to stop it too.
+let recordingStarted = false;
 
 async function startCall() {
   if (!activeConvoId || currentCall) return;
@@ -5344,12 +5379,14 @@ function closeCallScreen() {
   document.getElementById('callVideoGrid').innerHTML = '';
   callTiles.clear();
   if (dailyCallObject) {
+    if (recordingStarted) { try { dailyCallObject.stopRecording(); } catch {} }
     try { dailyCallObject.leave(); } catch {}
     try { dailyCallObject.destroy(); } catch {}
     dailyCallObject = null;
   }
   currentCall = null;
   currentCallConvoId = null;
+  recordingStarted = false;
 }
 
 async function endCall() {
@@ -5397,6 +5434,15 @@ function renderCallParticipants() {
   // one remote participant -- a group call falls back to the plain
   // equal-size grid instead of stacking multiple people into one corner.
   grid.classList.toggle('one-to-one', participants.length === 2);
+
+  // A real second person is on the call (not just this client's own
+  // preview tile) -- start recording now rather than the moment the
+  // initiator's own token joins, which would otherwise record them
+  // sitting alone while it's still ringing.
+  if (!recordingStarted && currentCall?.initiatorId === me.id && participants.length >= 2) {
+    recordingStarted = true;
+    dailyCallObject.startRecording().catch(e => { recordingStarted = false; console.error('[call] startRecording failed', e); });
+  }
 }
 
 // loadConversations' poll (runs regardless of which/whether a thread is

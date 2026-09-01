@@ -215,10 +215,13 @@ function getConfig() {
     // endpoints and createOrUpdateDriveDoc below.
     intakeFormsFolderId: "1He6NLZU0g9YNiG87C8Vhn2AKfrT6Cz-j",
     clientNotesFolderId: "1fOczxxstyKr9oaBnDvo4cDRhpgl_CWxG",
+    // Where finished video-call recordings get archived once Daily reports
+    // them ready — see archiveCallRecording().
+    callRecordingsFolderId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
-  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId"].forEach(k => {
+  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId"].forEach(k => {
     if (cfg[k]) cfg[k] = extractDriveFolderId(cfg[k]);
   });
   if (!cfg.trainingProtocolVideoLibraryFolderId) cfg.trainingProtocolVideoLibraryFolderId = "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX";
@@ -230,6 +233,7 @@ function getConfig() {
   // it isn't silently `undefined` and shows up as an empty field in the
   // admin panel rather than never appearing in the response at all.
   if (cfg.favoritesFolderId === undefined) cfg.favoritesFolderId = "";
+  if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
@@ -395,19 +399,33 @@ async function createDailyRoom(name) {
   const exp = Math.floor(Date.now() / 1000) + 2 * 3600;
   return dailyApiRequest("/rooms", "POST", {
     name, privacy: "private",
-    properties: { exp, eject_at_room_exp: true, enable_chat: false, enable_screenshare: true },
+    properties: { exp, eject_at_room_exp: true, enable_chat: false, enable_screenshare: true, enable_recording: "cloud" },
   });
 }
 // Per-participant, short-lived credential that actually grants entry to a
 // private room — the Daily API key itself never reaches the client, only
-// this scoped token does. is_owner only matters for Daily's own
-// recording-control permissions, not used yet in this stage.
+// this scoped token does. is_owner grants Daily's recording-control
+// permission -- only the call's initiator gets it (see /call/start and the
+// accept handler below), and only they trigger startRecording/
+// stopRecording client-side, so exactly one side manages the recording's
+// lifecycle instead of both sides racing to start/stop it.
 async function createDailyMeetingToken(roomName, userId, userName, isOwner) {
   const exp = Math.floor(Date.now() / 1000) + 2 * 3600;
   const d = await dailyApiRequest("/meeting-tokens", "POST", {
     properties: { room_name: roomName, user_id: userId, user_name: userName, is_owner: !!isOwner, exp },
   });
   return d.token;
+}
+async function listDailyRecordings(roomName) {
+  const d = await dailyApiRequest(`/recordings?room_name=${encodeURIComponent(roomName)}`, "GET");
+  return d.data || [];
+}
+async function getDailyRecordingAccessLink(recordingId) {
+  const d = await dailyApiRequest(`/recordings/${recordingId}/access-link`, "GET");
+  return d.download_link;
+}
+async function deleteDailyRecording(recordingId) {
+  return dailyApiRequest(`/recordings/${recordingId}`, "DELETE");
 }
 
 // Chat-account role -> the App sheet's own TYPE column vocabulary (see the
@@ -2035,6 +2053,72 @@ function publicCall(c) {
   return rest;
 }
 
+// A WhatsApp-style "call" bubble in the thread, written once a call is
+// truly over (not on every ringing/decline-in-a-group step — see the
+// callers below). "completed" vs "missed" is the only distinction that
+// matters to a viewer -- whether call.startedAt ever got set, i.e. whether
+// a second person actually joined -- chat.html's renderCallBubble derives
+// the "Missed video call" vs "No answer" wording from whichever side of it
+// the viewer was on.
+function createCallMessage(call) {
+  const outcome = call.startedAt ? "completed" : "missed";
+  const durationSeconds = call.startedAt ? Math.max(0, Math.round((new Date(call.endedAt) - new Date(call.startedAt)) / 1000)) : null;
+  const msg = {
+    id: randomUUID(), conversationId: call.conversationId, senderId: call.initiatorId,
+    type: "call", callId: call.id, callOutcome: outcome, durationSeconds,
+    createdAt: call.endedAt,
+  };
+  const messages = readJson(MESSAGES_FILE, []);
+  messages.push(msg);
+  writeJson(MESSAGES_FILE, messages);
+  notifyParticipants(call.conversationId, null, {
+    title: "Video call", body: outcome === "missed" ? "Missed video call" : "Video call ended", conversationId: call.conversationId,
+  }).catch(() => {});
+}
+
+// Fire-and-forget from the call's /end handler -- Daily finalizes a
+// recording a few seconds after everyone leaves, not instantly, so this
+// polls rather than blocking the HTTP response on it. Only ever called for
+// a call that actually reached "active" (startedAt set); a call nobody
+// answered has nothing to record.
+async function archiveCallRecording(call) {
+  try {
+    let recording = null;
+    for (let i = 0; i < 24; i++) {
+      const list = await listDailyRecordings(call.dailyRoomName);
+      recording = list.find(r => r.status === "finished");
+      if (recording) break;
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    if (!recording) { console.error("[call recording] never finished for room", call.dailyRoomName); return; }
+
+    const cfg = getConfig();
+    if (!cfg.callRecordingsFolderId) { console.error("[call recording] no callRecordingsFolderId configured -- set it in the admin panel"); return; }
+
+    const downloadLink = await getDailyRecordingAccessLink(recording.id);
+    const driveDownloadRes = await fetch(downloadLink);
+    if (!driveDownloadRes.ok || !driveDownloadRes.body) throw new Error("Could not fetch the finished recording from Daily");
+
+    const users = readJson(USERS_FILE, []);
+    const participants = call.participantIds.map(id => users.find(u => u.id === id)).filter(Boolean);
+    const student = participants.find(u => isClientRole(u.role));
+    const coach = participants.find(u => isStaff(u));
+    const namePart = [student, coach].filter(Boolean).map(u => `${u.first} ${u.last}`).join(" ") || "Video Call";
+    const dateStr = new Date(call.startedAt).toISOString().slice(0, 10);
+
+    const accessToken = await getDriveAccessToken();
+    await uploadStreamToDrive(Readable.fromWeb(driveDownloadRes.body), {
+      name: `${namePart} ${dateStr}.mp4`, mimeType: "video/mp4", folderId: cfg.callRecordingsFolderId, accessToken,
+    });
+
+    // Now archived in Drive -- no reason to also keep paying Daily's own
+    // storage rate for the same footage indefinitely.
+    await deleteDailyRecording(recording.id).catch(() => {});
+  } catch (e) {
+    console.error("[call recording] archive failed for call", call.id, e.message);
+  }
+}
+
 // ── Route handler ────────────────────────────────────────────────────────
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
@@ -2725,7 +2809,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2736,6 +2820,7 @@ export async function handleChatRequest(req, res, url) {
         if (favoritesFolderId !== undefined) cfg.favoritesFolderId = favoritesFolderId;
         if (intakeFormsFolderId !== undefined) cfg.intakeFormsFolderId = intakeFormsFolderId;
         if (clientNotesFolderId !== undefined) cfg.clientNotesFolderId = clientNotesFolderId;
+        if (callRecordingsFolderId !== undefined) cfg.callRecordingsFolderId = callRecordingsFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
@@ -3771,14 +3856,24 @@ export async function handleChatRequest(req, res, url) {
           const targets = call.participantIds.filter(id => id !== call.initiatorId);
           if (call.status === "ringing" && targets.every(id => call.declinedIds.includes(id))) {
             call.status = "declined"; call.endedAt = new Date().toISOString();
+            writeJson(CALLS_FILE, calls);
+            createCallMessage(call); // never reached "active" -- always "missed", nothing to record
+          } else {
+            writeJson(CALLS_FILE, calls);
           }
-          writeJson(CALLS_FILE, calls);
           return sendJson(res, 200, { call: publicCall(call) });
         }
 
         if (action === "end") {
-          if (call.status === "ringing" || call.status === "active") { call.status = "ended"; call.endedAt = new Date().toISOString(); }
-          writeJson(CALLS_FILE, calls);
+          const wasOpen = call.status === "ringing" || call.status === "active";
+          if (wasOpen) {
+            call.status = "ended"; call.endedAt = new Date().toISOString();
+            writeJson(CALLS_FILE, calls);
+            createCallMessage(call);
+            if (call.startedAt) archiveCallRecording(call); // fire-and-forget, see its own comment
+          } else {
+            writeJson(CALLS_FILE, calls);
+          }
           return sendJson(res, 200, { call: publicCall(call) });
         }
       }
