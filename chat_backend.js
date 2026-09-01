@@ -51,6 +51,7 @@ const INTAKE_FORMS_FILE = "chat_intake_forms.json";
 // separate from both the intake form and the chat history itself.
 const NOTES_FILE = "chat_notes.json";
 const GYM_BLOCKED_DATES_FILE = "chat_gym_blocked_dates.json";
+const CALLS_FILE = "chat_calls.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
 const APP_SHEET_TAB = "APP";
@@ -96,7 +97,7 @@ function migrateDataFile(file) {
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
-  "chat_gym_blocked_dates.json", "personality-quiz/leads.json", "personality-quiz/config.json",
+  "chat_gym_blocked_dates.json", "chat_calls.json", "personality-quiz/leads.json", "personality-quiz/config.json",
 // Defensive: this runs at module-load time, before the server starts
 // listening — one bad seed here must never take the whole app down again
 // the way the missing-mkdirSync bug above just did in production.
@@ -370,6 +371,44 @@ export async function getDriveAccessToken() {
 }
 // Same token also covers Sheets + Gmail scopes — reused for both below.
 const getGoogleAccessToken = getDriveAccessToken;
+
+// ── Video calls (Daily.co) ──────────────────────────────────────────────
+// Thin REST wrapper — no SDK installed for this, same "hand-rolled fetch
+// against the documented REST endpoint" approach as the Drive/Sheets calls
+// above rather than pulling in another dependency for a handful of calls.
+const DAILY_API_BASE = "https://api.daily.co/v1";
+async function dailyApiRequest(path, method, body) {
+  const r = await fetch(DAILY_API_BASE + path, {
+    method,
+    headers: { Authorization: `Bearer ${process.env.DAILY_API_KEY}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`Daily API ${method} ${path} failed: ${r.status} ${JSON.stringify(d)}`);
+  return d;
+}
+// Private room, auto-expires a couple hours after creation so an
+// abandoned/never-answered call doesn't linger on the account forever —
+// harmless either way (Daily bills active call-minutes, not idle rooms),
+// this is just hygiene.
+async function createDailyRoom(name) {
+  const exp = Math.floor(Date.now() / 1000) + 2 * 3600;
+  return dailyApiRequest("/rooms", "POST", {
+    name, privacy: "private",
+    properties: { exp, eject_at_room_exp: true, enable_chat: false, enable_screenshare: true },
+  });
+}
+// Per-participant, short-lived credential that actually grants entry to a
+// private room — the Daily API key itself never reaches the client, only
+// this scoped token does. is_owner only matters for Daily's own
+// recording-control permissions, not used yet in this stage.
+async function createDailyMeetingToken(roomName, userId, userName, isOwner) {
+  const exp = Math.floor(Date.now() / 1000) + 2 * 3600;
+  const d = await dailyApiRequest("/meeting-tokens", "POST", {
+    properties: { room_name: roomName, user_id: userId, user_name: userName, is_owner: !!isOwner, exp },
+  });
+  return d.token;
+}
 
 // Chat-account role -> the App sheet's own TYPE column vocabulary (see the
 // "prefix match" comment on sheetRole in fetchUsersMapPoints — Admin 2
@@ -1980,6 +2019,22 @@ function computeMessageStatus(m, convo, users) {
   return read ? "read" : "delivered";
 }
 
+// ── Video calls ──────────────────────────────────────────────────────────
+// One in-flight call per conversation at a time — /call/start is idempotent
+// against this (returns the existing one instead of creating a second),
+// and it's what a rejoin/refresh keys off of too.
+function findOpenCall(conversationId) {
+  const calls = readJson(CALLS_FILE, []);
+  return calls.find(c => c.conversationId === conversationId && (c.status === "ringing" || c.status === "active")) || null;
+}
+// Trimmed to what the client actually needs — never the Daily room name
+// (only the URL, which is what daily-js actually joins with).
+function publicCall(c) {
+  if (!c) return null;
+  const { dailyRoomName, ...rest } = c;
+  return rest;
+}
+
 // ── Route handler ────────────────────────────────────────────────────────
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
@@ -3475,7 +3530,18 @@ export async function handleChatRequest(req, res, url) {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return new Date(b.lastMessage?.createdAt || b.createdAt) - new Date(a.lastMessage?.createdAt || a.createdAt);
       });
-      return sendJson(res, 200, { conversations: enriched });
+      // A call ringing in a conversation that ISN'T the one currently open
+      // still needs to surface somewhere -- this list is what's polled
+      // regardless of which thread (if any) is open, so it's the one place
+      // that can catch "someone's calling you" no matter where you are in
+      // the app. Only ever the calls actually being offered to YOU (not
+      // ones you started or already answered/declined).
+      const myOpenConvoIds = new Set(convos.map(c => c.id));
+      const incomingCall = readJson(CALLS_FILE, []).find(c =>
+        c.status === "ringing" && myOpenConvoIds.has(c.conversationId) &&
+        c.participantIds.includes(user.id) && !c.joinedIds.includes(user.id) && !c.declinedIds.includes(user.id)
+      );
+      return sendJson(res, 200, { conversations: enriched, incomingCall: incomingCall ? { ...publicCall(incomingCall), fromConversation: enriched.find(c => c.id === incomingCall.conversationId) } : null });
     }
 
     // A coach's "favorites" are effectively their caseload — a quick-access
@@ -3642,6 +3708,66 @@ export async function handleChatRequest(req, res, url) {
         return sendJson(res, 200, { ok: true });
       }
 
+      if (sub === "/call" && req.method === "GET") {
+        return sendJson(res, 200, { call: publicCall(findOpenCall(convoId)) });
+      }
+
+      if (sub === "/call/start" && req.method === "POST") {
+        const existing = findOpenCall(convoId);
+        if (existing) {
+          const token = await createDailyMeetingToken(existing.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === existing.initiatorId);
+          return sendJson(res, 200, { call: publicCall(existing), token });
+        }
+        const calls = readJson(CALLS_FILE, []);
+        const room = await createDailyRoom(`call-${randomUUID()}`);
+        const call = {
+          id: randomUUID(), conversationId: convoId, initiatorId: user.id,
+          participantIds: [...convo.participantIds], joinedIds: [user.id], declinedIds: [],
+          status: "ringing", dailyRoomName: room.name, dailyRoomUrl: room.url,
+          createdAt: new Date().toISOString(), startedAt: null, endedAt: null,
+        };
+        calls.push(call);
+        writeJson(CALLS_FILE, calls);
+        const token = await createDailyMeetingToken(room.name, user.id, `${user.first} ${user.last}`, true);
+        return sendJson(res, 200, { call: publicCall(call), token });
+      }
+
+      const callActionMatch = sub.match(/^\/call\/([^/]+)\/(accept|decline|end)$/);
+      if (callActionMatch && req.method === "POST") {
+        const [, callId, action] = callActionMatch;
+        const calls = readJson(CALLS_FILE, []);
+        const call = calls.find(c => c.id === callId && c.conversationId === convoId);
+        if (!call) return sendJson(res, 404, { error: "Call not found" });
+
+        if (action === "accept") {
+          if (call.status !== "ringing" && call.status !== "active") return sendJson(res, 400, { error: "Call already ended" });
+          if (!call.joinedIds.includes(user.id)) call.joinedIds.push(user.id);
+          if (call.status === "ringing" && call.joinedIds.length >= 2) { call.status = "active"; call.startedAt = new Date().toISOString(); }
+          writeJson(CALLS_FILE, calls);
+          const token = await createDailyMeetingToken(call.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === call.initiatorId);
+          return sendJson(res, 200, { call: publicCall(call), token });
+        }
+
+        if (action === "decline") {
+          if (!call.declinedIds.includes(user.id)) call.declinedIds.push(user.id);
+          // Everyone who was ever offered the call (everyone but whoever
+          // started it) has now turned it down -- nobody's left who could
+          // still pick up, so it's over, not just quieter.
+          const targets = call.participantIds.filter(id => id !== call.initiatorId);
+          if (call.status === "ringing" && targets.every(id => call.declinedIds.includes(id))) {
+            call.status = "declined"; call.endedAt = new Date().toISOString();
+          }
+          writeJson(CALLS_FILE, calls);
+          return sendJson(res, 200, { call: publicCall(call) });
+        }
+
+        if (action === "end") {
+          if (call.status === "ringing" || call.status === "active") { call.status = "ended"; call.endedAt = new Date().toISOString(); }
+          writeJson(CALLS_FILE, calls);
+          return sendJson(res, 200, { call: publicCall(call) });
+        }
+      }
+
       if (sub === "/messages" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit")) || 50;
         const before = url.searchParams.get("before");
@@ -3671,7 +3797,7 @@ export async function handleChatRequest(req, res, url) {
         const users = readJson(USERS_FILE, []);
         msgs = msgs.map(m => m.senderId === user.id ? { ...m, status: computeMessageStatus(m, convo, users) } : m);
 
-        return sendJson(res, 200, { messages: msgs, typingUserIds: getTypingUserIds(convoId, user.id) });
+        return sendJson(res, 200, { messages: msgs, typingUserIds: getTypingUserIds(convoId, user.id), activeCall: publicCall(findOpenCall(convoId)) });
       }
 
       if (sub === "/messages" && req.method === "POST") {

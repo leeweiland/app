@@ -518,6 +518,42 @@
      trim track/label/buttons, instead of a fixed vh max-height eating
      most of the box and pushing the rest of the content past the fold. */
   .modal-box-flex { display: flex; flex-direction: column; }
+
+  /* ── Video calls ── */
+  /* Above the lightbox (9999) -- a call is the one thing that should never
+     get buried under anything else already open. */
+  .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
+  .call-screen.show { display: flex; }
+  .call-status-row { padding: max(14px, env(safe-area-inset-top)) 16px 10px; text-align: center; color: var(--pra-dim); font-size: .85rem; flex-shrink: 0; }
+  .call-status-name { color: #fff; font-size: 1.1rem; font-weight: 600; margin-bottom: 2px; }
+  .call-video-grid { flex: 1; display: grid; gap: 4px; padding: 4px; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .call-tile { position: relative; background: #16161d; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  .call-tile video { width: 100%; height: 100%; object-fit: cover; }
+  .call-tile.audio-only video { display: none; }
+  .call-tile-name { position: absolute; left: 8px; bottom: 6px; font-size: .74rem; color: #fff; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 999px; }
+  .call-tile-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--pra-blue-dim); color: var(--pra-blue); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 700; }
+  /* Local tile gets its own small corner insert, WhatsApp/FaceTime-style,
+     instead of an equal grid cell -- only actually looks right when
+     there's exactly one remote participant (the common 1:1 case); a group
+     call falls back to the plain equal-grid layout via .call-video-grid
+     having 2+ real (non-local) tiles, see updateCallLayout(). */
+  .call-video-grid.one-to-one { display: block; position: relative; }
+  .call-video-grid.one-to-one .call-tile[data-remote] { position: absolute; inset: 0; border-radius: 0; }
+  .call-video-grid.one-to-one .call-tile[data-local] { position: absolute; right: 12px; bottom: 12px; width: 96px; height: 140px; z-index: 1; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+  .call-controls { display: flex; justify-content: center; gap: 18px; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+  .call-control-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .call-control-btn.off { background: rgba(255,255,255,0.35); color: #0a0a0f; }
+  .call-control-btn.end-call { background: #ff3b30; }
+
+  .incoming-call-banner { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 10001; display: none; align-items: center; gap: 12px; padding: 12px 14px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
+  .incoming-call-banner.show { display: flex; }
+  .incoming-call-info { flex: 1; min-width: 0; }
+  .incoming-call-name { font-weight: 600; font-size: .92rem; }
+  .incoming-call-sub { color: var(--pra-dim); font-size: .78rem; }
+  .incoming-call-btn { width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .incoming-call-decline { background: #ff3b30; color: #fff; }
+  .incoming-call-accept { background: #34c759; color: #fff; }
+
   .avatar-wrap { position: relative; }
   .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 26px; height: 26px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
   .avatar-edit-badge:hover { border-color: var(--pra-blue); }
@@ -631,6 +667,7 @@
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
+  <script src="https://unpkg.com/@daily-co/daily-js@0.92.2/dist/daily.js"></script>
 
   <div id="pushBanner" class="push-banner" style="display:none">🔔 Turn on notifications for new messages</div>
 
@@ -692,6 +729,7 @@
             </div>
           </div>
           <div class="thread-head-icons" id="threadHeadIconsRow">
+            <button class="icon-btn" id="startCallBtn" title="Video call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="#fff" stroke-width="1.6"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
@@ -1137,6 +1175,30 @@
       </div>
     </div>
   </div>
+
+  <!-- Video call — headless Daily "call object" (see setupDailyCall.js
+       below); this is our own custom UI on top of it, not Daily Prebuilt. -->
+  <div class="call-screen" id="callScreen">
+    <div class="call-status-row">
+      <div class="call-status-name" id="callStatusName"></div>
+      <div id="callStatusSub"></div>
+    </div>
+    <div class="call-video-grid" id="callVideoGrid"></div>
+    <div class="call-controls">
+      <button class="call-control-btn" id="callMicBtn" title="Mute"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7"/><path d="M6 11a6 6 0 0 0 12 0M12 19v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+      <button class="call-control-btn" id="callCamBtn" title="Camera"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+      <button class="call-control-btn end-call" id="callEndBtn" title="End call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M4 14c5.5-4.7 10.5-4.7 16 0" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M9 14.3l-1.4 3.4a1 1 0 0 0 .5 1.3c1 .4 2.6.8 3.9.8s2.9-.4 3.9-.8a1 1 0 0 0 .5-1.3L15 14.3" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+    </div>
+  </div>
+
+  <div class="incoming-call-banner" id="incomingCallBanner">
+    <div class="incoming-call-info">
+      <div class="incoming-call-name" id="incomingCallName"></div>
+      <div class="incoming-call-sub">Incoming video call…</div>
+    </div>
+    <button class="incoming-call-btn incoming-call-decline" id="incomingCallDeclineBtn" title="Decline">✕</button>
+    <button class="incoming-call-btn incoming-call-accept" id="incomingCallAcceptBtn" title="Accept"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="#fff" stroke-width="1.7"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+  </div>
 </div>
 
 <script>
@@ -1481,6 +1543,7 @@ async function loadConversations() {
   }
   renderConvoList();
   if (activeConvoId) refreshThread(false);
+  handleIncomingCallPoll(d.incomingCall);
 }
 
 // Every contact you're allowed to message appears here, whether or not a
@@ -2782,6 +2845,7 @@ async function refreshThread(scrollDown) {
   // separately-tracked typing row anyway, so this just re-applies fresh
   // every single tick regardless of what else did or didn't change.
   renderTypingIndicator(d.typingUserIds || []);
+  handleActiveCallPoll(d.activeCall, activeConvoId);
 }
 
 // Referenced by replyQuoteHtml() to look up the original message a reply
@@ -3665,6 +3729,7 @@ function setupComposer() {
   document.getElementById('favNameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitFavoriteName(); });
 
   setupCameraCapture();
+  setupCallUI();
 }
 
 // ── In-app camera capture (students/users, touch devices) ─────────────────
@@ -5202,6 +5267,205 @@ async function subscribePush() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub })
     });
   } catch (e) { console.warn('push setup failed', e); }
+}
+
+// ── Video calls ──────────────────────────────────────────────────────────
+// Custom UI over Daily's headless "call object" (not Daily Prebuilt) so the
+// call screen matches the rest of the app instead of showing Daily's own
+// chrome. Call *signaling* (ring/accept/decline/end) rides the existing 3s
+// poll (loadConversations' `incomingCall`, refreshThread's `activeCall`) —
+// no push/native ringing yet, this only works while the app is open. Once
+// both sides have actually joined the Daily room, everything else (who's
+// talking, who left, video tracks) comes straight from Daily's own
+// real-time participant events, not the poll.
+let dailyCallObject = null;
+let currentCall = null;          // the call record from the backend, once joined/joining
+let currentCallConvoId = null;
+let callTiles = new Map();       // Daily session_id -> { el, video, avatar, nameEl }
+let callRingTimeout = null;      // give up if a call we started never gets answered
+let localAudioOn = true, localVideoOn = true;
+let pendingIncomingCall = null;  // an offered call not yet accepted/declined
+let pendingIncomingCallName = '';
+
+async function startCall() {
+  if (!activeConvoId || currentCall) return;
+  // threadName's own textContent isn't just the name -- it also carries a
+  // role-tag <span> (e.g. "User") glued on with no separating whitespace
+  // (set via .innerHTML = name + roleBadgeHtml(...)) -- only the leading
+  // text node is the name itself.
+  const nameNode = document.getElementById('threadName').firstChild;
+  const displayName = (nameNode?.nodeType === Node.TEXT_NODE ? nameNode.textContent.trim() : '') || 'Calling…';
+  const r = await fetch(`/api/chat/conversations/${activeConvoId}/call/start`, { method: 'POST' });
+  const d = await r.json();
+  if (!r.ok) { alert(d.error || 'Could not start the call.'); return; }
+  await joinCall(d.call, d.token, activeConvoId, displayName);
+  clearTimeout(callRingTimeout);
+  // No push/native ringing yet (see header comment) -- the other side only
+  // sees this if they already have the app open, so a call that's gone
+  // unanswered this long is treated the same as declined.
+  callRingTimeout = setTimeout(() => { if (currentCall?.status === 'ringing') endCall(); }, 45000);
+}
+
+async function joinCall(call, token, convoId, displayName) {
+  currentCall = call;
+  currentCallConvoId = convoId;
+  document.getElementById('incomingCallBanner').classList.remove('show');
+  document.getElementById('callScreen').classList.add('show');
+  localAudioOn = true; localVideoOn = true;
+  document.getElementById('callMicBtn').classList.remove('off');
+  document.getElementById('callCamBtn').classList.remove('off');
+  document.getElementById('callStatusName').textContent = displayName || '';
+  document.getElementById('callStatusSub').textContent = call.status === 'active' ? '' : 'Calling…';
+
+  dailyCallObject = Daily.createCallObject();
+  dailyCallObject.on('participant-joined', renderCallParticipants);
+  dailyCallObject.on('participant-updated', renderCallParticipants);
+  dailyCallObject.on('participant-left', renderCallParticipants);
+  dailyCallObject.on('left-meeting', closeCallScreen);
+  dailyCallObject.on('error', (e) => console.error('[call] error', e));
+  try {
+    await dailyCallObject.join({ url: call.dailyRoomUrl, token });
+  } catch (e) {
+    console.error('[call] join failed', e);
+    alert('Could not join the call.');
+    closeCallScreen();
+    return;
+  }
+  renderCallParticipants();
+}
+
+// Tears down the local call UI/connection only -- does NOT tell the
+// backend the call is over (endCall does that). Also what runs when Daily
+// itself ends our session (kicked, room expired, connection lost), where
+// there's nothing left worth telling the backend anyway.
+function closeCallScreen() {
+  clearTimeout(callRingTimeout);
+  document.getElementById('callScreen').classList.remove('show');
+  document.getElementById('callVideoGrid').innerHTML = '';
+  callTiles.clear();
+  if (dailyCallObject) {
+    try { dailyCallObject.leave(); } catch {}
+    try { dailyCallObject.destroy(); } catch {}
+    dailyCallObject = null;
+  }
+  currentCall = null;
+  currentCallConvoId = null;
+}
+
+async function endCall() {
+  const call = currentCall, convoId = currentCallConvoId;
+  closeCallScreen();
+  if (call && convoId) {
+    fetch(`/api/chat/conversations/${convoId}/call/${call.id}/end`, { method: 'POST' }).catch(() => {});
+  }
+}
+
+function renderCallParticipants() {
+  if (!dailyCallObject) return;
+  const grid = document.getElementById('callVideoGrid');
+  const participants = Object.values(dailyCallObject.participants());
+  const seen = new Set();
+  participants.forEach(p => {
+    seen.add(p.session_id);
+    let tile = callTiles.get(p.session_id);
+    if (!tile) {
+      const el = document.createElement('div');
+      el.className = 'call-tile';
+      el.innerHTML = `<video autoplay playsinline${p.local ? ' muted' : ''}></video><div class="call-tile-avatar" style="display:none"></div><div class="call-tile-name"></div>`;
+      grid.appendChild(el);
+      tile = { el, video: el.querySelector('video'), avatar: el.querySelector('.call-tile-avatar'), nameEl: el.querySelector('.call-tile-name') };
+      callTiles.set(p.session_id, tile);
+    }
+    if (p.local) tile.el.setAttribute('data-local', ''); else tile.el.setAttribute('data-remote', '');
+    tile.nameEl.textContent = p.local ? 'You' : (p.user_name || '');
+
+    const videoTrack = p.tracks?.video, audioTrack = p.tracks?.audio;
+    const liveTracks = [];
+    if (videoTrack?.state === 'playable' && videoTrack.persistentTrack) liveTracks.push(videoTrack.persistentTrack);
+    if (audioTrack?.state === 'playable' && audioTrack.persistentTrack) liveTracks.push(audioTrack.persistentTrack);
+    tile.video.srcObject = liveTracks.length ? new MediaStream(liveTracks) : null;
+    const hasVideo = videoTrack?.state === 'playable' && !!videoTrack.persistentTrack;
+    tile.video.style.display = hasVideo ? '' : 'none';
+    tile.avatar.style.display = hasVideo ? 'none' : 'flex';
+    if (!hasVideo) tile.avatar.textContent = (p.user_name || '?').trim().slice(0, 1).toUpperCase();
+    tile.el.classList.toggle('audio-only', !hasVideo);
+  });
+  for (const [sessionId, tile] of callTiles) {
+    if (!seen.has(sessionId)) { tile.el.remove(); callTiles.delete(sessionId); }
+  }
+  // The corner-inset "FaceTime" layout only reads correctly for exactly
+  // one remote participant -- a group call falls back to the plain
+  // equal-size grid instead of stacking multiple people into one corner.
+  grid.classList.toggle('one-to-one', participants.length === 2);
+}
+
+// loadConversations' poll (runs regardless of which/whether a thread is
+// open) is the only way a callee -- who hasn't joined anything yet, so has
+// no Daily events of their own -- finds out someone's calling them.
+function handleIncomingCallPoll(incomingCall) {
+  const banner = document.getElementById('incomingCallBanner');
+  if (currentCall || !incomingCall) {
+    banner.classList.remove('show');
+    if (!incomingCall) pendingIncomingCall = null;
+    return;
+  }
+  pendingIncomingCall = incomingCall;
+  const convo = incomingCall.fromConversation;
+  let displayName = 'Someone';
+  if (convo?.type === 'group') displayName = convo.name;
+  else if (convo) {
+    const other = (convo.participants || []).find(p => p.id !== me.id);
+    if (other) displayName = [other.first, other.last].filter(Boolean).join(' ') || displayName;
+  }
+  pendingIncomingCallName = displayName;
+  document.getElementById('incomingCallName').textContent = displayName;
+  banner.classList.add('show');
+}
+
+// refreshThread's poll (only the currently-open thread) is how the CALLER
+// learns the other side declined, or either side hung up, before ever
+// getting a Daily event of their own -- e.g. a decline that happens before
+// the callee has joined the room at all has no Daily-side signal.
+function handleActiveCallPoll(activeCall, convoId) {
+  if (!currentCall || currentCallConvoId !== convoId) return;
+  if (!activeCall || activeCall.id !== currentCall.id || activeCall.status === 'ended' || activeCall.status === 'declined') {
+    closeCallScreen();
+    return;
+  }
+  currentCall = activeCall;
+  document.getElementById('callStatusSub').textContent = activeCall.status === 'active' ? '' : 'Calling…';
+}
+
+function setupCallUI() {
+  document.getElementById('startCallBtn').onclick = startCall;
+  document.getElementById('callEndBtn').onclick = endCall;
+  document.getElementById('callMicBtn').onclick = () => {
+    localAudioOn = !localAudioOn;
+    dailyCallObject?.setLocalAudio(localAudioOn);
+    document.getElementById('callMicBtn').classList.toggle('off', !localAudioOn);
+  };
+  document.getElementById('callCamBtn').onclick = () => {
+    localVideoOn = !localVideoOn;
+    dailyCallObject?.setLocalVideo(localVideoOn);
+    document.getElementById('callCamBtn').classList.toggle('off', !localVideoOn);
+  };
+  document.getElementById('incomingCallAcceptBtn').onclick = async () => {
+    if (!pendingIncomingCall) return;
+    const call = pendingIncomingCall, convoId = call.conversationId, name = pendingIncomingCallName;
+    document.getElementById('incomingCallBanner').classList.remove('show');
+    pendingIncomingCall = null;
+    const r = await fetch(`/api/chat/conversations/${convoId}/call/${call.id}/accept`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Could not join the call.'); return; }
+    await joinCall(d.call, d.token, convoId, name);
+  };
+  document.getElementById('incomingCallDeclineBtn').onclick = () => {
+    if (!pendingIncomingCall) return;
+    const call = pendingIncomingCall;
+    document.getElementById('incomingCallBanner').classList.remove('show');
+    pendingIncomingCall = null;
+    fetch(`/api/chat/conversations/${call.conversationId}/call/${call.id}/decline`, { method: 'POST' }).catch(() => {});
+  };
 }
 
 init();
