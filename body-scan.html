@@ -84,6 +84,14 @@
   .photo-anim-controls input[type=range] { flex: 1; accent-color: var(--pra-blue); }
   .photo-anim-play { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .photo-anim-label { text-align: center; font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); margin: 8px 0 2px; }
+  /* ── Food Log tab ── */
+  .food-mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+  .food-mode-opt { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); background: rgba(255,255,255,0.03); }
+  .food-mode-opt.active { background: var(--pra-blue); color: #fff; }
+  .food-entry-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 8px; }
+  .food-entry-desc { flex: 1; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .food-entry-cals { font-weight: 700; font-size: .88rem; color: var(--pra-blue); flex-shrink: 0; }
+  .food-entry-label { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; width: 62px; }
 </style>
 </head>
 <body>
@@ -99,6 +107,7 @@
       <div class="hub-tab active" data-hub="scan">Scan</div>
       <div class="hub-tab" data-hub="stats">Stats</div>
       <div class="hub-tab" data-hub="photos">Photos</div>
+      <div class="hub-tab" data-hub="foodlog">Food Log</div>
     </div>
 
     <div id="hubPanelScan" class="hub-panel active">
@@ -239,6 +248,60 @@
       <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No progress photos yet — upload your first one above.</div>
       <div class="photo-gallery-grid" id="photoGalleryGrid"></div>
     </div>
+
+    <div id="hubPanelFoodlog" class="hub-panel">
+      <div class="field-row" style="margin-bottom:14px">
+        <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="foodDate" type="date"/></div>
+      </div>
+
+      <div class="pra-panel macro-grid" style="margin:0 0 20px;padding:14px">
+        <div class="macro-tile"><div class="val" id="foodTotalCals">0</div><div class="lab">Calories</div></div>
+        <div class="macro-tile"><div class="val" id="foodTotalProtein">0g</div><div class="lab">Protein</div></div>
+        <div class="macro-tile"><div class="val" id="foodTotalFat">0g</div><div class="lab">Fat</div></div>
+        <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="foodTotalCarb">0g</div><div class="lab">Carbs</div></div>
+      </div>
+
+      <div class="pra-panel" style="padding:18px;margin-bottom:22px">
+        <div class="pra-label" style="margin-bottom:12px">Log a meal</div>
+        <div class="food-mode-toggle">
+          <div class="food-mode-opt active" data-mode="photo">Photo</div>
+          <div class="food-mode-opt" data-mode="manual">Manual</div>
+        </div>
+
+        <div class="upload-box" id="foodUploadBox" style="padding:20px">
+          <div id="foodUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to photograph or upload your meal</div>
+          <input type="file" id="foodPhotoInput" accept="image/*" style="display:none"/>
+        </div>
+
+        <div id="foodManualFields" style="display:none">
+          <div class="field"><label class="pra-label">Description</label><input class="pra-input" id="foodDescInput" placeholder="e.g. grilled chicken, rice, broccoli"/></div>
+          <div class="field-row">
+            <div class="field"><label class="pra-label">Calories</label><input class="pra-input" id="foodCalInput" type="number"/></div>
+            <div class="field"><label class="pra-label">Protein (g)</label><input class="pra-input" id="foodProteinInput" type="number"/></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label class="pra-label">Fat (g)</label><input class="pra-input" id="foodFatInput" type="number"/></div>
+            <div class="field"><label class="pra-label">Carbs (g)</label><input class="pra-input" id="foodCarbInput" type="number"/></div>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label class="pra-label">Meal</label>
+          <select class="pra-select" id="foodMealLabel">
+            <option value="">—</option>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="snack">Snack</option>
+          </select>
+        </div>
+        <button class="pra-btn" id="foodSaveBtn" style="width:100%;margin-top:14px">LOG MEAL</button>
+        <div class="spinner" id="foodSpinner">Estimating…</div>
+      </div>
+
+      <div id="foodEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">Nothing logged for this day yet.</div>
+      <div id="foodEntriesList"></div>
+    </div>
   </div>
 </div>
 
@@ -298,6 +361,7 @@ document.querySelectorAll('.hub-tab').forEach(tab => {
     document.getElementById('hubPanel' + tab.dataset.hub[0].toUpperCase() + tab.dataset.hub.slice(1)).classList.add('active');
     if (tab.dataset.hub === 'stats' && !statsLoaded) { statsLoaded = true; loadStatsEntries(); }
     if (tab.dataset.hub === 'photos' && !photosLoaded) { photosLoaded = true; loadProgressPhotos(); }
+    if (tab.dataset.hub === 'foodlog') loadFoodEntries();
   };
 });
 
@@ -742,6 +806,105 @@ function setupPhotoAnimation() {
       showIndex(next);
     }, 700);
   };
+}
+
+// ── Food Log tab ─────────────────────────────────────────────────────
+let foodMode = 'photo';
+let foodPhotoFile = null;
+
+document.getElementById('foodDate').valueAsDate = new Date();
+document.getElementById('foodDate').addEventListener('change', loadFoodEntries);
+
+document.querySelectorAll('.food-mode-opt').forEach(opt => {
+  opt.onclick = () => {
+    document.querySelectorAll('.food-mode-opt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    foodMode = opt.dataset.mode;
+    document.getElementById('foodUploadBox').style.display = foodMode === 'photo' ? 'block' : 'none';
+    document.getElementById('foodManualFields').style.display = foodMode === 'manual' ? 'block' : 'none';
+  };
+});
+
+document.getElementById('foodUploadBox').onclick = () => document.getElementById('foodPhotoInput').click();
+document.getElementById('foodPhotoInput').addEventListener('change', (e) => {
+  foodPhotoFile = e.target.files[0];
+  if (!foodPhotoFile) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById('foodUploadPrompt').innerHTML = `<img src="${reader.result}" style="max-width:100%;max-height:180px;border-radius:8px"/>`; };
+  reader.readAsDataURL(foodPhotoFile);
+});
+
+document.getElementById('foodSaveBtn').onclick = async () => {
+  const fd = new FormData();
+  if (foodMode === 'photo') {
+    if (!foodPhotoFile) { alert('Take or upload a photo first, or switch to Manual.'); return; }
+    fd.append('photo', foodPhotoFile);
+  } else {
+    const desc = document.getElementById('foodDescInput').value;
+    const cal = document.getElementById('foodCalInput').value;
+    if (!desc || !cal) { alert('Description and calories are required.'); return; }
+    fd.append('description', desc);
+    fd.append('calories', cal);
+    fd.append('proteinG', document.getElementById('foodProteinInput').value || '0');
+    fd.append('fatG', document.getElementById('foodFatInput').value || '0');
+    fd.append('carbG', document.getElementById('foodCarbInput').value || '0');
+  }
+  fd.append('mealLabel', document.getElementById('foodMealLabel').value);
+
+  const dateVal = document.getElementById('foodDate').value;
+  fd.append('createdAt', dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString());
+
+  document.getElementById('foodSpinner').style.display = 'block';
+  document.getElementById('foodSaveBtn').disabled = true;
+  try {
+    const r = await fetch('/api/food-log/entries', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Log failed'); return; }
+    foodPhotoFile = null;
+    document.getElementById('foodPhotoInput').value = '';
+    document.getElementById('foodUploadPrompt').innerHTML = 'Tap to photograph or upload your meal';
+    document.getElementById('foodDescInput').value = '';
+    document.getElementById('foodCalInput').value = '';
+    document.getElementById('foodProteinInput').value = '';
+    document.getElementById('foodFatInput').value = '';
+    document.getElementById('foodCarbInput').value = '';
+    loadFoodEntries();
+  } finally {
+    document.getElementById('foodSpinner').style.display = 'none';
+    document.getElementById('foodSaveBtn').disabled = false;
+  }
+};
+
+async function loadFoodEntries() {
+  const dateVal = document.getElementById('foodDate').value;
+  try {
+    const r = await fetch('/api/food-log/entries?date=' + encodeURIComponent(dateVal));
+    if (!r.ok) return;
+    const { entries, totals } = await r.json();
+    document.getElementById('foodTotalCals').textContent = Math.round(totals.calories);
+    document.getElementById('foodTotalProtein').textContent = Math.round(totals.proteinG) + 'g';
+    document.getElementById('foodTotalFat').textContent = Math.round(totals.fatG) + 'g';
+    document.getElementById('foodTotalCarb').textContent = Math.round(totals.carbG) + 'g';
+
+    const list = document.getElementById('foodEntriesList');
+    document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';
+    list.innerHTML = entries.map(e => `<div class="pra-panel food-entry-row" data-id="${escapeHtml(e.id)}">
+      <span class="food-entry-label">${escapeHtml(e.mealLabel || '—')}</span>
+      <span class="food-entry-desc">${escapeHtml(e.description || '')}</span>
+      <span class="food-entry-cals">${Math.round(e.calories || 0)} cal</span>
+      <button class="past-scan-del" title="Delete">✕</button>
+    </div>`).join('');
+    list.querySelectorAll('.food-entry-row').forEach(row => {
+      row.querySelector('.past-scan-del').onclick = () => deleteFoodEntry(row.dataset.id);
+    });
+  } catch {}
+}
+
+async function deleteFoodEntry(id) {
+  try {
+    await fetch(`/api/food-log/entries/${id}`, { method: 'DELETE' });
+    loadFoodEntries();
+  } catch {}
 }
 
 (async () => {
