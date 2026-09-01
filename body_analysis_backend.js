@@ -10,6 +10,7 @@ import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
+import { recordWeightEntry } from "./body_stats_backend.js";
 
 const SCANS_FILE = "chat_body_scans.json";
 const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
@@ -294,10 +295,11 @@ export async function handleBodyAnalysisRequest(req, res, url) {
 
     if (user) {
       try {
+        const scanId = randomUUID();
         const all = readJson(SCANS_FILE, {});
         if (!all[user.id]) all[user.id] = [];
         all[user.id].push({
-          id: randomUUID(),
+          id: scanId,
           type: analysisType,
           createdAt: new Date().toISOString(),
           assessmentBody,
@@ -311,6 +313,16 @@ export async function handleBodyAnalysisRequest(req, res, url) {
           moveType: fields.moveType || null,
         });
         writeJson(SCANS_FILE, all);
+
+        // A body scan that included weight also feeds the same bodyweight
+        // time series a manual Stats-tab entry would -- one chart either way.
+        if (analysisType === "body" && fields.weightKg) {
+          const bodyFatPct = bodyFatLowPct != null && bodyFatHighPct != null
+            ? (bodyFatLowPct + bodyFatHighPct) / 2 : null;
+          recordWeightEntry(user.id, {
+            weightKg: fields.weightKg, heightCm: fields.heightCm, bodyFatPct, source: "scan", scanId,
+          });
+        }
       } catch (e) {
         console.error("[body-scan] Save result failed:", e.message);
       }

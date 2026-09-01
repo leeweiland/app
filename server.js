@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { handleChatRequest, getSessionUser } from "./chat_backend.js";
 import { handleBodyAnalysisRequest } from "./body_analysis_backend.js";
+import { handleBodyStatsRequest } from "./body_stats_backend.js";
 import { handleMovesDictionaryRequest } from "./moves_dictionary_backend.js";
 import { handleSocialVideoRequest } from "./social_video_backend.js";
 
@@ -38,6 +39,7 @@ createServer(async (req, res) => {
 
   if (await handleChatRequest(req, res, url)) return;
   if (await handleBodyAnalysisRequest(req, res, url)) return;
+  if (await handleBodyStatsRequest(req, res, url)) return;
   if (await handleMovesDictionaryRequest(req, res, url)) return;
   if (await handleSocialVideoRequest(req, res, url)) return;
 

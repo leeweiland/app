@@ -8,6 +8,13 @@
 <style>
   body { margin: 0; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
+  /* ── Hub tabs (Scan / Stats / ...) -- the outermost level of this page,
+     distinct from the Scan panel's own Body/Move type-toggle below. ── */
+  .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); }
+  .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; }
+  .hub-tab.active { color: var(--pra-blue); border-bottom-color: var(--pra-blue); }
+  .hub-panel { display: none; }
+  .hub-panel.active { display: block; }
   .type-toggle { display: flex; gap: 8px; margin-bottom: 22px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
   .type-tab { flex: 1; text-align: center; padding: 10px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); }
   .type-tab.active { background: var(--pra-blue); color: #fff; }
@@ -55,6 +62,16 @@
   .past-scan-del:hover { color: #e74c3c; }
   .past-scan-body { display: none; margin-top: 10px; font-size: .84rem; line-height: 1.6; white-space: pre-wrap; color: var(--pra-text); border-top: 1px solid var(--pra-border); padding-top: 10px; }
   .past-scan-card.open .past-scan-body { display: block; }
+  /* ── Stats tab: entry form + hand-rolled inline SVG line chart (no
+     charting library exists in this app -- matches the zero-dependency
+     inline-SVG convention already used for every icon). ── */
+  .weight-chart-wrap { margin: 6px 0 24px; padding: 14px 10px; }
+  .weight-chart-wrap svg { width: 100%; height: auto; display: block; }
+  .stat-entry-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 8px; }
+  .stat-entry-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); width: 84px; flex-shrink: 0; }
+  .stat-entry-weight { font-weight: 700; font-size: .92rem; width: 70px; flex-shrink: 0; }
+  .stat-entry-note { flex: 1; font-size: .8rem; color: var(--pra-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stat-entry-source { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -66,6 +83,12 @@
     <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Body &amp; Move Scan</div>
     <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Upload a photo — get an AI visual read plus a real macro plan.</div>
 
+    <div class="hub-tabs">
+      <div class="hub-tab active" data-hub="scan">Scan</div>
+      <div class="hub-tab" data-hub="stats">Stats</div>
+    </div>
+
+    <div id="hubPanelScan" class="hub-panel active">
     <div class="type-toggle">
       <div class="type-tab active" data-type="body">Body Scan</div>
       <div class="type-tab" data-type="move">Move Scan</div>
@@ -148,6 +171,39 @@
       <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
       <div id="pastScansList"></div>
     </div>
+    </div>
+
+    <div id="hubPanelStats" class="hub-panel">
+      <div class="pra-panel weight-chart-wrap">
+        <svg id="weightChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="pra-panel" style="padding:18px;margin-bottom:22px">
+        <div class="pra-label" style="margin-bottom:12px">Log a new entry</div>
+        <div class="field-row">
+          <div class="field">
+            <label class="pra-label">Weight</label>
+            <div class="unit-row">
+              <input class="pra-input" id="statWeightLbs" type="number" placeholder="lbs"/>
+              <input class="pra-input" id="statWeightKg" type="number" placeholder="kg" style="display:none"/>
+              <select class="pra-select" id="statWeightUnit">
+                <option value="lbs" selected>lbs</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label class="pra-label">Date</label><input class="pra-input" id="statDate" type="date"/></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label class="pra-label">Body Fat % (optional)</label><input class="pra-input" id="statBodyFatPct" type="number" step="0.1"/></div>
+          <div class="field"><label class="pra-label">Note (optional)</label><input class="pra-input" id="statNote" type="text" placeholder="e.g. morning, fasted"/></div>
+        </div>
+        <button class="pra-btn" id="statSaveBtn" style="width:100%;margin-top:6px">SAVE ENTRY</button>
+      </div>
+
+      <div id="statEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">No entries yet — log your first weigh-in above.</div>
+      <div id="statEntriesList"></div>
+    </div>
   </div>
 </div>
 
@@ -195,6 +251,18 @@ async function loadState() {
     renderResult(lastResult, false);
   }
 }
+
+// ── Hub tabs (Scan / Stats / ...) ──────────────────────────────────────
+let statsLoaded = false;
+document.querySelectorAll('.hub-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.hub-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('hubPanel' + tab.dataset.hub[0].toUpperCase() + tab.dataset.hub.slice(1)).classList.add('active');
+    if (tab.dataset.hub === 'stats' && !statsLoaded) { statsLoaded = true; loadStatsEntries(); }
+  };
+});
 
 document.querySelectorAll('.type-tab').forEach(tab => {
   tab.onclick = () => {
@@ -402,6 +470,131 @@ async function deleteScan(id, card) {
       document.getElementById('pastScans').style.display = 'none';
     }
   } catch {}
+}
+
+// ── Stats tab: weight time series + hand-rolled inline SVG line chart ──
+document.getElementById('statWeightUnit').addEventListener('change', (e) => {
+  const isKg = e.target.value === 'kg';
+  document.getElementById('statWeightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('statWeightLbs').style.display = isKg ? 'none' : '';
+});
+document.getElementById('statDate').valueAsDate = new Date();
+
+function getStatWeightKg() {
+  if (document.getElementById('statWeightUnit').value === 'kg') return document.getElementById('statWeightKg').value;
+  const lbs = Number(document.getElementById('statWeightLbs').value);
+  return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : '';
+}
+// Chart displays in whichever unit the entry form is currently set to, so
+// the axis always matches what the user just typed in.
+function kgToDisplay(kg) {
+  return document.getElementById('statWeightUnit').value === 'kg' ? kg : Math.round(kg / 0.453592 * 10) / 10;
+}
+
+let statEntries = []; // ascending by createdAt, as returned by the API
+
+document.getElementById('statSaveBtn').onclick = async () => {
+  const weightKg = getStatWeightKg();
+  if (!weightKg) { alert('Enter a weight first.'); return; }
+  const dateVal = document.getElementById('statDate').value; // yyyy-mm-dd
+  const btn = document.getElementById('statSaveBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/body-stats/entries', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        weightKg,
+        bodyFatPct: document.getElementById('statBodyFatPct').value || null,
+        note: document.getElementById('statNote').value || null,
+        createdAt: dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : null,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Save failed'); return; }
+    document.getElementById('statWeightLbs').value = '';
+    document.getElementById('statWeightKg').value = '';
+    document.getElementById('statBodyFatPct').value = '';
+    document.getElementById('statNote').value = '';
+    statEntries.push(d.entry);
+    statEntries.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    renderStatsChartAndList();
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+async function loadStatsEntries() {
+  try {
+    const r = await fetch('/api/body-stats/entries');
+    if (!r.ok) return;
+    statEntries = (await r.json()).entries || [];
+    renderStatsChartAndList();
+  } catch {}
+}
+
+async function deleteStatEntry(id, row) {
+  try {
+    await fetch(`/api/body-stats/entries/${id}`, { method: 'DELETE' });
+    statEntries = statEntries.filter(e => e.id !== id);
+    row.remove();
+    drawWeightChart(document.getElementById('weightChartSvg'), statEntries);
+    document.getElementById('statEntriesEmpty').style.display = statEntries.length ? 'none' : 'block';
+  } catch {}
+}
+
+function renderStatsChartAndList() {
+  drawWeightChart(document.getElementById('weightChartSvg'), statEntries);
+  const list = document.getElementById('statEntriesList');
+  const empty = document.getElementById('statEntriesEmpty');
+  empty.style.display = statEntries.length ? 'none' : 'block';
+  // Reverse-chronological for the list, ascending stays in statEntries for the chart.
+  list.innerHTML = statEntries.slice().reverse().map(e => {
+    const date = new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const w = kgToDisplay(e.weightKg);
+    const unit = document.getElementById('statWeightUnit').value;
+    const bits = [];
+    if (e.bodyFatPct != null) bits.push(`${e.bodyFatPct}% BF`);
+    if (e.note) bits.push(e.note);
+    return `<div class="pra-panel stat-entry-row" data-id="${escapeHtml(e.id)}">
+      <span class="stat-entry-date">${date}</span>
+      <span class="stat-entry-weight">${w} ${unit}</span>
+      <span class="stat-entry-note">${escapeHtml(bits.join(' · '))}</span>
+      <span class="stat-entry-source">${e.source === 'scan' ? 'From Scan' : ''}</span>
+      <button class="past-scan-del" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.stat-entry-row').forEach(row => {
+    row.querySelector('.past-scan-del').onclick = () => deleteStatEntry(row.dataset.id, row);
+  });
+}
+
+// Hand-rolled inline SVG line chart -- no charting library exists anywhere
+// in this app; this matches the same zero-dependency inline-SVG convention
+// already used for every icon (chat-header.js's ICON_SVG, etc).
+function drawWeightChart(svgEl, points) {
+  const W = 600, H = 220, padL = 40, padR = 14, padT = 16, padB = 26;
+  if (!points.length) {
+    svgEl.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--pra-dim)" font-size="13">No entries yet</text>`;
+    return;
+  }
+  const displayWeights = points.map(p => kgToDisplay(p.weightKg));
+  const times = points.map(p => new Date(p.createdAt).getTime());
+  const minT = times[0], maxT = times[times.length - 1];
+  const minW = Math.min(...displayWeights), maxW = Math.max(...displayWeights);
+  const wPad = Math.max(1, (maxW - minW) * 0.15);
+  const loW = minW - wPad, hiW = maxW + wPad;
+  const x = t => padL + (maxT === minT ? (W - padL - padR) / 2 : (t - minT) / (maxT - minT) * (W - padL - padR));
+  const y = w => padT + (hiW === loW ? (H - padT - padB) / 2 : (hiW - w) / (hiW - loW) * (H - padT - padB));
+
+  const pts = points.map((p, i) => `${x(times[i]).toFixed(1)},${y(displayWeights[i]).toFixed(1)}`).join(' ');
+  const fmtDate = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  let svg = `<polyline points="${pts}" fill="none" stroke="#009bff" stroke-width="2"/>`;
+  points.forEach((p, i) => { svg += `<circle cx="${x(times[i]).toFixed(1)}" cy="${y(displayWeights[i]).toFixed(1)}" r="3.5" fill="#009bff"/>`; });
+  svg += `<text x="${padL}" y="${H - 6}" fill="var(--pra-dim)" font-size="11">${fmtDate(minT)}</text>`;
+  svg += `<text x="${W - padR}" y="${H - 6}" text-anchor="end" fill="var(--pra-dim)" font-size="11">${fmtDate(maxT)}</text>`;
+  svg += `<text x="2" y="${(y(hiW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(hiW)}</text>`;
+  svg += `<text x="2" y="${(y(loW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(loW)}</text>`;
+  svgEl.innerHTML = svg;
 }
 
 (async () => {
