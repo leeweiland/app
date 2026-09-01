@@ -6,84 +6,14 @@
 // and results are saved per-user so they persist across sessions.
 
 import Busboy from "busboy";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { Readable } from "stream";
 import { randomUUID } from "crypto";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
 
 const SCANS_FILE = "chat_body_scans.json";
 const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
 
 const MODEL = "gpt-4o";
-
-function readJson(file, fallback) {
-  const p = join(__dirname, file);
-  try { return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback; } catch { return fallback; }
-}
-function writeJson(file, data) {
-  writeFileSync(join(__dirname, file), JSON.stringify(data, null, 2), "utf8");
-}
-
-async function getDriveAccessToken() {
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN_PRA,
-      grant_type: "refresh_token",
-    }),
-  });
-  const d = await r.json();
-  if (!d.access_token) throw new Error("Google token refresh failed");
-  return d.access_token;
-}
-
-async function uploadBufferToDrive(buffer, { name, mimeType, folderId, accessToken }) {
-  const metadata = JSON.stringify({ name, parents: [folderId] });
-  const boundary = "scan_upload_bdry";
-  const body = Buffer.concat([
-    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`),
-    buffer,
-    Buffer.from(`\r\n--${boundary}--`),
-  ]);
-  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  });
-  const d = await r.json();
-  if (!d.id) throw new Error("Drive upload failed: " + JSON.stringify(d));
-  return d.id;
-}
-
-function getCookie(req, name) {
-  const header = req.headers.cookie || "";
-  const match = header.split(";").map(s => s.trim()).find(s => s.startsWith(name + "="));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
-}
-function getSessionUser(req) {
-  const token = getCookie(req, "pra_session");
-  if (!token) return null;
-  const sessions = readJson("chat_sessions.json", {});
-  const session = sessions[token];
-  if (!session || session.expiresAt < Date.now()) return null;
-  const users = readJson("chat_users.json", []);
-  return users.find(u => u.id === session.userId) || null;
-}
-
-function sendJson(res, status, obj) {
-  res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-  res.end(JSON.stringify(obj));
-  return true;
-}
 
 function parseMultipart(req) {
   return new Promise((resolve, reject) => {
@@ -339,12 +269,13 @@ export async function handleBodyAnalysisRequest(req, res, url) {
         ? "BODY SCAN"
         : (fields.moveType || "MOVE SCAN").replace(/[^a-zA-Z0-9 ]/g, "").trim() || "MOVE SCAN";
       const userName = user ? `${user.first} ${user.last}` : "GUEST";
-      driveFileId = await uploadBufferToDrive(image.buffer, {
+      const uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
         name: `${userName} ${contentGuess}`.toUpperCase() + ext,
         mimeType: image.mimeType,
         folderId: SCAN_PHOTOS_FOLDER,
         accessToken,
       });
+      driveFileId = uploaded.id;
     } catch (e) {
       console.error("[body-scan] Drive upload failed:", e.message);
     }

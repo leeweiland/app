@@ -234,6 +234,7 @@
   // Second, bottom-anchored bar for the newer content sections — kept
   // separate from the top bar's core app nav.
   const BOTTOM_ICONS = [
+    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body Scan' },
     { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
     { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },

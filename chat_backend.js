@@ -97,7 +97,7 @@ function migrateDataFile(file) {
   "chat_push_subscriptions.json", "chat_admin_config.json", "chat_password_resets.json",
   "chat_upload_counters.json", "chat_training_protocols.json", "chat_favorites.json",
   "chat_appointments.json", "chat_message_templates.json", "chat_protocol_step_templates.json",
-  "chat_gym_blocked_dates.json", "chat_calls.json", "personality-quiz/leads.json", "personality-quiz/config.json",
+  "chat_gym_blocked_dates.json", "chat_calls.json", "chat_body_scans.json", "personality-quiz/leads.json", "personality-quiz/config.json",
 // Defensive: this runs at module-load time, before the server starts
 // listening — one bad seed here must never take the whole app down again
 // the way the missing-mkdirSync bug above just did in production.
