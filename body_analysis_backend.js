@@ -5,33 +5,15 @@
 // model to invent numbers. Photos are uploaded to Drive for record-keeping
 // and results are saved per-user so they persist across sessions.
 
-import Busboy from "busboy";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 import { recordWeightEntry } from "./body_stats_backend.js";
+import { parseMultipartUpload } from "./multipart_util.js";
 
 const SCANS_FILE = "chat_body_scans.json";
 const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
-
-function parseMultipart(req) {
-  return new Promise((resolve, reject) => {
-    const bb = Busboy({ headers: req.headers, limits: { fileSize: 25 * 1024 * 1024 } });
-    const fields = {};
-    let image = null;
-    bb.on("field", (name, val) => { fields[name] = val; });
-    bb.on("file", (name, stream, info) => {
-      if (name !== "photo") { stream.resume(); return; }
-      const chunks = [];
-      stream.on("data", c => chunks.push(c));
-      stream.on("end", () => { image = { buffer: Buffer.concat(chunks), mimeType: info.mimeType }; });
-    });
-    bb.on("finish", () => resolve({ fields, image }));
-    bb.on("error", reject);
-    req.pipe(bb);
-  });
-}
 
 // Mifflin-St Jeor — the standard, defensible TDEE formula (not AI-guessed).
 function calcCalorieTarget({ heightCm, weightKg, age, sex, activityLevel, goal }) {
@@ -211,7 +193,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
 
   try {
     const user = getSessionUser(req);
-    const { fields, image } = await parseMultipart(req);
+    const { fields, image } = await parseMultipartUpload(req);
     if (!image) return sendJson(res, 400, { error: "photo is required" });
 
     const analysisType = fields.analysisType === "move" ? "move" : "body";

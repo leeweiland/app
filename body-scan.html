@@ -72,6 +72,18 @@
   .stat-entry-weight { font-weight: 700; font-size: .92rem; width: 70px; flex-shrink: 0; }
   .stat-entry-note { flex: 1; font-size: .8rem; color: var(--pra-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stat-entry-source { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; }
+  /* ── Progress Photos tab ── */
+  .photo-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 26px; }
+  .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.03); cursor: pointer; }
+  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-thumb .photo-thumb-date { position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px; font-family: var(--font-secondary); font-size: .6rem; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
+  .photo-thumb-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: .75rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .photo-anim-wrap { position: relative; width: 100%; aspect-ratio: 3/4; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 14px; }
+  .photo-anim-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity .25s linear; }
+  .photo-anim-controls { display: flex; align-items: center; gap: 10px; }
+  .photo-anim-controls input[type=range] { flex: 1; accent-color: var(--pra-blue); }
+  .photo-anim-play { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .photo-anim-label { text-align: center; font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); margin: 8px 0 2px; }
 </style>
 </head>
 <body>
@@ -86,6 +98,7 @@
     <div class="hub-tabs">
       <div class="hub-tab active" data-hub="scan">Scan</div>
       <div class="hub-tab" data-hub="stats">Stats</div>
+      <div class="hub-tab" data-hub="photos">Photos</div>
     </div>
 
     <div id="hubPanelScan" class="hub-panel active">
@@ -204,6 +217,28 @@
       <div id="statEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">No entries yet — log your first weigh-in above.</div>
       <div id="statEntriesList"></div>
     </div>
+
+    <div id="hubPanelPhotos" class="hub-panel">
+      <div class="upload-box" id="photoUploadBox" style="padding:20px;margin-bottom:6px">
+        <div id="photoUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a progress photo</div>
+        <input type="file" id="photoInputPhotos" accept="image/*" style="display:none"/>
+      </div>
+
+      <div id="photoAnimSection" style="display:none">
+        <div class="photo-anim-wrap">
+          <img class="photo-anim-layer" id="animLayerA" style="opacity:1"/>
+          <img class="photo-anim-layer" id="animLayerB" style="opacity:0"/>
+        </div>
+        <div class="photo-anim-controls">
+          <button class="photo-anim-play" id="animPlayBtn" title="Play">▶</button>
+          <input type="range" id="animScrubber" min="0" max="0" value="0" step="1"/>
+        </div>
+        <div class="photo-anim-label" id="animDateLabel"></div>
+      </div>
+
+      <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No progress photos yet — upload your first one above.</div>
+      <div class="photo-gallery-grid" id="photoGalleryGrid"></div>
+    </div>
   </div>
 </div>
 
@@ -252,8 +287,9 @@ async function loadState() {
   }
 }
 
-// ── Hub tabs (Scan / Stats / ...) ──────────────────────────────────────
+// ── Hub tabs (Scan / Stats / Photos / ...) ──────────────────────────────
 let statsLoaded = false;
+let photosLoaded = false;
 document.querySelectorAll('.hub-tab').forEach(tab => {
   tab.onclick = () => {
     document.querySelectorAll('.hub-tab').forEach(t => t.classList.remove('active'));
@@ -261,6 +297,7 @@ document.querySelectorAll('.hub-tab').forEach(tab => {
     tab.classList.add('active');
     document.getElementById('hubPanel' + tab.dataset.hub[0].toUpperCase() + tab.dataset.hub.slice(1)).classList.add('active');
     if (tab.dataset.hub === 'stats' && !statsLoaded) { statsLoaded = true; loadStatsEntries(); }
+    if (tab.dataset.hub === 'photos' && !photosLoaded) { photosLoaded = true; loadProgressPhotos(); }
   };
 });
 
@@ -595,6 +632,116 @@ function drawWeightChart(svgEl, points) {
   svg += `<text x="2" y="${(y(hiW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(hiW)}</text>`;
   svg += `<text x="2" y="${(y(loW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(loW)}</text>`;
   svgEl.innerHTML = svg;
+}
+
+// ── Progress Photos tab: gallery + upload + before/after crossfade ─────
+let progressPhotos = []; // ascending by createdAt
+
+document.getElementById('photoUploadBox').onclick = () => document.getElementById('photoInputPhotos').click();
+document.getElementById('photoInputPhotos').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  document.getElementById('photoUploadPrompt').textContent = 'Uploading…';
+  try {
+    const r = await fetch('/api/body-stats/photos', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Upload failed'); return; }
+    progressPhotos.push(d.entry);
+    renderPhotoGallery();
+  } finally {
+    document.getElementById('photoUploadPrompt').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a progress photo';
+    document.getElementById('photoInputPhotos').value = '';
+  }
+});
+
+async function loadProgressPhotos() {
+  try {
+    const r = await fetch('/api/body-stats/photos');
+    if (!r.ok) return;
+    progressPhotos = (await r.json()).photos || [];
+    renderPhotoGallery();
+  } catch {}
+}
+
+async function deleteProgressPhoto(id) {
+  try {
+    await fetch(`/api/body-stats/photos/${id}`, { method: 'DELETE' });
+    progressPhotos = progressPhotos.filter(p => p.id !== id);
+    renderPhotoGallery();
+  } catch {}
+}
+
+function renderPhotoGallery() {
+  document.getElementById('photosEmpty').style.display = progressPhotos.length ? 'none' : 'block';
+  document.getElementById('photoAnimSection').style.display = progressPhotos.length >= 2 ? 'block' : 'none';
+  const grid = document.getElementById('photoGalleryGrid');
+  // Most recent first for the grid; the animation below always plays in
+  // actual date order regardless of grid order.
+  grid.innerHTML = progressPhotos.slice().reverse().map(p => {
+    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `<div class="photo-thumb" data-id="${escapeHtml(p.id)}">
+      <img src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
+      <div class="photo-thumb-date">${date}</div>
+      <button class="photo-thumb-del" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.photo-thumb').forEach(el => {
+    el.querySelector('.photo-thumb-del').onclick = (e) => { e.stopPropagation(); deleteProgressPhoto(el.dataset.id); };
+  });
+  setupPhotoAnimation();
+}
+
+let animPlayTimer = null;
+function setupPhotoAnimation() {
+  const scrubber = document.getElementById('animScrubber');
+  const layerA = document.getElementById('animLayerA');
+  const layerB = document.getElementById('animLayerB');
+  const label = document.getElementById('animDateLabel');
+  const playBtn = document.getElementById('animPlayBtn');
+  if (progressPhotos.length < 2) return;
+
+  scrubber.max = progressPhotos.length - 1;
+  let current = 0;
+  let showingA = true;
+
+  function showIndex(i) {
+    const p = progressPhotos[i];
+    const url = `/api/body-stats/media/${p.driveFileId}`;
+    const showLayer = showingA ? layerB : layerA;
+    const hideLayer = showingA ? layerA : layerB;
+    showLayer.src = url;
+    showLayer.style.opacity = '1';
+    hideLayer.style.opacity = '0';
+    showingA = !showingA;
+    label.textContent = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    current = i;
+  }
+  // Seed the first frame directly (no crossfade needed for the very first paint).
+  layerA.src = `/api/body-stats/media/${progressPhotos[0].driveFileId}`;
+  layerA.style.opacity = '1';
+  layerB.style.opacity = '0';
+  showingA = false;
+  label.textContent = new Date(progressPhotos[0].createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  scrubber.value = 0;
+
+  scrubber.oninput = () => showIndex(Number(scrubber.value));
+
+  playBtn.onclick = () => {
+    if (animPlayTimer) {
+      clearInterval(animPlayTimer);
+      animPlayTimer = null;
+      playBtn.textContent = '▶';
+      return;
+    }
+    playBtn.textContent = '⏸';
+    animPlayTimer = setInterval(() => {
+      const next = (current + 1) % progressPhotos.length;
+      scrubber.value = next;
+      showIndex(next);
+    }, 700);
+  };
 }
 
 (async () => {

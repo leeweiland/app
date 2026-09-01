@@ -376,6 +376,39 @@ export async function getDriveAccessToken() {
 // Same token also covers Sheets + Gmail scopes — reused for both below.
 const getGoogleAccessToken = getDriveAccessToken;
 
+// Range-aware Drive file streaming, shared by every authorized media-read
+// route (this file's own chat-media proxy below, plus body_stats_backend.js's
+// progress-photo proxy) -- each route does its OWN authorization check
+// first (this fileId belongs to something the requester can see), then
+// hands off to this once that's settled.
+export async function streamDriveMedia(req, res, fileId, accessToken) {
+  await new Promise((resolve, reject) => {
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    if (req.headers.range) headers.Range = req.headers.range;
+    const driveReq = httpsRequest({
+      hostname: "www.googleapis.com",
+      path: `/drive/v3/files/${fileId}?alt=media`,
+      method: "GET",
+      headers,
+    }, driveRes => {
+      const passHeaders = {};
+      ["content-type", "content-length", "content-range", "accept-ranges"].forEach(h => {
+        if (driveRes.headers[h]) passHeaders[h.replace(/(^|-)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase())] = driveRes.headers[h];
+      });
+      // A given fileId's bytes never change once sent -- nothing here ever
+      // needs revalidating. `private` (not `public`) since access is gated
+      // per-request by the caller -- this is safe to keep on THIS device's
+      // cache, not a shared one.
+      passHeaders["Cache-Control"] = "private, max-age=31536000, immutable";
+      res.writeHead(driveRes.statusCode, passHeaders);
+      driveRes.pipe(res);
+      driveRes.on("end", resolve);
+    });
+    driveReq.on("error", reject);
+    driveReq.end();
+  });
+}
+
 // ── Video calls (Daily.co) ──────────────────────────────────────────────
 // Thin REST wrapper — no SDK installed for this, same "hand-rolled fetch
 // against the documented REST endpoint" approach as the Drive/Sheets calls
@@ -2474,34 +2507,7 @@ export async function handleChatRequest(req, res, url) {
     }
     try {
       const accessToken = await getDriveAccessToken();
-      await new Promise((resolve, reject) => {
-        const headers = { Authorization: `Bearer ${accessToken}` };
-        if (req.headers.range) headers.Range = req.headers.range;
-        const driveReq = httpsRequest({
-          hostname: "www.googleapis.com",
-          path: `/drive/v3/files/${fileId}?alt=media`,
-          method: "GET",
-          headers,
-        }, driveRes => {
-          const passHeaders = {};
-          ["content-type", "content-length", "content-range", "accept-ranges"].forEach(h => {
-            if (driveRes.headers[h]) passHeaders[h.replace(/(^|-)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase())] = driveRes.headers[h];
-          });
-          // A given fileId's bytes never change once sent -- nothing here
-          // ever needs revalidating. No cache header at all before this
-          // meant every view re-fetched the same photo/video through this
-          // proxy (which itself re-fetches from Drive) instead of the
-          // device just reading it back from its own cache. `private`
-          // (not `public`) since access is gated per-request above --
-          // this is safe to keep on THIS device's cache, not a shared one.
-          passHeaders["Cache-Control"] = "private, max-age=31536000, immutable";
-          res.writeHead(driveRes.statusCode, passHeaders);
-          driveRes.pipe(res);
-          driveRes.on("end", resolve);
-        });
-        driveReq.on("error", reject);
-        driveReq.end();
-      });
+      await streamDriveMedia(req, res, fileId, accessToken);
     } catch (e) {
       res.writeHead(500); res.end("Media fetch failed: " + e.message);
     }

@@ -3,10 +3,19 @@
 // also feeds this same series via recordWeightEntry (called directly, no
 // HTTP round trip) so manual entries and scan-time entries share one chart.
 
+import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, readJsonBody, sendJson } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia } from "./chat_backend.js";
+import { parseMultipartUpload } from "./multipart_util.js";
 
 const STATS_FILE = "chat_body_stats.json";
+const PHOTOS_FILE = "chat_progress_photos.json";
+// TODO(lee): replace with a real Drive folder id once created and shared
+// with the GOOGLE_REFRESH_TOKEN_PRA account -- same pattern as
+// body_analysis_backend.js's SCAN_PHOTOS_FOLDER. Uploads fail loudly (400)
+// until this is a real folder, rather than silently saving an unusable
+// photo-less record.
+const PROGRESS_PHOTOS_FOLDER = "REPLACE_WITH_REAL_DRIVE_FOLDER_ID";
 
 // Called by body_analysis_backend.js (and, later, progress-photo uploads
 // that include a weigh-in) -- not an HTTP route, just a shared write path.
@@ -63,6 +72,92 @@ export async function handleBodyStatsRequest(req, res, url) {
       writeJson(STATS_FILE, all);
     }
     return sendJson(res, 200, { ok: true });
+  }
+
+  // ── Progress photos ───────────────────────────────────────────────────
+  if (req.method === "POST" && url.pathname === "/api/body-stats/photos") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const { fields, image } = await parseMultipartUpload(req);
+    if (!image) return sendJson(res, 400, { error: "photo is required" });
+
+    let uploaded;
+    try {
+      const accessToken = await getDriveAccessToken();
+      const ext = image.mimeType.includes("png") ? ".png" : image.mimeType.includes("webp") ? ".webp" : ".jpg";
+      const date = new Date().toISOString().slice(0, 10);
+      uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
+        name: `${user.first} ${user.last} PROGRESS PHOTO ${date}`.toUpperCase() + ext,
+        mimeType: image.mimeType,
+        folderId: PROGRESS_PHOTOS_FOLDER,
+        accessToken,
+      });
+    } catch (e) {
+      console.error("[progress-photos] Drive upload failed:", e.message);
+      return sendJson(res, 500, { error: "Photo upload failed, try again" });
+    }
+
+    const entry = {
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      driveFileId: uploaded.id,
+      mimeType: image.mimeType,
+      note: fields.note || null,
+      weightKg: fields.weightKg || null,
+      linkedScanId: null,
+    };
+    const all = readJson(PHOTOS_FILE, {});
+    if (!all[user.id]) all[user.id] = [];
+    all[user.id].push(entry);
+    writeJson(PHOTOS_FILE, all);
+
+    // Uploading with a weight double as a weigh-in, same as a scan does.
+    if (fields.weightKg) recordWeightEntry(user.id, { weightKg: fields.weightKg, source: "manual" });
+
+    return sendJson(res, 200, { entry });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/body-stats/photos") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const all = readJson(PHOTOS_FILE, {});
+    const photos = (all[user.id] || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return sendJson(res, 200, { photos });
+  }
+
+  const delPhotoMatch = url.pathname.match(/^\/api\/body-stats\/photos\/([^/]+)$/);
+  if (delPhotoMatch && req.method === "DELETE") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const id = delPhotoMatch[1];
+    const all = readJson(PHOTOS_FILE, {});
+    if (all[user.id]) {
+      all[user.id] = all[user.id].filter(p => p.id !== id);
+      writeJson(PHOTOS_FILE, all);
+    }
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Authorization-scoped Drive read proxy -- the fileId must belong to a
+  // progress photo OR a body/move scan owned by the requester (scans get
+  // photos through here too now, rather than only ever being fetched
+  // through Drive's own share link).
+  const mediaMatch = url.pathname.match(/^\/api\/body-stats\/media\/([^/]+)$/);
+  if (mediaMatch && req.method === "GET") {
+    const user = getSessionUser(req);
+    if (!user) { res.writeHead(401); res.end(); return true; }
+    const fileId = mediaMatch[1];
+    const ownPhotos = readJson(PHOTOS_FILE, {})[user.id] || [];
+    const ownScans = readJson("chat_body_scans.json", {})[user.id] || [];
+    const owns = ownPhotos.some(p => p.driveFileId === fileId) || ownScans.some(s => s.driveFileId === fileId);
+    if (!owns) { res.writeHead(403); res.end(); return true; }
+    try {
+      const accessToken = await getDriveAccessToken();
+      await streamDriveMedia(req, res, fileId, accessToken);
+    } catch (e) {
+      res.writeHead(500); res.end("Media fetch failed: " + e.message);
+    }
+    return true;
   }
 
   return false;
