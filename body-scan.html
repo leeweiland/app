@@ -228,7 +228,7 @@
 
         <div class="upload-box" id="foodUploadBox" style="padding:20px">
           <div id="foodUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to photograph or upload your meal</div>
-          <input type="file" id="foodPhotoInput" accept="image/*" style="display:none"/>
+          <input type="file" id="foodPhotoInput" accept="image/*" capture="environment" style="display:none"/>
         </div>
 
         <div id="foodManualFields" style="display:none">
@@ -255,7 +255,7 @@
         <div class="upload-box" id="uploadBox">
           <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
           <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
-          <input type="file" id="photoInput" accept="image/*" style="display:none"/>
+          <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"/>
         </div>
 
         <div class="field">
@@ -278,7 +278,7 @@
 
       <div class="pra-h2" style="margin:28px 0 10px">Progress Photos</div>
       <button class="link-btn" id="addProgressPhotoBtn">+ Add a progress photo (no AI analysis)</button>
-      <input type="file" id="photoInputPhotos" accept="image/*" style="display:none"/>
+      <input type="file" id="photoInputPhotos" accept="image/*" capture="environment" style="display:none"/>
 
       <div id="photoAnimSection" style="display:none">
         <div class="photo-anim-wrap">
