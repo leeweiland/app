@@ -553,6 +553,17 @@
   .call-control-btn.off { background: rgba(255,255,255,0.35); color: #0a0a0f; }
   .call-control-btn.end-call { background: #ff3b30; }
 
+  /* Camera picker -- for when the selected input isn't actually producing
+     a usable feed (a virtual webcam app that isn't running, a disconnected
+     USB camera) and switching mid-call is the only fix; a page reload
+     would drop the call entirely. */
+  .call-device-menu { display: none; position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); min-width: 200px; max-width: 280px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; padding: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); z-index: 1; }
+  .call-device-menu.show { display: block; }
+  .call-device-item { padding: 8px 10px; border-radius: 6px; font-size: .82rem; color: #fff; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .call-device-item:hover { background: rgba(255,255,255,0.08); }
+  .call-device-item.active { color: var(--pra-blue); font-weight: 600; }
+  .call-device-menu-empty { padding: 8px 10px; font-size: .8rem; color: var(--pra-dim); }
+
   .incoming-call-banner { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 10001; display: none; align-items: center; gap: 12px; padding: 12px 14px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
   .incoming-call-banner.show { display: flex; }
   .incoming-call-info { flex: 1; min-width: 0; }
@@ -801,8 +812,13 @@
             <button class="icon-btn composer-icon" id="gifBtn">GIF</button>
             <button class="icon-btn composer-icon" id="templatesBtn" title="Saved message templates" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 3.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v.5" stroke="#fff" stroke-width="1.6"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <textarea id="textInput" class="composer-textarea" placeholder="Type a message…" rows="1"></textarea>
-            <button class="icon-btn composer-icon" id="attachBtn">📎</button>
-            <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none">📷</button>
+            <!-- Matches the SVG line-art + glow convention used by every other
+                 icon button in the app (.icon-btn svg, chat-header.js's
+                 ICON_SVG) instead of the previous raw 📎/📷 emoji, which
+                 rendered in the OS's own emoji art and didn't match the
+                 templatesBtn icon sitting right next to them. -->
+            <button class="icon-btn composer-icon" id="attachBtn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg></button>
             <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           </div>
           <button class="composer-send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.4 20.4l17.45-8.4a.6.6 0 0 0 0-1.08L3.4 2.52a.6.6 0 0 0-.85.66l2.17 7.02a.6.6 0 0 0 .49.42l8.9 1.3-8.9 1.3a.6.6 0 0 0-.49.42l-2.17 7.1a.6.6 0 0 0 .85.66z" fill="#fff"/></svg></button>
@@ -1195,6 +1211,10 @@
     <div class="call-controls">
       <button class="call-control-btn" id="callMicBtn" title="Mute"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7"/><path d="M6 11a6 6 0 0 0 12 0M12 19v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
       <button class="call-control-btn" id="callCamBtn" title="Camera"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+      <div style="position:relative">
+        <button class="call-control-btn" id="callSwitchCamBtn" title="Switch camera"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M4 8a8 8 0 0 1 13.5-4.5L20 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M20 3v4h-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16a8 8 0 0 1-13.5 4.5L4 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 21v-4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="call-device-menu" id="callCameraMenu"></div>
+      </div>
       <button class="call-control-btn end-call" id="callEndBtn" title="End call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M4 14c5.5-4.7 10.5-4.7 16 0" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M9 14.3l-1.4 3.4a1 1 0 0 0 .5 1.3c1 .4 2.6.8 3.9.8s2.9-.4 3.9-.8a1 1 0 0 0 .5-1.3L15 14.3" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
     </div>
   </div>
@@ -5377,6 +5397,7 @@ function closeCallScreen() {
   clearTimeout(callRingTimeout);
   document.getElementById('callScreen').classList.remove('show');
   document.getElementById('callVideoGrid').innerHTML = '';
+  document.getElementById('callCameraMenu').classList.remove('show');
   callTiles.clear();
   if (dailyCallObject) {
     if (recordingStarted) { try { dailyCallObject.stopRecording(); } catch {} }
@@ -5482,8 +5503,45 @@ function handleActiveCallPoll(activeCall, convoId) {
   document.getElementById('callStatusSub').textContent = activeCall.status === 'active' ? '' : 'Calling…';
 }
 
+// Populated fresh every open (not cached) -- the whole point is recovering
+// from a camera that wasn't available/working a moment ago (a virtual
+// webcam app not started yet, a USB camera just plugged in), so a stale
+// list would defeat it.
+async function toggleCameraMenu() {
+  const menu = document.getElementById('callCameraMenu');
+  if (menu.classList.contains('show')) { menu.classList.remove('show'); return; }
+  if (!dailyCallObject) return;
+  menu.innerHTML = '<div class="call-device-menu-empty">Loading cameras…</div>';
+  menu.classList.add('show');
+  const [{ devices }, { camera }] = await Promise.all([
+    dailyCallObject.enumerateDevices(),
+    dailyCallObject.getInputDevices(),
+  ]);
+  const cameras = devices.filter(d => d.kind === 'videoinput');
+  if (!cameras.length) { menu.innerHTML = '<div class="call-device-menu-empty">No cameras found</div>'; return; }
+  menu.innerHTML = cameras.map(d =>
+    `<div class="call-device-item${d.deviceId === camera?.deviceId ? ' active' : ''}" data-device-id="${d.deviceId}">${escapeHtml(d.label || 'Camera')}</div>`
+  ).join('');
+  menu.querySelectorAll('.call-device-item').forEach(item => {
+    item.onclick = async () => {
+      menu.classList.remove('show');
+      try {
+        await dailyCallObject.setInputDevicesAsync({ videoDeviceId: item.dataset.deviceId });
+      } catch (e) {
+        console.error('[call] switching camera failed', e);
+        alert('Could not switch to that camera.');
+      }
+    };
+  });
+}
+
 function setupCallUI() {
   document.getElementById('startCallBtn').onclick = startCall;
+  document.getElementById('callSwitchCamBtn').onclick = toggleCameraMenu;
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('callCameraMenu');
+    if (menu.classList.contains('show') && !menu.contains(e.target) && !e.target.closest('#callSwitchCamBtn')) menu.classList.remove('show');
+  });
   document.getElementById('callEndBtn').onclick = endCall;
   document.getElementById('callMicBtn').onclick = () => {
     localAudioOn = !localAudioOn;
