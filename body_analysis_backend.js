@@ -9,44 +9,13 @@ import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
-import { recordWeightEntry } from "./body_stats_backend.js";
+import { recordWeightEntry, getLatestWeightKg } from "./body_stats_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
+import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
 
 const SCANS_FILE = "chat_body_scans.json";
+const PROFILE_FILE = "chat_body_profile.json";
 const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
-
-// Mifflin-St Jeor — the standard, defensible TDEE formula (not AI-guessed).
-function calcCalorieTarget({ heightCm, weightKg, age, sex, activityLevel, goal }) {
-  const h = Number(heightCm), w = Number(weightKg), a = Number(age) || 30;
-  const bmr = sex === "female"
-    ? 10 * w + 6.25 * h - 5 * a - 161
-    : 10 * w + 6.25 * h - 5 * a + 5;
-  const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
-  const tdee = bmr * (activityMultipliers[activityLevel] || 1.375);
-  const goalMultipliers = { cut: 0.8, maintain: 1.0, bulk: 1.1 };
-  return Math.round(tdee * (goalMultipliers[goal] || 1.0));
-}
-
-function calcMacros(calories) {
-  // 40% protein / 30% fat / 30% carb, per the requested split.
-  const proteinCal = calories * 0.40, fatCal = calories * 0.30, carbCal = calories * 0.30;
-  return {
-    proteinG: Math.round(proteinCal / 4),
-    fatG: Math.round(fatCal / 9),
-    carbG: Math.round(carbCal / 4),
-  };
-}
-
-function buildMealPlan(macros, calories) {
-  // Even split across 6 meals — simple and predictable, matches what was asked for.
-  const perMeal = {
-    calories: Math.round(calories / 6),
-    proteinG: Math.round(macros.proteinG / 6),
-    fatG: Math.round(macros.fatG / 6),
-    carbG: Math.round(macros.carbG / 6),
-  };
-  return Array.from({ length: 6 }, (_, i) => ({ meal: i + 1, ...perMeal }));
-}
 
 // Forces structured output (a body-fat range as actual numbers, not text to
 // regex out of a formatted line) via a tool call instead of a "line 1 must
@@ -165,11 +134,20 @@ export async function handleBodyAnalysisRequest(req, res, url) {
     const { fields, image } = await parseMultipartUpload(req);
     if (!image) return sendJson(res, 400, { error: "photo is required" });
 
-    let calorieTarget = null, macros = null, mealPlan = null;
+    // The Scan tab no longer asks for height/weight/age/sex/activity/goal
+    // directly (that's the Food Log profile now) -- fields.* stays as an
+    // explicit-override path for API callers that do supply it, falling
+    // back to the saved profile + latest weigh-in otherwise.
+    const profile = user ? readJson(PROFILE_FILE, {})[user.id] || null : null;
     const calorieInputs = {
-      heightCm: fields.heightCm, weightKg: fields.weightKg, age: fields.age,
-      sex: fields.sex, activityLevel: fields.activityLevel, goal: fields.goal,
+      heightCm: fields.heightCm || profile?.heightCm,
+      weightKg: fields.weightKg || (user ? getLatestWeightKg(user.id) : null),
+      age: fields.age || profile?.age,
+      sex: fields.sex || profile?.sex,
+      activityLevel: fields.activityLevel || profile?.activityLevel,
+      goal: fields.goal || profile?.goal,
     };
+    let calorieTarget = null, macros = null, mealPlan = null;
     if (calorieInputs.heightCm && calorieInputs.weightKg) {
       calorieTarget = calcCalorieTarget(calorieInputs);
       macros = calcMacros(calorieTarget);
@@ -241,13 +219,15 @@ export async function handleBodyAnalysisRequest(req, res, url) {
         });
         writeJson(SCANS_FILE, all);
 
-        // A scan that included weight also feeds the same bodyweight time
-        // series a manual Stats-tab entry would -- one chart either way.
-        if (fields.weightKg) {
+        // Every scan with a usable weight (fresh or carried over from the
+        // profile/latest weigh-in) adds a stats entry -- a fresh bodyFatPct
+        // reading is new information worth timestamping on the bodyfat
+        // trend chart even on a day the user didn't also log a new weight.
+        if (calorieInputs.weightKg) {
           const bodyFatPct = bodyFatLowPct != null && bodyFatHighPct != null
             ? (bodyFatLowPct + bodyFatHighPct) / 2 : null;
           recordWeightEntry(user.id, {
-            weightKg: fields.weightKg, heightCm: fields.heightCm, bodyFatPct, source: "scan", scanId,
+            weightKg: calorieInputs.weightKg, heightCm: calorieInputs.heightCm, bodyFatPct, source: "scan", scanId,
           });
         }
       } catch (e) {

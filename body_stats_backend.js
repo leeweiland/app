@@ -7,9 +7,11 @@ import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia } from "./chat_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
+import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
 
 const STATS_FILE = "chat_body_stats.json";
 const PHOTOS_FILE = "chat_progress_photos.json";
+const PROFILE_FILE = "chat_body_profile.json";
 // TODO(lee): replace with a real Drive folder id once created and shared
 // with the GOOGLE_REFRESH_TOKEN_PRA account -- same pattern as
 // body_analysis_backend.js's SCAN_PHOTOS_FOLDER. Uploads fail loudly (400)
@@ -38,7 +40,68 @@ export function recordWeightEntry(userId, { weightKg, heightCm = null, bodyFatPc
   return entry;
 }
 
+// Most recent weigh-in regardless of source (manual, scan, or the Food Log
+// profile's own "current weight" field) -- called by body_analysis_backend.js
+// so a scan run without an explicit weight still gets a real calorie/macro
+// plan instead of none at all.
+export function getLatestWeightKg(userId) {
+  const entries = readJson(STATS_FILE, {})[userId] || [];
+  if (!entries.length) return null;
+  return entries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].weightKg;
+}
+
+// Profile (height/age/sex/activity/goal/goal-weight) + the latest weigh-in
+// combine into a calorie/macro estimate -- shared by the profile routes
+// below and by body_analysis_backend.js's fallback when a scan doesn't
+// supply its own explicit values.
+export function estimateFromProfile(profile, weightKg) {
+  if (!profile?.heightCm || !weightKg) return { calorieTarget: null, macros: null, mealPlan: null };
+  const calorieTarget = calcCalorieTarget({
+    heightCm: profile.heightCm, weightKg, age: profile.age, sex: profile.sex,
+    activityLevel: profile.activityLevel, goal: profile.goal,
+  });
+  const macros = calcMacros(calorieTarget);
+  const mealPlan = buildMealPlan(macros, calorieTarget);
+  return { calorieTarget, macros, mealPlan };
+}
+
 export async function handleBodyStatsRequest(req, res, url) {
+  // ── Profile (height/age/sex/goal weight/activity/goal) ─────────────────
+  if (req.method === "GET" && url.pathname === "/api/body-stats/profile") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const profile = readJson(PROFILE_FILE, {})[user.id] || null;
+    const weightKg = getLatestWeightKg(user.id);
+    const estimate = estimateFromProfile(profile, weightKg);
+    return sendJson(res, 200, { profile, weightKg, ...estimate });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/body-stats/profile") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const body = await readJsonBody(req);
+    const all = readJson(PROFILE_FILE, {});
+    const profile = {
+      heightCm: body.heightCm ? Number(body.heightCm) : null,
+      age: body.age ? Number(body.age) : null,
+      sex: body.sex || null,
+      goalWeightKg: body.goalWeightKg ? Number(body.goalWeightKg) : null,
+      activityLevel: body.activityLevel || null,
+      goal: body.goal || null,
+      updatedAt: new Date().toISOString(),
+    };
+    all[user.id] = profile;
+    writeJson(PROFILE_FILE, all);
+
+    // Entering "current weight" alongside the profile is a weigh-in, same
+    // as the Stats-tab entry it replaced.
+    if (body.weightKg) recordWeightEntry(user.id, { weightKg: body.weightKg, heightCm: profile.heightCm, source: "manual" });
+
+    const weightKg = getLatestWeightKg(user.id);
+    const estimate = estimateFromProfile(profile, weightKg);
+    return sendJson(res, 200, { profile, weightKg, ...estimate });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/body-stats/entries") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });

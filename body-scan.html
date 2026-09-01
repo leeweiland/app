@@ -8,7 +8,8 @@
 <style>
   body { margin: 0; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
-  /* ── Hub tabs (Scan / Stats / ...) -- the outermost level of this page. ── */
+  /* ── Hub tabs (Food Log / Physique Scan / Reports) -- the outermost level
+     of this page. ── */
   .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); overflow-x: auto; scrollbar-width: none; }
   .hub-tabs::-webkit-scrollbar { display: none; }
   .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
@@ -63,9 +64,9 @@
   .past-scan-del:hover { color: #e74c3c; }
   .past-scan-body { display: none; margin-top: 10px; font-size: .84rem; line-height: 1.6; white-space: pre-wrap; color: var(--pra-text); border-top: 1px solid var(--pra-border); padding-top: 10px; }
   .past-scan-card.open .past-scan-body { display: block; }
-  /* ── Stats tab: entry form + hand-rolled inline SVG line chart (no
-     charting library exists in this app -- matches the zero-dependency
-     inline-SVG convention already used for every icon). ── */
+  /* ── Line chart (weight / bodyfat) -- hand-rolled inline SVG, no charting
+     library exists in this app -- matches the zero-dependency inline-SVG
+     convention already used for every icon. ── */
   .weight-chart-wrap { margin: 6px 0 24px; padding: 14px 10px; }
   .weight-chart-wrap svg { width: 100%; height: auto; display: block; }
   .stat-entry-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 8px; }
@@ -73,14 +74,16 @@
   .stat-entry-weight { font-weight: 700; font-size: .92rem; width: 70px; flex-shrink: 0; }
   .stat-entry-note { flex: 1; font-size: .8rem; color: var(--pra-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stat-entry-source { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; }
-  /* ── Progress Photos tab ── */
+  /* ── Physique Scan tab: merged photo history + morph animation ── */
+  .profile-summary-line { font-size: .8rem; margin-bottom: 14px; }
+  .link-btn { background: none; border: none; color: var(--pra-blue); font-size: .82rem; cursor: pointer; text-decoration: underline; display: block; margin: 0 auto 14px; padding: 6px; }
   .photo-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 26px; }
   .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.03); cursor: pointer; }
   .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .photo-thumb .photo-thumb-date { position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px; font-family: var(--font-secondary); font-size: .6rem; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
   .photo-thumb-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: .75rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .photo-anim-wrap { position: relative; width: 100%; aspect-ratio: 3/4; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 14px; }
-  .photo-anim-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity .25s linear; }
+  .photo-anim-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity .3s linear; }
   .photo-anim-controls { display: flex; align-items: center; gap: 10px; }
   .photo-anim-controls input[type=range] { flex: 1; accent-color: var(--pra-blue); }
   .photo-anim-play { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -90,6 +93,7 @@
   .food-mode-opt { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); background: rgba(255,255,255,0.03); }
   .food-mode-opt.active { background: var(--pra-blue); color: #fff; }
   .food-entry-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 8px; }
+  .food-entry-thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
   .food-entry-desc { flex: 1; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .food-entry-cals { font-weight: 700; font-size: .88rem; color: var(--pra-blue); flex-shrink: 0; }
   .food-entry-label { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; width: 62px; }
@@ -108,142 +112,88 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Body Scan</div>
-    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Upload a photo — get an AI visual read plus a real macro plan.</div>
+    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Track your weight, nutrition, and physique — all in one place.</div>
 
     <div class="hub-tabs">
-      <div class="hub-tab active" data-hub="scan">Scan</div>
-      <div class="hub-tab" data-hub="stats">Stats</div>
-      <div class="hub-tab" data-hub="photos">Photos</div>
-      <div class="hub-tab" data-hub="foodlog">Food Log</div>
+      <div class="hub-tab active" data-hub="foodlog">Food Log</div>
+      <div class="hub-tab" data-hub="physique">Physique Scan</div>
       <div class="hub-tab" data-hub="reports">Reports</div>
     </div>
 
-    <div id="hubPanelScan" class="hub-panel active">
-    <div class="upload-box" id="uploadBox">
-      <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
-      <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
-      <input type="file" id="photoInput" accept="image/*" style="display:none"/>
-    </div>
-
-    <div class="pra-panel" id="nutritionPanel" style="padding:18px">
-      <div class="pra-label" style="margin-bottom:12px">For your calorie/macro plan (optional but recommended)</div>
-      <div class="field-row">
-        <div class="field">
-          <label class="pra-label">Height</label>
-          <div class="unit-row">
-            <input class="pra-input" id="heightFt" type="number" placeholder="ft"/>
-            <input class="pra-input" id="heightIn" type="number" placeholder="in"/>
-            <input class="pra-input" id="heightCm" type="number" placeholder="cm" style="display:none"/>
-            <select class="pra-select" id="heightUnit">
-              <option value="ftin" selected>ft/in</option>
-              <option value="cm">cm</option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <label class="pra-label">Weight</label>
-          <div class="unit-row">
-            <input class="pra-input" id="weightLbs" type="number" placeholder="lbs"/>
-            <input class="pra-input" id="weightKg" type="number" placeholder="kg" style="display:none"/>
-            <select class="pra-select" id="weightUnit">
-              <option value="lbs" selected>lbs</option>
-              <option value="kg">kg</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label class="pra-label">Age</label><input class="pra-input" id="age" type="number"/></div>
-        <div class="field"><label class="pra-label">Sex</label>
-          <select class="pra-select" id="sex"><option value="male">Male</option><option value="female">Female</option></select>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label class="pra-label">Activity Level</label>
-          <select class="pra-select" id="activityLevel">
-            <option value="sedentary">Sedentary</option>
-            <option value="light" selected>Light</option>
-            <option value="moderate">Moderate</option>
-            <option value="active">Active</option>
-            <option value="very_active">Very Active</option>
-          </select>
-        </div>
-        <div class="field"><label class="pra-label">Goal</label>
-          <select class="pra-select" id="goal">
-            <option value="cut">Cut</option>
-            <option value="maintain" selected>Maintain</option>
-            <option value="bulk">Bulk</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <button class="pra-btn" id="analyzeBtn" style="width:100%;margin-top:18px">ANALYZE</button>
-    <div class="spinner" id="spinner">Analyzing…</div>
-
-    <div class="pra-panel" id="resultBox"></div>
-
-    <div id="pastScans" style="display:none">
-      <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
-      <div id="pastScansList"></div>
-    </div>
-    </div>
-
-    <div id="hubPanelStats" class="hub-panel">
-      <div class="pra-panel weight-chart-wrap">
-        <svg id="weightChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
-      </div>
-
-      <div class="pra-panel" style="padding:18px;margin-bottom:22px">
-        <div class="pra-label" style="margin-bottom:12px">Log a new entry</div>
+    <div id="hubPanelFoodlog" class="hub-panel active">
+      <div class="pra-panel" style="padding:18px;margin-bottom:20px">
+        <div class="pra-label" style="margin-bottom:12px">Your Profile</div>
         <div class="field-row">
           <div class="field">
-            <label class="pra-label">Weight</label>
+            <label class="pra-label">Current Weight</label>
             <div class="unit-row">
-              <input class="pra-input" id="statWeightLbs" type="number" placeholder="lbs"/>
-              <input class="pra-input" id="statWeightKg" type="number" placeholder="kg" style="display:none"/>
-              <select class="pra-select" id="statWeightUnit">
+              <input class="pra-input" id="profileWeightLbs" type="number" placeholder="lbs"/>
+              <input class="pra-input" id="profileWeightKg" type="number" placeholder="kg" style="display:none"/>
+              <select class="pra-select" id="profileWeightUnit">
                 <option value="lbs" selected>lbs</option>
                 <option value="kg">kg</option>
               </select>
             </div>
           </div>
-          <div class="field"><label class="pra-label">Date</label><input class="pra-input" id="statDate" type="date"/></div>
+          <div class="field">
+            <label class="pra-label">Goal Weight</label>
+            <div class="unit-row">
+              <input class="pra-input" id="profileGoalWeightLbs" type="number" placeholder="lbs"/>
+              <input class="pra-input" id="profileGoalWeightKg" type="number" placeholder="kg" style="display:none"/>
+              <select class="pra-select" id="profileGoalWeightUnit">
+                <option value="lbs" selected>lbs</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="field-row">
-          <div class="field"><label class="pra-label">Body Fat % (optional)</label><input class="pra-input" id="statBodyFatPct" type="number" step="0.1"/></div>
-          <div class="field"><label class="pra-label">Note (optional)</label><input class="pra-input" id="statNote" type="text" placeholder="e.g. morning, fasted"/></div>
+          <div class="field">
+            <label class="pra-label">Height</label>
+            <div class="unit-row">
+              <input class="pra-input" id="profileHeightFt" type="number" placeholder="ft"/>
+              <input class="pra-input" id="profileHeightIn" type="number" placeholder="in"/>
+              <input class="pra-input" id="profileHeightCm" type="number" placeholder="cm" style="display:none"/>
+              <select class="pra-select" id="profileHeightUnit">
+                <option value="ftin" selected>ft/in</option>
+                <option value="cm">cm</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label class="pra-label">Age</label><input class="pra-input" id="profileAge" type="number"/></div>
         </div>
-        <button class="pra-btn" id="statSaveBtn" style="width:100%;margin-top:6px">SAVE ENTRY</button>
+        <div class="field-row">
+          <div class="field"><label class="pra-label">Gender</label>
+            <select class="pra-select" id="profileSex"><option value="male">Male</option><option value="female">Female</option></select>
+          </div>
+          <div class="field"><label class="pra-label">Activity Level</label>
+            <select class="pra-select" id="profileActivityLevel">
+              <option value="sedentary">Sedentary</option>
+              <option value="light" selected>Light</option>
+              <option value="moderate">Moderate</option>
+              <option value="active">Active</option>
+              <option value="very_active">Very Active</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="pra-label">Goal</label>
+          <select class="pra-select" id="profileGoal">
+            <option value="cut">Cut</option>
+            <option value="maintain" selected>Maintain</option>
+            <option value="bulk">Bulk</option>
+          </select>
+        </div>
+        <button class="pra-btn" id="profileSaveBtn" style="width:100%;margin-top:6px">SAVE PROFILE</button>
+
+        <div class="macro-grid" id="profileEstimateGrid" style="display:none;margin-top:16px">
+          <div class="macro-tile"><div class="val" id="profileCals">0</div><div class="lab">Calories</div></div>
+          <div class="macro-tile"><div class="val" id="profileProtein">0g</div><div class="lab">Protein 40%</div></div>
+          <div class="macro-tile"><div class="val" id="profileFat">0g</div><div class="lab">Fat 30%</div></div>
+          <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="profileCarb">0g</div><div class="lab">Carbs 30%</div></div>
+        </div>
       </div>
 
-      <div id="statEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">No entries yet — log your first weigh-in above.</div>
-      <div id="statEntriesList"></div>
-    </div>
-
-    <div id="hubPanelPhotos" class="hub-panel">
-      <div class="upload-box" id="photoUploadBox" style="padding:20px;margin-bottom:6px">
-        <div id="photoUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a progress photo</div>
-        <input type="file" id="photoInputPhotos" accept="image/*" style="display:none"/>
-      </div>
-
-      <div id="photoAnimSection" style="display:none">
-        <div class="photo-anim-wrap">
-          <img class="photo-anim-layer" id="animLayerA" style="opacity:1"/>
-          <img class="photo-anim-layer" id="animLayerB" style="opacity:0"/>
-        </div>
-        <div class="photo-anim-controls">
-          <button class="photo-anim-play" id="animPlayBtn" title="Play">▶</button>
-          <input type="range" id="animScrubber" min="0" max="0" value="0" step="1"/>
-        </div>
-        <div class="photo-anim-label" id="animDateLabel"></div>
-      </div>
-
-      <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No progress photos yet — upload your first one above.</div>
-      <div class="photo-gallery-grid" id="photoGalleryGrid"></div>
-    </div>
-
-    <div id="hubPanelFoodlog" class="hub-panel">
       <div class="field-row" style="margin-bottom:14px">
         <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="foodDate" type="date"/></div>
       </div>
@@ -294,8 +244,48 @@
         <div class="disclaimer" style="margin-top:16px;padding-top:12px">A photo estimate is a rough guess, not a lab measurement — switch to Manual to correct any number before logging if it looks off.</div>
       </div>
 
+      <div class="pra-h2" style="margin:24px 0 10px">History</div>
       <div id="foodEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">Nothing logged for this day yet.</div>
       <div id="foodEntriesList"></div>
+    </div>
+
+    <div id="hubPanelPhysique" class="hub-panel">
+      <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
+
+      <div class="upload-box" id="uploadBox">
+        <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
+        <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
+        <input type="file" id="photoInput" accept="image/*" style="display:none"/>
+      </div>
+
+      <button class="pra-btn" id="analyzeBtn" style="width:100%;margin-top:18px">ANALYZE</button>
+      <div class="spinner" id="spinner">Analyzing…</div>
+
+      <div class="pra-panel" id="resultBox"></div>
+
+      <div class="pra-h2" style="margin:28px 0 10px">Progress Photos</div>
+      <button class="link-btn" id="addProgressPhotoBtn">+ Add a progress photo (no AI analysis)</button>
+      <input type="file" id="photoInputPhotos" accept="image/*" style="display:none"/>
+
+      <div id="photoAnimSection" style="display:none">
+        <div class="photo-anim-wrap">
+          <img class="photo-anim-layer" id="animLayerA" style="opacity:1"/>
+          <img class="photo-anim-layer" id="animLayerB" style="opacity:0"/>
+        </div>
+        <div class="photo-anim-controls">
+          <button class="photo-anim-play" id="animPlayBtn" title="Pause">⏸</button>
+          <input type="range" id="animScrubber" min="0" max="0" value="0" step="1"/>
+        </div>
+        <div class="photo-anim-label" id="animDateLabel"></div>
+      </div>
+
+      <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No photos yet — analyze one above to start your progress history.</div>
+      <div class="photo-gallery-grid" id="photoGalleryGrid"></div>
+
+      <div id="pastScans" style="display:none">
+        <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
+        <div id="pastScansList"></div>
+      </div>
     </div>
 
     <div id="hubPanelReports" class="hub-panel">
@@ -311,8 +301,19 @@
         <button class="report-nav-btn" id="reportNextBtn">›</button>
       </div>
 
+      <div class="report-section-title">Weight</div>
       <div class="pra-panel weight-chart-wrap">
         <svg id="reportWeightChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
+        <div class="macro-tile"><div class="val" id="reportWeightDelta">—</div><div class="lab">Change</div></div>
+        <div class="macro-tile"><div class="val" id="reportWeightMin">—</div><div class="lab">Min</div></div>
+        <div class="macro-tile"><div class="val" id="reportWeightMax">—</div><div class="lab">Max</div></div>
+      </div>
+
+      <div class="report-section-title">Body Fat %</div>
+      <div class="pra-panel weight-chart-wrap">
+        <svg id="reportBodyFatChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
       </div>
 
       <div class="report-section-title">Nutrition</div>
@@ -320,13 +321,6 @@
         <div class="macro-tile"><div class="val" id="reportAvgCals">0</div><div class="lab">Avg Calories/Day</div></div>
         <div class="macro-tile"><div class="val" id="reportAvgProtein">0g</div><div class="lab">Avg Protein</div></div>
         <div class="macro-tile"><div class="val" id="reportDaysLogged">0</div><div class="lab">Days Logged</div></div>
-      </div>
-
-      <div class="report-section-title">Weight</div>
-      <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
-        <div class="macro-tile"><div class="val" id="reportWeightDelta">—</div><div class="lab">Change</div></div>
-        <div class="macro-tile"><div class="val" id="reportWeightMin">—</div><div class="lab">Min</div></div>
-        <div class="macro-tile"><div class="val" id="reportWeightMax">—</div><div class="lab">Max</div></div>
       </div>
 
       <div class="report-section-title">Photos &amp; Scans</div>
@@ -339,491 +333,144 @@
 </div>
 
 <script>
-let photoFile = null;
-let photoDataUrl = null;
-let lastResult = null;
 let me = null;
 
-// ── Persistence: photo, form fields, and the last result all survive a
-// refresh, nav-away-and-back, or server restart — stored client-side since
-// there's nothing server-side to key it to (no analysis-session concept).
-const STATE_KEY = 'pra-body-move-scan-state-v1';
-const FIELD_IDS = ['heightUnit','heightFt','heightIn','heightCm','weightUnit','weightLbs','weightKg','age','sex','activityLevel','goal'];
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function lbsToKgVal(lbs) { return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : ''; }
+function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 10 : ''; }
 
-function saveState() {
-  const state = { photoDataUrl, lastResult, fields: {} };
-  FIELD_IDS.forEach(id => { state.fields[id] = document.getElementById(id).value; });
-  try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch {}
-}
-
-async function loadState() {
-  let state;
-  try { state = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch { state = null; }
-  if (!state) return;
-
-  if (state.fields) FIELD_IDS.forEach(id => { if (state.fields[id] !== undefined) document.getElementById(id).value = state.fields[id]; });
-  document.getElementById('heightUnit').dispatchEvent(new Event('change'));
-  document.getElementById('weightUnit').dispatchEvent(new Event('change'));
-
-  if (state.photoDataUrl) {
-    photoDataUrl = state.photoDataUrl;
-    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
-    document.getElementById('clearPhotoBtn').style.display = 'flex';
-    try {
-      const blob = await (await fetch(photoDataUrl)).blob();
-      photoFile = new File([blob], 'restored-photo.jpg', { type: blob.type || 'image/jpeg' });
-    } catch {}
-  }
-
-  if (state.lastResult) {
-    lastResult = state.lastResult;
-    renderResult(lastResult, false);
-  }
-}
-
-// ── Hub tabs (Scan / Stats / Photos / ...) ──────────────────────────────
-let statsLoaded = false;
-let photosLoaded = false;
+// ── Hub tabs (Food Log / Physique Scan / Reports) ───────────────────────
+let physiqueLoaded = false;
 document.querySelectorAll('.hub-tab').forEach(tab => {
   tab.onclick = () => {
     document.querySelectorAll('.hub-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('hubPanel' + tab.dataset.hub[0].toUpperCase() + tab.dataset.hub.slice(1)).classList.add('active');
-    if (tab.dataset.hub === 'stats' && !statsLoaded) { statsLoaded = true; loadStatsEntries(); }
-    if (tab.dataset.hub === 'photos' && !photosLoaded) { photosLoaded = true; loadProgressPhotos(); }
+    if (tab.dataset.hub === 'physique' && !physiqueLoaded) { physiqueLoaded = true; loadPhysiqueHistory(); loadPastScans(); }
     if (tab.dataset.hub === 'foodlog') loadFoodEntries();
     if (tab.dataset.hub === 'reports') loadReport();
   };
 });
 
-FIELD_IDS.forEach(id => document.getElementById(id).addEventListener('input', saveState));
-FIELD_IDS.forEach(id => document.getElementById(id).addEventListener('change', saveState));
-
-document.getElementById('uploadBox').onclick = () => document.getElementById('photoInput').click();
-document.getElementById('photoInput').addEventListener('change', (e) => {
-  photoFile = e.target.files[0];
-  if (!photoFile) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    photoDataUrl = reader.result;
-    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
-    document.getElementById('clearPhotoBtn').style.display = 'flex';
-    saveState();
-  };
-  reader.readAsDataURL(photoFile);
-});
-document.getElementById('clearPhotoBtn').onclick = (e) => {
-  e.stopPropagation();
-  photoFile = null;
-  photoDataUrl = null;
-  lastResult = null;
-  document.getElementById('photoInput').value = '';
-  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to upload a photo';
-  document.getElementById('clearPhotoBtn').style.display = 'none';
-  document.getElementById('resultBox').style.display = 'none';
-  document.getElementById('resultBox').innerHTML = '';
-  saveState();
-};
-
-// ── Unit toggles: default ft/in + lbs (US-friendly), metric always what's sent to the backend ──
-document.getElementById('heightUnit').addEventListener('change', (e) => {
-  const isCm = e.target.value === 'cm';
-  document.getElementById('heightCm').style.display = isCm ? '' : 'none';
-  document.getElementById('heightFt').style.display = isCm ? 'none' : '';
-  document.getElementById('heightIn').style.display = isCm ? 'none' : '';
-});
-document.getElementById('weightUnit').addEventListener('change', (e) => {
+// ── Food Log: Profile (weight/height/age/gender/goal weight/activity/goal) ──
+document.getElementById('profileWeightUnit').addEventListener('change', (e) => {
   const isKg = e.target.value === 'kg';
-  document.getElementById('weightKg').style.display = isKg ? '' : 'none';
-  document.getElementById('weightLbs').style.display = isKg ? 'none' : '';
+  document.getElementById('profileWeightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('profileWeightLbs').style.display = isKg ? 'none' : '';
+});
+document.getElementById('profileGoalWeightUnit').addEventListener('change', (e) => {
+  const isKg = e.target.value === 'kg';
+  document.getElementById('profileGoalWeightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('profileGoalWeightLbs').style.display = isKg ? 'none' : '';
+});
+document.getElementById('profileHeightUnit').addEventListener('change', (e) => {
+  const isCm = e.target.value === 'cm';
+  document.getElementById('profileHeightCm').style.display = isCm ? '' : 'none';
+  document.getElementById('profileHeightFt').style.display = isCm ? 'none' : '';
+  document.getElementById('profileHeightIn').style.display = isCm ? 'none' : '';
 });
 
-function getHeightCm() {
-  if (document.getElementById('heightUnit').value === 'cm') return document.getElementById('heightCm').value;
-  const ft = Number(document.getElementById('heightFt').value) || 0;
-  const inch = Number(document.getElementById('heightIn').value) || 0;
+function getProfileWeightKg() {
+  if (document.getElementById('profileWeightUnit').value === 'kg') return document.getElementById('profileWeightKg').value;
+  return lbsToKgVal(Number(document.getElementById('profileWeightLbs').value));
+}
+function getProfileGoalWeightKg() {
+  if (document.getElementById('profileGoalWeightUnit').value === 'kg') return document.getElementById('profileGoalWeightKg').value;
+  return lbsToKgVal(Number(document.getElementById('profileGoalWeightLbs').value));
+}
+function getProfileHeightCm() {
+  if (document.getElementById('profileHeightUnit').value === 'cm') return document.getElementById('profileHeightCm').value;
+  const ft = Number(document.getElementById('profileHeightFt').value) || 0;
+  const inch = Number(document.getElementById('profileHeightIn').value) || 0;
   return (ft || inch) ? Math.round((ft * 30.48 + inch * 2.54) * 10) / 10 : '';
 }
-function getWeightKg() {
-  if (document.getElementById('weightUnit').value === 'kg') return document.getElementById('weightKg').value;
-  const lbs = Number(document.getElementById('weightLbs').value);
-  return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : '';
+// Shared weight-display-unit preference for both charts -- mirrors
+// whichever unit the profile form's own weight toggle is currently set to.
+function weightDisplayUnit() {
+  return document.getElementById('profileWeightUnit').value === 'kg' ? 'kg' : 'lbs';
 }
-
-document.getElementById('analyzeBtn').onclick = async () => {
-  if (!photoFile) { alert('Upload a photo first.'); return; }
-  const fd = new FormData();
-  fd.append('photo', photoFile);
-  fd.append('heightCm', getHeightCm());
-  fd.append('weightKg', getWeightKg());
-  ['age','sex','activityLevel','goal'].forEach(id => fd.append(id, document.getElementById(id).value));
-
-  document.getElementById('spinner').style.display = 'block';
-  document.getElementById('resultBox').style.display = 'none';
-  document.getElementById('analyzeBtn').disabled = true;
-  try {
-    const r = await fetch('/api/body-scan/analyze', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Analysis failed'); return; }
-    lastResult = d;
-    saveState();
-    renderResult(d);
-  } finally {
-    document.getElementById('spinner').style.display = 'none';
-    document.getElementById('analyzeBtn').disabled = false;
-  }
-};
-
-function renderResult(d, scrollTo) {
-  const box = document.getElementById('resultBox');
-  // Current records carry the body-fat range as real numbers (bodyFatLowPct/
-  // bodyFatHighPct) instead of a "BODY FAT ESTIMATE: X-Y%" line embedded in
-  // the text -- fall back to the old regex-parse only for pre-existing
-  // records saved before that switch.
-  let assessment = d.assessmentBody ?? d.assessment ?? '';
-  let bodyFat = (d.bodyFatLowPct != null && d.bodyFatHighPct != null)
-    ? `${d.bodyFatLowPct}-${d.bodyFatHighPct}%`
-    : null;
-  if (bodyFat == null) {
-    const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
-    if (bfMatch) {
-      bodyFat = bfMatch[1].trim();
-      assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
-    }
-  }
-
-  let html = bodyFat
-    ? `<div class="bodyfat-tile"><div class="val">${escapeHtml(bodyFat)}</div><div class="lab">Estimated Body Fat</div></div>`
-    : '';
-  // Reads like an actual email now, not a labeled report — the AI is told
-  // not to write its own greeting/sign-off, so both are added here instead.
-  const greetName = me?.first ? escapeHtml(me.first) : 'there';
-  html += `<div class="greeting">Hey ${greetName},</div>`;
-  html += `<div style="font-size:.9rem;line-height:1.6;white-space:pre-wrap">${escapeHtml(assessment)}</div>`;
-
-  if (d.calorieTarget) {
-    html += `
-      <div class="pra-h2" style="margin-top:22px;margin-bottom:6px">Daily Suggestion</div>
-      <div class="macro-grid">
-        <div class="macro-tile"><div class="val">${d.calorieTarget}</div><div class="lab">Calories</div></div>
-        <div class="macro-tile"><div class="val">${d.macros.proteinG}g</div><div class="lab">Protein 40%</div></div>
-        <div class="macro-tile"><div class="val">${d.macros.fatG}g</div><div class="lab">Fat 30%</div></div>
-      </div>
-      <div class="pra-h2" style="margin-top:18px;margin-bottom:8px">6-Meal Plan</div>
-      ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal · P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
-    `;
-  } else {
-    html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Add height + weight above to get a personalized calorie/macro plan.</div>`;
-  }
-
-  html += `
-    <div class="signoff">
-      <div class="signoff-text">Blessings!</div>
-      <div class="signoff-text">Coach Lee</div>
-      <img class="signoff-logo" src="/chat-app/assets/lee-signature.png" alt="Lee Weiland signature"/>
-      <div class="signoff-name">Lee Weiland</div>
-      <div class="signoff-title">Creator Powerbatics</div>
-      <div class="signoff-title">Founder Pacific Rim Athletics</div>
-    </div>
-  `;
-  html += `<div class="disclaimer">${escapeHtml(d.disclaimer)}</div>`;
-  box.innerHTML = html;
-  box.style.display = 'block';
-  if (scrollTo !== false) box.scrollIntoView({ behavior: 'smooth' });
-}
-
-function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-async function loadPastScans() {
-  try {
-    const r = await fetch('/api/body-scan/scans');
-    if (!r.ok) return;
-    const { scans } = await r.json();
-    if (!scans || !scans.length) return;
-    const wrap = document.getElementById('pastScans');
-    const list = document.getElementById('pastScansList');
-    list.innerHTML = scans.map(s => {
-      const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      let preview = s.assessmentBody ?? s.assessment ?? '';
-      let bfVal = (s.bodyFatLowPct != null && s.bodyFatHighPct != null) ? `${s.bodyFatLowPct}-${s.bodyFatHighPct}%` : null;
-      let bodyText = preview;
-      if (bfVal == null) {
-        const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
-        bfVal = bfMatch ? bfMatch[1].trim() : null;
-        bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
-      }
-      const label = s.type === 'move' ? (s.moveType || 'Move Scan') : 'Body Scan';
-      return `<div class="pra-panel past-scan-card" data-id="${escapeHtml(s.id)}">
-        <div class="past-scan-head">
-          <span class="past-scan-type">${escapeHtml(label)}</span>
-          <span class="past-scan-date">${date}</span>
-          ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
-          <button class="past-scan-del" title="Delete">✕</button>
-        </div>
-        <div class="past-scan-body">${escapeHtml(bodyText)}</div>
-      </div>`;
-    }).join('');
-    wrap.style.display = 'block';
-    list.querySelectorAll('.past-scan-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.past-scan-del')) {
-          e.stopPropagation();
-          deleteScan(card.dataset.id, card);
-          return;
-        }
-        card.classList.toggle('open');
-      });
-    });
-  } catch {}
-}
-
-async function deleteScan(id, card) {
-  try {
-    await fetch(`/api/body-scan/scans/${id}`, { method: 'DELETE' });
-    card.remove();
-    if (!document.getElementById('pastScansList').children.length) {
-      document.getElementById('pastScans').style.display = 'none';
-    }
-  } catch {}
-}
-
-// ── Stats tab: weight time series + hand-rolled inline SVG line chart ──
-document.getElementById('statWeightUnit').addEventListener('change', (e) => {
-  const isKg = e.target.value === 'kg';
-  document.getElementById('statWeightKg').style.display = isKg ? '' : 'none';
-  document.getElementById('statWeightLbs').style.display = isKg ? 'none' : '';
-});
-document.getElementById('statDate').valueAsDate = new Date();
-
-function getStatWeightKg() {
-  if (document.getElementById('statWeightUnit').value === 'kg') return document.getElementById('statWeightKg').value;
-  const lbs = Number(document.getElementById('statWeightLbs').value);
-  return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : '';
-}
-// Chart displays in whichever unit the entry form is currently set to, so
-// the axis always matches what the user just typed in.
 function kgToDisplay(kg) {
-  return document.getElementById('statWeightUnit').value === 'kg' ? kg : Math.round(kg / 0.453592 * 10) / 10;
+  return weightDisplayUnit() === 'kg' ? kg : kgToLbsVal(kg);
 }
 
-let statEntries = []; // ascending by createdAt, as returned by the API
+function showEstimate(d) {
+  const grid = document.getElementById('profileEstimateGrid');
+  if (!d.calorieTarget) { grid.style.display = 'none'; return; }
+  document.getElementById('profileCals').textContent = d.calorieTarget;
+  document.getElementById('profileProtein').textContent = d.macros.proteinG + 'g';
+  document.getElementById('profileFat').textContent = d.macros.fatG + 'g';
+  document.getElementById('profileCarb').textContent = d.macros.carbG + 'g';
+  grid.style.display = 'grid';
+}
 
-document.getElementById('statSaveBtn').onclick = async () => {
-  const weightKg = getStatWeightKg();
-  if (!weightKg) { alert('Enter a weight first.'); return; }
-  const dateVal = document.getElementById('statDate').value; // yyyy-mm-dd
-  const btn = document.getElementById('statSaveBtn');
+function updatePhysiqueProfileSummary(d) {
+  const el = document.getElementById('physiqueProfileSummary');
+  if (!d.profile?.heightCm || !d.weightKg) {
+    el.textContent = 'Fill in your profile on the Food Log tab to get a personalized calorie/macro plan with your scan.';
+    return;
+  }
+  const totalIn = Math.round(d.profile.heightCm / 2.54);
+  const ftin = `${Math.floor(totalIn / 12)}'${totalIn % 12}"`;
+  el.textContent = `Using: ${ftin}, ${kgToLbsVal(d.weightKg)} lbs, ${d.profile.age || '—'}, ${d.profile.sex || '—'}, ${d.profile.activityLevel || '—'}, ${d.profile.goal || '—'} — edit on Food Log`;
+}
+
+async function loadProfile() {
+  try {
+    const r = await fetch('/api/body-stats/profile');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.profile) {
+      if (d.profile.heightCm) {
+        const totalIn = Math.round(d.profile.heightCm / 2.54);
+        document.getElementById('profileHeightFt').value = Math.floor(totalIn / 12);
+        document.getElementById('profileHeightIn').value = totalIn % 12;
+        document.getElementById('profileHeightCm').value = d.profile.heightCm;
+      }
+      if (d.profile.age) document.getElementById('profileAge').value = d.profile.age;
+      if (d.profile.sex) document.getElementById('profileSex').value = d.profile.sex;
+      if (d.profile.goalWeightKg) {
+        document.getElementById('profileGoalWeightLbs').value = kgToLbsVal(d.profile.goalWeightKg);
+        document.getElementById('profileGoalWeightKg').value = d.profile.goalWeightKg;
+      }
+      if (d.profile.activityLevel) document.getElementById('profileActivityLevel').value = d.profile.activityLevel;
+      if (d.profile.goal) document.getElementById('profileGoal').value = d.profile.goal;
+    }
+    if (d.weightKg) {
+      document.getElementById('profileWeightLbs').value = kgToLbsVal(d.weightKg);
+      document.getElementById('profileWeightKg').value = d.weightKg;
+    }
+    showEstimate(d);
+    updatePhysiqueProfileSummary(d);
+  } catch {}
+}
+
+document.getElementById('profileSaveBtn').onclick = async () => {
+  const btn = document.getElementById('profileSaveBtn');
   btn.disabled = true;
   try {
-    const r = await fetch('/api/body-stats/entries', {
+    const r = await fetch('/api/body-stats/profile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        weightKg,
-        bodyFatPct: document.getElementById('statBodyFatPct').value || null,
-        note: document.getElementById('statNote').value || null,
-        createdAt: dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : null,
+        weightKg: getProfileWeightKg() || null,
+        heightCm: getProfileHeightCm() || null,
+        age: document.getElementById('profileAge').value || null,
+        sex: document.getElementById('profileSex').value,
+        goalWeightKg: getProfileGoalWeightKg() || null,
+        activityLevel: document.getElementById('profileActivityLevel').value,
+        goal: document.getElementById('profileGoal').value,
       }),
     });
     const d = await r.json();
     if (!r.ok) { alert(d.error || 'Save failed'); return; }
-    document.getElementById('statWeightLbs').value = '';
-    document.getElementById('statWeightKg').value = '';
-    document.getElementById('statBodyFatPct').value = '';
-    document.getElementById('statNote').value = '';
-    statEntries.push(d.entry);
-    statEntries.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    renderStatsChartAndList();
+    showEstimate(d);
+    updatePhysiqueProfileSummary(d);
   } finally {
     btn.disabled = false;
   }
 };
 
-async function loadStatsEntries() {
-  try {
-    const r = await fetch('/api/body-stats/entries');
-    if (!r.ok) return;
-    statEntries = (await r.json()).entries || [];
-    renderStatsChartAndList();
-  } catch {}
-}
-
-async function deleteStatEntry(id, row) {
-  try {
-    await fetch(`/api/body-stats/entries/${id}`, { method: 'DELETE' });
-    statEntries = statEntries.filter(e => e.id !== id);
-    row.remove();
-    drawWeightChart(document.getElementById('weightChartSvg'), statEntries);
-    document.getElementById('statEntriesEmpty').style.display = statEntries.length ? 'none' : 'block';
-  } catch {}
-}
-
-function renderStatsChartAndList() {
-  drawWeightChart(document.getElementById('weightChartSvg'), statEntries);
-  const list = document.getElementById('statEntriesList');
-  const empty = document.getElementById('statEntriesEmpty');
-  empty.style.display = statEntries.length ? 'none' : 'block';
-  // Reverse-chronological for the list, ascending stays in statEntries for the chart.
-  list.innerHTML = statEntries.slice().reverse().map(e => {
-    const date = new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const w = kgToDisplay(e.weightKg);
-    const unit = document.getElementById('statWeightUnit').value;
-    const bits = [];
-    if (e.bodyFatPct != null) bits.push(`${e.bodyFatPct}% BF`);
-    if (e.note) bits.push(e.note);
-    return `<div class="pra-panel stat-entry-row" data-id="${escapeHtml(e.id)}">
-      <span class="stat-entry-date">${date}</span>
-      <span class="stat-entry-weight">${w} ${unit}</span>
-      <span class="stat-entry-note">${escapeHtml(bits.join(' · '))}</span>
-      <span class="stat-entry-source">${e.source === 'scan' ? 'From Scan' : ''}</span>
-      <button class="past-scan-del" title="Delete">✕</button>
-    </div>`;
-  }).join('');
-  list.querySelectorAll('.stat-entry-row').forEach(row => {
-    row.querySelector('.past-scan-del').onclick = () => deleteStatEntry(row.dataset.id, row);
-  });
-}
-
-// Hand-rolled inline SVG line chart -- no charting library exists anywhere
-// in this app; this matches the same zero-dependency inline-SVG convention
-// already used for every icon (chat-header.js's ICON_SVG, etc).
-function drawWeightChart(svgEl, points) {
-  const W = 600, H = 220, padL = 40, padR = 14, padT = 16, padB = 26;
-  if (!points.length) {
-    svgEl.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--pra-dim)" font-size="13">No entries yet</text>`;
-    return;
-  }
-  const displayWeights = points.map(p => kgToDisplay(p.weightKg));
-  const times = points.map(p => new Date(p.createdAt).getTime());
-  const minT = times[0], maxT = times[times.length - 1];
-  const minW = Math.min(...displayWeights), maxW = Math.max(...displayWeights);
-  const wPad = Math.max(1, (maxW - minW) * 0.15);
-  const loW = minW - wPad, hiW = maxW + wPad;
-  const x = t => padL + (maxT === minT ? (W - padL - padR) / 2 : (t - minT) / (maxT - minT) * (W - padL - padR));
-  const y = w => padT + (hiW === loW ? (H - padT - padB) / 2 : (hiW - w) / (hiW - loW) * (H - padT - padB));
-
-  const pts = points.map((p, i) => `${x(times[i]).toFixed(1)},${y(displayWeights[i]).toFixed(1)}`).join(' ');
-  const fmtDate = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  let svg = `<polyline points="${pts}" fill="none" stroke="#009bff" stroke-width="2"/>`;
-  points.forEach((p, i) => { svg += `<circle cx="${x(times[i]).toFixed(1)}" cy="${y(displayWeights[i]).toFixed(1)}" r="3.5" fill="#009bff"/>`; });
-  svg += `<text x="${padL}" y="${H - 6}" fill="var(--pra-dim)" font-size="11">${fmtDate(minT)}</text>`;
-  svg += `<text x="${W - padR}" y="${H - 6}" text-anchor="end" fill="var(--pra-dim)" font-size="11">${fmtDate(maxT)}</text>`;
-  svg += `<text x="2" y="${(y(hiW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(hiW)}</text>`;
-  svg += `<text x="2" y="${(y(loW) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${Math.round(loW)}</text>`;
-  svgEl.innerHTML = svg;
-}
-
-// ── Progress Photos tab: gallery + upload + before/after crossfade ─────
-let progressPhotos = []; // ascending by createdAt
-
-document.getElementById('photoUploadBox').onclick = () => document.getElementById('photoInputPhotos').click();
-document.getElementById('photoInputPhotos').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('photo', file);
-  document.getElementById('photoUploadPrompt').textContent = 'Uploading…';
-  try {
-    const r = await fetch('/api/body-stats/photos', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Upload failed'); return; }
-    progressPhotos.push(d.entry);
-    renderPhotoGallery();
-  } finally {
-    document.getElementById('photoUploadPrompt').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a progress photo';
-    document.getElementById('photoInputPhotos').value = '';
-  }
-});
-
-async function loadProgressPhotos() {
-  try {
-    const r = await fetch('/api/body-stats/photos');
-    if (!r.ok) return;
-    progressPhotos = (await r.json()).photos || [];
-    renderPhotoGallery();
-  } catch {}
-}
-
-async function deleteProgressPhoto(id) {
-  try {
-    await fetch(`/api/body-stats/photos/${id}`, { method: 'DELETE' });
-    progressPhotos = progressPhotos.filter(p => p.id !== id);
-    renderPhotoGallery();
-  } catch {}
-}
-
-function renderPhotoGallery() {
-  document.getElementById('photosEmpty').style.display = progressPhotos.length ? 'none' : 'block';
-  document.getElementById('photoAnimSection').style.display = progressPhotos.length >= 2 ? 'block' : 'none';
-  const grid = document.getElementById('photoGalleryGrid');
-  // Most recent first for the grid; the animation below always plays in
-  // actual date order regardless of grid order.
-  grid.innerHTML = progressPhotos.slice().reverse().map(p => {
-    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `<div class="photo-thumb" data-id="${escapeHtml(p.id)}">
-      <img src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
-      <div class="photo-thumb-date">${date}</div>
-      <button class="photo-thumb-del" title="Delete">✕</button>
-    </div>`;
-  }).join('');
-  grid.querySelectorAll('.photo-thumb').forEach(el => {
-    el.querySelector('.photo-thumb-del').onclick = (e) => { e.stopPropagation(); deleteProgressPhoto(el.dataset.id); };
-  });
-  setupPhotoAnimation();
-}
-
-let animPlayTimer = null;
-function setupPhotoAnimation() {
-  const scrubber = document.getElementById('animScrubber');
-  const layerA = document.getElementById('animLayerA');
-  const layerB = document.getElementById('animLayerB');
-  const label = document.getElementById('animDateLabel');
-  const playBtn = document.getElementById('animPlayBtn');
-  if (progressPhotos.length < 2) return;
-
-  scrubber.max = progressPhotos.length - 1;
-  let current = 0;
-  let showingA = true;
-
-  function showIndex(i) {
-    const p = progressPhotos[i];
-    const url = `/api/body-stats/media/${p.driveFileId}`;
-    const showLayer = showingA ? layerB : layerA;
-    const hideLayer = showingA ? layerA : layerB;
-    showLayer.src = url;
-    showLayer.style.opacity = '1';
-    hideLayer.style.opacity = '0';
-    showingA = !showingA;
-    label.textContent = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    current = i;
-  }
-  // Seed the first frame directly (no crossfade needed for the very first paint).
-  layerA.src = `/api/body-stats/media/${progressPhotos[0].driveFileId}`;
-  layerA.style.opacity = '1';
-  layerB.style.opacity = '0';
-  showingA = false;
-  label.textContent = new Date(progressPhotos[0].createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  scrubber.value = 0;
-
-  scrubber.oninput = () => showIndex(Number(scrubber.value));
-
-  playBtn.onclick = () => {
-    if (animPlayTimer) {
-      clearInterval(animPlayTimer);
-      animPlayTimer = null;
-      playBtn.textContent = '▶';
-      return;
-    }
-    playBtn.textContent = '⏸';
-    animPlayTimer = setInterval(() => {
-      const next = (current + 1) % progressPhotos.length;
-      scrubber.value = next;
-      showIndex(next);
-    }, 700);
-  };
-}
-
-// ── Food Log tab ─────────────────────────────────────────────────────
+// ── Food Log: date, totals, log-a-meal, history ─────────────────────────
 let foodMode = 'photo';
 let foodPhotoFile = null;
 
@@ -904,6 +551,7 @@ async function loadFoodEntries() {
     const list = document.getElementById('foodEntriesList');
     document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';
     list.innerHTML = entries.map(e => `<div class="pra-panel food-entry-row" data-id="${escapeHtml(e.id)}">
+      ${e.driveFileId ? `<img class="food-entry-thumb" src="/api/food-log/media/${escapeHtml(e.driveFileId)}" loading="lazy"/>` : ''}
       <span class="food-entry-label">${escapeHtml(e.mealLabel || '—')}</span>
       <span class="food-entry-desc">${escapeHtml(e.description || '')}</span>
       <span class="food-entry-cals">${Math.round(e.calories || 0)} cal</span>
@@ -922,7 +570,329 @@ async function deleteFoodEntry(id) {
   } catch {}
 }
 
-// ── Reports tab: daily/weekly/monthly rollups ───────────────────────────
+// ── Physique Scan: upload/analyze ───────────────────────────────────────
+let photoFile = null;
+let photoDataUrl = null;
+let lastResult = null;
+
+// The in-progress photo + last result survive a refresh/nav-away-and-back
+// (nothing server-side to key an in-progress upload to).
+const STATE_KEY = 'pra-body-scan-state-v2';
+
+function saveState() {
+  try { localStorage.setItem(STATE_KEY, JSON.stringify({ photoDataUrl, lastResult })); } catch {}
+}
+
+async function loadState() {
+  let state;
+  try { state = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch { state = null; }
+  if (!state) return;
+
+  if (state.photoDataUrl) {
+    photoDataUrl = state.photoDataUrl;
+    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
+    document.getElementById('clearPhotoBtn').style.display = 'flex';
+    try {
+      const blob = await (await fetch(photoDataUrl)).blob();
+      photoFile = new File([blob], 'restored-photo.jpg', { type: blob.type || 'image/jpeg' });
+    } catch {}
+  }
+  if (state.lastResult) {
+    lastResult = state.lastResult;
+    renderResult(lastResult, false);
+  }
+}
+
+document.getElementById('uploadBox').onclick = () => document.getElementById('photoInput').click();
+document.getElementById('photoInput').addEventListener('change', (e) => {
+  photoFile = e.target.files[0];
+  if (!photoFile) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    photoDataUrl = reader.result;
+    document.getElementById('uploadPrompt').innerHTML = '<img src="' + photoDataUrl + '"/>';
+    document.getElementById('clearPhotoBtn').style.display = 'flex';
+    saveState();
+  };
+  reader.readAsDataURL(photoFile);
+});
+document.getElementById('clearPhotoBtn').onclick = (e) => {
+  e.stopPropagation();
+  photoFile = null;
+  photoDataUrl = null;
+  lastResult = null;
+  document.getElementById('photoInput').value = '';
+  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to upload a photo';
+  document.getElementById('clearPhotoBtn').style.display = 'none';
+  document.getElementById('resultBox').style.display = 'none';
+  document.getElementById('resultBox').innerHTML = '';
+  saveState();
+};
+
+document.getElementById('analyzeBtn').onclick = async () => {
+  if (!photoFile) { alert('Upload a photo first.'); return; }
+  const fd = new FormData();
+  fd.append('photo', photoFile);
+
+  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('resultBox').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+  try {
+    const r = await fetch('/api/body-scan/analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Analysis failed'); return; }
+    lastResult = d;
+    saveState();
+    renderResult(d);
+    loadPhysiqueHistory();
+  } finally {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+};
+
+function renderResult(d, scrollTo) {
+  const box = document.getElementById('resultBox');
+  // Current records carry the body-fat range as real numbers (bodyFatLowPct/
+  // bodyFatHighPct) instead of a "BODY FAT ESTIMATE: X-Y%" line embedded in
+  // the text -- fall back to the old regex-parse only for pre-existing
+  // records saved before that switch.
+  let assessment = d.assessmentBody ?? d.assessment ?? '';
+  let bodyFat = (d.bodyFatLowPct != null && d.bodyFatHighPct != null)
+    ? `${d.bodyFatLowPct}-${d.bodyFatHighPct}%`
+    : null;
+  if (bodyFat == null) {
+    const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+    if (bfMatch) {
+      bodyFat = bfMatch[1].trim();
+      assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
+    }
+  }
+
+  let html = bodyFat
+    ? `<div class="bodyfat-tile"><div class="val">${escapeHtml(bodyFat)}</div><div class="lab">Estimated Body Fat</div></div>`
+    : '';
+  // Reads like an actual email now, not a labeled report — the AI is told
+  // not to write its own greeting/sign-off, so both are added here instead.
+  const greetName = me?.first ? escapeHtml(me.first) : 'there';
+  html += `<div class="greeting">Hey ${greetName},</div>`;
+  html += `<div style="font-size:.9rem;line-height:1.6;white-space:pre-wrap">${escapeHtml(assessment)}</div>`;
+
+  if (d.calorieTarget) {
+    html += `
+      <div class="pra-h2" style="margin-top:22px;margin-bottom:6px">Daily Suggestion</div>
+      <div class="macro-grid">
+        <div class="macro-tile"><div class="val">${d.calorieTarget}</div><div class="lab">Calories</div></div>
+        <div class="macro-tile"><div class="val">${d.macros.proteinG}g</div><div class="lab">Protein 40%</div></div>
+        <div class="macro-tile"><div class="val">${d.macros.fatG}g</div><div class="lab">Fat 30%</div></div>
+      </div>
+      <div class="pra-h2" style="margin-top:18px;margin-bottom:8px">6-Meal Plan</div>
+      ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal · P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
+    `;
+  } else {
+    html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Fill in your profile on the Food Log tab to get a personalized calorie/macro plan.</div>`;
+  }
+
+  html += `
+    <div class="signoff">
+      <div class="signoff-text">Blessings!</div>
+      <div class="signoff-text">Coach Lee</div>
+      <img class="signoff-logo" src="/chat-app/assets/lee-signature.png" alt="Lee Weiland signature"/>
+      <div class="signoff-name">Lee Weiland</div>
+      <div class="signoff-title">Creator Powerbatics</div>
+      <div class="signoff-title">Founder Pacific Rim Athletics</div>
+    </div>
+  `;
+  html += `<div class="disclaimer">${escapeHtml(d.disclaimer)}</div>`;
+  box.innerHTML = html;
+  box.style.display = 'block';
+  if (scrollTo !== false) box.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function loadPastScans() {
+  try {
+    const r = await fetch('/api/body-scan/scans');
+    if (!r.ok) return;
+    const { scans } = await r.json();
+    const wrap = document.getElementById('pastScans');
+    const list = document.getElementById('pastScansList');
+    if (!scans || !scans.length) { wrap.style.display = 'none'; return; }
+    list.innerHTML = scans.map(s => {
+      const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      let preview = s.assessmentBody ?? s.assessment ?? '';
+      let bfVal = (s.bodyFatLowPct != null && s.bodyFatHighPct != null) ? `${s.bodyFatLowPct}-${s.bodyFatHighPct}%` : null;
+      let bodyText = preview;
+      if (bfVal == null) {
+        const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+        bfVal = bfMatch ? bfMatch[1].trim() : null;
+        bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
+      }
+      const label = s.type === 'move' ? (s.moveType || 'Move Scan') : 'Body Scan';
+      return `<div class="pra-panel past-scan-card" data-id="${escapeHtml(s.id)}">
+        <div class="past-scan-head">
+          <span class="past-scan-type">${escapeHtml(label)}</span>
+          <span class="past-scan-date">${date}</span>
+          ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
+          <button class="past-scan-del" title="Delete">✕</button>
+        </div>
+        <div class="past-scan-body">${escapeHtml(bodyText)}</div>
+      </div>`;
+    }).join('');
+    wrap.style.display = 'block';
+    list.querySelectorAll('.past-scan-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.past-scan-del')) {
+          e.stopPropagation();
+          deleteScan(card.dataset.id, card);
+          return;
+        }
+        card.classList.toggle('open');
+      });
+    });
+  } catch {}
+}
+
+async function deleteScan(id, card) {
+  try {
+    await fetch(`/api/body-scan/scans/${id}`, { method: 'DELETE' });
+    card.remove();
+    if (!document.getElementById('pastScansList').children.length) {
+      document.getElementById('pastScans').style.display = 'none';
+    }
+    loadPhysiqueHistory(); // a scan's photo also drops out of the merged gallery/animation
+  } catch {}
+}
+
+// ── Physique Scan: merged photo history (scans + standalone progress
+// photos) + morph animation ─────────────────────────────────────────────
+let physiqueHistory = []; // ascending by createdAt, {id, rawId, createdAt, driveFileId, source}
+
+async function loadPhysiqueHistory() {
+  try {
+    const [scansR, photosR] = await Promise.all([
+      fetch('/api/body-scan/scans'), fetch('/api/body-stats/photos'),
+    ]);
+    const scansD = scansR.ok ? await scansR.json() : { scans: [] };
+    const photosD = photosR.ok ? await photosR.json() : { photos: [] };
+    const fromScans = (scansD.scans || []).filter(s => s.driveFileId).map(s => ({
+      id: 's-' + s.id, rawId: s.id, createdAt: s.createdAt, driveFileId: s.driveFileId, source: 'scan',
+    }));
+    const fromPhotos = (photosD.photos || []).filter(p => p.driveFileId).map(p => ({
+      id: 'p-' + p.id, rawId: p.id, createdAt: p.createdAt, driveFileId: p.driveFileId, source: 'photo',
+    }));
+    physiqueHistory = [...fromScans, ...fromPhotos].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    renderPhysiqueGallery();
+  } catch {}
+}
+
+document.getElementById('addProgressPhotoBtn').onclick = () => document.getElementById('photoInputPhotos').click();
+document.getElementById('photoInputPhotos').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  const btn = document.getElementById('addProgressPhotoBtn');
+  const prevText = btn.textContent;
+  btn.textContent = 'Uploading…';
+  try {
+    const r = await fetch('/api/body-stats/photos', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Upload failed'); return; }
+    physiqueHistory.push({ id: 'p-' + d.entry.id, rawId: d.entry.id, createdAt: d.entry.createdAt, driveFileId: d.entry.driveFileId, source: 'photo' });
+    physiqueHistory.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    renderPhysiqueGallery();
+  } finally {
+    btn.textContent = prevText;
+    document.getElementById('photoInputPhotos').value = '';
+  }
+});
+
+async function deletePhysiqueHistoryItem(item) {
+  try {
+    const url = item.source === 'scan' ? `/api/body-scan/scans/${item.rawId}` : `/api/body-stats/photos/${item.rawId}`;
+    await fetch(url, { method: 'DELETE' });
+    physiqueHistory = physiqueHistory.filter(p => p.id !== item.id);
+    renderPhysiqueGallery();
+    if (item.source === 'scan') loadPastScans();
+  } catch {}
+}
+
+function renderPhysiqueGallery() {
+  document.getElementById('photosEmpty').style.display = physiqueHistory.length ? 'none' : 'block';
+  document.getElementById('photoAnimSection').style.display = physiqueHistory.length >= 2 ? 'block' : 'none';
+  const grid = document.getElementById('photoGalleryGrid');
+  // Most recent first for the grid; the animation always plays in actual
+  // date order regardless of grid order.
+  grid.innerHTML = physiqueHistory.slice().reverse().map(p => {
+    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `<div class="photo-thumb" data-id="${escapeHtml(p.id)}">
+      <img src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
+      <div class="photo-thumb-date">${date}</div>
+      <button class="photo-thumb-del" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.photo-thumb').forEach(el => {
+    const item = physiqueHistory.find(p => p.id === el.dataset.id);
+    el.querySelector('.photo-thumb-del').onclick = (e) => { e.stopPropagation(); if (item) deletePhysiqueHistoryItem(item); };
+  });
+  setupPhysiqueAnimation();
+}
+
+// Auto-playing morph: two stacked <img> layers CSS-crossfaded (.3s, see
+// .photo-anim-layer) -- alternates which layer is "next" so every step
+// fades the incoming photo in and the outgoing one out together.
+let animPlayTimer = null;
+function setupPhysiqueAnimation() {
+  const scrubber = document.getElementById('animScrubber');
+  const layerA = document.getElementById('animLayerA');
+  const layerB = document.getElementById('animLayerB');
+  const label = document.getElementById('animDateLabel');
+  const playBtn = document.getElementById('animPlayBtn');
+  if (animPlayTimer) { clearInterval(animPlayTimer); animPlayTimer = null; }
+  if (physiqueHistory.length < 2) return;
+
+  scrubber.max = physiqueHistory.length - 1;
+  let current = 0;
+  let showingA = true;
+
+  function showIndex(i) {
+    const p = physiqueHistory[i];
+    const url = `/api/body-stats/media/${p.driveFileId}`;
+    const showLayer = showingA ? layerB : layerA;
+    const hideLayer = showingA ? layerA : layerB;
+    showLayer.src = url;
+    showLayer.style.opacity = '1';
+    hideLayer.style.opacity = '0';
+    showingA = !showingA;
+    label.textContent = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    current = i;
+  }
+  layerA.src = `/api/body-stats/media/${physiqueHistory[0].driveFileId}`;
+  layerA.style.opacity = '1';
+  layerB.style.opacity = '0';
+  showingA = false;
+  label.textContent = new Date(physiqueHistory[0].createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  scrubber.value = 0;
+
+  function stopPlaying() {
+    if (animPlayTimer) { clearInterval(animPlayTimer); animPlayTimer = null; }
+    playBtn.textContent = '▶';
+  }
+  function startPlaying() {
+    playBtn.textContent = '⏸';
+    animPlayTimer = setInterval(() => {
+      const next = (current + 1) % physiqueHistory.length;
+      scrubber.value = next;
+      showIndex(next);
+    }, 1000); // .3s crossfade (CSS) + a beat to actually see each photo
+  }
+  scrubber.oninput = () => { stopPlaying(); showIndex(Number(scrubber.value)); };
+  playBtn.onclick = () => { if (animPlayTimer) stopPlaying(); else startPlaying(); };
+
+  startPlaying(); // shows the progression the moment there's enough to show
+}
+
+// ── Reports: daily/weekly/monthly rollups ───────────────────────────────
 let reportPeriod = 'daily';
 let reportAnchor = new Date();
 
@@ -960,18 +930,51 @@ async function loadReport() {
     document.getElementById('reportAvgProtein').textContent = d.nutrition.avgProteinG + 'g';
     document.getElementById('reportDaysLogged').textContent = d.nutrition.daysLogged;
 
-    const unit = document.getElementById('statWeightUnit')?.value === 'kg' ? 'kg' : 'lbs';
-    const toDisp = kg => unit === 'kg' ? kg : Math.round(kg / 0.453592 * 10) / 10;
+    const unit = weightDisplayUnit();
     document.getElementById('reportWeightDelta').textContent = d.weight.deltaKg != null
-      ? `${d.weight.deltaKg > 0 ? '+' : ''}${toDisp(d.weight.deltaKg)} ${unit}` : '—';
-    document.getElementById('reportWeightMin').textContent = d.weight.minKg != null ? `${toDisp(d.weight.minKg)} ${unit}` : '—';
-    document.getElementById('reportWeightMax').textContent = d.weight.maxKg != null ? `${toDisp(d.weight.maxKg)} ${unit}` : '—';
+      ? `${d.weight.deltaKg > 0 ? '+' : ''}${kgToDisplay(d.weight.deltaKg)} ${unit}` : '—';
+    document.getElementById('reportWeightMin').textContent = d.weight.minKg != null ? `${kgToDisplay(d.weight.minKg)} ${unit}` : '—';
+    document.getElementById('reportWeightMax').textContent = d.weight.maxKg != null ? `${kgToDisplay(d.weight.maxKg)} ${unit}` : '—';
 
     document.getElementById('reportPhotoCount').textContent = d.photos.count;
     document.getElementById('reportScanCount').textContent = d.scans.count;
 
-    drawWeightChart(document.getElementById('reportWeightChartSvg'), d.weight.entries);
+    drawLineChart(document.getElementById('reportWeightChartSvg'), d.weight.entries, { getY: e => kgToDisplay(e.weightKg) });
+    drawLineChart(document.getElementById('reportBodyFatChartSvg'), d.weight.entries.filter(e => e.bodyFatPct != null), {
+      getY: e => e.bodyFatPct, fmtY: v => Math.round(v) + '%',
+    });
   } catch {}
+}
+
+// Hand-rolled inline SVG line chart -- no charting library exists anywhere
+// in this app; this matches the same zero-dependency inline-SVG convention
+// already used for every icon (chat-header.js's ICON_SVG, etc). Generic
+// over a `getY` extractor so the same function draws both the weight chart
+// and the bodyfat chart.
+function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
+  const W = 600, H = 220, padL = 40, padR = 14, padT = 16, padB = 26;
+  const usable = points.map(p => ({ t: new Date(p.createdAt).getTime(), y: getY(p) })).filter(p => p.y != null);
+  if (!usable.length) {
+    svgEl.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="var(--pra-dim)" font-size="13">No data yet</text>`;
+    return;
+  }
+  const times = usable.map(p => p.t), ys = usable.map(p => p.y);
+  const minT = times[0], maxT = times[times.length - 1];
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const yPad = Math.max(minY === maxY ? 1 : (maxY - minY) * 0.15, 0.5);
+  const loY = minY - yPad, hiY = maxY + yPad;
+  const x = t => padL + (maxT === minT ? (W - padL - padR) / 2 : (t - minT) / (maxT - minT) * (W - padL - padR));
+  const y = v => padT + (hiY === loY ? (H - padT - padB) / 2 : (hiY - v) / (hiY - loY) * (H - padT - padB));
+
+  const pts = usable.map(p => `${x(p.t).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
+  const fmtDate = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  let svg = `<polyline points="${pts}" fill="none" stroke="#009bff" stroke-width="2"/>`;
+  usable.forEach(p => { svg += `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="3.5" fill="#009bff"/>`; });
+  svg += `<text x="${padL}" y="${H - 6}" fill="var(--pra-dim)" font-size="11">${fmtDate(minT)}</text>`;
+  svg += `<text x="${W - padR}" y="${H - 6}" text-anchor="end" fill="var(--pra-dim)" font-size="11">${fmtDate(maxT)}</text>`;
+  svg += `<text x="2" y="${(y(hiY) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${fmtY(hiY)}</text>`;
+  svg += `<text x="2" y="${(y(loY) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${fmtY(loY)}</text>`;
+  svgEl.innerHTML = svg;
 }
 
 (async () => {
@@ -979,8 +982,9 @@ async function loadReport() {
     const r = await fetch('/api/auth/me');
     if (r.ok) me = (await r.json()).user;
   } catch {}
+  loadProfile();
+  loadFoodEntries();
   loadState();
-  loadPastScans();
 })();
 </script>
 </body>

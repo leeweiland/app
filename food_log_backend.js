@@ -6,7 +6,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 
@@ -152,6 +152,25 @@ export async function handleFoodLogRequest(req, res, url) {
       if (byDate[key].length !== before) { writeJson(LOG_FILE, all); break; }
     }
     return sendJson(res, 200, { ok: true });
+  }
+
+  // Authorization-scoped Drive read proxy for a food-log photo's thumbnail
+  // -- the fileId must belong to one of the requester's own entries.
+  const mediaMatch = url.pathname.match(/^\/api\/food-log\/media\/([^/]+)$/);
+  if (mediaMatch && req.method === "GET") {
+    const user = getSessionUser(req);
+    if (!user) { res.writeHead(401); res.end(); return true; }
+    const fileId = mediaMatch[1];
+    const byDate = readJson(LOG_FILE, {})[user.id] || {};
+    const owns = Object.values(byDate).some(entries => entries.some(e => e.driveFileId === fileId));
+    if (!owns) { res.writeHead(403); res.end(); return true; }
+    try {
+      const accessToken = await getDriveAccessToken();
+      await streamDriveMedia(req, res, fileId, accessToken);
+    } catch (e) {
+      res.writeHead(500); res.end("Media fetch failed: " + e.message);
+    }
+    return true;
   }
 
   return false;
