@@ -223,11 +223,17 @@ export async function handleBodyAnalysisRequest(req, res, url) {
         // profile/latest weigh-in) adds a stats entry -- a fresh bodyFatPct
         // reading is new information worth timestamping on the bodyfat
         // trend chart even on a day the user didn't also log a new weight.
+        // A scan photo is also the weekly check-in photo now (one photo
+        // area does both) -- but only tag it "checkin" when the weight was
+        // actually typed fresh this submission, not silently carried over
+        // via the fallback, so reusing an old weight doesn't reset the
+        // 7-day check-in clock with stale data.
         if (calorieInputs.weightKg) {
           const bodyFatPct = bodyFatLowPct != null && bodyFatHighPct != null
             ? (bodyFatLowPct + bodyFatHighPct) / 2 : null;
           recordWeightEntry(user.id, {
-            weightKg: calorieInputs.weightKg, heightCm: calorieInputs.heightCm, bodyFatPct, source: "scan", scanId,
+            weightKg: calorieInputs.weightKg, heightCm: calorieInputs.heightCm, bodyFatPct,
+            source: fields.weightKg ? "checkin" : "scan", scanId,
           });
         }
       } catch (e) {

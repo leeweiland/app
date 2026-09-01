@@ -249,36 +249,30 @@
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
 
       <div class="pra-panel" style="padding:18px;margin-bottom:22px">
-        <div class="pra-label" style="margin-bottom:6px">Weekly Check-In</div>
+        <div class="pra-label" style="margin-bottom:6px">Physique Scan</div>
         <div class="pra-muted" id="checkinStatus" style="font-size:.8rem;margin-bottom:12px"></div>
-        <div class="upload-box" id="checkinUploadBox" style="padding:20px;margin-bottom:12px">
-          <div id="checkinUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:26px;height:26px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap for your check-in photo</div>
-          <input type="file" id="checkinPhotoInput" accept="image/*" style="display:none"/>
+
+        <div class="upload-box" id="uploadBox">
+          <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
+          <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
+          <input type="file" id="photoInput" accept="image/*" style="display:none"/>
         </div>
+
         <div class="field">
           <label class="pra-label">Weight</label>
           <div class="unit-row">
-            <input class="pra-input" id="checkinWeightLbs" type="number" placeholder="lbs"/>
-            <input class="pra-input" id="checkinWeightKg" type="number" placeholder="kg" style="display:none"/>
-            <select class="pra-select" id="checkinWeightUnit">
+            <input class="pra-input" id="scanWeightLbs" type="number" placeholder="lbs"/>
+            <input class="pra-input" id="scanWeightKg" type="number" placeholder="kg" style="display:none"/>
+            <select class="pra-select" id="scanWeightUnit">
               <option value="lbs" selected>lbs</option>
               <option value="kg">kg</option>
             </select>
           </div>
         </div>
-        <button class="pra-btn" id="checkinSubmitBtn" style="width:100%">SUBMIT CHECK-IN</button>
-        <div class="spinner" id="checkinSpinner">Submitting…</div>
-      </div>
 
-      <div class="pra-h2" style="margin:12px 0 10px">Scan a Photo</div>
-      <div class="upload-box" id="uploadBox">
-        <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
-        <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
-        <input type="file" id="photoInput" accept="image/*" style="display:none"/>
+        <button class="pra-btn" id="analyzeBtn" style="width:100%">ANALYZE</button>
+        <div class="spinner" id="spinner">Analyzing…</div>
       </div>
-
-      <button class="pra-btn" id="analyzeBtn" style="width:100%;margin-top:18px">ANALYZE</button>
-      <div class="spinner" id="spinner">Analyzing…</div>
 
       <div class="pra-panel" id="resultBox"></div>
 
@@ -610,50 +604,18 @@ async function deleteFoodEntry(id) {
   } catch {}
 }
 
-// ── Physique Scan: weekly check-in ──────────────────────────────────────
-let checkinPhotoFile = null;
-document.getElementById('checkinWeightUnit').addEventListener('change', (e) => {
+// ── Physique Scan: weight field (feeds the same Analyze submission --
+// typing a weight here is what makes a scan also count as this week's
+// check-in, tagged server-side) ──────────────────────────────────────────
+document.getElementById('scanWeightUnit').addEventListener('change', (e) => {
   const isKg = e.target.value === 'kg';
-  document.getElementById('checkinWeightKg').style.display = isKg ? '' : 'none';
-  document.getElementById('checkinWeightLbs').style.display = isKg ? 'none' : '';
+  document.getElementById('scanWeightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('scanWeightLbs').style.display = isKg ? 'none' : '';
 });
-function getCheckinWeightKg() {
-  if (document.getElementById('checkinWeightUnit').value === 'kg') return document.getElementById('checkinWeightKg').value;
-  return lbsToKgVal(Number(document.getElementById('checkinWeightLbs').value));
+function getScanWeightKg() {
+  if (document.getElementById('scanWeightUnit').value === 'kg') return document.getElementById('scanWeightKg').value;
+  return lbsToKgVal(Number(document.getElementById('scanWeightLbs').value));
 }
-document.getElementById('checkinUploadBox').onclick = () => document.getElementById('checkinPhotoInput').click();
-document.getElementById('checkinPhotoInput').addEventListener('change', (e) => {
-  checkinPhotoFile = e.target.files[0];
-  if (!checkinPhotoFile) return;
-  const reader = new FileReader();
-  reader.onload = () => { document.getElementById('checkinUploadPrompt').innerHTML = `<img src="${reader.result}" style="max-width:100%;max-height:160px;border-radius:8px"/>`; };
-  reader.readAsDataURL(checkinPhotoFile);
-});
-document.getElementById('checkinSubmitBtn').onclick = async () => {
-  if (!checkinPhotoFile) { alert('Add your check-in photo first.'); return; }
-  const weightKg = getCheckinWeightKg();
-  if (!weightKg) { alert('Enter your weight.'); return; }
-  const fd = new FormData();
-  fd.append('photo', checkinPhotoFile);
-  fd.append('weightKg', weightKg);
-  document.getElementById('checkinSpinner').style.display = 'block';
-  document.getElementById('checkinSubmitBtn').disabled = true;
-  try {
-    const r = await fetch('/api/body-stats/checkin', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Check-in failed'); return; }
-    checkinPhotoFile = null;
-    document.getElementById('checkinPhotoInput').value = '';
-    document.getElementById('checkinUploadPrompt').textContent = 'Tap for your check-in photo';
-    document.getElementById('checkinWeightLbs').value = '';
-    document.getElementById('checkinWeightKg').value = '';
-    loadCheckinStatus();
-    loadPhysiqueHistory();
-  } finally {
-    document.getElementById('checkinSpinner').style.display = 'none';
-    document.getElementById('checkinSubmitBtn').disabled = false;
-  }
-};
 async function loadCheckinStatus() {
   try {
     const r = await fetch('/api/body-stats/checkin-status');
@@ -729,8 +691,11 @@ document.getElementById('clearPhotoBtn').onclick = (e) => {
 
 document.getElementById('analyzeBtn').onclick = async () => {
   if (!photoFile) { alert('Upload a photo first.'); return; }
+  const weightKg = getScanWeightKg();
+  if (!weightKg) { alert('Enter your weight.'); return; }
   const fd = new FormData();
   fd.append('photo', photoFile);
+  fd.append('weightKg', weightKg);
 
   document.getElementById('spinner').style.display = 'block';
   document.getElementById('resultBox').style.display = 'none';
@@ -742,7 +707,10 @@ document.getElementById('analyzeBtn').onclick = async () => {
     lastResult = d;
     saveState();
     renderResult(d);
+    document.getElementById('scanWeightLbs').value = '';
+    document.getElementById('scanWeightKg').value = '';
     loadPhysiqueHistory();
+    loadCheckinStatus(); // this scan also just satisfied the weekly check-in
   } finally {
     document.getElementById('spinner').style.display = 'none';
     document.getElementById('analyzeBtn').disabled = false;

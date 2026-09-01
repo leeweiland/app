@@ -146,54 +146,18 @@ export async function handleBodyStatsRequest(req, res, url) {
     return sendJson(res, 200, { ok: true });
   }
 
-  // ── Weekly check-in (photo + weight, bundled as one dedicated action so
-  // "did they check in this week" is unambiguous -- separate from ad-hoc
-  // scans/progress photos, which don't count toward it) ──────────────────
+  // ── Weekly check-in status ──────────────────────────────────────────────
+  // The check-in itself isn't a separate action anymore -- one photo area on
+  // the Physique Scan tab does both (see body_analysis_backend.js's
+  // /api/body-scan/analyze, which tags its weight entry "checkin" whenever
+  // a fresh weight was submitted alongside the photo). This just reports
+  // status off that same getLastCheckinAt() read.
   if (req.method === "GET" && url.pathname === "/api/body-stats/checkin-status") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const lastCheckinAt = getLastCheckinAt(user.id);
     const daysSince = lastCheckinAt ? (Date.now() - new Date(lastCheckinAt).getTime()) / 86400000 : null;
     return sendJson(res, 200, { lastCheckinAt, dueThisWeek: daysSince == null || daysSince >= 7 });
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/body-stats/checkin") {
-    const user = getSessionUser(req);
-    if (!user) return sendJson(res, 401, { error: "Not logged in" });
-    const { fields, image } = await parseMultipartUpload(req);
-    if (!image) return sendJson(res, 400, { error: "photo is required" });
-    if (!fields.weightKg) return sendJson(res, 400, { error: "weight is required" });
-
-    let uploaded;
-    try {
-      const accessToken = await getDriveAccessToken();
-      const ext = image.mimeType.includes("png") ? ".png" : image.mimeType.includes("webp") ? ".webp" : ".jpg";
-      const date = new Date().toISOString().slice(0, 10);
-      uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
-        name: `${user.first} ${user.last} WEEKLY CHECKIN ${date}`.toUpperCase() + ext,
-        mimeType: image.mimeType,
-        folderId: PROGRESS_PHOTOS_FOLDER,
-        accessToken,
-      });
-    } catch (e) {
-      console.error("[checkin] Drive upload failed:", e.message);
-      return sendJson(res, 500, { error: "Photo upload failed, try again" });
-    }
-
-    const photoEntry = {
-      id: randomUUID(), createdAt: new Date().toISOString(), driveFileId: uploaded.id,
-      mimeType: image.mimeType, note: "Weekly Check-In", weightKg: fields.weightKg, linkedScanId: null,
-    };
-    const allPhotos = readJson(PHOTOS_FILE, {});
-    if (!allPhotos[user.id]) allPhotos[user.id] = [];
-    allPhotos[user.id].push(photoEntry);
-    writeJson(PHOTOS_FILE, allPhotos);
-
-    const weightEntry = recordWeightEntry(user.id, {
-      weightKg: fields.weightKg, bodyFatPct: fields.bodyFatPct || null, source: "checkin",
-    });
-
-    return sendJson(res, 200, { photoEntry, weightEntry });
   }
 
   // ── Progress photos ───────────────────────────────────────────────────
