@@ -10,8 +10,8 @@ export function calcCalorieTarget({ heightCm, weightKg, age, sex, activityLevel,
     : 10 * w + 6.25 * h - 5 * a + 5;
   const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
   const tdee = bmr * (activityMultipliers[activityLevel] || 1.375);
-  const goalMultipliers = { cut: 0.8, maintain: 1.0, bulk: 1.1 };
-  return Math.round(tdee * (goalMultipliers[goal] || 1.0));
+  const goalMultipliers = { reduce: 0.8, maintain: 1.0, increase: 1.1 };
+  return Math.round(tdee * (goalMultipliers[goal] || goalMultipliers.reduce));
 }
 
 export function calcMacros(calories) {

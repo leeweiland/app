@@ -1507,6 +1507,50 @@ setInterval(() => {
   checkAppointmentReminders().catch(e => console.error("[appointment reminders]", e.message));
 }, 60 * 1000);
 
+// ── Physique weekly check-in reminders ───────────────────────────────────
+// Same polling pattern as checkAppointmentReminders above: a plain
+// setInterval reading the relevant data file, with a per-user "already
+// reminded" timestamp (physiqueCheckinReminderSentAt) so crossing the
+// 7-day threshold doesn't re-notify on every poll tick.
+const CHECKIN_REMINDER_DAYS = 7;
+async function checkPhysiqueCheckinReminders() {
+  const users = readJson(USERS_FILE, []);
+  const stats = readJson("chat_body_stats.json", {});
+  const now = Date.now();
+  let changed = false;
+  for (const user of users) {
+    if (user.archived) continue;
+    // Opt-out, not opt-in -- default on for everyone unless an admin has
+    // explicitly turned it off for this user.
+    if (user.physiqueCheckinNotifsEnabled === false) continue;
+
+    const checkins = (stats[user.id] || []).filter(e => e.source === "checkin");
+    const lastCheckinAt = checkins.length
+      ? checkins.reduce((latest, e) => (new Date(e.createdAt) > new Date(latest) ? e.createdAt : latest), checkins[0].createdAt)
+      : null;
+    const daysSinceCheckin = lastCheckinAt ? (now - new Date(lastCheckinAt).getTime()) / 86400000 : Infinity;
+    if (daysSinceCheckin < CHECKIN_REMINDER_DAYS) continue;
+
+    const daysSinceReminder = user.physiqueCheckinReminderSentAt
+      ? (now - new Date(user.physiqueCheckinReminderSentAt).getTime()) / 86400000 : Infinity;
+    if (daysSinceReminder < CHECKIN_REMINDER_DAYS) continue;
+
+    const targets = readJson(PUSH_FILE, []).filter(s => s.userId === user.id);
+    if (targets.length) {
+      await sendPushToTargets(targets, {
+        title: "Weekly check-in",
+        body: "It's time for your weekly physique check-in — snap a photo and log your weight.",
+      }).catch(() => {});
+    }
+    user.physiqueCheckinReminderSentAt = new Date().toISOString();
+    changed = true;
+  }
+  if (changed) writeJson(USERS_FILE, users);
+}
+setInterval(() => {
+  checkPhysiqueCheckinReminders().catch(e => console.error("[physique checkin reminders]", e.message));
+}, 60 * 60 * 1000); // hourly polling is plenty of resolution for a 7-day threshold
+
 // ── Auto-labeling uploads: "FIRST LAST BEST-GUESS-OF-CONTENT" ──────────────
 // Chat and body/move-scan uploads land in Drive named after who sent them
 // and a short AI guess at what's actually in the shot (e.g. "LEE WEILAND
@@ -2760,6 +2804,17 @@ export async function handleChatRequest(req, res, url) {
         Object.keys(sessions).forEach(token => { if (sessions[token].userId === target.id) delete sessions[token]; });
         writeJson(SESSIONS_FILE, sessions);
       }
+      return sendJson(res, 200, { ok: true, user: publicUser(target) });
+    }
+    const physiqueNotifsMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/physique-checkin-notifs$/);
+    if (physiqueNotifsMatch && req.method === "POST") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const { enabled } = await readJsonBody(req);
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === physiqueNotifsMatch[1]);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      target.physiqueCheckinNotifsEnabled = !!enabled;
+      writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
     const hardDeleteMatch = p.match(/^\/api\/admin\/users\/([^/]+)$/);

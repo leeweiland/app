@@ -1,8 +1,9 @@
-// openai_vision_backend.js — shared OpenAI vision-call helper: forces
-// structured output via a tool/function call (instead of parsing free text
-// with a regex) and handles the refusal-detect-and-retry dance. Used by
-// body_analysis_backend.js (body/move scans) and food_log_backend.js (food
-// photo -> calorie/macro estimate) so this scaffold exists exactly once.
+// openai_vision_backend.js — shared OpenAI call helper: forces structured
+// output via a tool/function call (instead of parsing free text with a
+// regex) and handles the refusal-detect-and-retry dance. Used by
+// body_analysis_backend.js (body scans, always with a photo) and
+// food_log_backend.js (food photo OR a plain text description -> the same
+// calorie/macro estimate) so this scaffold exists exactly once.
 
 const MODEL = "gpt-4o";
 
@@ -13,8 +14,13 @@ function looksLikeRefusal(text) {
   return /^\s*(i'?m sorry|i can'?t|i cannot|i'?m not able|i won'?t)/i.test(text || "");
 }
 
-async function callOnce(imageBuffer, mimeType, systemPrompt, userPrompt, tool) {
-  const base64 = imageBuffer.toString("base64");
+async function callOnce(userPrompt, systemPrompt, tool, image) {
+  const content = image
+    ? [
+        { type: "text", text: userPrompt },
+        { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString("base64")}` } },
+      ]
+    : userPrompt;
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -22,10 +28,7 @@ async function callOnce(imageBuffer, mimeType, systemPrompt, userPrompt, tool) {
       model: MODEL,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: [
-          { type: "text", text: userPrompt },
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-        ] },
+        { role: "user", content },
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: tool.function.name } },
@@ -48,12 +51,22 @@ async function callOnce(imageBuffer, mimeType, systemPrompt, userPrompt, tool) {
   return { refused: false, args };
 }
 
-// Runs the vision call, retrying once with extra reassurance appended to
-// the user prompt if the model refuses the tool call, before giving up.
-export async function analyzeImageWithOpenAI({ imageBuffer, mimeType, systemPrompt, userPrompt, tool, reassurance }) {
-  let result = await callOnce(imageBuffer, mimeType, systemPrompt, userPrompt, tool);
+// Runs the call, retrying once with extra reassurance appended to the user
+// prompt if the model refuses the tool call, before giving up.
+async function runWithRetry(userPrompt, systemPrompt, tool, image, reassurance) {
+  let result = await callOnce(userPrompt, systemPrompt, tool, image);
   if (result.refused && reassurance) {
-    result = await callOnce(imageBuffer, mimeType, systemPrompt, `${userPrompt} ${reassurance}`, tool);
+    result = await callOnce(`${userPrompt} ${reassurance}`, systemPrompt, tool, image);
   }
   return result; // { refused, args }
+}
+
+export async function analyzeImageWithOpenAI({ imageBuffer, mimeType, systemPrompt, userPrompt, tool, reassurance }) {
+  return runWithRetry(userPrompt, systemPrompt, tool, { buffer: imageBuffer, mimeType }, reassurance);
+}
+
+// Text-only variant (no image) -- e.g. a food-log entry logged by typed
+// description instead of a photo.
+export async function analyzeTextWithOpenAI({ systemPrompt, userPrompt, tool, reassurance }) {
+  return runWithRetry(userPrompt, systemPrompt, tool, null, reassurance);
 }

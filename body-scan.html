@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<title>Body Scan — PRA</title>
+<title>Physique Builder — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
   body { margin: 0; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
-  /* ── Hub tabs (Food Log / Physique Scan / Reports) -- the outermost level
-     of this page. ── */
+  /* ── Hub tabs -- the outermost level of this page. Order is rebuilt by JS
+     (renderHubTabs): Profile leads until the profile is complete, then it
+     drops to the end and Nutrition Log becomes the lead tab. ── */
   .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); overflow-x: auto; scrollbar-width: none; }
   .hub-tabs::-webkit-scrollbar { display: none; }
   .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
@@ -88,7 +89,7 @@
   .photo-anim-controls input[type=range] { flex: 1; accent-color: var(--pra-blue); }
   .photo-anim-play { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .photo-anim-label { text-align: center; font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); margin: 8px 0 2px; }
-  /* ── Food Log tab ── */
+  /* ── Nutrition Log tab ── */
   .food-mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
   .food-mode-opt { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); background: rgba(255,255,255,0.03); }
   .food-mode-opt.active { background: var(--pra-blue); color: #fff; }
@@ -96,7 +97,17 @@
   .food-entry-thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
   .food-entry-desc { flex: 1; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .food-entry-cals { font-weight: 700; font-size: .88rem; color: var(--pra-blue); flex-shrink: 0; }
-  .food-entry-label { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; width: 62px; }
+  /* Calories full-width, macros in a row underneath -- both "so far / goal". */
+  .totals-cal-row { text-align: center; padding: 4px 0 14px; border-bottom: 1px solid var(--pra-border); margin-bottom: 12px; }
+  .totals-cal-row .val { font-size: 1.7rem; font-weight: 700; color: var(--pra-blue); }
+  .totals-cal-row .sep { font-size: 1.7rem; font-weight: 700; color: var(--pra-dim); }
+  .totals-cal-row .goal { font-size: 1.7rem; font-weight: 700; color: var(--pra-dim); }
+  .totals-cal-row .lab { display: block; font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-top: 3px; }
+  .totals-macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .totals-macro-row .macro-cell { text-align: center; }
+  .totals-macro-row .val { font-size: 1rem; font-weight: 700; color: var(--pra-blue); }
+  .totals-macro-row .sep, .totals-macro-row .goal, .totals-macro-row .unit { font-size: 1rem; font-weight: 700; color: var(--pra-dim); }
+  .totals-macro-row .lab { display: block; font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-top: 3px; }
   /* ── Reports tab ── */
   .report-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
   .report-nav-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-text); cursor: pointer; flex-shrink: 0; font-size: 1rem; }
@@ -111,16 +122,12 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
-    <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Body Scan</div>
+    <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Physique Builder</div>
     <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Track your weight, nutrition, and physique — all in one place.</div>
 
-    <div class="hub-tabs">
-      <div class="hub-tab active" data-hub="foodlog">Food Log</div>
-      <div class="hub-tab" data-hub="physique">Physique Scan</div>
-      <div class="hub-tab" data-hub="reports">Reports</div>
-    </div>
+    <div class="hub-tabs" id="hubTabsBar"></div>
 
-    <div id="hubPanelFoodlog" class="hub-panel active">
+    <div id="hubPanelProfile" class="hub-panel">
       <div class="pra-panel" style="padding:18px;margin-bottom:20px">
         <div class="pra-label" style="margin-bottom:12px">Your Profile</div>
         <div class="field-row">
@@ -168,20 +175,20 @@
           </div>
           <div class="field"><label class="pra-label">Activity Level</label>
             <select class="pra-select" id="profileActivityLevel">
-              <option value="sedentary">Sedentary</option>
-              <option value="light" selected>Light</option>
-              <option value="moderate">Moderate</option>
-              <option value="active">Active</option>
-              <option value="very_active">Very Active</option>
+              <option value="sedentary">Sedentary — little or no exercise</option>
+              <option value="light" selected>Light — exercise 1-3 days/week</option>
+              <option value="moderate">Moderate — exercise 3-5 days/week</option>
+              <option value="active">Active — exercise 6-7 days/week</option>
+              <option value="very_active">Very Active — hard daily exercise or physical job</option>
             </select>
           </div>
         </div>
         <div class="field">
           <label class="pra-label">Goal</label>
           <select class="pra-select" id="profileGoal">
-            <option value="cut">Cut</option>
-            <option value="maintain" selected>Maintain</option>
-            <option value="bulk">Bulk</option>
+            <option value="reduce" selected>Reduce</option>
+            <option value="maintain">Maintain</option>
+            <option value="increase">Increase</option>
           </select>
         </div>
         <button class="pra-btn" id="profileSaveBtn" style="width:100%;margin-top:6px">SAVE PROFILE</button>
@@ -193,16 +200,23 @@
           <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="profileCarb">0g</div><div class="lab">Carbs 30%</div></div>
         </div>
       </div>
+    </div>
 
+    <div id="hubPanelNutrition" class="hub-panel">
       <div class="field-row" style="margin-bottom:14px">
         <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="foodDate" type="date"/></div>
       </div>
 
-      <div class="pra-panel macro-grid" style="margin:0 0 20px;padding:14px">
-        <div class="macro-tile"><div class="val" id="foodTotalCals">0</div><div class="lab">Calories</div></div>
-        <div class="macro-tile"><div class="val" id="foodTotalProtein">0g</div><div class="lab">Protein</div></div>
-        <div class="macro-tile"><div class="val" id="foodTotalFat">0g</div><div class="lab">Fat</div></div>
-        <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="foodTotalCarb">0g</div><div class="lab">Carbs</div></div>
+      <div class="pra-panel" style="margin:0 0 20px;padding:16px">
+        <div class="totals-cal-row">
+          <span class="val" id="foodTotalCals">0</span><span class="sep"> / </span><span class="goal" id="foodGoalCals">—</span>
+          <span class="lab">Calories</span>
+        </div>
+        <div class="totals-macro-row">
+          <div class="macro-cell"><span class="val" id="foodTotalProtein">0</span><span class="sep">/</span><span class="goal" id="foodGoalProtein">—</span><span class="unit">g</span><span class="lab">Protein</span></div>
+          <div class="macro-cell"><span class="val" id="foodTotalFat">0</span><span class="sep">/</span><span class="goal" id="foodGoalFat">—</span><span class="unit">g</span><span class="lab">Fat</span></div>
+          <div class="macro-cell"><span class="val" id="foodTotalCarb">0</span><span class="sep">/</span><span class="goal" id="foodGoalCarb">—</span><span class="unit">g</span><span class="lab">Carbs</span></div>
+        </div>
       </div>
 
       <div class="pra-panel" style="padding:18px;margin-bottom:22px">
@@ -219,29 +233,11 @@
 
         <div id="foodManualFields" style="display:none">
           <div class="field"><label class="pra-label">Description</label><input class="pra-input" id="foodDescInput" placeholder="e.g. grilled chicken, rice, broccoli"/></div>
-          <div class="field-row">
-            <div class="field"><label class="pra-label">Calories</label><input class="pra-input" id="foodCalInput" type="number"/></div>
-            <div class="field"><label class="pra-label">Protein (g)</label><input class="pra-input" id="foodProteinInput" type="number"/></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label class="pra-label">Fat (g)</label><input class="pra-input" id="foodFatInput" type="number"/></div>
-            <div class="field"><label class="pra-label">Carbs (g)</label><input class="pra-input" id="foodCarbInput" type="number"/></div>
-          </div>
         </div>
 
-        <div class="field" style="margin-top:14px">
-          <label class="pra-label">Meal</label>
-          <select class="pra-select" id="foodMealLabel">
-            <option value="">—</option>
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snack">Snack</option>
-          </select>
-        </div>
         <button class="pra-btn" id="foodSaveBtn" style="width:100%;margin-top:14px">LOG MEAL</button>
         <div class="spinner" id="foodSpinner">Estimating…</div>
-        <div class="disclaimer" style="margin-top:16px;padding-top:12px">A photo estimate is a rough guess, not a lab measurement — switch to Manual to correct any number before logging if it looks off.</div>
+        <div class="disclaimer" style="margin-top:16px;padding-top:12px">An AI estimate is a rough guess, not a lab measurement — switch to Manual and describe it more precisely if a number looks off.</div>
       </div>
 
       <div class="pra-h2" style="margin:24px 0 10px">History</div>
@@ -252,6 +248,29 @@
     <div id="hubPanelPhysique" class="hub-panel">
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
 
+      <div class="pra-panel" style="padding:18px;margin-bottom:22px">
+        <div class="pra-label" style="margin-bottom:6px">Weekly Check-In</div>
+        <div class="pra-muted" id="checkinStatus" style="font-size:.8rem;margin-bottom:12px"></div>
+        <div class="upload-box" id="checkinUploadBox" style="padding:20px;margin-bottom:12px">
+          <div id="checkinUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:26px;height:26px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap for your check-in photo</div>
+          <input type="file" id="checkinPhotoInput" accept="image/*" style="display:none"/>
+        </div>
+        <div class="field">
+          <label class="pra-label">Weight</label>
+          <div class="unit-row">
+            <input class="pra-input" id="checkinWeightLbs" type="number" placeholder="lbs"/>
+            <input class="pra-input" id="checkinWeightKg" type="number" placeholder="kg" style="display:none"/>
+            <select class="pra-select" id="checkinWeightUnit">
+              <option value="lbs" selected>lbs</option>
+              <option value="kg">kg</option>
+            </select>
+          </div>
+        </div>
+        <button class="pra-btn" id="checkinSubmitBtn" style="width:100%">SUBMIT CHECK-IN</button>
+        <div class="spinner" id="checkinSpinner">Submitting…</div>
+      </div>
+
+      <div class="pra-h2" style="margin:12px 0 10px">Scan a Photo</div>
       <div class="upload-box" id="uploadBox">
         <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
         <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
@@ -339,21 +358,35 @@ function escapeHtml(s) { const d = document.createElement('div'); d.textContent 
 function lbsToKgVal(lbs) { return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : ''; }
 function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 10 : ''; }
 
-// ── Hub tabs (Food Log / Physique Scan / Reports) ───────────────────────
+// ── Hub tabs: order + active tab are computed, not fixed in HTML -- Profile
+// leads until it's complete, then drops to the end and Nutrition Log leads. ──
+const HUB_LABELS = { profile: 'Profile', nutrition: 'Nutrition Log', physique: 'Physique Scan', reports: 'Reports' };
+let profileComplete = false;
+let activeHub = 'profile';
 let physiqueLoaded = false;
-document.querySelectorAll('.hub-tab').forEach(tab => {
-  tab.onclick = () => {
-    document.querySelectorAll('.hub-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById('hubPanel' + tab.dataset.hub[0].toUpperCase() + tab.dataset.hub.slice(1)).classList.add('active');
-    if (tab.dataset.hub === 'physique' && !physiqueLoaded) { physiqueLoaded = true; loadPhysiqueHistory(); loadPastScans(); }
-    if (tab.dataset.hub === 'foodlog') loadFoodEntries();
-    if (tab.dataset.hub === 'reports') loadReport();
-  };
-});
 
-// ── Food Log: Profile (weight/height/age/gender/goal weight/activity/goal) ──
+function computeProfileComplete(d) {
+  return !!(d.profile?.heightCm && d.profile?.age && d.profile?.sex && d.profile?.goalWeightKg
+    && d.profile?.activityLevel && d.profile?.goal && d.weightKg);
+}
+
+function renderHubTabs(preserveActive) {
+  const order = profileComplete ? ['nutrition', 'physique', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'reports'];
+  if (!preserveActive) activeHub = order[0];
+  document.getElementById('hubTabsBar').innerHTML = order.map(id =>
+    `<div class="hub-tab${id === activeHub ? ' active' : ''}" data-hub="${id}">${HUB_LABELS[id]}</div>`
+  ).join('');
+  document.querySelectorAll('.hub-tab').forEach(tab => {
+    tab.onclick = () => { activeHub = tab.dataset.hub; renderHubTabs(true); };
+  });
+  document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('hubPanel' + activeHub[0].toUpperCase() + activeHub.slice(1)).classList.add('active');
+  if (activeHub === 'physique' && !physiqueLoaded) { physiqueLoaded = true; loadPhysiqueHistory(); loadPastScans(); loadCheckinStatus(); }
+  if (activeHub === 'nutrition') loadFoodEntries();
+  if (activeHub === 'reports') loadReport();
+}
+
+// ── Profile ──────────────────────────────────────────────────────────────
 document.getElementById('profileWeightUnit').addEventListener('change', (e) => {
   const isKg = e.target.value === 'kg';
   document.getElementById('profileWeightKg').style.display = isKg ? '' : 'none';
@@ -394,7 +427,10 @@ function kgToDisplay(kg) {
   return weightDisplayUnit() === 'kg' ? kg : kgToLbsVal(kg);
 }
 
+let currentEstimate = { calorieTarget: null, macros: null };
+
 function showEstimate(d) {
+  currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros };
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
   document.getElementById('profileCals').textContent = d.calorieTarget;
@@ -407,12 +443,12 @@ function showEstimate(d) {
 function updatePhysiqueProfileSummary(d) {
   const el = document.getElementById('physiqueProfileSummary');
   if (!d.profile?.heightCm || !d.weightKg) {
-    el.textContent = 'Fill in your profile on the Food Log tab to get a personalized calorie/macro plan with your scan.';
+    el.textContent = 'Fill in your profile to get a personalized calorie/macro plan with your scan.';
     return;
   }
   const totalIn = Math.round(d.profile.heightCm / 2.54);
   const ftin = `${Math.floor(totalIn / 12)}'${totalIn % 12}"`;
-  el.textContent = `Using: ${ftin}, ${kgToLbsVal(d.weightKg)} lbs, ${d.profile.age || '—'}, ${d.profile.sex || '—'}, ${d.profile.activityLevel || '—'}, ${d.profile.goal || '—'} — edit on Food Log`;
+  el.textContent = `Using: ${ftin}, ${kgToLbsVal(d.weightKg)} lbs, ${d.profile.age || '—'}, ${d.profile.sex || '—'}, ${d.profile.activityLevel || '—'}, ${d.profile.goal || '—'} — edit on Profile`;
 }
 
 async function loadProfile() {
@@ -440,6 +476,7 @@ async function loadProfile() {
       document.getElementById('profileWeightLbs').value = kgToLbsVal(d.weightKg);
       document.getElementById('profileWeightKg').value = d.weightKg;
     }
+    profileComplete = computeProfileComplete(d);
     showEstimate(d);
     updatePhysiqueProfileSummary(d);
   } catch {}
@@ -465,12 +502,22 @@ document.getElementById('profileSaveBtn').onclick = async () => {
     if (!r.ok) { alert(d.error || 'Save failed'); return; }
     showEstimate(d);
     updatePhysiqueProfileSummary(d);
+    const wasComplete = profileComplete;
+    profileComplete = computeProfileComplete(d);
+    if (profileComplete && !wasComplete) {
+      // Graduation moment: profile drops to the last tab, Nutrition Log
+      // becomes the lead tab the user lands on going forward.
+      activeHub = 'nutrition';
+      renderHubTabs(true);
+    } else {
+      renderHubTabs(true);
+    }
   } finally {
     btn.disabled = false;
   }
 };
 
-// ── Food Log: date, totals, log-a-meal, history ─────────────────────────
+// ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
 let foodMode = 'photo';
 let foodPhotoFile = null;
 
@@ -502,16 +549,10 @@ document.getElementById('foodSaveBtn').onclick = async () => {
     if (!foodPhotoFile) { alert('Take or upload a photo first, or switch to Manual.'); return; }
     fd.append('photo', foodPhotoFile);
   } else {
-    const desc = document.getElementById('foodDescInput').value;
-    const cal = document.getElementById('foodCalInput').value;
-    if (!desc || !cal) { alert('Description and calories are required.'); return; }
+    const desc = document.getElementById('foodDescInput').value.trim();
+    if (!desc) { alert('Describe what you ate first.'); return; }
     fd.append('description', desc);
-    fd.append('calories', cal);
-    fd.append('proteinG', document.getElementById('foodProteinInput').value || '0');
-    fd.append('fatG', document.getElementById('foodFatInput').value || '0');
-    fd.append('carbG', document.getElementById('foodCarbInput').value || '0');
   }
-  fd.append('mealLabel', document.getElementById('foodMealLabel').value);
 
   const dateVal = document.getElementById('foodDate').value;
   fd.append('createdAt', dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString());
@@ -526,10 +567,6 @@ document.getElementById('foodSaveBtn').onclick = async () => {
     document.getElementById('foodPhotoInput').value = '';
     document.getElementById('foodUploadPrompt').innerHTML = 'Tap to photograph or upload your meal';
     document.getElementById('foodDescInput').value = '';
-    document.getElementById('foodCalInput').value = '';
-    document.getElementById('foodProteinInput').value = '';
-    document.getElementById('foodFatInput').value = '';
-    document.getElementById('foodCarbInput').value = '';
     loadFoodEntries();
   } finally {
     document.getElementById('foodSpinner').style.display = 'none';
@@ -544,15 +581,18 @@ async function loadFoodEntries() {
     if (!r.ok) return;
     const { entries, totals } = await r.json();
     document.getElementById('foodTotalCals').textContent = Math.round(totals.calories);
-    document.getElementById('foodTotalProtein').textContent = Math.round(totals.proteinG) + 'g';
-    document.getElementById('foodTotalFat').textContent = Math.round(totals.fatG) + 'g';
-    document.getElementById('foodTotalCarb').textContent = Math.round(totals.carbG) + 'g';
+    document.getElementById('foodGoalCals').textContent = currentEstimate.calorieTarget ?? '—';
+    document.getElementById('foodTotalProtein').textContent = Math.round(totals.proteinG);
+    document.getElementById('foodGoalProtein').textContent = currentEstimate.macros?.proteinG ?? '—';
+    document.getElementById('foodTotalFat').textContent = Math.round(totals.fatG);
+    document.getElementById('foodGoalFat').textContent = currentEstimate.macros?.fatG ?? '—';
+    document.getElementById('foodTotalCarb').textContent = Math.round(totals.carbG);
+    document.getElementById('foodGoalCarb').textContent = currentEstimate.macros?.carbG ?? '—';
 
     const list = document.getElementById('foodEntriesList');
     document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';
     list.innerHTML = entries.map(e => `<div class="pra-panel food-entry-row" data-id="${escapeHtml(e.id)}">
       ${e.driveFileId ? `<img class="food-entry-thumb" src="/api/food-log/media/${escapeHtml(e.driveFileId)}" loading="lazy"/>` : ''}
-      <span class="food-entry-label">${escapeHtml(e.mealLabel || '—')}</span>
       <span class="food-entry-desc">${escapeHtml(e.description || '')}</span>
       <span class="food-entry-cals">${Math.round(e.calories || 0)} cal</span>
       <button class="past-scan-del" title="Delete">✕</button>
@@ -567,6 +607,64 @@ async function deleteFoodEntry(id) {
   try {
     await fetch(`/api/food-log/entries/${id}`, { method: 'DELETE' });
     loadFoodEntries();
+  } catch {}
+}
+
+// ── Physique Scan: weekly check-in ──────────────────────────────────────
+let checkinPhotoFile = null;
+document.getElementById('checkinWeightUnit').addEventListener('change', (e) => {
+  const isKg = e.target.value === 'kg';
+  document.getElementById('checkinWeightKg').style.display = isKg ? '' : 'none';
+  document.getElementById('checkinWeightLbs').style.display = isKg ? 'none' : '';
+});
+function getCheckinWeightKg() {
+  if (document.getElementById('checkinWeightUnit').value === 'kg') return document.getElementById('checkinWeightKg').value;
+  return lbsToKgVal(Number(document.getElementById('checkinWeightLbs').value));
+}
+document.getElementById('checkinUploadBox').onclick = () => document.getElementById('checkinPhotoInput').click();
+document.getElementById('checkinPhotoInput').addEventListener('change', (e) => {
+  checkinPhotoFile = e.target.files[0];
+  if (!checkinPhotoFile) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById('checkinUploadPrompt').innerHTML = `<img src="${reader.result}" style="max-width:100%;max-height:160px;border-radius:8px"/>`; };
+  reader.readAsDataURL(checkinPhotoFile);
+});
+document.getElementById('checkinSubmitBtn').onclick = async () => {
+  if (!checkinPhotoFile) { alert('Add your check-in photo first.'); return; }
+  const weightKg = getCheckinWeightKg();
+  if (!weightKg) { alert('Enter your weight.'); return; }
+  const fd = new FormData();
+  fd.append('photo', checkinPhotoFile);
+  fd.append('weightKg', weightKg);
+  document.getElementById('checkinSpinner').style.display = 'block';
+  document.getElementById('checkinSubmitBtn').disabled = true;
+  try {
+    const r = await fetch('/api/body-stats/checkin', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'Check-in failed'); return; }
+    checkinPhotoFile = null;
+    document.getElementById('checkinPhotoInput').value = '';
+    document.getElementById('checkinUploadPrompt').textContent = 'Tap for your check-in photo';
+    document.getElementById('checkinWeightLbs').value = '';
+    document.getElementById('checkinWeightKg').value = '';
+    loadCheckinStatus();
+    loadPhysiqueHistory();
+  } finally {
+    document.getElementById('checkinSpinner').style.display = 'none';
+    document.getElementById('checkinSubmitBtn').disabled = false;
+  }
+};
+async function loadCheckinStatus() {
+  try {
+    const r = await fetch('/api/body-stats/checkin-status');
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('checkinStatus');
+    if (!d.lastCheckinAt) { el.textContent = "You haven't done a check-in yet — do your first one below."; return; }
+    const days = Math.floor((Date.now() - new Date(d.lastCheckinAt).getTime()) / 86400000);
+    el.textContent = d.dueThisWeek
+      ? `Check-in due — your last one was ${days} day${days === 1 ? '' : 's'} ago.`
+      : `Last check-in: ${days} day${days === 1 ? '' : 's'} ago. You're on track.`;
   } catch {}
 }
 
@@ -690,7 +788,7 @@ function renderResult(d, scrollTo) {
       ${d.mealPlan.map(m => `<div class="meal-row"><span>Meal ${m.meal}</span><span class="pra-muted">${m.calories} cal · P${m.proteinG}g F${m.fatG}g C${m.carbG}g</span></div>`).join('')}
     `;
   } else {
-    html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Fill in your profile on the Food Log tab to get a personalized calorie/macro plan.</div>`;
+    html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Fill in your profile to get a personalized calorie/macro plan.</div>`;
   }
 
   html += `
@@ -764,7 +862,7 @@ async function deleteScan(id, card) {
 }
 
 // ── Physique Scan: merged photo history (scans + standalone progress
-// photos) + morph animation ─────────────────────────────────────────────
+// photos + check-in photos) + morph animation ──────────────────────────
 let physiqueHistory = []; // ascending by createdAt, {id, rawId, createdAt, driveFileId, source}
 
 async function loadPhysiqueHistory() {
@@ -982,8 +1080,8 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
     const r = await fetch('/api/auth/me');
     if (r.ok) me = (await r.json()).user;
   } catch {}
-  loadProfile();
-  loadFoodEntries();
+  await loadProfile();
+  renderHubTabs();
   loadState();
 })();
 </script>

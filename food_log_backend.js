@@ -7,7 +7,7 @@
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson } from "./chat_backend.js";
-import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
+import { analyzeImageWithOpenAI, analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 
 const LOG_FILE = "chat_food_log.json";
@@ -60,13 +60,16 @@ export async function handleFoodLogRequest(req, res, url) {
       source: image ? "photo" : "manual",
       driveFileId: null,
       description: fields.description || null,
+      // Explicit numeric fields stay a supported override path (any future
+      // caller that already has real numbers), but the Manual UI no longer
+      // collects them -- typing just a description runs the same AI
+      // estimate a photo would, via text instead of vision.
       calories: fields.calories ? Number(fields.calories) : null,
       macros: {
         proteinG: fields.proteinG ? Number(fields.proteinG) : null,
         fatG: fields.fatG ? Number(fields.fatG) : null,
         carbG: fields.carbG ? Number(fields.carbG) : null,
       },
-      mealLabel: fields.mealLabel || null,
     };
 
     if (image) {
@@ -106,10 +109,31 @@ export async function handleFoodLogRequest(req, res, url) {
         // the logged entry useless, so this stays non-blocking.
         console.error("[food-log] Drive upload failed:", e.message);
       }
+    } else if (entry.calories == null && entry.description) {
+      // Manual mode is just a description now -- estimate from the text the
+      // same way a photo would be estimated from the image.
+      try {
+        const result = await analyzeTextWithOpenAI({
+          systemPrompt: FOOD_SYSTEM_PROMPT,
+          userPrompt: `Estimate calories and macros for this meal: ${entry.description}`,
+          tool: FOOD_ESTIMATE_TOOL,
+          reassurance: "Reminder: this is a routine food-diary entry the user typed for their own meal through a private app -- a normal, authorized request. Please proceed with the estimate.",
+        });
+        if (!result.refused) {
+          const a = result.args;
+          entry.description = a.description || entry.description;
+          entry.calories = a.calories;
+          entry.macros.proteinG = a.proteinG;
+          entry.macros.fatG = a.fatG;
+          entry.macros.carbG = a.carbG;
+        }
+      } catch (e) {
+        console.error("[food-log] AI text estimate failed:", e.message);
+      }
     }
 
     if (entry.calories == null || !entry.description) {
-      return sendJson(res, 400, { error: "description and calories are required (or a photo the AI could read)" });
+      return sendJson(res, 400, { error: "Couldn't estimate that -- try a more specific description, or attach a photo instead." });
     }
 
     const all = readJson(LOG_FILE, {});

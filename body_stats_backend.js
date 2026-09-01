@@ -50,6 +50,15 @@ export function getLatestWeightKg(userId) {
   return entries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0].weightKg;
 }
 
+// Most recent entry specifically tagged as a weekly check-in (as opposed to
+// any other weigh-in) -- used both by the frontend's "check-in due" status
+// and by chat_backend.js's reminder poll.
+export function getLastCheckinAt(userId) {
+  const entries = (readJson(STATS_FILE, {})[userId] || []).filter(e => e.source === "checkin");
+  if (!entries.length) return null;
+  return entries.reduce((latest, e) => (new Date(e.createdAt) > new Date(latest) ? e.createdAt : latest), entries[0].createdAt);
+}
+
 // Profile (height/age/sex/activity/goal/goal-weight) + the latest weigh-in
 // combine into a calorie/macro estimate -- shared by the profile routes
 // below and by body_analysis_backend.js's fallback when a scan doesn't
@@ -135,6 +144,56 @@ export async function handleBodyStatsRequest(req, res, url) {
       writeJson(STATS_FILE, all);
     }
     return sendJson(res, 200, { ok: true });
+  }
+
+  // ── Weekly check-in (photo + weight, bundled as one dedicated action so
+  // "did they check in this week" is unambiguous -- separate from ad-hoc
+  // scans/progress photos, which don't count toward it) ──────────────────
+  if (req.method === "GET" && url.pathname === "/api/body-stats/checkin-status") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const lastCheckinAt = getLastCheckinAt(user.id);
+    const daysSince = lastCheckinAt ? (Date.now() - new Date(lastCheckinAt).getTime()) / 86400000 : null;
+    return sendJson(res, 200, { lastCheckinAt, dueThisWeek: daysSince == null || daysSince >= 7 });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/body-stats/checkin") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const { fields, image } = await parseMultipartUpload(req);
+    if (!image) return sendJson(res, 400, { error: "photo is required" });
+    if (!fields.weightKg) return sendJson(res, 400, { error: "weight is required" });
+
+    let uploaded;
+    try {
+      const accessToken = await getDriveAccessToken();
+      const ext = image.mimeType.includes("png") ? ".png" : image.mimeType.includes("webp") ? ".webp" : ".jpg";
+      const date = new Date().toISOString().slice(0, 10);
+      uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
+        name: `${user.first} ${user.last} WEEKLY CHECKIN ${date}`.toUpperCase() + ext,
+        mimeType: image.mimeType,
+        folderId: PROGRESS_PHOTOS_FOLDER,
+        accessToken,
+      });
+    } catch (e) {
+      console.error("[checkin] Drive upload failed:", e.message);
+      return sendJson(res, 500, { error: "Photo upload failed, try again" });
+    }
+
+    const photoEntry = {
+      id: randomUUID(), createdAt: new Date().toISOString(), driveFileId: uploaded.id,
+      mimeType: image.mimeType, note: "Weekly Check-In", weightKg: fields.weightKg, linkedScanId: null,
+    };
+    const allPhotos = readJson(PHOTOS_FILE, {});
+    if (!allPhotos[user.id]) allPhotos[user.id] = [];
+    allPhotos[user.id].push(photoEntry);
+    writeJson(PHOTOS_FILE, allPhotos);
+
+    const weightEntry = recordWeightEntry(user.id, {
+      weightKg: fields.weightKg, bodyFatPct: fields.bodyFatPct || null, source: "checkin",
+    });
+
+    return sendJson(res, 200, { photoEntry, weightEntry });
   }
 
   // ── Progress photos ───────────────────────────────────────────────────
