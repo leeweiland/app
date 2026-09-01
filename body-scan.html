@@ -10,14 +10,15 @@
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
   /* ── Hub tabs (Scan / Stats / ...) -- the outermost level of this page,
      distinct from the Scan panel's own Body/Move type-toggle below. ── */
-  .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); }
-  .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; }
+  .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); overflow-x: auto; scrollbar-width: none; }
+  .hub-tabs::-webkit-scrollbar { display: none; }
+  .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
   .hub-tab.active { color: var(--pra-blue); border-bottom-color: var(--pra-blue); }
   .hub-panel { display: none; }
   .hub-panel.active { display: block; }
   .type-toggle { display: flex; gap: 8px; margin-bottom: 22px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
-  .type-tab { flex: 1; text-align: center; padding: 10px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); }
-  .type-tab.active { background: var(--pra-blue); color: #fff; }
+  .type-tab, .period-tab { flex: 1; text-align: center; padding: 10px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); }
+  .type-tab.active, .period-tab.active { background: var(--pra-blue); color: #fff; }
   .upload-box { position: relative; border: 2px dashed var(--pra-border); border-radius: 14px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 18px; transition: border-color .15s; }
   .upload-box:hover { border-color: var(--pra-blue); }
   .upload-box img { max-width: 100%; max-height: 260px; border-radius: 10px; }
@@ -92,6 +93,12 @@
   .food-entry-desc { flex: 1; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .food-entry-cals { font-weight: 700; font-size: .88rem; color: var(--pra-blue); flex-shrink: 0; }
   .food-entry-label { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; width: 62px; }
+  /* ── Reports tab ── */
+  .report-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .report-nav-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-text); cursor: pointer; flex-shrink: 0; font-size: 1rem; }
+  .report-nav-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .report-range-label { flex: 1; text-align: center; font-family: var(--font-secondary); font-size: .82rem; color: var(--pra-text); }
+  .report-section-title { font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin: 20px 0 8px; }
 </style>
 </head>
 <body>
@@ -108,6 +115,7 @@
       <div class="hub-tab" data-hub="stats">Stats</div>
       <div class="hub-tab" data-hub="photos">Photos</div>
       <div class="hub-tab" data-hub="foodlog">Food Log</div>
+      <div class="hub-tab" data-hub="reports">Reports</div>
     </div>
 
     <div id="hubPanelScan" class="hub-panel active">
@@ -302,6 +310,44 @@
       <div id="foodEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">Nothing logged for this day yet.</div>
       <div id="foodEntriesList"></div>
     </div>
+
+    <div id="hubPanelReports" class="hub-panel">
+      <div class="type-toggle">
+        <div class="period-tab active" data-period="daily">Daily</div>
+        <div class="period-tab" data-period="weekly">Weekly</div>
+        <div class="period-tab" data-period="monthly">Monthly</div>
+      </div>
+
+      <div class="report-nav">
+        <button class="report-nav-btn" id="reportPrevBtn">‹</button>
+        <div class="report-range-label" id="reportRangeLabel"></div>
+        <button class="report-nav-btn" id="reportNextBtn">›</button>
+      </div>
+
+      <div class="pra-panel weight-chart-wrap">
+        <svg id="reportWeightChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="report-section-title">Nutrition</div>
+      <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
+        <div class="macro-tile"><div class="val" id="reportAvgCals">0</div><div class="lab">Avg Calories/Day</div></div>
+        <div class="macro-tile"><div class="val" id="reportAvgProtein">0g</div><div class="lab">Avg Protein</div></div>
+        <div class="macro-tile"><div class="val" id="reportDaysLogged">0</div><div class="lab">Days Logged</div></div>
+      </div>
+
+      <div class="report-section-title">Weight</div>
+      <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
+        <div class="macro-tile"><div class="val" id="reportWeightDelta">—</div><div class="lab">Change</div></div>
+        <div class="macro-tile"><div class="val" id="reportWeightMin">—</div><div class="lab">Min</div></div>
+        <div class="macro-tile"><div class="val" id="reportWeightMax">—</div><div class="lab">Max</div></div>
+      </div>
+
+      <div class="report-section-title">Photos &amp; Scans</div>
+      <div class="pra-panel macro-grid" style="margin:0;padding:14px">
+        <div class="macro-tile"><div class="val" id="reportPhotoCount">0</div><div class="lab">Progress Photos</div></div>
+        <div class="macro-tile"><div class="val" id="reportScanCount">0</div><div class="lab">Scans</div></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -362,6 +408,7 @@ document.querySelectorAll('.hub-tab').forEach(tab => {
     if (tab.dataset.hub === 'stats' && !statsLoaded) { statsLoaded = true; loadStatsEntries(); }
     if (tab.dataset.hub === 'photos' && !photosLoaded) { photosLoaded = true; loadProgressPhotos(); }
     if (tab.dataset.hub === 'foodlog') loadFoodEntries();
+    if (tab.dataset.hub === 'reports') loadReport();
   };
 });
 
@@ -904,6 +951,58 @@ async function deleteFoodEntry(id) {
   try {
     await fetch(`/api/food-log/entries/${id}`, { method: 'DELETE' });
     loadFoodEntries();
+  } catch {}
+}
+
+// ── Reports tab: daily/weekly/monthly rollups ───────────────────────────
+let reportPeriod = 'daily';
+let reportAnchor = new Date();
+
+document.querySelectorAll('.period-tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    reportPeriod = tab.dataset.period;
+    loadReport();
+  };
+});
+
+function shiftReportAnchor(dir) {
+  const d = new Date(reportAnchor);
+  if (reportPeriod === 'daily') d.setDate(d.getDate() + dir);
+  else if (reportPeriod === 'weekly') d.setDate(d.getDate() + dir * 7);
+  else d.setMonth(d.getMonth() + dir);
+  reportAnchor = d;
+  loadReport();
+}
+document.getElementById('reportPrevBtn').onclick = () => shiftReportAnchor(-1);
+document.getElementById('reportNextBtn').onclick = () => shiftReportAnchor(1);
+
+async function loadReport() {
+  const dateStr = reportAnchor.toISOString().slice(0, 10);
+  try {
+    const r = await fetch(`/api/body-reports/summary?period=${reportPeriod}&date=${dateStr}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const fmt = iso => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    document.getElementById('reportRangeLabel').textContent = reportPeriod === 'daily'
+      ? fmt(d.rangeStart) : `${fmt(d.rangeStart)} – ${fmt(d.rangeEnd)}`;
+
+    document.getElementById('reportAvgCals').textContent = d.nutrition.avgCalories;
+    document.getElementById('reportAvgProtein').textContent = d.nutrition.avgProteinG + 'g';
+    document.getElementById('reportDaysLogged').textContent = d.nutrition.daysLogged;
+
+    const unit = document.getElementById('statWeightUnit')?.value === 'kg' ? 'kg' : 'lbs';
+    const toDisp = kg => unit === 'kg' ? kg : Math.round(kg / 0.453592 * 10) / 10;
+    document.getElementById('reportWeightDelta').textContent = d.weight.deltaKg != null
+      ? `${d.weight.deltaKg > 0 ? '+' : ''}${toDisp(d.weight.deltaKg)} ${unit}` : '—';
+    document.getElementById('reportWeightMin').textContent = d.weight.minKg != null ? `${toDisp(d.weight.minKg)} ${unit}` : '—';
+    document.getElementById('reportWeightMax').textContent = d.weight.maxKg != null ? `${toDisp(d.weight.maxKg)} ${unit}` : '—';
+
+    document.getElementById('reportPhotoCount').textContent = d.photos.count;
+    document.getElementById('reportScanCount').textContent = d.scans.count;
+
+    drawWeightChart(document.getElementById('reportWeightChartSvg'), d.weight.entries);
   } catch {}
 }
 

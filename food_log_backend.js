@@ -56,7 +56,7 @@ export async function handleFoodLogRequest(req, res, url) {
 
     let entry = {
       id: randomUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: fields.createdAt || new Date().toISOString(),
       source: image ? "photo" : "manual",
       driveFileId: null,
       description: fields.description || null,

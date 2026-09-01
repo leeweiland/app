@@ -7,6 +7,7 @@ import { handleChatRequest, getSessionUser } from "./chat_backend.js";
 import { handleBodyAnalysisRequest } from "./body_analysis_backend.js";
 import { handleBodyStatsRequest } from "./body_stats_backend.js";
 import { handleFoodLogRequest } from "./food_log_backend.js";
+import { handleBodyReportsRequest } from "./body_reports_backend.js";
 import { handleMovesDictionaryRequest } from "./moves_dictionary_backend.js";
 import { handleSocialVideoRequest } from "./social_video_backend.js";
 
@@ -42,6 +43,7 @@ createServer(async (req, res) => {
   if (await handleBodyAnalysisRequest(req, res, url)) return;
   if (await handleBodyStatsRequest(req, res, url)) return;
   if (await handleFoodLogRequest(req, res, url)) return;
+  if (await handleBodyReportsRequest(req, res, url)) return;
   if (await handleMovesDictionaryRequest(req, res, url)) return;
   if (await handleSocialVideoRequest(req, res, url)) return;
 
