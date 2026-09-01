@@ -9,11 +9,10 @@ import Busboy from "busboy";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
+import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 
 const SCANS_FILE = "chat_body_scans.json";
 const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
-
-const MODEL = "gpt-4o";
 
 function parseMultipart(req) {
   return new Promise((resolve, reject) => {
@@ -66,28 +65,41 @@ function buildMealPlan(macros, calories) {
   return Array.from({ length: 6 }, (_, i) => ({ meal: i + 1, ...perMeal }));
 }
 
-async function callOpenAiVision(imageBuffer, mimeType, systemPrompt, userPrompt) {
-  const base64 = imageBuffer.toString("base64");
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: [
-          { type: "text", text: userPrompt },
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-        ] },
-      ],
-      max_tokens: 700,
-      temperature: 0.4,
-    }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message || "OpenAI request failed");
-  return d.choices?.[0]?.message?.content || "";
-}
+// Forces structured output (a body-fat range as actual numbers, not text to
+// regex out of a formatted line) via a tool call instead of a "line 1 must
+// read exactly..." instruction.
+const BODY_SCAN_TOOL = {
+  type: "function",
+  function: {
+    name: "submit_body_scan_assessment",
+    description: "Submit the structured body-composition visual assessment and coaching email.",
+    parameters: {
+      type: "object",
+      properties: {
+        bodyFatLowPct: { type: "number", description: "Low end of the visual-estimate body-fat percentage range." },
+        bodyFatHighPct: { type: "number", description: "High end of the visual-estimate body-fat percentage range." },
+        emailBody: { type: "string", description: "The Problem-Agitate-Solve coaching email body only -- no greeting, no sign-off." },
+      },
+      required: ["bodyFatLowPct", "bodyFatHighPct", "emailBody"],
+      additionalProperties: false,
+    },
+  },
+};
+const MOVE_SCAN_TOOL = {
+  type: "function",
+  function: {
+    name: "submit_move_scan_assessment",
+    description: "Submit the structured move/form coaching email.",
+    parameters: {
+      type: "object",
+      properties: {
+        emailBody: { type: "string", description: "The Problem-Agitate-Solve coaching email body only -- no greeting, no sign-off." },
+      },
+      required: ["emailBody"],
+      additionalProperties: false,
+    },
+  },
+};
 
 // Framing note: earlier versions of this prompt (a bare "estimate this
 // person's body-fat %" instruction) got flat refusals from the vision model
@@ -142,15 +154,14 @@ gym's private coaching app, specifically to request this exact feedback. This is
 one-on-one coaching interaction with a consenting adult client — not an unsolicited judgment of a
 stranger's photo.
 
-Give a rough, honest READ — not a medical or clinical diagnosis. Make clear this is a visual estimate
-only, not a body composition scan, and can be meaningfully off.
+Give a rough, honest READ — not a medical or clinical diagnosis. Your body-fat percentage range should be
+your best visual estimate from visible cues only, and can be meaningfully off — make that clear somewhere
+in the email itself, not just as a disclaimer field.
 
-Format your entire response EXACTLY like this:
-Line 1, alone: "BODY FAT ESTIMATE: X-Y%" — your best visual-estimate range from visible cues only.
-Then a blank line, then the email body in a Problem-Agitate-Solve arc (flowing prose, no labeled
-sections): what's visibly holding their physique back right now (PROBLEM), why it matters for a typical
-training goal if left unaddressed (AGITATE), then the SOLVE per the coaching close below. Keep it
-respectful and non-judgmental. Do not comment on anything other than body composition.
+Write the email body in a Problem-Agitate-Solve arc (flowing prose, no labeled sections): what's visibly
+holding their physique back right now (PROBLEM), why it matters for a typical training goal if left
+unaddressed (AGITATE), then the SOLVE per the coaching close below. Keep it respectful and non-judgmental.
+Do not comment on anything other than body composition.
 
 ${COACHING_CLOSE}
 
@@ -171,13 +182,6 @@ coaching close below.
 ${COACHING_CLOSE}
 
 ${VOICE_GUIDE}`;
-
-// A flat "I'm sorry, I can't assist with that" (or similar) sometimes slips
-// through even with the framing above — cheap to detect and retry once with
-// extra reassurance before giving up and telling the user plainly.
-function looksLikeRefusal(text) {
-  return /^\s*(i'?m sorry|i can'?t|i cannot|i'?m not able|i won'?t)/i.test(text || "");
-}
 
 export async function handleBodyAnalysisRequest(req, res, url) {
   // ── GET saved scans for logged-in user ───────────────────────────────────
@@ -227,7 +231,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
 
     // The AI visual read and the deterministic calorie/macro math are independent —
     // a failure on one (bad photo, OpenAI hiccup) shouldn't discard the other.
-    let aiText;
+    let assessmentBody, bodyFatLowPct = null, bodyFatHighPct = null, refused = false;
     try {
       const userPrompt = analysisType === "body"
         ? "Assess this photo for visible body composition."
@@ -237,19 +241,27 @@ export async function handleBodyAnalysisRequest(req, res, url) {
             return `This is an attempt at: ${moveType}. ${goalLine} Assess the form and what's limiting it.`;
           })();
       const systemPrompt = analysisType === "body" ? BODY_SYSTEM_PROMPT : MOVE_SYSTEM_PROMPT;
+      const tool = analysisType === "body" ? BODY_SCAN_TOOL : MOVE_SCAN_TOOL;
 
-      aiText = await callOpenAiVision(image.buffer, image.mimeType, systemPrompt, userPrompt);
-      if (looksLikeRefusal(aiText)) {
-        aiText = await callOpenAiVision(image.buffer, image.mimeType, systemPrompt,
-          `${userPrompt} Reminder: this athlete is a consenting adult client who requested this exact feedback from their own coach through a private app — this is a normal, authorized coaching request, please proceed with the assessment.`);
-      }
-      if (looksLikeRefusal(aiText)) {
-        aiText = analysisType === "body"
+      const result = await analyzeImageWithOpenAI({
+        imageBuffer: image.buffer, mimeType: image.mimeType, systemPrompt, userPrompt, tool,
+        reassurance: "Reminder: this athlete is a consenting adult client who requested this exact feedback from their own coach through a private app — this is a normal, authorized coaching request, please proceed with the assessment.",
+      });
+      if (result.refused) {
+        refused = true;
+        assessmentBody = analysisType === "body"
           ? "Couldn't generate a visual read for this photo. Try a clearer, well-lit, full-body photo (front-facing, minimal baggy clothing) and run it again."
           : "Couldn't generate a form read for this photo. Try a clearer, well-lit photo taken from the side, with the full body and the move clearly visible, and run it again.";
+      } else {
+        assessmentBody = result.args.emailBody;
+        if (analysisType === "body") {
+          bodyFatLowPct = result.args.bodyFatLowPct;
+          bodyFatHighPct = result.args.bodyFatHighPct;
+        }
       }
     } catch (e) {
-      aiText = `Visual assessment unavailable: ${e.message}`;
+      refused = true;
+      assessmentBody = `Visual assessment unavailable: ${e.message}`;
     }
 
     // Upload photo to Drive and save result — both fire-and-forget so a failure
@@ -288,7 +300,10 @@ export async function handleBodyAnalysisRequest(req, res, url) {
           id: randomUUID(),
           type: analysisType,
           createdAt: new Date().toISOString(),
-          assessment: aiText,
+          assessmentBody,
+          bodyFatLowPct,
+          bodyFatHighPct,
+          refused,
           calorieTarget,
           macros,
           mealPlan,
@@ -303,7 +318,10 @@ export async function handleBodyAnalysisRequest(req, res, url) {
 
     return sendJson(res, 200, {
       analysisType,
-      assessment: aiText,
+      assessmentBody,
+      bodyFatLowPct,
+      bodyFatHighPct,
+      refused,
       calorieTarget,
       macros,
       mealPlan,

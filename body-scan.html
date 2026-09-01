@@ -293,15 +293,20 @@ document.getElementById('analyzeBtn').onclick = async () => {
 
 function renderResult(d, scrollTo) {
   const box = document.getElementById('resultBox');
-  // The body-fat estimate ships as a "BODY FAT ESTIMATE: X-Y%" line at the
-  // top of the AI text (per the system prompt) — pull it out into its own
-  // stat tile instead of leaving it buried in the paragraph.
-  let assessment = d.assessment || '';
-  let bodyFat = null;
-  const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
-  if (bfMatch) {
-    bodyFat = bfMatch[1].trim();
-    assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
+  // Current records carry the body-fat range as real numbers (bodyFatLowPct/
+  // bodyFatHighPct) instead of a "BODY FAT ESTIMATE: X-Y%" line embedded in
+  // the text -- fall back to the old regex-parse only for pre-existing
+  // records saved before that switch.
+  let assessment = d.assessmentBody ?? d.assessment ?? '';
+  let bodyFat = (d.bodyFatLowPct != null && d.bodyFatHighPct != null)
+    ? `${d.bodyFatLowPct}-${d.bodyFatHighPct}%`
+    : null;
+  if (bodyFat == null) {
+    const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+    if (bfMatch) {
+      bodyFat = bfMatch[1].trim();
+      assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
+    }
   }
 
   let html = bodyFat
@@ -356,10 +361,14 @@ async function loadPastScans() {
     const list = document.getElementById('pastScansList');
     list.innerHTML = scans.map(s => {
       const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      let preview = s.assessment || '';
-      const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
-      const bfVal = bfMatch ? bfMatch[1].trim() : null;
-      const bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
+      let preview = s.assessmentBody ?? s.assessment ?? '';
+      let bfVal = (s.bodyFatLowPct != null && s.bodyFatHighPct != null) ? `${s.bodyFatLowPct}-${s.bodyFatHighPct}%` : null;
+      let bodyText = preview;
+      if (bfVal == null) {
+        const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+        bfVal = bfMatch ? bfMatch[1].trim() : null;
+        bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
+      }
       const label = s.type === 'move' ? (s.moveType || 'Move Scan') : 'Body Scan';
       return `<div class="pra-panel past-scan-card" data-id="${escapeHtml(s.id)}">
         <div class="past-scan-head">
