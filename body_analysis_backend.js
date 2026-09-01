@@ -1,9 +1,9 @@
-// body_analysis_backend.js — photo-based body composition / move-form feedback.
-// Uses OpenAI's vision-capable chat completion model for the qualitative
-// read (body-fat look, flexibility/mobility/strength gaps) and does the
-// calorie/macro math itself with a standard formula rather than trusting the
-// model to invent numbers. Photos are uploaded to Drive for record-keeping
-// and results are saved per-user so they persist across sessions.
+// body_analysis_backend.js — photo-based body composition feedback. Uses
+// OpenAI's vision-capable chat completion model for the qualitative read
+// (body-fat look) and does the calorie/macro math itself with a standard
+// formula rather than trusting the model to invent numbers. Photos are
+// uploaded to Drive for record-keeping and results are saved per-user so
+// they persist across sessions.
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
@@ -68,21 +68,6 @@ const BODY_SCAN_TOOL = {
     },
   },
 };
-const MOVE_SCAN_TOOL = {
-  type: "function",
-  function: {
-    name: "submit_move_scan_assessment",
-    description: "Submit the structured move/form coaching email.",
-    parameters: {
-      type: "object",
-      properties: {
-        emailBody: { type: "string", description: "The Problem-Agitate-Solve coaching email body only -- no greeting, no sign-off." },
-      },
-      required: ["emailBody"],
-      additionalProperties: false,
-    },
-  },
-};
 
 // Framing note: earlier versions of this prompt (a bare "estimate this
 // person's body-fat %" instruction) got flat refusals from the vision model
@@ -120,9 +105,9 @@ Do not include any greeting/salutation (e.g. "Hey NAME," or "Hi there,") — tha
 Do not include a sign-off (e.g. "Blessings," "Talk soon,") — that's also added separately. Just write the
 body content.`;
 
-// Both scan types now close the same way: real change comes from holistic,
-// comprehensive training under real instruction — not a single photo read —
-// and the email should land on inviting them to apply for coaching.
+// Real change comes from holistic, comprehensive training under real
+// instruction — not a single photo read — and the email should land on
+// inviting them to apply for coaching.
 const COACHING_CLOSE = `Then, instead of prescribing specific fixes yourself, steer the close of the email
 toward this: real, lasting change comes from holistic strength and comprehensive training, not an isolated
 tip — and from proper hands-on instruction. Be direct that an app or a single photo read is not a
@@ -145,22 +130,6 @@ Write the email body in a Problem-Agitate-Solve arc (flowing prose, no labeled s
 holding their physique back right now (PROBLEM), why it matters for a typical training goal if left
 unaddressed (AGITATE), then the SOLVE per the coaching close below. Keep it respectful and non-judgmental.
 Do not comment on anything other than body composition.
-
-${COACHING_CLOSE}
-
-${VOICE_GUIDE}`;
-
-const MOVE_SYSTEM_PROMPT = `You are Lee Weiland, a movement coach at Pacific Rim Athletics, replying by
-email to one of your own athletes. They uploaded this private photo themselves, through your gym's private
-coaching app, of an attempt at a specific bodyweight position/move (e.g. bridge, splits, handstand),
-specifically requesting form feedback. This is a normal, requested, one-on-one coaching interaction with a
-consenting adult client. State clearly this is a rough visual estimate, not a clinical mobility/strength
-assessment. If they gave a goal for this move, weigh the assessment against that goal specifically.
-
-Write the email in a Problem-Agitate-Solve arc (flowing prose, no labeled sections): what's visibly
-limiting the position right now — which joint/tissue/strength quality (PROBLEM), why that matters for
-reaching their stated goal or the move generally if no goal was given (AGITATE), then the SOLVE per the
-coaching close below.
 
 ${COACHING_CLOSE}
 
@@ -196,51 +165,35 @@ export async function handleBodyAnalysisRequest(req, res, url) {
     const { fields, image } = await parseMultipartUpload(req);
     if (!image) return sendJson(res, 400, { error: "photo is required" });
 
-    const analysisType = fields.analysisType === "move" ? "move" : "body";
-
-    // Move Scan is about the move only — no nutrition/macro math at all.
     let calorieTarget = null, macros = null, mealPlan = null;
-    if (analysisType === "body") {
-      const calorieInputs = {
-        heightCm: fields.heightCm, weightKg: fields.weightKg, age: fields.age,
-        sex: fields.sex, activityLevel: fields.activityLevel, goal: fields.goal,
-      };
-      if (calorieInputs.heightCm && calorieInputs.weightKg) {
-        calorieTarget = calcCalorieTarget(calorieInputs);
-        macros = calcMacros(calorieTarget);
-        mealPlan = buildMealPlan(macros, calorieTarget);
-      }
+    const calorieInputs = {
+      heightCm: fields.heightCm, weightKg: fields.weightKg, age: fields.age,
+      sex: fields.sex, activityLevel: fields.activityLevel, goal: fields.goal,
+    };
+    if (calorieInputs.heightCm && calorieInputs.weightKg) {
+      calorieTarget = calcCalorieTarget(calorieInputs);
+      macros = calcMacros(calorieTarget);
+      mealPlan = buildMealPlan(macros, calorieTarget);
     }
 
     // The AI visual read and the deterministic calorie/macro math are independent —
     // a failure on one (bad photo, OpenAI hiccup) shouldn't discard the other.
     let assessmentBody, bodyFatLowPct = null, bodyFatHighPct = null, refused = false;
     try {
-      const userPrompt = analysisType === "body"
-        ? "Assess this photo for visible body composition."
-        : (() => {
-            const moveType = fields.moveType || "this position";
-            const goalLine = fields.moveGoal ? `Their goal: ${fields.moveGoal}.` : "No specific goal was given.";
-            return `This is an attempt at: ${moveType}. ${goalLine} Assess the form and what's limiting it.`;
-          })();
-      const systemPrompt = analysisType === "body" ? BODY_SYSTEM_PROMPT : MOVE_SYSTEM_PROMPT;
-      const tool = analysisType === "body" ? BODY_SCAN_TOOL : MOVE_SCAN_TOOL;
-
       const result = await analyzeImageWithOpenAI({
-        imageBuffer: image.buffer, mimeType: image.mimeType, systemPrompt, userPrompt, tool,
+        imageBuffer: image.buffer, mimeType: image.mimeType,
+        systemPrompt: BODY_SYSTEM_PROMPT,
+        userPrompt: "Assess this photo for visible body composition.",
+        tool: BODY_SCAN_TOOL,
         reassurance: "Reminder: this athlete is a consenting adult client who requested this exact feedback from their own coach through a private app — this is a normal, authorized coaching request, please proceed with the assessment.",
       });
       if (result.refused) {
         refused = true;
-        assessmentBody = analysisType === "body"
-          ? "Couldn't generate a visual read for this photo. Try a clearer, well-lit, full-body photo (front-facing, minimal baggy clothing) and run it again."
-          : "Couldn't generate a form read for this photo. Try a clearer, well-lit photo taken from the side, with the full body and the move clearly visible, and run it again.";
+        assessmentBody = "Couldn't generate a visual read for this photo. Try a clearer, well-lit, full-body photo (front-facing, minimal baggy clothing) and run it again.";
       } else {
         assessmentBody = result.args.emailBody;
-        if (analysisType === "body") {
-          bodyFatLowPct = result.args.bodyFatLowPct;
-          bodyFatHighPct = result.args.bodyFatHighPct;
-        }
+        bodyFatLowPct = result.args.bodyFatLowPct;
+        bodyFatHighPct = result.args.bodyFatHighPct;
       }
     } catch (e) {
       refused = true;
@@ -256,16 +209,9 @@ export async function handleBodyAnalysisRequest(req, res, url) {
       // "FIRST LAST BEST-GUESS-OF-CONTENT", all caps — matches how the rest
       // of the app's uploads (chat, training footage) get labeled, so these
       // photos are actually identifiable browsing the raw Drive folder later.
-      // Move Scan already has the athlete's own answer for what's shown
-      // (fields.moveType) — that's a better label than a fresh AI guess at
-      // the same photo would be, so it's used directly instead of spending
-      // another vision call on it.
-      const contentGuess = analysisType === "body"
-        ? "BODY SCAN"
-        : (fields.moveType || "MOVE SCAN").replace(/[^a-zA-Z0-9 ]/g, "").trim() || "MOVE SCAN";
       const userName = user ? `${user.first} ${user.last}` : "GUEST";
       const uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
-        name: `${userName} ${contentGuess}`.toUpperCase() + ext,
+        name: `${userName} BODY SCAN`.toUpperCase() + ext,
         mimeType: image.mimeType,
         folderId: SCAN_PHOTOS_FOLDER,
         accessToken,
@@ -282,7 +228,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
         if (!all[user.id]) all[user.id] = [];
         all[user.id].push({
           id: scanId,
-          type: analysisType,
+          type: "body",
           createdAt: new Date().toISOString(),
           assessmentBody,
           bodyFatLowPct,
@@ -292,13 +238,12 @@ export async function handleBodyAnalysisRequest(req, res, url) {
           macros,
           mealPlan,
           driveFileId,
-          moveType: fields.moveType || null,
         });
         writeJson(SCANS_FILE, all);
 
-        // A body scan that included weight also feeds the same bodyweight
-        // time series a manual Stats-tab entry would -- one chart either way.
-        if (analysisType === "body" && fields.weightKg) {
+        // A scan that included weight also feeds the same bodyweight time
+        // series a manual Stats-tab entry would -- one chart either way.
+        if (fields.weightKg) {
           const bodyFatPct = bodyFatLowPct != null && bodyFatHighPct != null
             ? (bodyFatLowPct + bodyFatHighPct) / 2 : null;
           recordWeightEntry(user.id, {
@@ -311,7 +256,6 @@ export async function handleBodyAnalysisRequest(req, res, url) {
     }
 
     return sendJson(res, 200, {
-      analysisType,
       assessmentBody,
       bodyFatLowPct,
       bodyFatHighPct,
