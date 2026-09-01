@@ -48,17 +48,10 @@
   .meal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--pra-border); font-size: .84rem; }
   .disclaimer { font-family: var(--font-secondary); font-size: .7rem; color: var(--pra-dim); margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--pra-border); line-height: 1.5; }
   .spinner { display: none; text-align: center; padding: 20px; color: var(--pra-blue); }
-  .greeting { font-weight: 700; font-size: 1rem; margin-bottom: 12px; }
-  .signoff { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--pra-border); text-align: left; }
-  .signoff-text { font-family: var(--font-primary); font-weight: 700; font-size: 1.1rem; margin-bottom: 12px; }
-  .signoff-logo { width: 220px; height: auto; display: block; margin: 0 0 12px; }
-  .signoff-name { font-weight: 700; font-size: .92rem; }
-  .signoff-title { font-family: var(--font-primary); font-weight: 700; font-size: .74rem; color: var(--pra-dim); }
   /* ── Previous Scans ── */
   #pastScans { margin-top: 32px; }
   .past-scan-card { padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
   .past-scan-head { display: flex; align-items: center; gap: 10px; }
-  .past-scan-type { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; background: rgba(0,155,255,0.12); color: var(--pra-blue); border-radius: 20px; padding: 2px 9px; }
   .past-scan-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); flex: 1; }
   .past-scan-bf { font-weight: 700; font-size: .85rem; color: var(--pra-blue); }
   .past-scan-del { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
@@ -122,8 +115,7 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
-    <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary)">Physique Builder</div>
-    <div class="pra-muted" style="margin-bottom:22px;font-size:.85rem">Track your weight, nutrition, and physique — all in one place.</div>
+    <div class="pra-h1 pra-glow" style="margin-bottom:22px;font-family:var(--font-secondary)">Physique Builder</div>
 
     <div class="hub-tabs" id="hubTabsBar"></div>
 
@@ -346,8 +338,6 @@
 </div>
 
 <script>
-let me = null;
-
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function lbsToKgVal(lbs) { return lbs ? Math.round(lbs * 0.453592 * 10) / 10 : ''; }
 function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 10 : ''; }
@@ -720,29 +710,21 @@ document.getElementById('analyzeBtn').onclick = async () => {
 function renderResult(d, scrollTo) {
   const box = document.getElementById('resultBox');
   // Current records carry the body-fat range as real numbers (bodyFatLowPct/
-  // bodyFatHighPct) instead of a "BODY FAT ESTIMATE: X-Y%" line embedded in
-  // the text -- fall back to the old regex-parse only for pre-existing
-  // records saved before that switch.
-  let assessment = d.assessmentBody ?? d.assessment ?? '';
+  // bodyFatHighPct) -- fall back to the old regex-parse against a legacy
+  // record's assessment/assessmentBody text only for scans saved before
+  // that switch (and before the coaching-email format was dropped entirely).
   let bodyFat = (d.bodyFatLowPct != null && d.bodyFatHighPct != null)
     ? `${d.bodyFatLowPct}-${d.bodyFatHighPct}%`
     : null;
   if (bodyFat == null) {
-    const bfMatch = assessment.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
-    if (bfMatch) {
-      bodyFat = bfMatch[1].trim();
-      assessment = assessment.replace(bfMatch[0], '').replace(/^\s+/, '');
-    }
+    const legacyText = d.assessmentBody ?? d.assessment ?? '';
+    const bfMatch = legacyText.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+    if (bfMatch) bodyFat = bfMatch[1].trim();
   }
 
   let html = bodyFat
     ? `<div class="bodyfat-tile"><div class="val">${escapeHtml(bodyFat)}</div><div class="lab">Estimated Body Fat</div></div>`
-    : '';
-  // Reads like an actual email now, not a labeled report — the AI is told
-  // not to write its own greeting/sign-off, so both are added here instead.
-  const greetName = me?.first ? escapeHtml(me.first) : 'there';
-  html += `<div class="greeting">Hey ${greetName},</div>`;
-  html += `<div style="font-size:.9rem;line-height:1.6;white-space:pre-wrap">${escapeHtml(assessment)}</div>`;
+    : `<div class="pra-muted" style="margin-bottom:16px">${escapeHtml(d.readError || "Couldn't generate a body-fat read for this photo.")}</div>`;
 
   if (d.calorieTarget) {
     html += `
@@ -759,16 +741,6 @@ function renderResult(d, scrollTo) {
     html += `<div class="pra-muted" style="margin-top:16px;font-size:.82rem">Fill in your profile to get a personalized calorie/macro plan.</div>`;
   }
 
-  html += `
-    <div class="signoff">
-      <div class="signoff-text">Blessings!</div>
-      <div class="signoff-text">Coach Lee</div>
-      <img class="signoff-logo" src="/chat-app/assets/lee-signature.png" alt="Lee Weiland signature"/>
-      <div class="signoff-name">Lee Weiland</div>
-      <div class="signoff-title">Creator Powerbatics</div>
-      <div class="signoff-title">Founder Pacific Rim Athletics</div>
-    </div>
-  `;
   html += `<div class="disclaimer">${escapeHtml(d.disclaimer)}</div>`;
   box.innerHTML = html;
   box.style.display = 'block';
@@ -785,23 +757,23 @@ async function loadPastScans() {
     if (!scans || !scans.length) { wrap.style.display = 'none'; return; }
     list.innerHTML = scans.map(s => {
       const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      let preview = s.assessmentBody ?? s.assessment ?? '';
+      // Legacy records saved before the coaching-email format was dropped
+      // still carry that text -- keep it expandable for those; current
+      // records have nothing to expand, just the body-fat pill.
+      let legacyText = s.assessmentBody ?? s.assessment ?? '';
       let bfVal = (s.bodyFatLowPct != null && s.bodyFatHighPct != null) ? `${s.bodyFatLowPct}-${s.bodyFatHighPct}%` : null;
-      let bodyText = preview;
       if (bfVal == null) {
-        const bfMatch = preview.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
+        const bfMatch = legacyText.match(/^BODY FAT ESTIMATE:\s*(.+)$/im);
         bfVal = bfMatch ? bfMatch[1].trim() : null;
-        bodyText = bfMatch ? preview.replace(bfMatch[0], '').replace(/^\s+/, '') : preview;
+        legacyText = bfMatch ? legacyText.replace(bfMatch[0], '').replace(/^\s+/, '') : legacyText;
       }
-      const label = s.type === 'move' ? (s.moveType || 'Move Scan') : 'Body Scan';
       return `<div class="pra-panel past-scan-card" data-id="${escapeHtml(s.id)}">
         <div class="past-scan-head">
-          <span class="past-scan-type">${escapeHtml(label)}</span>
           <span class="past-scan-date">${date}</span>
           ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
           <button class="past-scan-del" title="Delete">✕</button>
         </div>
-        <div class="past-scan-body">${escapeHtml(bodyText)}</div>
+        ${legacyText ? `<div class="past-scan-body">${escapeHtml(legacyText)}</div>` : ''}
       </div>`;
     }).join('');
     wrap.style.display = 'block';
@@ -812,7 +784,7 @@ async function loadPastScans() {
           deleteScan(card.dataset.id, card);
           return;
         }
-        card.classList.toggle('open');
+        if (card.querySelector('.past-scan-body')) card.classList.toggle('open');
       });
     });
   } catch {}
@@ -1044,10 +1016,6 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
 }
 
 (async () => {
-  try {
-    const r = await fetch('/api/auth/me');
-    if (r.ok) me = (await r.json()).user;
-  } catch {}
   await loadProfile();
   renderHubTabs();
   loadState();
