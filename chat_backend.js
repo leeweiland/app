@@ -3713,23 +3713,33 @@ export async function handleChatRequest(req, res, url) {
       }
 
       if (sub === "/call/start" && req.method === "POST") {
-        const existing = findOpenCall(convoId);
-        if (existing) {
-          const token = await createDailyMeetingToken(existing.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === existing.initiatorId);
-          return sendJson(res, 200, { call: publicCall(existing), token });
+        try {
+          const existing = findOpenCall(convoId);
+          if (existing) {
+            const token = await createDailyMeetingToken(existing.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === existing.initiatorId);
+            return sendJson(res, 200, { call: publicCall(existing), token });
+          }
+          const calls = readJson(CALLS_FILE, []);
+          const room = await createDailyRoom(`call-${randomUUID()}`);
+          const call = {
+            id: randomUUID(), conversationId: convoId, initiatorId: user.id,
+            participantIds: [...convo.participantIds], joinedIds: [user.id], declinedIds: [],
+            status: "ringing", dailyRoomName: room.name, dailyRoomUrl: room.url,
+            createdAt: new Date().toISOString(), startedAt: null, endedAt: null,
+          };
+          calls.push(call);
+          writeJson(CALLS_FILE, calls);
+          const token = await createDailyMeetingToken(room.name, user.id, `${user.first} ${user.last}`, true);
+          return sendJson(res, 200, { call: publicCall(call), token });
+        } catch (e) {
+          // A thrown error in here (bad/missing DAILY_API_KEY, Daily's API
+          // down, etc.) would otherwise propagate all the way up to
+          // server.js's request handler, which has no try/catch of its own
+          // -- res.end() never gets called, and the client's fetch just
+          // hangs indefinitely instead of failing visibly.
+          console.error("[call/start]", e.message);
+          return sendJson(res, 502, { error: "Could not start the call. Try again in a moment." });
         }
-        const calls = readJson(CALLS_FILE, []);
-        const room = await createDailyRoom(`call-${randomUUID()}`);
-        const call = {
-          id: randomUUID(), conversationId: convoId, initiatorId: user.id,
-          participantIds: [...convo.participantIds], joinedIds: [user.id], declinedIds: [],
-          status: "ringing", dailyRoomName: room.name, dailyRoomUrl: room.url,
-          createdAt: new Date().toISOString(), startedAt: null, endedAt: null,
-        };
-        calls.push(call);
-        writeJson(CALLS_FILE, calls);
-        const token = await createDailyMeetingToken(room.name, user.id, `${user.first} ${user.last}`, true);
-        return sendJson(res, 200, { call: publicCall(call), token });
       }
 
       const callActionMatch = sub.match(/^\/call\/([^/]+)\/(accept|decline|end)$/);
@@ -3744,8 +3754,13 @@ export async function handleChatRequest(req, res, url) {
           if (!call.joinedIds.includes(user.id)) call.joinedIds.push(user.id);
           if (call.status === "ringing" && call.joinedIds.length >= 2) { call.status = "active"; call.startedAt = new Date().toISOString(); }
           writeJson(CALLS_FILE, calls);
-          const token = await createDailyMeetingToken(call.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === call.initiatorId);
-          return sendJson(res, 200, { call: publicCall(call), token });
+          try {
+            const token = await createDailyMeetingToken(call.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === call.initiatorId);
+            return sendJson(res, 200, { call: publicCall(call), token });
+          } catch (e) {
+            console.error("[call/accept]", e.message);
+            return sendJson(res, 502, { error: "Could not join the call. Try again in a moment." });
+          }
         }
 
         if (action === "decline") {
