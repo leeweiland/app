@@ -77,11 +77,6 @@
   .progress-entry-info { flex: 1; min-width: 0; }
   .progress-entry-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); }
   .progress-entry-stats { font-weight: 700; font-size: .88rem; margin-top: 2px; }
-  /* ── Photo gallery grid (Nutrition Log's all-time meal photos) ── */
-  .photo-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 26px; }
-  .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.03); cursor: pointer; }
-  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .photo-thumb .photo-thumb-date { position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px; font-family: var(--font-secondary); font-size: .6rem; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
   .photo-thumb-del { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .85rem; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
   .photo-thumb-del:hover { color: #e74c3c; }
   /* ── Morph animation (Reports tab, top) ── */
@@ -245,10 +240,6 @@
       <div class="pra-h2" style="margin:24px 0 10px">History</div>
       <div id="foodEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">Nothing logged for this day yet.</div>
       <div id="foodEntriesList"></div>
-
-      <div class="pra-h2" style="margin:28px 0 10px">Photos</div>
-      <div id="foodPhotosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No meal photos yet.</div>
-      <div class="photo-gallery-grid" id="foodPhotoGallery"></div>
     </div>
 
     <div id="hubPanelPhysique" class="hub-panel">
@@ -382,7 +373,7 @@ function renderHubTabs(preserveActive) {
     loadPhysiqueHistory();
   }
   if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
-  if (activeHub === 'nutrition') { loadFoodEntries(); loadFoodPhotos(); }
+  if (activeHub === 'nutrition') loadFoodEntries();
   if (activeHub === 'reports') loadReport();
 }
 
@@ -580,7 +571,6 @@ document.getElementById('foodSaveBtn').onclick = async () => {
     document.getElementById('foodUploadPrompt').innerHTML = 'Tap to photograph your meal';
     document.getElementById('foodDescInput').value = '';
     loadFoodEntries();
-    loadFoodPhotos();
   } finally {
     document.getElementById('foodSpinner').style.display = 'none';
     document.getElementById('foodSaveBtn').disabled = false;
@@ -620,25 +610,6 @@ async function deleteFoodEntry(id) {
   try {
     await fetch(`/api/food-log/entries/${id}`, { method: 'DELETE' });
     loadFoodEntries();
-    loadFoodPhotos();
-  } catch {}
-}
-
-// All meal photos across every date, not just the selected day.
-async function loadFoodPhotos() {
-  try {
-    const r = await fetch('/api/food-log/photos');
-    if (!r.ok) return;
-    const { photos } = await r.json();
-    document.getElementById('foodPhotosEmpty').style.display = photos.length ? 'none' : 'block';
-    const grid = document.getElementById('foodPhotoGallery');
-    grid.innerHTML = photos.slice().reverse().map(p => {
-      const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      return `<div class="photo-thumb">
-        <img src="/api/food-log/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
-        <div class="photo-thumb-date">${date}</div>
-      </div>`;
-    }).join('');
   } catch {}
 }
 

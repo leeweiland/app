@@ -160,18 +160,6 @@ export async function handleFoodLogRequest(req, res, url) {
     return sendJson(res, 200, { entries, totals });
   }
 
-  // All photo-bearing entries across every date -- the Nutrition Log's photo
-  // history is not limited to whatever day happens to be selected.
-  if (req.method === "GET" && url.pathname === "/api/food-log/photos") {
-    const user = getSessionUser(req);
-    if (!user) return sendJson(res, 401, { error: "Not logged in" });
-    const byDate = readJson(LOG_FILE, {})[user.id] || {};
-    const photos = Object.values(byDate).flat()
-      .filter(e => e.driveFileId)
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    return sendJson(res, 200, { photos });
-  }
-
   const delMatch = url.pathname.match(/^\/api\/food-log\/entries\/([^/]+)$/);
   if (delMatch && req.method === "DELETE") {
     const user = getSessionUser(req);
