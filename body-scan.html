@@ -245,6 +245,10 @@
     <div id="hubPanelPhysique" class="hub-panel">
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
 
+      <div class="field-row" style="margin-bottom:14px">
+        <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="scanDate" type="date"/></div>
+      </div>
+
       <div class="pra-panel" style="padding:18px;margin-bottom:22px">
         <div class="pra-label" style="margin-bottom:6px">Physique Scan</div>
         <div class="pra-muted" id="checkinStatus" style="font-size:.8rem;margin-bottom:12px"></div>
@@ -527,6 +531,8 @@ let foodPhotoFile = null;
 document.getElementById('foodDate').valueAsDate = new Date();
 document.getElementById('foodDate').addEventListener('change', loadFoodEntries);
 
+document.getElementById('scanDate').valueAsDate = new Date();
+
 document.querySelectorAll('.food-mode-opt').forEach(opt => {
   opt.onclick = () => {
     document.querySelectorAll('.food-mode-opt').forEach(o => o.classList.remove('active'));
@@ -705,6 +711,8 @@ document.getElementById('analyzeBtn').onclick = async () => {
   const fd = new FormData();
   fd.append('photo', photoFile);
   fd.append('weightKg', weightKg);
+  const dateVal = document.getElementById('scanDate').value;
+  fd.append('createdAt', dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString());
 
   document.getElementById('spinner').style.display = 'block';
   document.getElementById('resultBox').style.display = 'none';

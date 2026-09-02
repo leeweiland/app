@@ -153,7 +153,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
         all[user.id].push({
           id: scanId,
           type: "body",
-          createdAt: new Date().toISOString(),
+          createdAt: fields.createdAt || new Date().toISOString(),
           bodyFatLowPct,
           bodyFatHighPct,
           refused,
@@ -179,7 +179,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
             ? (bodyFatLowPct + bodyFatHighPct) / 2 : null;
           recordWeightEntry(user.id, {
             weightKg: calorieInputs.weightKg, heightCm: calorieInputs.heightCm, bodyFatPct,
-            source: fields.weightKg ? "checkin" : "scan", scanId,
+            source: fields.weightKg ? "checkin" : "scan", scanId, createdAt: fields.createdAt || null,
           });
         }
       } catch (e) {
