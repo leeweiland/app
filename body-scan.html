@@ -199,6 +199,7 @@
     </div>
 
     <div id="hubPanelNutrition" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Fuel Like A Superhuman</div>
       <div class="pra-muted profile-summary-line" id="nutritionProfileSummary"></div>
 
       <div class="field-row" style="margin-bottom:14px">
@@ -243,6 +244,7 @@
     </div>
 
     <div id="hubPanelPhysique" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Build A Powerful Physique</div>
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
 
       <div class="field-row" style="margin-bottom:14px">
@@ -288,6 +290,7 @@
     </div>
 
     <div id="hubPanelReports" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Transform Into A Strength Ninja</div>
       <div class="pra-muted profile-summary-line" id="reportsProfileSummary"></div>
 
       <div id="photoAnimSection" style="display:none">
@@ -355,7 +358,7 @@ function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 1
 
 // ── Hub tabs: order + active tab are computed, not fixed in HTML -- Profile
 // leads until it's complete, then drops to the end and Nutrition Log leads. ──
-const HUB_LABELS = { profile: 'Profile', nutrition: 'Nutrition Log', physique: 'Physique Scan', reports: 'Reports' };
+const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', reports: 'Reports' };
 let profileComplete = false;
 let activeHub = 'profile';
 let physiqueHistoryLoaded = false;
