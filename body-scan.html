@@ -314,6 +314,22 @@
         <button class="report-nav-btn" id="reportNextBtn">›</button>
       </div>
 
+      <div class="pra-panel" style="padding:16px;margin:0 0 20px">
+        <div class="totals-cal-row">
+          <span class="val" id="reportDaysLogged">0</span>
+          <span class="lab">Days Logged</span>
+        </div>
+        <div class="totals-cal-row" style="border-bottom:none;margin-bottom:0;padding-bottom:0">
+          <span class="val" id="reportAvgCals">0</span>
+          <span class="lab">Avg Calories/Day</span>
+        </div>
+        <div class="totals-macro-row" style="margin-top:14px">
+          <div class="macro-cell"><span class="val" id="reportAvgProtein">0g</span><span class="lab">Avg Protein/Day</span></div>
+          <div class="macro-cell"><span class="val" id="reportAvgFat">0g</span><span class="lab">Avg Fat/Day</span></div>
+          <div class="macro-cell"><span class="val" id="reportAvgCarb">0g</span><span class="lab">Avg Carbs/Day</span></div>
+        </div>
+      </div>
+
       <div class="report-section-title">Weight</div>
       <div class="pra-panel weight-chart-wrap">
         <svg id="reportWeightChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
@@ -327,15 +343,6 @@
       <div class="report-section-title">Body Fat %</div>
       <div class="pra-panel weight-chart-wrap">
         <svg id="reportBodyFatChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
-      </div>
-
-      <div class="report-section-title">Nutrition</div>
-      <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
-        <div class="macro-tile"><div class="val" id="reportAvgCals">0</div><div class="lab">Avg Calories/Day</div></div>
-        <div class="macro-tile"><div class="val" id="reportAvgProtein">0g</div><div class="lab">Avg Protein/Day</div></div>
-        <div class="macro-tile"><div class="val" id="reportAvgFat">0g</div><div class="lab">Avg Fat/Day</div></div>
-        <div class="macro-tile"><div class="val" id="reportAvgCarb">0g</div><div class="lab">Avg Carbs/Day</div></div>
-        <div class="macro-tile"><div class="val" id="reportDaysLogged">0</div><div class="lab">Days Logged</div></div>
       </div>
     </div>
   </div>
