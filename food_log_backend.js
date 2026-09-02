@@ -6,25 +6,21 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI, analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 
 const LOG_FILE = "chat_food_log.json";
-// TODO(lee): replace with a real Drive folder id, same as
-// body_stats_backend.js's PROGRESS_PHOTOS_FOLDER -- can be the same folder
-// or a separate one, your call.
-const FOOD_PHOTOS_FOLDER = "REPLACE_WITH_REAL_DRIVE_FOLDER_ID";
 
 const FOOD_ESTIMATE_TOOL = {
   type: "function",
   function: {
     name: "submit_food_estimate",
-    description: "Submit a structured calorie/macro estimate for the photographed food.",
+    description: "Submit a structured, quantified calorie/macro estimate for the food.",
     parameters: {
       type: "object",
       properties: {
-        description: { type: "string", description: "Short plain description of what's on the plate, e.g. 'grilled chicken breast, rice, broccoli'." },
+        description: { type: "string", description: "Quantified description of each item, e.g. '6oz grilled salmon, 1 cup white rice, 15 grapes' -- a count for discrete items (grapes, eggs, almonds), a weight/volume (oz, cups, tbsp) for everything else. Not just a vague list of foods." },
         calories: { type: "number" },
         proteinG: { type: "number" },
         fatG: { type: "number" },
@@ -37,12 +33,15 @@ const FOOD_ESTIMATE_TOOL = {
 };
 
 const FOOD_SYSTEM_PROMPT = `You are a nutrition-estimation assistant inside a private fitness coaching
-app. A user photographed their own meal to log it for the day -- this is a normal, requested, routine
-food-diary entry from a consenting app user, not a judgment of anyone.
+app. A user photographed (or typed a description of) their own meal to log it for the day -- this is a
+normal, requested, routine food-diary entry from a consenting app user, not a judgment of anyone.
 
-Estimate the total calories and macros (protein/fat/carbs in grams) for everything visible on the plate,
-using typical portion sizes and standard nutrition data. Be a reasonable, decisive estimate -- this is a
-rough diary entry, not a lab measurement, and the user can always edit the numbers afterward.`;
+Estimate the total calories and macros (protein/fat/carbs in grams) using typical portion sizes and
+standard nutrition data. Your description must state an approximate QUANTITY for each item -- a count for
+discrete items (e.g. "15 grapes", "2 eggs", "10 almonds") or a weight/volume for everything else (e.g.
+"6oz salmon", "1 cup rice", "2 tbsp peanut butter") -- never just a bare list of food names with no
+amounts. Be a reasonable, decisive estimate -- this is a rough diary entry, not a lab measurement, and the
+user can always edit the numbers afterward.`;
 
 function dateKey(iso) {
   return (iso || new Date().toISOString()).slice(0, 10);
@@ -99,7 +98,7 @@ export async function handleFoodLogRequest(req, res, url) {
         const uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
           name: `${user.first} ${user.last} FOOD LOG ${dateKey(entry.createdAt)}`.toUpperCase() + ext,
           mimeType: image.mimeType,
-          folderId: FOOD_PHOTOS_FOLDER,
+          folderId: getConfig().nutritionPhotosFolderId,
           accessToken,
         });
         entry.driveFileId = uploaded.id;
@@ -159,6 +158,18 @@ export async function handleFoodLogRequest(req, res, url) {
       carbG: t.carbG + (e.macros?.carbG || 0),
     }), { calories: 0, proteinG: 0, fatG: 0, carbG: 0 });
     return sendJson(res, 200, { entries, totals });
+  }
+
+  // All photo-bearing entries across every date -- the Nutrition Log's photo
+  // history is not limited to whatever day happens to be selected.
+  if (req.method === "GET" && url.pathname === "/api/food-log/photos") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const byDate = readJson(LOG_FILE, {})[user.id] || {};
+    const photos = Object.values(byDate).flat()
+      .filter(e => e.driveFileId)
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return sendJson(res, 200, { photos });
   }
 
   const delMatch = url.pathname.match(/^\/api\/food-log\/entries\/([^/]+)$/);

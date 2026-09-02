@@ -7,7 +7,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 import { recordWeightEntry, getLatestWeightKg } from "./body_stats_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
@@ -15,7 +15,6 @@ import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.j
 
 const SCANS_FILE = "chat_body_scans.json";
 const PROFILE_FILE = "chat_body_profile.json";
-const SCAN_PHOTOS_FOLDER = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
 
 // Forces structured output (a body-fat range as actual numbers, not text to
 // regex out of a formatted line) via a tool call. No coaching-email content
@@ -138,7 +137,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
       const uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
         name: `${userName} BODY SCAN`.toUpperCase() + ext,
         mimeType: image.mimeType,
-        folderId: SCAN_PHOTOS_FOLDER,
+        folderId: getConfig().bodyScanPhotosFolderId,
         accessToken,
       });
       driveFileId = uploaded.id;

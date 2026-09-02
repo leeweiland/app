@@ -5,19 +5,13 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig } from "./chat_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
 
 const STATS_FILE = "chat_body_stats.json";
 const PHOTOS_FILE = "chat_progress_photos.json";
 const PROFILE_FILE = "chat_body_profile.json";
-// TODO(lee): replace with a real Drive folder id once created and shared
-// with the GOOGLE_REFRESH_TOKEN_PRA account -- same pattern as
-// body_analysis_backend.js's SCAN_PHOTOS_FOLDER. Uploads fail loudly (400)
-// until this is a real folder, rather than silently saving an unusable
-// photo-less record.
-const PROGRESS_PHOTOS_FOLDER = "REPLACE_WITH_REAL_DRIVE_FOLDER_ID";
 
 // Called by body_analysis_backend.js (and, later, progress-photo uploads
 // that include a weigh-in) -- not an HTTP route, just a shared write path.
@@ -175,7 +169,7 @@ export async function handleBodyStatsRequest(req, res, url) {
       uploaded = await uploadStreamToDrive(Readable.from(image.buffer), {
         name: `${user.first} ${user.last} PROGRESS PHOTO ${date}`.toUpperCase() + ext,
         mimeType: image.mimeType,
-        folderId: PROGRESS_PHOTOS_FOLDER,
+        folderId: getConfig().bodyScanPhotosFolderId,
         accessToken,
       });
     } catch (e) {

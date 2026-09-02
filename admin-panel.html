@@ -157,6 +157,14 @@
         <input class="pra-input" id="callRecordingsFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
+        <label class="pra-label">Physique Builder — Body Scan Photos Drive Folder ID (scan photos + progress photos)</label>
+        <input class="pra-input" id="bodyScanPhotosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Physique Builder — Nutrition Log Photos Drive Folder ID (meal photos)</label>
+        <input class="pra-input" id="nutritionPhotosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -928,6 +936,8 @@ async function loadConfig() {
   document.getElementById('intakeFormsFolderId').value = d.intakeFormsFolderId || '';
   document.getElementById('clientNotesFolderId').value = d.clientNotesFolderId || '';
   document.getElementById('callRecordingsFolderId').value = d.callRecordingsFolderId || '';
+  document.getElementById('bodyScanPhotosFolderId').value = d.bodyScanPhotosFolderId || '';
+  document.getElementById('nutritionPhotosFolderId').value = d.nutritionPhotosFolderId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -1048,6 +1058,8 @@ async function saveConfig() {
       intakeFormsFolderId: document.getElementById('intakeFormsFolderId').value.trim(),
       clientNotesFolderId: document.getElementById('clientNotesFolderId').value.trim(),
       callRecordingsFolderId: document.getElementById('callRecordingsFolderId').value.trim(),
+      bodyScanPhotosFolderId: document.getElementById('bodyScanPhotosFolderId').value.trim(),
+      nutritionPhotosFolderId: document.getElementById('nutritionPhotosFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });

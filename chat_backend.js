@@ -187,7 +187,7 @@ const DEFAULT_APPOINTMENTS_CONFIG = {
   messengerReminderTemplate: "Reminder: your session with {{coachName}} is {{date}} at {{time}} ({{duration}} min).",
 };
 
-function getConfig() {
+export function getConfig() {
   const cfg = readJson(CONFIG_FILE, {
     profilePhotosFolderId: "", chatImagesFolderId: "", chatVideosFolderId: "",
     trainingProtocolFolderId: "",
@@ -218,22 +218,30 @@ function getConfig() {
     // Where finished video-call recordings get archived once Daily reports
     // them ready — see archiveCallRecording().
     callRecordingsFolderId: "",
+    // Physique Builder (body_analysis_backend.js/body_stats_backend.js/
+    // food_log_backend.js) -- was hardcoded per-file before this setting
+    // existed; bodyScanPhotosFolderId also backs the standalone "progress
+    // photo" quick-add (same category of photo, one folder for both).
+    bodyScanPhotosFolderId: "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw",
+    nutritionPhotosFolderId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
-  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId"].forEach(k => {
+  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId"].forEach(k => {
     if (cfg[k]) cfg[k] = extractDriveFolderId(cfg[k]);
   });
   if (!cfg.trainingProtocolVideoLibraryFolderId) cfg.trainingProtocolVideoLibraryFolderId = "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX";
   if (!cfg.powerbaticsVideosFolderId) cfg.powerbaticsVideosFolderId = "1Es9fbvFRx7EuFiZu9t-X8pmZXGigf_wX";
   if (!cfg.intakeFormsFolderId) cfg.intakeFormsFolderId = "1He6NLZU0g9YNiG87C8Vhn2AKfrT6Cz-j";
   if (!cfg.clientNotesFolderId) cfg.clientNotesFolderId = "1fOczxxstyKr9oaBnDvo4cDRhpgl_CWxG";
-  // No non-empty default to fall back to (unlike the two above) — just
+  if (!cfg.bodyScanPhotosFolderId) cfg.bodyScanPhotosFolderId = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
+  // No non-empty default to fall back to (unlike the ones above) — just
   // ensures the key exists on configs saved before this feature existed, so
   // it isn't silently `undefined` and shows up as an empty field in the
   // admin panel rather than never appearing in the response at all.
   if (cfg.favoritesFolderId === undefined) cfg.favoritesFolderId = "";
   if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
+  if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
@@ -2870,7 +2878,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2882,6 +2890,8 @@ export async function handleChatRequest(req, res, url) {
         if (intakeFormsFolderId !== undefined) cfg.intakeFormsFolderId = intakeFormsFolderId;
         if (clientNotesFolderId !== undefined) cfg.clientNotesFolderId = clientNotesFolderId;
         if (callRecordingsFolderId !== undefined) cfg.callRecordingsFolderId = callRecordingsFolderId;
+        if (bodyScanPhotosFolderId !== undefined) cfg.bodyScanPhotosFolderId = bodyScanPhotosFolderId;
+        if (nutritionPhotosFolderId !== undefined) cfg.nutritionPhotosFolderId = nutritionPhotosFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);

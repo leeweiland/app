@@ -68,14 +68,23 @@
   .stat-entry-weight { font-weight: 700; font-size: .92rem; width: 70px; flex-shrink: 0; }
   .stat-entry-note { flex: 1; font-size: .8rem; color: var(--pra-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stat-entry-source { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); flex-shrink: 0; }
-  /* ── Physique Scan tab: merged photo history + morph animation ── */
+  /* ── Profile summary line (shown on Physique Scan / Nutrition Log / Reports) ── */
   .profile-summary-line { font-size: .8rem; margin-bottom: 14px; }
-  .link-btn { background: none; border: none; color: var(--pra-blue); font-size: .82rem; cursor: pointer; text-decoration: underline; display: block; margin: 0 auto 14px; padding: 6px; }
+  .profile-summary-line a { color: var(--pra-blue); text-decoration: underline; cursor: pointer; }
+  /* ── Progress (photo + weight + bodyfat history) ── */
+  .progress-entry-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .progress-entry-thumb { width: 58px; height: 58px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+  .progress-entry-info { flex: 1; min-width: 0; }
+  .progress-entry-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); }
+  .progress-entry-stats { font-weight: 700; font-size: .88rem; margin-top: 2px; }
+  /* ── Photo gallery grid (Nutrition Log's all-time meal photos) ── */
   .photo-gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 26px; }
   .photo-thumb { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.03); cursor: pointer; }
   .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .photo-thumb .photo-thumb-date { position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 6px; font-family: var(--font-secondary); font-size: .6rem; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
-  .photo-thumb-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: .75rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .photo-thumb-del { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .85rem; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+  .photo-thumb-del:hover { color: #e74c3c; }
+  /* ── Morph animation (Reports tab, top) ── */
   .photo-anim-wrap { position: relative; width: 100%; aspect-ratio: 3/4; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 14px; }
   .photo-anim-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity .3s linear; }
   .photo-anim-controls { display: flex; align-items: center; gap: 10px; }
@@ -195,6 +204,8 @@
     </div>
 
     <div id="hubPanelNutrition" class="hub-panel">
+      <div class="pra-muted profile-summary-line" id="nutritionProfileSummary"></div>
+
       <div class="field-row" style="margin-bottom:14px">
         <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="foodDate" type="date"/></div>
       </div>
@@ -219,7 +230,7 @@
         </div>
 
         <div class="upload-box" id="foodUploadBox" style="padding:20px">
-          <div id="foodUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to photograph or upload your meal</div>
+          <div id="foodUploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to photograph your meal</div>
           <input type="file" id="foodPhotoInput" accept="image/*" capture="environment" style="display:none"/>
         </div>
 
@@ -234,6 +245,10 @@
       <div class="pra-h2" style="margin:24px 0 10px">History</div>
       <div id="foodEntriesEmpty" class="pra-muted" style="font-size:.85rem;display:none">Nothing logged for this day yet.</div>
       <div id="foodEntriesList"></div>
+
+      <div class="pra-h2" style="margin:28px 0 10px">Photos</div>
+      <div id="foodPhotosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No meal photos yet.</div>
+      <div class="photo-gallery-grid" id="foodPhotoGallery"></div>
     </div>
 
     <div id="hubPanelPhysique" class="hub-panel">
@@ -244,7 +259,7 @@
         <div class="pra-muted" id="checkinStatus" style="font-size:.8rem;margin-bottom:12px"></div>
 
         <div class="upload-box" id="uploadBox">
-          <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to upload a photo</div>
+          <div id="uploadPrompt"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px;overflow:visible;display:inline-block;vertical-align:middle;margin-bottom:6px"><rect x="2" y="7" width="20" height="14" rx="2" stroke="#fff" stroke-width="1.5"/><path d="M16 7l-1.5-3h-5L8 7" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" stroke="#009bff" stroke-width="1.5"/><circle cx="12" cy="14" r="1.2" fill="#009bff"/></svg><br>Tap to take a photo</div>
           <button class="clear-photo-btn" id="clearPhotoBtn" title="Remove photo">✕</button>
           <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"/>
         </div>
@@ -267,9 +282,18 @@
 
       <div class="pra-panel" id="resultBox"></div>
 
-      <div class="pra-h2" style="margin:28px 0 10px">Progress Photos</div>
-      <button class="link-btn" id="addProgressPhotoBtn">+ Add a progress photo (no AI analysis)</button>
-      <input type="file" id="photoInputPhotos" accept="image/*" capture="environment" style="display:none"/>
+      <div class="pra-h2" style="margin:28px 0 10px">Progress</div>
+      <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No photos yet — take one above to start your progress history.</div>
+      <div id="progressList"></div>
+
+      <div id="pastScans" style="display:none">
+        <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
+        <div id="pastScansList"></div>
+      </div>
+    </div>
+
+    <div id="hubPanelReports" class="hub-panel">
+      <div class="pra-muted profile-summary-line" id="reportsProfileSummary"></div>
 
       <div id="photoAnimSection" style="display:none">
         <div class="photo-anim-wrap">
@@ -283,16 +307,6 @@
         <div class="photo-anim-label" id="animDateLabel"></div>
       </div>
 
-      <div id="photosEmpty" class="pra-muted" style="font-size:.85rem;display:none">No photos yet — analyze one above to start your progress history.</div>
-      <div class="photo-gallery-grid" id="photoGalleryGrid"></div>
-
-      <div id="pastScans" style="display:none">
-        <div class="pra-h2" style="margin-bottom:10px">Previous Scans</div>
-        <div id="pastScansList"></div>
-      </div>
-    </div>
-
-    <div id="hubPanelReports" class="hub-panel">
       <div class="type-toggle">
         <div class="period-tab active" data-period="daily">Daily</div>
         <div class="period-tab" data-period="weekly">Weekly</div>
@@ -323,14 +337,10 @@
       <div class="report-section-title">Nutrition</div>
       <div class="pra-panel macro-grid" style="margin:0 0 4px;padding:14px">
         <div class="macro-tile"><div class="val" id="reportAvgCals">0</div><div class="lab">Avg Calories/Day</div></div>
-        <div class="macro-tile"><div class="val" id="reportAvgProtein">0g</div><div class="lab">Avg Protein</div></div>
+        <div class="macro-tile"><div class="val" id="reportAvgProtein">0g</div><div class="lab">Avg Protein/Day</div></div>
+        <div class="macro-tile"><div class="val" id="reportAvgFat">0g</div><div class="lab">Avg Fat/Day</div></div>
+        <div class="macro-tile"><div class="val" id="reportAvgCarb">0g</div><div class="lab">Avg Carbs/Day</div></div>
         <div class="macro-tile"><div class="val" id="reportDaysLogged">0</div><div class="lab">Days Logged</div></div>
-      </div>
-
-      <div class="report-section-title">Photos &amp; Scans</div>
-      <div class="pra-panel macro-grid" style="margin:0;padding:14px">
-        <div class="macro-tile"><div class="val" id="reportPhotoCount">0</div><div class="lab">Progress Photos</div></div>
-        <div class="macro-tile"><div class="val" id="reportScanCount">0</div><div class="lab">Scans</div></div>
       </div>
     </div>
   </div>
@@ -346,7 +356,7 @@ function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 1
 const HUB_LABELS = { profile: 'Profile', nutrition: 'Nutrition Log', physique: 'Physique Scan', reports: 'Reports' };
 let profileComplete = false;
 let activeHub = 'profile';
-let physiqueLoaded = false;
+let physiqueHistoryLoaded = false;
 
 function computeProfileComplete(d) {
   return !!(d.profile?.heightCm && d.profile?.age && d.profile?.sex && d.profile?.goalWeightKg
@@ -364,8 +374,15 @@ function renderHubTabs(preserveActive) {
   });
   document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('hubPanel' + activeHub[0].toUpperCase() + activeHub.slice(1)).classList.add('active');
-  if (activeHub === 'physique' && !physiqueLoaded) { physiqueLoaded = true; loadPhysiqueHistory(); loadPastScans(); loadCheckinStatus(); }
-  if (activeHub === 'nutrition') loadFoodEntries();
+  // The merged scan+photo history drives both the Physique tab's Progress
+  // list and the Reports tab's morph animation -- load it once, whichever
+  // of the two tabs is visited first.
+  if ((activeHub === 'physique' || activeHub === 'reports') && !physiqueHistoryLoaded) {
+    physiqueHistoryLoaded = true;
+    loadPhysiqueHistory();
+  }
+  if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
+  if (activeHub === 'nutrition') { loadFoodEntries(); loadFoodPhotos(); }
   if (activeHub === 'reports') loadReport();
 }
 
@@ -423,15 +440,29 @@ function showEstimate(d) {
   grid.style.display = 'grid';
 }
 
-function updatePhysiqueProfileSummary(d) {
-  const el = document.getElementById('physiqueProfileSummary');
+// Shown on Nutrition Log, Physique Scan, and Reports -- same line, same
+// "edit on Profile" link (switches to the Profile tab in place) everywhere.
+function profileSummaryHtml(d) {
   if (!d.profile?.heightCm || !d.weightKg) {
-    el.textContent = 'Fill in your profile to get a personalized calorie/macro plan with your scan.';
-    return;
+    return `Fill in your profile to get a personalized calorie/macro plan. <a class="profile-summary-link" href="#">Go to Profile</a>`;
   }
   const totalIn = Math.round(d.profile.heightCm / 2.54);
   const ftin = `${Math.floor(totalIn / 12)}'${totalIn % 12}"`;
-  el.textContent = `Using: ${ftin}, ${kgToLbsVal(d.weightKg)} lbs, ${d.profile.age || '—'}, ${d.profile.sex || '—'}, ${d.profile.activityLevel || '—'}, ${d.profile.goal || '—'} — edit on Profile`;
+  const parts = [ftin, `${kgToLbsVal(d.weightKg)} lbs`, d.profile.age || '—', d.profile.sex || '—', d.profile.activityLevel || '—'];
+  return `${escapeHtml(parts.join(', '))} — Goal: ${escapeHtml(d.profile.goal || '—')} — edit on <a class="profile-summary-link" href="#">Profile</a>`;
+}
+function renderProfileSummaryInto(elId, d) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = profileSummaryHtml(d);
+  el.querySelectorAll('.profile-summary-link').forEach(a => {
+    a.onclick = (e) => { e.preventDefault(); activeHub = 'profile'; renderHubTabs(true); };
+  });
+}
+function updateProfileSummaries(d) {
+  renderProfileSummaryInto('physiqueProfileSummary', d);
+  renderProfileSummaryInto('nutritionProfileSummary', d);
+  renderProfileSummaryInto('reportsProfileSummary', d);
 }
 
 async function loadProfile() {
@@ -461,7 +492,7 @@ async function loadProfile() {
     }
     profileComplete = computeProfileComplete(d);
     showEstimate(d);
-    updatePhysiqueProfileSummary(d);
+    updateProfileSummaries(d);
   } catch {}
 }
 
@@ -484,17 +515,15 @@ document.getElementById('profileSaveBtn').onclick = async () => {
     const d = await r.json();
     if (!r.ok) { alert(d.error || 'Save failed'); return; }
     showEstimate(d);
-    updatePhysiqueProfileSummary(d);
+    updateProfileSummaries(d);
     const wasComplete = profileComplete;
     profileComplete = computeProfileComplete(d);
     if (profileComplete && !wasComplete) {
       // Graduation moment: profile drops to the last tab, Nutrition Log
       // becomes the lead tab the user lands on going forward.
       activeHub = 'nutrition';
-      renderHubTabs(true);
-    } else {
-      renderHubTabs(true);
     }
+    renderHubTabs(true);
   } finally {
     btn.disabled = false;
   }
@@ -529,7 +558,7 @@ document.getElementById('foodPhotoInput').addEventListener('change', (e) => {
 document.getElementById('foodSaveBtn').onclick = async () => {
   const fd = new FormData();
   if (foodMode === 'photo') {
-    if (!foodPhotoFile) { alert('Take or upload a photo first, or switch to Manual.'); return; }
+    if (!foodPhotoFile) { alert('Take a photo first, or switch to Manual.'); return; }
     fd.append('photo', foodPhotoFile);
   } else {
     const desc = document.getElementById('foodDescInput').value.trim();
@@ -548,9 +577,10 @@ document.getElementById('foodSaveBtn').onclick = async () => {
     if (!r.ok) { alert(d.error || 'Log failed'); return; }
     foodPhotoFile = null;
     document.getElementById('foodPhotoInput').value = '';
-    document.getElementById('foodUploadPrompt').innerHTML = 'Tap to photograph or upload your meal';
+    document.getElementById('foodUploadPrompt').innerHTML = 'Tap to photograph your meal';
     document.getElementById('foodDescInput').value = '';
     loadFoodEntries();
+    loadFoodPhotos();
   } finally {
     document.getElementById('foodSpinner').style.display = 'none';
     document.getElementById('foodSaveBtn').disabled = false;
@@ -590,6 +620,25 @@ async function deleteFoodEntry(id) {
   try {
     await fetch(`/api/food-log/entries/${id}`, { method: 'DELETE' });
     loadFoodEntries();
+    loadFoodPhotos();
+  } catch {}
+}
+
+// All meal photos across every date, not just the selected day.
+async function loadFoodPhotos() {
+  try {
+    const r = await fetch('/api/food-log/photos');
+    if (!r.ok) return;
+    const { photos } = await r.json();
+    document.getElementById('foodPhotosEmpty').style.display = photos.length ? 'none' : 'block';
+    const grid = document.getElementById('foodPhotoGallery');
+    grid.innerHTML = photos.slice().reverse().map(p => {
+      const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `<div class="photo-thumb">
+        <img src="/api/food-log/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
+        <div class="photo-thumb-date">${date}</div>
+      </div>`;
+    }).join('');
   } catch {}
 }
 
@@ -671,7 +720,7 @@ document.getElementById('clearPhotoBtn').onclick = (e) => {
   photoDataUrl = null;
   lastResult = null;
   document.getElementById('photoInput').value = '';
-  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to upload a photo';
+  document.getElementById('uploadPrompt').innerHTML = '📷 Tap to take a photo';
   document.getElementById('clearPhotoBtn').style.display = 'none';
   document.getElementById('resultBox').style.display = 'none';
   document.getElementById('resultBox').innerHTML = '';
@@ -679,7 +728,7 @@ document.getElementById('clearPhotoBtn').onclick = (e) => {
 };
 
 document.getElementById('analyzeBtn').onclick = async () => {
-  if (!photoFile) { alert('Upload a photo first.'); return; }
+  if (!photoFile) { alert('Take a photo first.'); return; }
   const weightKg = getScanWeightKg();
   if (!weightKg) { alert('Enter your weight.'); return; }
   const fd = new FormData();
@@ -796,83 +845,77 @@ async function deleteScan(id, card) {
     if (!document.getElementById('pastScansList').children.length) {
       document.getElementById('pastScans').style.display = 'none';
     }
-    loadPhysiqueHistory(); // a scan's photo also drops out of the merged gallery/animation
+    loadPhysiqueHistory(); // a scan's photo also drops out of the merged history/animation
   } catch {}
 }
 
-// ── Physique Scan: merged photo history (scans + standalone progress
-// photos + check-in photos) + morph animation ──────────────────────────
-let physiqueHistory = []; // ascending by createdAt, {id, rawId, createdAt, driveFileId, source}
+// ── Physique Scan / Reports: merged photo history (scans + any legacy
+// standalone progress photos) driving both the Progress list (Physique tab)
+// and the morph animation (Reports tab, top) ────────────────────────────
+let physiqueHistory = []; // ascending by createdAt, {id, rawId, createdAt, driveFileId, source, weightKg, bodyFatLowPct, bodyFatHighPct}
 
 async function loadPhysiqueHistory() {
   try {
-    const [scansR, photosR] = await Promise.all([
-      fetch('/api/body-scan/scans'), fetch('/api/body-stats/photos'),
+    const [scansR, photosR, statsR] = await Promise.all([
+      fetch('/api/body-scan/scans'), fetch('/api/body-stats/photos'), fetch('/api/body-stats/entries'),
     ]);
     const scansD = scansR.ok ? await scansR.json() : { scans: [] };
     const photosD = photosR.ok ? await photosR.json() : { photos: [] };
+    const statsD = statsR.ok ? await statsR.json() : { entries: [] };
+    // Every scan's weight lives in chat_body_stats.json (linked by scanId),
+    // not on the scan record itself -- correlate them for the Progress list.
+    const weightByScanId = {};
+    (statsD.entries || []).forEach(e => { if (e.scanId) weightByScanId[e.scanId] = e.weightKg; });
     const fromScans = (scansD.scans || []).filter(s => s.driveFileId).map(s => ({
       id: 's-' + s.id, rawId: s.id, createdAt: s.createdAt, driveFileId: s.driveFileId, source: 'scan',
+      weightKg: weightByScanId[s.id] ?? null, bodyFatLowPct: s.bodyFatLowPct, bodyFatHighPct: s.bodyFatHighPct,
     }));
+    // Legacy standalone progress photos (the old "+ Add a progress photo"
+    // action, removed now that Analyze always saves the photo) -- keep
+    // showing any that already exist.
     const fromPhotos = (photosD.photos || []).filter(p => p.driveFileId).map(p => ({
       id: 'p-' + p.id, rawId: p.id, createdAt: p.createdAt, driveFileId: p.driveFileId, source: 'photo',
+      weightKg: p.weightKg ?? null, bodyFatLowPct: null, bodyFatHighPct: null,
     }));
     physiqueHistory = [...fromScans, ...fromPhotos].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    renderPhysiqueGallery();
+    renderProgressList();
+    setupPhysiqueAnimation();
   } catch {}
 }
-
-document.getElementById('addProgressPhotoBtn').onclick = () => document.getElementById('photoInputPhotos').click();
-document.getElementById('photoInputPhotos').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('photo', file);
-  const btn = document.getElementById('addProgressPhotoBtn');
-  const prevText = btn.textContent;
-  btn.textContent = 'Uploading…';
-  try {
-    const r = await fetch('/api/body-stats/photos', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Upload failed'); return; }
-    physiqueHistory.push({ id: 'p-' + d.entry.id, rawId: d.entry.id, createdAt: d.entry.createdAt, driveFileId: d.entry.driveFileId, source: 'photo' });
-    physiqueHistory.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    renderPhysiqueGallery();
-  } finally {
-    btn.textContent = prevText;
-    document.getElementById('photoInputPhotos').value = '';
-  }
-});
 
 async function deletePhysiqueHistoryItem(item) {
   try {
     const url = item.source === 'scan' ? `/api/body-scan/scans/${item.rawId}` : `/api/body-stats/photos/${item.rawId}`;
     await fetch(url, { method: 'DELETE' });
     physiqueHistory = physiqueHistory.filter(p => p.id !== item.id);
-    renderPhysiqueGallery();
+    renderProgressList();
+    setupPhysiqueAnimation();
     if (item.source === 'scan') loadPastScans();
   } catch {}
 }
 
-function renderPhysiqueGallery() {
+function renderProgressList() {
   document.getElementById('photosEmpty').style.display = physiqueHistory.length ? 'none' : 'block';
-  document.getElementById('photoAnimSection').style.display = physiqueHistory.length >= 2 ? 'block' : 'none';
-  const grid = document.getElementById('photoGalleryGrid');
-  // Most recent first for the grid; the animation always plays in actual
-  // date order regardless of grid order.
-  grid.innerHTML = physiqueHistory.slice().reverse().map(p => {
-    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `<div class="photo-thumb" data-id="${escapeHtml(p.id)}">
-      <img src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
-      <div class="photo-thumb-date">${date}</div>
+  const list = document.getElementById('progressList');
+  const unit = weightDisplayUnit();
+  list.innerHTML = physiqueHistory.slice().reverse().map(p => {
+    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const bits = [];
+    if (p.weightKg != null) bits.push(`${kgToDisplay(p.weightKg)} ${unit}`);
+    if (p.bodyFatLowPct != null && p.bodyFatHighPct != null) bits.push(`${p.bodyFatLowPct}-${p.bodyFatHighPct}% BF`);
+    return `<div class="pra-panel progress-entry-row" data-id="${escapeHtml(p.id)}">
+      <img class="progress-entry-thumb" src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
+      <div class="progress-entry-info">
+        <div class="progress-entry-date">${date}</div>
+        <div class="progress-entry-stats">${escapeHtml(bits.join(' · ') || '—')}</div>
+      </div>
       <button class="photo-thumb-del" title="Delete">✕</button>
     </div>`;
   }).join('');
-  grid.querySelectorAll('.photo-thumb').forEach(el => {
+  list.querySelectorAll('.progress-entry-row').forEach(el => {
     const item = physiqueHistory.find(p => p.id === el.dataset.id);
-    el.querySelector('.photo-thumb-del').onclick = (e) => { e.stopPropagation(); if (item) deletePhysiqueHistoryItem(item); };
+    el.querySelector('.photo-thumb-del').onclick = () => { if (item) deletePhysiqueHistoryItem(item); };
   });
-  setupPhysiqueAnimation();
 }
 
 // Auto-playing morph: two stacked <img> layers CSS-crossfaded (.3s, see
@@ -880,13 +923,15 @@ function renderPhysiqueGallery() {
 // fades the incoming photo in and the outgoing one out together.
 let animPlayTimer = null;
 function setupPhysiqueAnimation() {
+  const section = document.getElementById('photoAnimSection');
   const scrubber = document.getElementById('animScrubber');
   const layerA = document.getElementById('animLayerA');
   const layerB = document.getElementById('animLayerB');
   const label = document.getElementById('animDateLabel');
   const playBtn = document.getElementById('animPlayBtn');
   if (animPlayTimer) { clearInterval(animPlayTimer); animPlayTimer = null; }
-  if (physiqueHistory.length < 2) return;
+  if (physiqueHistory.length < 2) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
 
   scrubber.max = physiqueHistory.length - 1;
   let current = 0;
@@ -965,6 +1010,8 @@ async function loadReport() {
 
     document.getElementById('reportAvgCals').textContent = d.nutrition.avgCalories;
     document.getElementById('reportAvgProtein').textContent = d.nutrition.avgProteinG + 'g';
+    document.getElementById('reportAvgFat').textContent = d.nutrition.avgFatG + 'g';
+    document.getElementById('reportAvgCarb').textContent = d.nutrition.avgCarbG + 'g';
     document.getElementById('reportDaysLogged').textContent = d.nutrition.daysLogged;
 
     const unit = weightDisplayUnit();
@@ -972,9 +1019,6 @@ async function loadReport() {
       ? `${d.weight.deltaKg > 0 ? '+' : ''}${kgToDisplay(d.weight.deltaKg)} ${unit}` : '—';
     document.getElementById('reportWeightMin').textContent = d.weight.minKg != null ? `${kgToDisplay(d.weight.minKg)} ${unit}` : '—';
     document.getElementById('reportWeightMax').textContent = d.weight.maxKg != null ? `${kgToDisplay(d.weight.maxKg)} ${unit}` : '—';
-
-    document.getElementById('reportPhotoCount').textContent = d.photos.count;
-    document.getElementById('reportScanCount').textContent = d.scans.count;
 
     drawLineChart(document.getElementById('reportWeightChartSvg'), d.weight.entries, { getY: e => kgToDisplay(e.weightKg) });
     drawLineChart(document.getElementById('reportBodyFatChartSvg'), d.weight.entries.filter(e => e.bodyFatPct != null), {
