@@ -233,8 +233,11 @@
 
   // Second, bottom-anchored bar for the newer content sections — kept
   // separate from the top bar's core app nav.
+  // Temporary: Physique Builder is still under active development -- only
+  // this one account sees its nav icon until it's ready for everyone.
+  const DEV_ONLY_USER_ID = '76f3579b-ed30-46dd-928f-42a32d269dd2'; // lee@pacificrimathletics.com
   const BOTTOM_ICONS = [
-    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body Scan' },
+    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Body Scan', devOnly: true },
     { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
     { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
@@ -466,6 +469,10 @@
       // Skill levels are internal — coaches/admins only, same gate as the
       // /api/chat/levels* endpoints and levels.html itself.
       if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
+      // Temporary, while Body Scan is still being built out -- remove this
+      // gate (and the devOnly flag on its BOTTOM_ICONS entry above) once
+      // it's ready for everyone.
+      if (item.devOnly && myId !== DEV_ONLY_USER_ID) return;
       const a = document.createElement('a');
       a.className = 'cah-bottom-item' + (item.label ? ' cah-bottom-label' : '') + (!item.external && path === item.href ? ' active' : '');
       a.href = item.href;
