@@ -121,7 +121,7 @@
 
     <div id="viewingBanner" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,155,255,0.1);border:1px solid var(--pra-blue-dim);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:.82rem">
       <div>Viewing <strong id="viewingBannerName"></strong>'s Physique Builder — read only</div>
-      <button id="viewingBannerBackBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.8rem;text-decoration:underline;white-space:nowrap">Back to Search</button>
+      <button id="viewingBannerBackBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.8rem;text-decoration:underline;white-space:nowrap">Back to My Profile</button>
     </div>
 
     <div id="hubPanelProfile" class="hub-panel">
@@ -294,8 +294,8 @@
       <div class="pra-h2" style="margin-bottom:14px">Master Every Move</div>
       <div class="pra-muted profile-summary-line" id="movesProfileSummary"></div>
 
-      <div class="pra-h2" style="margin:20px 0 10px">Favorited Videos</div>
-      <div id="movesEmpty" class="pra-muted" style="font-size:.85rem;display:none">No favorited videos yet — once a coach favorites one of your videos, it shows up here.</div>
+      <div class="pra-h2" style="margin:20px 0 10px">Progress Videos</div>
+      <div id="movesEmpty" class="pra-muted" style="font-size:.85rem;display:none"></div>
       <div id="movesVideoList"></div>
     </div>
 
@@ -320,7 +320,7 @@
           <button id="reportsMontageRegenBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.72rem;white-space:nowrap;text-decoration:underline;padding:0">Regenerate</button>
         </div>
       </div>
-      <div class="pra-muted" id="reportsMontageEmpty" style="font-size:.78rem;display:none;margin-bottom:20px">No favorited media yet — once your coach favorites one of your photos or videos, a highlight reel shows up here.</div>
+      <div class="pra-muted" id="reportsMontageEmpty" style="font-size:.78rem;display:none;margin-bottom:20px"></div>
       <div class="pra-muted" id="reportsMontageLoading" style="font-size:.78rem;display:none;margin-bottom:20px">Building your highlight reel…</div>
 
       <div class="type-toggle">
@@ -433,28 +433,56 @@ function backToSelf() {
   reportsMontageLoaded = false;
   applyViewingMode();
   loadProfile();
-  activeHub = 'search';
+  activeHub = 'profile';
   renderHubTabs(true);
 }
 let userSearchDebounce = null;
-async function runUserSearch(q) {
+const USER_SEARCH_PAGE_SIZE = 20;
+let userSearchOffset = 0;
+let userSearchQuery = '';
+let userSearchHasMore = false;
+let userSearchLoading = false;
+
+// `append` -- false on a fresh search (new query, or first open of the
+// tab): replaces the list and resets pagination. true on a scroll-
+// triggered "load more": fetches the next page and appends to what's
+// already there instead of re-fetching everything from the top.
+async function runUserSearch(q, append) {
+  if (userSearchLoading) return;
+  if (!append) { userSearchOffset = 0; userSearchQuery = q; userSearchHasMore = false; }
+  userSearchLoading = true;
   const list = document.getElementById('searchResultsList');
   try {
-    const r = await fetch('/api/body-reports/search-users?q=' + encodeURIComponent(q));
+    const r = await fetch(`/api/body-reports/search-users?q=${encodeURIComponent(q)}&offset=${userSearchOffset}&limit=${USER_SEARCH_PAGE_SIZE}`);
     if (!r.ok) return;
     const d = await r.json();
-    list.innerHTML = d.users.map(u => {
+    userSearchHasMore = !!d.hasMore;
+    userSearchOffset += d.users.length;
+    const rowsHtml = d.users.map(u => {
       const name = `${u.first} ${u.last}`;
       return `<div class="pra-panel search-result-row" data-id="${u.id}" data-name="${escapeHtml(name)}">
         <div>${escapeHtml(name)}</div>
         <span class="pra-muted" style="font-size:.72rem;text-transform:uppercase">${escapeHtml(u.role)}</span>
       </div>`;
-    }).join('') || '<div class="pra-muted" style="font-size:.85rem">No matches.</div>';
+    }).join('');
+    if (append) list.insertAdjacentHTML('beforeend', rowsHtml);
+    else list.innerHTML = rowsHtml || '<div class="pra-muted" style="font-size:.85rem">No matches.</div>';
     list.querySelectorAll('.search-result-row').forEach(row => {
       row.onclick = () => switchViewingUser(row.dataset.id, row.dataset.name);
     });
-  } catch {}
+  } catch {} finally {
+    userSearchLoading = false;
+  }
 }
+// Scrolling near the bottom of the page while the Search tab is open loads
+// the next page -- only 20 shown at a time rather than the whole roster up
+// front.
+window.addEventListener('scroll', () => {
+  if (activeHub !== 'search' || !userSearchHasMore || userSearchLoading) return;
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) {
+    runUserSearch(userSearchQuery, true);
+  }
+});
 document.getElementById('searchInput').addEventListener('input', (e) => {
   clearTimeout(userSearchDebounce);
   const q = e.target.value;

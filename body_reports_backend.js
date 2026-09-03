@@ -53,13 +53,15 @@ export async function handleBodyReportsRequest(req, res, url) {
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
     const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+    const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
     let pool = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
     if (!isAdmin(user)) pool = pool.filter(u => !isStaff(u));
-    const matches = (q ? pool.filter(u => `${u.first} ${u.last}`.toLowerCase().includes(q)) : pool)
-      .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`))
-      .slice(0, 50)
+    const filtered = (q ? pool.filter(u => `${u.first} ${u.last}`.toLowerCase().includes(q)) : pool)
+      .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
+    const page = filtered.slice(offset, offset + limit)
       .map(u => ({ id: u.id, first: u.first, last: u.last, role: u.role }));
-    return sendJson(res, 200, { users: matches });
+    return sendJson(res, 200, { users: page, hasMore: offset + limit < filtered.length });
   }
 
   if (req.method !== "GET" || url.pathname !== "/api/body-reports/summary") return false;
