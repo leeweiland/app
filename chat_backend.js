@@ -229,8 +229,8 @@ export function getConfig() {
     // panel, not pasted like a Drive folder id) that a captured clip's
     // message gets posted into; Folder Id is where the clip itself is
     // saved in Drive, labeled with whatever the coach typed.
-    gymTrainingChannelId: "", gymTrainingFolderId: "",
-    gymLevelTestChannelId: "", gymLevelTestFolderId: "",
+    gymTrainingChannelId: "", gymTrainingFolderId: "1sxSvzkKarlK3QxrnGQufKwKrJ7yd1800",
+    gymLevelTestChannelId: "", gymLevelTestFolderId: "1jjtWE3ATlKwJ76qe6JbTWBX4s4O6w7_t",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
@@ -242,6 +242,8 @@ export function getConfig() {
   if (!cfg.intakeFormsFolderId) cfg.intakeFormsFolderId = "1He6NLZU0g9YNiG87C8Vhn2AKfrT6Cz-j";
   if (!cfg.clientNotesFolderId) cfg.clientNotesFolderId = "1fOczxxstyKr9oaBnDvo4cDRhpgl_CWxG";
   if (!cfg.bodyScanPhotosFolderId) cfg.bodyScanPhotosFolderId = "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw";
+  if (!cfg.gymTrainingFolderId) cfg.gymTrainingFolderId = "1sxSvzkKarlK3QxrnGQufKwKrJ7yd1800";
+  if (!cfg.gymLevelTestFolderId) cfg.gymLevelTestFolderId = "1jjtWE3ATlKwJ76qe6JbTWBX4s4O6w7_t";
   // No non-empty default to fall back to (unlike the ones above) — just
   // ensures the key exists on configs saved before this feature existed, so
   // it isn't silently `undefined` and shows up as an empty field in the
@@ -250,9 +252,7 @@ export function getConfig() {
   if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
   if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
-  if (cfg.gymTrainingFolderId === undefined) cfg.gymTrainingFolderId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
-  if (cfg.gymLevelTestFolderId === undefined) cfg.gymLevelTestFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
