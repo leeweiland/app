@@ -3671,7 +3671,8 @@ export async function handleChatRequest(req, res, url) {
         const unreadCount = convoMsgs.filter(m => m.senderId !== user.id && (!lastReadAt || new Date(m.createdAt) > new Date(lastReadAt))).length;
         return {
           ...c,
-          participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean),
+          participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean)
+            .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`)),
           // status mirrors what the per-thread /messages endpoint attaches
           // (see computeMessageStatus) — needed here too so the sidebar can
           // show a read-receipt tick in the unread-count badge's slot for

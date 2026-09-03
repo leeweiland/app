@@ -600,6 +600,8 @@
   .contact-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
   .contact-row:hover { background: rgba(255,255,255,0.04); }
   .contact-row input[type=checkbox] { margin-left: auto; }
+  .group-name-title-input { display: block; width: 100%; background: transparent; border: none; border-bottom: 1px dashed transparent; color: inherit; padding: 2px 0; outline: none; box-sizing: border-box; }
+  .group-name-title-input:hover, .group-name-title-input:focus { border-bottom-color: var(--pra-border); }
   .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   /* Cells are clickable wrappers that open the full lightbox instead of
      relying on native <video controls> at this thumbnail size — Chrome (and
@@ -750,6 +752,7 @@
           <div class="thread-head-icons" id="threadHeadIconsRow">
             <button class="icon-btn" id="startCallBtn" title="Video call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="#fff" stroke-width="1.6"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn" id="threadChannelBtn" title="Mark as channel" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 4L7 20" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M17 4l-2 16" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/><path d="M4 9h16" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M3.5 15h16" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="staffNotesBtn" title="Coach Notes" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="12" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M7.5 8h6M7.5 12h4M7.5 16h2.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M15.3 16.3l4.4-4.4a1.2 1.2 0 0 1 1.7 1.7l-4.4 4.4-2.2.5.5-2.2Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
@@ -853,13 +856,21 @@
 
   <!-- New group modal -->
   <div class="modal-backdrop" id="groupModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:14px">New Group</div>
-      <input class="pra-input" id="groupNameInput" placeholder="Group name" style="margin-bottom:12px"/>
-      <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">You're added to every group automatically — pick who else to include.</div>
-      <div id="groupContactsList"></div>
-      <button class="pra-btn" style="margin-top:14px;width:100%" id="createGroupBtn">Create Group</button>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupModal')">Cancel</button>
+    <div class="pra-panel modal-box modal-box-flex" style="padding:0">
+      <div style="padding:22px 22px 14px;flex-shrink:0">
+        <!-- Click straight into the title to rename it -- no separate name
+             field needed, which frees this space for a contact search bar. -->
+        <input class="pra-h2 group-name-title-input" id="groupNameInput" value="New Group" maxlength="60" onfocus="this.select()"/>
+        <input class="pra-input" id="groupContactSearchInput" placeholder="Search contacts…" style="margin:12px 0 8px"/>
+        <div class="pra-muted" style="font-size:.76rem">You're added to every group automatically — pick who else to include.</div>
+      </div>
+      <div style="flex:1 1 auto;overflow-y:auto;min-height:0;padding:0 22px">
+        <div id="groupContactsList"></div>
+      </div>
+      <div style="padding:14px 22px 22px;flex-shrink:0">
+        <button class="pra-btn" style="width:100%" id="createGroupBtn">Create Group</button>
+        <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupModal')">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -2116,6 +2127,11 @@ async function openConvo(id) {
   document.getElementById('staffNotesBtn').style.display = (protocolStudent && isStaffMe()) ? '' : 'none';
 
   document.getElementById('groupInfoBtn').style.display = (convo.type === 'group' && isStaffMe()) ? '' : 'none';
+  const canToggleThreadChannel = convo.type === 'group' && isAdminMe() && (convo.isChannel || !convo.participants.some(p => isClientRole(p.role)));
+  const threadChannelBtn = document.getElementById('threadChannelBtn');
+  threadChannelBtn.style.display = canToggleThreadChannel ? '' : 'none';
+  threadChannelBtn.classList.toggle('on', !!convo.isChannel);
+  threadChannelBtn.title = convo.isChannel ? 'Remove from channels' : 'Mark as channel';
   document.getElementById('scheduleBtn').style.display = (canScheduleIn(convo) || canScheduleGym(convo)) ? '' : 'none';
   const apptInfo = document.getElementById('threadApptInfo');
   if (apptInfo) apptInfo.style.display = 'none';
@@ -4995,24 +5011,33 @@ function openModal(id) { document.getElementById(id).classList.add('show'); }
 // panel's own content) — same "bounce in and out, an accidental close
 // isn't costly" reasoning extends to Publish since Cancel already discards
 // the trim with no confirmation of its own.
-['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal'].forEach(id => {
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'groupModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
 });
 
-document.getElementById('newGroupBtn').onclick = async () => {
-  await loadContacts();
-  document.getElementById('groupNameInput').value = '';
-  document.getElementById('groupContactsList').innerHTML = contacts.map(c => `
+function renderGroupContactsList() {
+  const q = document.getElementById('groupContactSearchInput').value.trim().toLowerCase();
+  const checkedIds = new Set(Array.from(document.querySelectorAll('#groupContactsList input:checked')).map(el => el.value));
+  const visible = q ? contacts.filter(c => `${c.first} ${c.last}`.toLowerCase().includes(q)) : contacts;
+  document.getElementById('groupContactsList').innerHTML = visible.map(c => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(c)}</div>
       <div>${c.first} ${c.last} <span class="pra-badge">${c.role}</span></div>
-      <input type="checkbox" value="${c.id}"/>
+      <input type="checkbox" value="${c.id}" ${checkedIds.has(c.id) ? 'checked' : ''}/>
     </div>
   `).join('');
+}
+
+document.getElementById('newGroupBtn').onclick = async () => {
+  await loadContacts();
+  document.getElementById('groupNameInput').value = 'New Group';
+  document.getElementById('groupContactSearchInput').value = '';
+  renderGroupContactsList();
   openModal('groupModal');
 };
+document.getElementById('groupContactSearchInput').addEventListener('input', renderGroupContactsList);
 
 async function renderGroupInfoModal() {
   const convo = conversations.find(c => c.id === activeConvoId);
@@ -5052,6 +5077,21 @@ async function renderGroupInfoModal() {
   openModal('groupInfoModal');
 }
 document.getElementById('groupInfoBtn').onclick = renderGroupInfoModal;
+
+document.getElementById('threadChannelBtn').onclick = async () => {
+  const convo = conversations.find(c => c.id === activeConvoId);
+  if (!convo) return;
+  const isChannel = !convo.isChannel;
+  const r = await fetch(`/api/chat/conversations/${activeConvoId}/channel`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isChannel }),
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update channel status.'); return; }
+  convo.isChannel = isChannel;
+  const threadChannelBtn = document.getElementById('threadChannelBtn');
+  threadChannelBtn.classList.toggle('on', isChannel);
+  threadChannelBtn.title = isChannel ? 'Remove from channels' : 'Mark as channel';
+  renderConvoList();
+};
 
 document.getElementById('groupInfoAddBtn').onclick = async () => {
   const ids = Array.from(document.querySelectorAll('#groupInfoAddList input:checked')).map(el => el.value);
