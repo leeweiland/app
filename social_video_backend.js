@@ -17,6 +17,19 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SETTINGS_FILE = "social_video_settings.json"; // DATA_DIR — admin-editable brand voice + own-words ratio
+// Every network this pipeline is capable of publishing to -- shared shape
+// with pacific_rim_video_backend.js's own settings, so an admin can switch
+// any of them off (per brand) without touching which Metricool accounts are
+// actually connected (that part still auto-detects via getConnectedAccounts).
+export const DEFAULT_PLATFORMS = { fb: true, fbs: true, ig: true, igs: true, li: true, tt: true, x: true, yt: true };
+export function getSocialVideoSettings() {
+  const saved = readJson(SETTINGS_FILE, {});
+  return {
+    aiPrompt: "", ownWordsRatio: 60, postHour: 3, timezone: "America/Anchorage",
+    ...saved,
+    platforms: { ...DEFAULT_PLATFORMS, ...(saved.platforms || {}) },
+  };
+}
 // chunks_cache.json is committed to git (read-only at runtime, ~22MB, never
 // written by this app) rather than routed through DATA_DIR/migrateDataFile —
 // it doesn't need per-deploy persistence, just needs to exist, and living
@@ -337,9 +350,9 @@ export async function getScheduledPosts(auth, startDate, endDate) {
 
 // en-CA formats as YYYY-MM-DD — matches the literal date portion Metricool
 // posts are submitted/echoed with, given every post below is scheduled at a
-// fixed America/Anchorage wall-clock time.
-function anchorageDateStr(date) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Anchorage" }).format(date);
+// fixed wall-clock time in whichever timezone the brand's own settings pick.
+function dayStrInTimezone(date, timezone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(date);
 }
 function addDaysToDateStr(dateStr, days) {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -348,15 +361,16 @@ function addDaysToDateStr(dateStr, days) {
   return dt.toISOString().slice(0, 10);
 }
 
-// "Next open day" = earliest future ANCHORAGE calendar day with ZERO
-// Powerbatics posts scheduled on any platform — per Lee's explicit choice of
-// "shared day for everything" over independently checking each platform.
-// Previously computed "tomorrow" off a UTC midnight boundary while every
-// post is actually scheduled at a fixed America/Anchorage wall-clock time —
-// those two clocks can disagree about which calendar day "today"/"tomorrow"
-// even is by up to ~9 hours, which was producing wrong/colliding days.
-export async function findNextOpenDay(auth, { withinDays = 30 } = {}) {
-  const startDay = addDaysToDateStr(anchorageDateStr(new Date()), 1);
+// "Next open day" = earliest future calendar day (in the brand's own
+// configured timezone) with ZERO posts scheduled on any platform — per
+// Lee's explicit choice of "shared day for everything" over independently
+// checking each platform. Previously computed "tomorrow" off a UTC midnight
+// boundary while every post is actually scheduled at a fixed wall-clock
+// time in a specific timezone — those two clocks can disagree about which
+// calendar day "today"/"tomorrow" even is by up to ~14 hours, which was
+// producing wrong/colliding days.
+export async function findNextOpenDay(auth, { withinDays = 30, timezone = "America/Anchorage" } = {}) {
+  const startDay = addDaysToDateStr(dayStrInTimezone(new Date(), timezone), 1);
   // getScheduledPosts just needs a real Date range to query Metricool with —
   // padded a day either side since it's only fetching a candidate window,
   // not itself the source of truth for which day something lands on.
@@ -372,7 +386,7 @@ export async function findNextOpenDay(auth, { withinDays = 30 } = {}) {
   return null;
 }
 
-export function buildMetricoolPostBody({ platformId, accountId, text, title, mediaUrl, dateTimeStr, thumbnailUrl, coverMilliseconds }) {
+export function buildMetricoolPostBody({ platformId, accountId, text, title, mediaUrl, dateTimeStr, timezone = "America/Anchorage", thumbnailUrl, coverMilliseconds }) {
   const networkType = NETWORK_TYPE_MAP[platformId];
   const body = {
     providers: [{ network: networkType, id: accountId }],
@@ -381,12 +395,13 @@ export function buildMetricoolPostBody({ platformId, accountId, text, title, med
     text: platformId === "fb" && title ? (text ? `${title}\n\n${text}` : title) : (text || ""),
     media: mediaUrl ? [mediaUrl] : [],
     saveExternalMediaFiles: true,
-    // dateTimeStr is always a literal "T03:00:00" wall-clock string — tagging
-    // it timezone:"UTC" was scheduling it at 3am UTC, i.e. ~6-7pm the
-    // PREVIOUS day in Anchorage, not "3am Anchorage" as intended. That also
-    // explains the day-collision bug: findNextOpenDay's bookedDays came back
-    // shifted a day from what the calendar actually shows.
-    publicationDate: { dateTime: dateTimeStr, timezone: "America/Anchorage" },
+    // dateTimeStr is always a literal "THH:00:00" wall-clock string — tagging
+    // it timezone:"UTC" would schedule it at that hour UTC instead of that
+    // hour in the brand's own configured zone (previously hardcoded to
+    // America/Anchorage; a mismatch here is exactly what caused the
+    // original day-collision bug: findNextOpenDay's bookedDays came back
+    // shifted a day from what the calendar actually shows).
+    publicationDate: { dateTime: dateTimeStr, timezone },
     autoPublish: true,
   };
   if (networkType === "instagram") body.instagramData = { type: platformId === "igs" ? "STORY" : "REEL" };
@@ -481,7 +496,7 @@ export async function handleSocialVideoRequest(req, res, url) {
 
   if (p === "/api/social-video/settings") {
     if (req.method === "GET") {
-      const settings = readJson(SETTINGS_FILE, { aiPrompt: "", ownWordsRatio: 60 });
+      const settings = getSocialVideoSettings();
       sendJson(res, 200, {
         ...settings,
         metricoolConfigured: !!(process.env.METRICOOL_API_KEY && process.env.METRICOOL_USER_ID && process.env.METRICOOL_PB_BLOG_ID),
@@ -492,9 +507,16 @@ export async function handleSocialVideoRequest(req, res, url) {
     }
     if (req.method === "POST") {
       const body = await readJsonBody(req);
-      const current = readJson(SETTINGS_FILE, {});
+      const current = getSocialVideoSettings();
       if (body.aiPrompt !== undefined) current.aiPrompt = String(body.aiPrompt).slice(0, 8000);
       if (body.ownWordsRatio !== undefined) current.ownWordsRatio = Math.max(0, Math.min(100, Number(body.ownWordsRatio) || 0));
+      if (body.postHour !== undefined) current.postHour = Math.max(0, Math.min(23, Number(body.postHour) || 0));
+      if (body.timezone !== undefined) current.timezone = String(body.timezone).slice(0, 100);
+      if (body.platforms && typeof body.platforms === "object") {
+        Object.keys(DEFAULT_PLATFORMS).forEach(k => {
+          if (body.platforms[k] !== undefined) current.platforms[k] = !!body.platforms[k];
+        });
+      }
       writeJson(SETTINGS_FILE, current);
       sendJson(res, 200, { ok: true });
       return true;
@@ -607,6 +629,7 @@ export async function handleSocialVideoRequest(req, res, url) {
       tempVerticalFileId = vertResult.id;
       const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
 
+      const settings = getSocialVideoSettings();
       const captions = await generateCaptions({ description: label.trim() });
       const auth = metricoolAuth(process.env.METRICOOL_PB_BLOG_ID);
       const accounts = await getConnectedAccounts(auth);
@@ -620,14 +643,19 @@ export async function handleSocialVideoRequest(req, res, url) {
       // "All available accounts" = every network this brand actually has
       // connected — plus the FB/IG Story variant riding along on the same
       // connected account, per Lee's explicit scoping decision to keep
-      // FB/IG Stories in (only YouTube Community posts were dropped).
+      // FB/IG Stories in (only YouTube Community posts were dropped) --
+      // filtered further by which of those an admin has actually left
+      // enabled in settings.platforms.
       const networkToPlatform = { facebook: "fb", instagram: "ig", youtube: "yt", tiktok: "tt", linkedin: "li", twitter: "x" };
       const storyPlatform = { facebook: "fbs", instagram: "igs" };
-      const platformIds = Object.entries(accounts).filter(([, id]) => !!id).flatMap(([net]) => [networkToPlatform[net], storyPlatform[net]].filter(Boolean));
+      const platformIds = Object.entries(accounts).filter(([, id]) => !!id)
+        .flatMap(([net]) => [networkToPlatform[net], storyPlatform[net]].filter(Boolean))
+        .filter(id => settings.platforms[id]);
 
-      const day = await findNextOpenDay(auth, {});
+      const day = await findNextOpenDay(auth, { timezone: settings.timezone });
       if (!day) throw new Error("Could not find an open day to schedule on");
-      const dateTimeStr = day + "T03:00:00";
+      const hour = String(Math.max(0, Math.min(23, Number(settings.postHour) || 0))).padStart(2, "0");
+      const dateTimeStr = `${day}T${hour}:00:00`;
 
       const results = [];
       for (const platformId of platformIds) {
@@ -636,7 +664,7 @@ export async function handleSocialVideoRequest(req, res, url) {
         // has no separate fbs/igs entry (a Story doesn't need its own).
         const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
         const plat = captions[captionKey] || {};
-        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, thumbnailUrl, coverMilliseconds });
+        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
         try {
           await schedulePost(auth, postBody);
           results.push({ platformId, ok: true });

@@ -390,9 +390,21 @@
         <div class="pra-muted" style="font-size:.74rem;margin-top:6px">Only networks actually connected to this brand in Metricool ever publish, regardless of what's checked here — these just turn a connected network on/off.</div>
       </div>
       <div class="field">
-        <label class="pra-label">Post Time (America/Anchorage)</label>
+        <label class="pra-label">Timezone</label>
+        <select class="pra-select" id="praTimezone">
+          <option value="America/Anchorage">Alaska</option>
+          <option value="Pacific/Honolulu">Hawaii</option>
+          <option value="America/Los_Angeles">Pacific</option>
+          <option value="America/Denver">Mountain</option>
+          <option value="America/Chicago">Central</option>
+          <option value="America/New_York">Eastern</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="pra-label">Post Time</label>
         <select class="pra-select" id="praPostHour"></select>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour.</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour in the timezone above.</div>
       </div>
       <div class="field">
         <label class="pra-label">Connections</label>
@@ -502,6 +514,14 @@ async function saveArchetypes() {
   setTimeout(() => msg.textContent = '', 2000);
 }
 
+const SOCIAL_VIDEO_PLATFORMS = ['fb', 'fbs', 'ig', 'igs', 'li', 'tt', 'x', 'yt'];
+
+function fmtHour12(h) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
+}
+
 async function loadSocialVideoSettings() {
   const r = await fetch('/api/social-video/settings');
   if (!r.ok) return;
@@ -509,6 +529,13 @@ async function loadSocialVideoSettings() {
   document.getElementById('svAiPrompt').value = s.aiPrompt || '';
   document.getElementById('svOwnWordsRatio').value = s.ownWordsRatio ?? 60;
   document.getElementById('svOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
+  SOCIAL_VIDEO_PLATFORMS.forEach(id => { document.getElementById(`svPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
+  document.getElementById('svTimezone').value = s.timezone || 'America/Anchorage';
+  const hourSelect = document.getElementById('svPostHour');
+  if (!hourSelect.options.length) {
+    hourSelect.innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${fmtHour12(h)}</option>`).join('');
+  }
+  hourSelect.value = s.postHour ?? 3;
   const rows = [
     ['Anthropic (captions)', s.anthropicConfigured],
     ['OpenAI (voice-bank search)', s.openaiConfigured],
@@ -520,24 +547,21 @@ async function loadSocialVideoSettings() {
 }
 
 async function saveSocialVideoSettings() {
+  const platforms = {};
+  SOCIAL_VIDEO_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`svPlatform-${id}`).checked; });
   await fetch('/api/social-video/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       aiPrompt: document.getElementById('svAiPrompt').value,
       ownWordsRatio: Number(document.getElementById('svOwnWordsRatio').value),
+      postHour: Number(document.getElementById('svPostHour').value),
+      timezone: document.getElementById('svTimezone').value,
+      platforms,
     }),
   });
   const msg = document.getElementById('socialVideoSaveMsg');
   msg.textContent = 'Saved.';
   setTimeout(() => msg.textContent = '', 2000);
-}
-
-const PRA_PLATFORMS = ['fb', 'fbs', 'ig', 'igs', 'li', 'tt', 'x', 'yt'];
-
-function fmtHour12(h) {
-  const period = h < 12 ? 'AM' : 'PM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:00 ${period}`;
 }
 
 async function loadPacificRimVideoSettings() {
@@ -547,7 +571,8 @@ async function loadPacificRimVideoSettings() {
   document.getElementById('praAiPrompt').value = s.aiPrompt || '';
   document.getElementById('praOwnWordsRatio').value = s.ownWordsRatio ?? 60;
   document.getElementById('praOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
-  PRA_PLATFORMS.forEach(id => { document.getElementById(`praPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
+  SOCIAL_VIDEO_PLATFORMS.forEach(id => { document.getElementById(`praPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
+  document.getElementById('praTimezone').value = s.timezone || 'America/Anchorage';
   const hourSelect = document.getElementById('praPostHour');
   if (!hourSelect.options.length) {
     hourSelect.innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${fmtHour12(h)}</option>`).join('');
@@ -565,13 +590,14 @@ async function loadPacificRimVideoSettings() {
 
 async function savePacificRimVideoSettings() {
   const platforms = {};
-  PRA_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`praPlatform-${id}`).checked; });
+  SOCIAL_VIDEO_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`praPlatform-${id}`).checked; });
   await fetch('/api/pacific-rim-video/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       aiPrompt: document.getElementById('praAiPrompt').value,
       ownWordsRatio: Number(document.getElementById('praOwnWordsRatio').value),
       postHour: Number(document.getElementById('praPostHour').value),
+      timezone: document.getElementById('praTimezone').value,
       platforms,
     }),
   });

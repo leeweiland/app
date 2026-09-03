@@ -30,7 +30,8 @@ const DEFAULT_SETTINGS = {
   // switch any of them off without touching which Metricool accounts are
   // actually connected (that part still auto-detects via getConnectedAccounts).
   platforms: { fb: true, fbs: true, ig: true, igs: true, li: true, tt: true, x: true, yt: true },
-  postHour: 3, // wall-clock hour in America/Anchorage -- see buildMetricoolPostBody's dateTimeStr
+  postHour: 3, // wall-clock hour, in `timezone` below -- see buildMetricoolPostBody's dateTimeStr
+  timezone: "America/Anchorage",
 };
 
 function getSettings() {
@@ -130,7 +131,7 @@ export async function publishPacificRimClip({ driveFileId, label, thumbnailBase6
       .flatMap(([net]) => [networkToPlatform[net], storyPlatform[net]].filter(Boolean))
       .filter(id => settings.platforms[id]);
 
-    const day = await findNextOpenDay(auth, {});
+    const day = await findNextOpenDay(auth, { timezone: settings.timezone });
     if (!day) throw new Error("Could not find an open day to schedule on");
     const hour = String(Math.max(0, Math.min(23, Number(settings.postHour) || 0))).padStart(2, "0");
     const dateTimeStr = `${day}T${hour}:00:00`;
@@ -140,7 +141,7 @@ export async function publishPacificRimClip({ driveFileId, label, thumbnailBase6
       const accountId = accounts[NETWORK_TYPE_MAP[platformId]];
       const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
       const plat = captions[captionKey] || {};
-      const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, thumbnailUrl, coverMilliseconds });
+      const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
       try {
         await schedulePost(auth, postBody);
         results.push({ platformId, ok: true });
@@ -190,6 +191,7 @@ export async function handlePacificRimVideoRequest(req, res, url) {
       if (body.aiPrompt !== undefined) current.aiPrompt = String(body.aiPrompt).slice(0, 8000);
       if (body.ownWordsRatio !== undefined) current.ownWordsRatio = Math.max(0, Math.min(100, Number(body.ownWordsRatio) || 0));
       if (body.postHour !== undefined) current.postHour = Math.max(0, Math.min(23, Number(body.postHour) || 0));
+      if (body.timezone !== undefined) current.timezone = String(body.timezone).slice(0, 100);
       if (body.platforms && typeof body.platforms === "object") {
         Object.keys(DEFAULT_SETTINGS.platforms).forEach(k => {
           if (body.platforms[k] !== undefined) current.platforms[k] = !!body.platforms[k];
