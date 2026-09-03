@@ -301,6 +301,7 @@
   .reply-preview-cancel:hover { color: var(--pra-text); }
   .forward-convo-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
   .forward-convo-row:hover { background: rgba(255,255,255,0.04); }
+  .forward-convo-row input[type=checkbox] { margin-left: auto; }
   .msg-edited { font-size: .7em; color: var(--pra-dim); margin-left: 4px; }
   .bubble-edit-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
   .bubble-edit-textarea { font-size: .88rem; line-height: 1.4; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--pra-blue); background: rgba(0,0,0,0.3); color: var(--pra-text); resize: vertical; width: 100%; box-sizing: border-box; font-family: inherit; }
@@ -1062,12 +1063,21 @@
   </div>
 
   <!-- Forward-to modal — opened from a message's forward action, lists every
-       conversation you're in so you can pick where the copy lands. -->
+       conversation you're in so you can pick where the copy lands
+       (checkbox multi-select — Forward sends to everything checked at once). -->
   <div class="modal-backdrop" id="forwardModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:14px">Forward Message</div>
-      <div id="forwardConvoList"></div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('forwardModal')">Cancel</button>
+    <div class="pra-panel modal-box modal-box-flex" style="padding:0">
+      <div style="padding:22px 22px 14px;flex-shrink:0">
+        <div class="pra-h2" style="margin-bottom:12px">Forward Message</div>
+        <input class="pra-input" id="forwardSearchInput" placeholder="Search contacts…"/>
+      </div>
+      <div style="flex:1 1 auto;overflow-y:auto;min-height:0;padding:0 22px">
+        <div id="forwardConvoList"></div>
+      </div>
+      <div style="padding:14px 22px 22px;flex-shrink:0">
+        <button class="pra-btn" style="width:100%" id="forwardSubmitBtn">Forward</button>
+        <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('forwardModal')">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -5080,34 +5090,59 @@ document.getElementById('videoReplySendBtn').onclick = async () => {
   refreshThread(true);
 };
 
+let forwardMessageId = null;
+let forwardConvoItems = [];
+let forwardSelectedIds = new Set();
+
 async function openForwardModal(mid) {
   moreMenuMessageId = null;
   forwardMessageId = mid;
-  const list = document.getElementById('forwardConvoList');
-  list.innerHTML = conversations.map(c => {
+  forwardConvoItems = conversations.map(c => {
     const other = c.type === 'group' ? null : c.participants.find(p => p.id !== me.id);
     const name = c.type === 'group' ? (c.name || 'Group') : (other ? `${other.first} ${other.last}` : 'Unknown');
     const avatarUser = c.type === 'group' ? convoAvatarUser(c) : other;
-    return `<div class="forward-convo-row" data-convo-id="${c.id}">
-      <div class="pra-avatar${avatarUser ? avatarRoleClass(avatarUser, c.type === 'group') : ''}">${avatarUser ? avatarHtml(avatarUser) : '#'}</div>
-      <div>${escapeHtml(name)}</div>
-    </div>`;
-  }).join('') || '<div class="empty-hint">No conversations to forward to.</div>';
-  list.querySelectorAll('.forward-convo-row').forEach(row => {
-    row.onclick = () => submitForward(row.dataset.convoId);
+    return { id: c.id, name, avatarUser, isGroup: c.type === 'group' };
   });
+  forwardSelectedIds = new Set();
+  document.getElementById('forwardSearchInput').value = '';
+  renderForwardConvoList();
   openModal('forwardModal');
 }
-let forwardMessageId = null;
-async function submitForward(targetConvoId) {
-  if (!forwardMessageId || !targetConvoId) return;
-  closeModal('forwardModal');
-  await fetch(`/api/chat/conversations/${targetConvoId}/messages`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forwardMessageId })
+
+function renderForwardConvoList() {
+  const q = document.getElementById('forwardSearchInput').value.trim().toLowerCase();
+  const visible = q ? forwardConvoItems.filter(c => c.name.toLowerCase().includes(q)) : forwardConvoItems;
+  const list = document.getElementById('forwardConvoList');
+  list.innerHTML = visible.map(c => `<div class="forward-convo-row" data-convo-id="${c.id}">
+      <div class="pra-avatar${c.avatarUser ? avatarRoleClass(c.avatarUser, c.isGroup) : ''}">${c.avatarUser ? avatarHtml(c.avatarUser) : '#'}</div>
+      <div>${escapeHtml(c.name)}</div>
+      <input type="checkbox" value="${c.id}" ${forwardSelectedIds.has(c.id) ? 'checked' : ''}/>
+    </div>`).join('') || '<div class="empty-hint">No conversations to forward to.</div>';
+  list.querySelectorAll('.forward-convo-row').forEach(row => {
+    const checkbox = row.querySelector('input[type=checkbox]');
+    row.onclick = (e) => {
+      // A checkbox click has already toggled itself natively by the time
+      // this fires (bubbled from the checkbox) -- only toggle it ourselves
+      // for a click elsewhere on the row, then sync either way.
+      if (e.target !== checkbox) checkbox.checked = !checkbox.checked;
+      if (checkbox.checked) forwardSelectedIds.add(checkbox.value); else forwardSelectedIds.delete(checkbox.value);
+    };
   });
-  forwardMessageId = null;
-  if (targetConvoId === activeConvoId) refreshThread(true);
 }
+document.getElementById('forwardSearchInput').addEventListener('input', renderForwardConvoList);
+
+document.getElementById('forwardSubmitBtn').onclick = async () => {
+  if (!forwardMessageId || !forwardSelectedIds.size) return;
+  const targets = Array.from(forwardSelectedIds);
+  closeModal('forwardModal');
+  await Promise.all(targets.map(id =>
+    fetch(`/api/chat/conversations/${id}/messages`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forwardMessageId })
+    })
+  ));
+  forwardMessageId = null;
+  if (targets.includes(activeConvoId)) refreshThread(true);
+};
 
 function startEditMessage(mid) {
   const row = document.querySelector(`.bubble-row[data-mid="${mid}"]`);
@@ -5146,7 +5181,7 @@ function openModal(id) { document.getElementById(id).classList.add('show'); }
 // panel's own content) — same "bounce in and out, an accidental close
 // isn't costly" reasoning extends to Publish since Cancel already discards
 // the trim with no confirmation of its own.
-['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'groupModal'].forEach(id => {
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'groupModal', 'forwardModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
