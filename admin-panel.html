@@ -327,6 +327,45 @@
       </div>
     </div>
 
+    <div class="pra-panel section" id="pacificRimVideoConfigSection">
+      <div class="pra-h2" style="margin-bottom:6px">Pacific Rim Athletics Social Video</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Same pipeline as Powerbatics Social Video above (trim → AI reframe/track → AI caption → schedule to Metricool), publishing to the Pacific Rim Athletics brand instead — triggered by the Gym Capture header camera icon (both Gym Training and Gym Level Test clips get scheduled here automatically). Every field saves itself — no Save button.</div>
+      <div class="save-msg" id="pacificRimVideoSaveMsg"></div>
+      <div class="field">
+        <label class="pra-label">Brand Voice Instructions (used to write every caption)</label>
+        <textarea class="pra-input" id="praAiPrompt" rows="6" style="width:100%;font-family:var(--font-primary);resize:vertical" placeholder="e.g. Bold, direct, no-fluff. Speak to the pain of stalled progress. Never mention a student's job or career."></textarea>
+      </div>
+      <div class="field">
+        <label class="pra-label">Own-Words Ratio: <span id="praOwnWordsRatioLabel">60</span>%</label>
+        <input type="range" id="praOwnWordsRatio" min="0" max="100" step="5" style="width:100%"/>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">0% = write completely fresh copy. 100% = reuse the voice bank's exact past sentences as much as possible.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Publish To</label>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;font-size:.86rem">
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-fb"/> Facebook</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-fbs"/> Facebook Story</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-ig"/> Instagram</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-igs"/> Instagram Story</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-li"/> LinkedIn</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-tt"/> TikTok</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-x"/> X</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-yt"/> YouTube Shorts</label>
+        </div>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:6px">Only networks actually connected to this brand in Metricool ever publish, regardless of what's checked here — these just turn a connected network on/off.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Post Time (America/Anchorage)</label>
+        <select class="pra-select" id="praPostHour"></select>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Connections</label>
+        <div id="praConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
+        <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> (shared with Powerbatics) / <code>METRICOOL_PRA_BLOG_ID</code> (scheduling).</div>
+      </div>
+    </div>
+
     <div class="pra-panel section">
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
@@ -458,6 +497,54 @@ async function saveSocialVideoSettings() {
   setTimeout(() => msg.textContent = '', 2000);
 }
 
+const PRA_PLATFORMS = ['fb', 'fbs', 'ig', 'igs', 'li', 'tt', 'x', 'yt'];
+
+function fmtHour12(h) {
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
+}
+
+async function loadPacificRimVideoSettings() {
+  const r = await fetch('/api/pacific-rim-video/settings');
+  if (!r.ok) return;
+  const s = await r.json();
+  document.getElementById('praAiPrompt').value = s.aiPrompt || '';
+  document.getElementById('praOwnWordsRatio').value = s.ownWordsRatio ?? 60;
+  document.getElementById('praOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
+  PRA_PLATFORMS.forEach(id => { document.getElementById(`praPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
+  const hourSelect = document.getElementById('praPostHour');
+  if (!hourSelect.options.length) {
+    hourSelect.innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${fmtHour12(h)}</option>`).join('');
+  }
+  hourSelect.value = s.postHour ?? 3;
+  const rows = [
+    ['Anthropic (captions)', s.anthropicConfigured],
+    ['OpenAI (voice-bank search)', s.openaiConfigured],
+    ['Metricool (scheduling)', s.metricoolConfigured],
+  ];
+  document.getElementById('praConnectionStatus').innerHTML = rows.map(([label, ok]) =>
+    `<div>${ok ? '✅' : '❌'} ${label}</div>`
+  ).join('');
+}
+
+async function savePacificRimVideoSettings() {
+  const platforms = {};
+  PRA_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`praPlatform-${id}`).checked; });
+  await fetch('/api/pacific-rim-video/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      aiPrompt: document.getElementById('praAiPrompt').value,
+      ownWordsRatio: Number(document.getElementById('praOwnWordsRatio').value),
+      postHour: Number(document.getElementById('praPostHour').value),
+      platforms,
+    }),
+  });
+  const msg = document.getElementById('pacificRimVideoSaveMsg');
+  msg.textContent = 'Saved.';
+  setTimeout(() => msg.textContent = '', 2000);
+}
+
 async function loadArchetypes() {
   const r = await fetch('/api/personality-quiz/config');
   if (!r.ok) { document.getElementById('archGrid').textContent = 'Could not load.'; return; }
@@ -567,6 +654,7 @@ async function init() {
   loadCalendarStatus();
   loadArchetypes();
   loadSocialVideoSettings();
+  loadPacificRimVideoSettings();
   // No Save buttons — every field in these two sections saves itself.
   // 'change' catches selects/checkboxes immediately; 'focusout' (the
   // bubbling version of blur) catches text/textarea fields once you tab or
@@ -588,6 +676,11 @@ async function init() {
   document.getElementById('socialVideoConfigSection').addEventListener('change', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
   document.getElementById('socialVideoConfigSection').addEventListener('focusout', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
   document.getElementById('svOwnWordsRatio').addEventListener('input', (e) => { document.getElementById('svOwnWordsRatioLabel').textContent = e.target.value; });
+
+  let pacificRimVideoSaveTimer;
+  document.getElementById('pacificRimVideoConfigSection').addEventListener('change', () => { clearTimeout(pacificRimVideoSaveTimer); pacificRimVideoSaveTimer = setTimeout(savePacificRimVideoSettings, 400); });
+  document.getElementById('pacificRimVideoConfigSection').addEventListener('focusout', () => { clearTimeout(pacificRimVideoSaveTimer); pacificRimVideoSaveTimer = setTimeout(savePacificRimVideoSettings, 400); });
+  document.getElementById('praOwnWordsRatio').addEventListener('input', (e) => { document.getElementById('praOwnWordsRatioLabel').textContent = e.target.value; });
 
   let searchTimer;
   document.getElementById('userSearchInput').addEventListener('input', () => {

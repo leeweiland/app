@@ -286,6 +286,13 @@
       <div class="pra-h2" style="margin-bottom:14px">Transform Into A Strength Ninja</div>
       <div class="pra-muted profile-summary-line" id="reportsProfileSummary"></div>
 
+      <div id="reportsMontageSection" style="display:none;margin-bottom:20px">
+        <video id="reportsMontageVideo" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000;display:block"></video>
+        <div class="pra-muted" style="font-size:.72rem;margin-top:6px;text-align:center">Highlight reel of your coach-favorited photos &amp; videos</div>
+      </div>
+      <div class="pra-muted" id="reportsMontageEmpty" style="font-size:.78rem;display:none;margin-bottom:20px">No favorited media yet — once your coach favorites one of your photos or videos, a highlight reel shows up here.</div>
+      <div class="pra-muted" id="reportsMontageLoading" style="font-size:.78rem;display:none;margin-bottom:20px">Building your highlight reel…</div>
+
       <div class="type-toggle">
         <div class="period-tab active" data-period="daily">Daily</div>
         <div class="period-tab" data-period="weekly">Weekly</div>
@@ -360,16 +367,41 @@ function renderHubTabs(preserveActive) {
   });
   document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('hubPanel' + activeHub[0].toUpperCase() + activeHub.slice(1)).classList.add('active');
-  // The merged scan+photo history drives both the Physique tab's Progress
-  // list and the Reports tab's morph animation -- load it once, whichever
-  // of the two tabs is visited first.
+  // The merged scan+photo history drives the Physique tab's Progress list --
+  // load it once, whichever of Physique/Reports is visited first.
   if ((activeHub === 'physique' || activeHub === 'reports') && !physiqueHistoryLoaded) {
     physiqueHistoryLoaded = true;
     loadPhysiqueHistory();
   }
   if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
   if (activeHub === 'nutrition') loadFoodEntries();
-  if (activeHub === 'reports') loadReport();
+  if (activeHub === 'reports') {
+    loadReport();
+    // The montage is rebuilt server-side from scratch on every call (no
+    // caching yet -- see favorites_montage_backend.js) -- load once per
+    // session rather than on every tab switch back to Reports.
+    if (!reportsMontageLoaded) { reportsMontageLoaded = true; loadReportsMontage(); }
+  }
+}
+let reportsMontageLoaded = false;
+async function loadReportsMontage() {
+  const section = document.getElementById('reportsMontageSection');
+  const empty = document.getElementById('reportsMontageEmpty');
+  const loading = document.getElementById('reportsMontageLoading');
+  section.style.display = 'none';
+  empty.style.display = 'none';
+  loading.style.display = 'block';
+  try {
+    const r = await fetch('/api/body-reports/montage');
+    const d = await r.json();
+    if (!r.ok || !d.montage) { empty.style.display = 'block'; return; }
+    document.getElementById('reportsMontageVideo').src = `/api/body-reports/montage/media/${d.montage.driveFileId}`;
+    section.style.display = 'block';
+  } catch {
+    empty.style.display = 'block';
+  } finally {
+    loading.style.display = 'none';
+  }
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────

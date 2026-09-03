@@ -81,36 +81,26 @@ export const CAPTION_PLATFORMS = [
   { id: "x", label: "X", hasTitle: false, descLimit: 280 },
 ];
 
-function ownWordsRuleFor(ratio) {
+export function ownWordsRuleFor(ratio) {
   if (ratio >= 90) return "STRICT COPY-PASTE MODE: reuse the voice bank's exact sentences and phrasing as much as possible — light edits only to make them fit this specific clip.";
   if (ratio <= 10) return "Write completely fresh copy in the brand voice described below — don't quote the voice bank directly, just match its tone and style.";
   return `Blend roughly ${ratio}% reused phrasing/sentences from the voice bank with your own fresh writing tailored to this clip.`;
 }
 
-export async function generateCaptions({ description }) {
+// The Claude-calling half of caption generation, shared across brands — each
+// brand builds its own sharedContext (its own settings file, its own brand
+// name/voice) and hands it here. One focused call per platform (run in
+// parallel) rather than one call asked to fill all 6 at once — tested live
+// and found that with the full voice-bank context injected (10-20K+
+// characters), a single combined call reliably nailed the FIRST platform in
+// the schema and left the rest as empty {}, well under the token budget so
+// not a truncation issue — just the model's attention thinning out across a
+// long list of sibling fields. Six small, single-purpose calls can't leave
+// anything blank because there's nothing else in that call's schema to
+// neglect.
+export async function generateCaptionsFromContext(sharedContext) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-  const settings = readJson(SETTINGS_FILE, {});
-  const brandPrompt = settings.aiPrompt || "Write bold, direct, no-fluff training-focused social captions.";
-  const ownWordsRatio = Number.isFinite(settings.ownWordsRatio) ? settings.ownWordsRatio : 60;
-
-  let chunks = [];
-  try { chunks = await semanticRetrieve(description || "training video caption", { topN: 20 }); }
-  catch (e) { console.error("[generateCaptions] semanticRetrieve failed, continuing without voice bank:", e.message); }
-  const voiceBlock = chunks.length
-    ? chunks.map(c => `--- ${c.type === "campaign" ? "EMAIL" : "DOC"}: ${c.source} ---\n${c.text}`).join("\n\n")
-    : "(no voice-bank matches found — write fresh copy in the brand voice below)";
-
-  const sharedContext = `BRAND VOICE INSTRUCTIONS:\n${brandPrompt}\n\n${ownWordsRuleFor(ownWordsRatio)}\n\nVOICE BANK (real past writing to draw from):\n${voiceBlock}\n\n${description ? `WHAT'S IN THIS CLIP: ${description}\n\n` : ""}This caption is for the Powerbatics brand.`;
-
-  // One focused call per platform (run in parallel) rather than one call
-  // asked to fill all 6 at once — tested live and found that with the full
-  // voice-bank context injected (10-20K+ characters), a single combined
-  // call reliably nailed the FIRST platform in the schema and left the
-  // rest as empty {}, well under the token budget so not a truncation
-  // issue — just the model's attention thinning out across a long list of
-  // sibling fields. Six small, single-purpose calls can't leave anything
-  // blank because there's nothing else in that call's schema to neglect.
   async function writeOnePlatform(id, label, hasTitle, charLimit, titleLimit) {
     const schema = hasTitle
       ? { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title", "desc"] }
@@ -139,6 +129,22 @@ export async function generateCaptions({ description }) {
   const captions = {};
   CAPTION_PLATFORMS.forEach((p, i) => { captions[p.id] = results[i]; });
   return captions;
+}
+
+export async function generateCaptions({ description }) {
+  const settings = readJson(SETTINGS_FILE, {});
+  const brandPrompt = settings.aiPrompt || "Write bold, direct, no-fluff training-focused social captions.";
+  const ownWordsRatio = Number.isFinite(settings.ownWordsRatio) ? settings.ownWordsRatio : 60;
+
+  let chunks = [];
+  try { chunks = await semanticRetrieve(description || "training video caption", { topN: 20 }); }
+  catch (e) { console.error("[generateCaptions] semanticRetrieve failed, continuing without voice bank:", e.message); }
+  const voiceBlock = chunks.length
+    ? chunks.map(c => `--- ${c.type === "campaign" ? "EMAIL" : "DOC"}: ${c.source} ---\n${c.text}`).join("\n\n")
+    : "(no voice-bank matches found — write fresh copy in the brand voice below)";
+
+  const sharedContext = `BRAND VOICE INSTRUCTIONS:\n${brandPrompt}\n\n${ownWordsRuleFor(ownWordsRatio)}\n\nVOICE BANK (real past writing to draw from):\n${voiceBlock}\n\n${description ? `WHAT'S IN THIS CLIP: ${description}\n\n` : ""}This caption is for the Powerbatics brand.`;
+  return generateCaptionsFromContext(sharedContext);
 }
 
 // ── Vertical reframe (ffmpeg, ported from root server.js's buildDynamicCrop) ──
@@ -236,7 +242,7 @@ export function reframeVideoVertical(inputPath, outputPath, { videoWidth, videoH
 // endpoint, just flip the ONE output file actually being posted publicly
 // (it's about to go out on Instagram/TikTok/etc. anyway) to "anyone with the
 // link" on Drive itself, and hand Metricool that direct link.
-async function makeDriveFilePublic(fileId, accessToken) {
+export async function makeDriveFilePublic(fileId, accessToken) {
   await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -257,8 +263,8 @@ async function makeDriveFilePublic(fileId, accessToken) {
 // 'yyyy-MM-ddTHH:mm:ss' with NO trailing Z/milliseconds, and there is no
 // working /brands/{id}/social-accounts endpoint; connected-account ids come
 // from /admin/simpleProfiles instead).
-const METRICOOL_BASE = "https://app.metricool.com/api";
-const NETWORK_TYPE_MAP = { fb: "facebook", ig: "instagram", yt: "youtube", tt: "tiktok", li: "linkedin", x: "twitter", fbs: "facebook", igs: "instagram" };
+export const METRICOOL_BASE = "https://app.metricool.com/api";
+export const NETWORK_TYPE_MAP = { fb: "facebook", ig: "instagram", yt: "youtube", tt: "tiktok", li: "linkedin", x: "twitter", fbs: "facebook", igs: "instagram" };
 
 // HTTP header values must be Latin1 — Node's fetch() throws an opaque
 // "Cannot convert argument to a ByteString" TypeError (no var name, just a
@@ -266,7 +272,7 @@ const NETWORK_TYPE_MAP = { fb: "facebook", ig: "instagram", yt: "youtube", tt: "
 // smart-quote/bullet/etc from somewhere. Check up front so a bad Railway env
 // var points straight at itself instead of surfacing as a mystery crash deep
 // in a Metricool fetch call.
-function assertHeaderSafe(varName, value) {
+export function assertHeaderSafe(varName, value) {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
     if (code > 255) {
@@ -275,14 +281,17 @@ function assertHeaderSafe(varName, value) {
   }
 }
 
-function metricoolAuth() {
+// apiKey/userId are Metricool-ACCOUNT-level (shared across every brand/blog
+// on that account); blogId is the one brand-specific piece — callers pass
+// their own brand's blogId (e.g. process.env.METRICOOL_PB_BLOG_ID for
+// Powerbatics, METRICOOL_PRA_BLOG_ID for Pacific Rim Athletics).
+export function metricoolAuth(blogId) {
   const apiKey = process.env.METRICOOL_API_KEY;
   const userId = process.env.METRICOOL_USER_ID;
-  const blogId = process.env.METRICOOL_PB_BLOG_ID;
-  if (!apiKey || !userId || !blogId) throw new Error("Metricool isn't configured — set METRICOOL_API_KEY, METRICOOL_USER_ID, METRICOOL_PB_BLOG_ID.");
+  if (!apiKey || !userId || !blogId) throw new Error("Metricool isn't configured — set METRICOOL_API_KEY, METRICOOL_USER_ID, and this brand's blog id.");
   assertHeaderSafe("METRICOOL_API_KEY", apiKey);
   assertHeaderSafe("METRICOOL_USER_ID", userId);
-  assertHeaderSafe("METRICOOL_PB_BLOG_ID", blogId);
+  assertHeaderSafe("blogId", blogId);
   return { apiKey, userId, blogId };
 }
 
@@ -291,32 +300,34 @@ function fmtMetricoolDate(d) {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
-// The Powerbatics brand's connected-account id per network — cached in
-// memory for a few minutes since it almost never changes and the
-// scheduling flow may look it up several times in one session.
-let _accountsMemo = null; // { at, accounts }
-export async function getPbConnectedAccounts() {
-  if (_accountsMemo && Date.now() - _accountsMemo.at < 5 * 60 * 1000) return _accountsMemo.accounts;
-  const { apiKey, userId, blogId } = metricoolAuth();
+// A brand's connected-account id per network — cached in memory (per blogId,
+// so multiple brands never share/clobber each other's entry) for a few
+// minutes since it almost never changes and the scheduling flow may look it
+// up several times in one session.
+const _accountsMemoByBlog = new Map(); // blogId -> { at, accounts }
+export async function getConnectedAccounts(auth) {
+  const { apiKey, userId, blogId } = auth;
+  const cached = _accountsMemoByBlog.get(blogId);
+  if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.accounts;
   const r = await fetch(`${METRICOOL_BASE}/admin/simpleProfiles?userId=${userId}`, { headers: { "X-Mc-Auth": apiKey } });
   if (!r.ok) throw new Error(`Metricool simpleProfiles ${r.status}: ${await r.text()}`);
   const profiles = await r.json();
-  const pb = profiles.find(p => String(p.id) === String(blogId));
-  if (!pb) throw new Error(`No Metricool brand found for blogId ${blogId}`);
+  const brand = profiles.find(p => String(p.id) === String(blogId));
+  if (!brand) throw new Error(`No Metricool brand found for blogId ${blogId}`);
   const accounts = {
-    facebook: pb.facebookPageId || null,
-    instagram: pb.fbBusinessId || null,
-    youtube: pb.youtube || null,
-    tiktok: pb.tiktok || null,
-    linkedin: pb.linkedinCompany || null,
-    twitter: pb.twitter || null,
+    facebook: brand.facebookPageId || null,
+    instagram: brand.fbBusinessId || null,
+    youtube: brand.youtube || null,
+    tiktok: brand.tiktok || null,
+    linkedin: brand.linkedinCompany || null,
+    twitter: brand.twitter || null,
   };
-  _accountsMemo = { at: Date.now(), accounts };
+  _accountsMemoByBlog.set(blogId, { at: Date.now(), accounts });
   return accounts;
 }
 
-export async function getScheduledPosts(startDate, endDate) {
-  const { apiKey, userId, blogId } = metricoolAuth();
+export async function getScheduledPosts(auth, startDate, endDate) {
+  const { apiKey, userId, blogId } = auth;
   const url = `${METRICOOL_BASE}/v2/scheduler/posts?userId=${userId}&blogId=${blogId}&start=${fmtMetricoolDate(startDate)}&end=${fmtMetricoolDate(endDate)}`;
   const r = await fetch(url, { headers: { "X-Mc-Auth": apiKey } });
   if (!r.ok) throw new Error(`Metricool posts ${r.status}: ${await r.text()}`);
@@ -344,14 +355,14 @@ function addDaysToDateStr(dateStr, days) {
 // post is actually scheduled at a fixed America/Anchorage wall-clock time —
 // those two clocks can disagree about which calendar day "today"/"tomorrow"
 // even is by up to ~9 hours, which was producing wrong/colliding days.
-export async function findNextOpenDay({ withinDays = 30 } = {}) {
+export async function findNextOpenDay(auth, { withinDays = 30 } = {}) {
   const startDay = addDaysToDateStr(anchorageDateStr(new Date()), 1);
   // getScheduledPosts just needs a real Date range to query Metricool with —
   // padded a day either side since it's only fetching a candidate window,
   // not itself the source of truth for which day something lands on.
   const start = new Date(startDay + "T00:00:00Z");
   const end = new Date(start); end.setUTCDate(end.getUTCDate() + withinDays + 1);
-  const posts = await getScheduledPosts(start, end);
+  const posts = await getScheduledPosts(auth, start, end);
   const bookedDays = new Set(posts.map(p => (p.publicationDate?.dateTime || "").slice(0, 10)));
   let day = startDay;
   for (let i = 0; i < withinDays; i++) {
@@ -361,7 +372,7 @@ export async function findNextOpenDay({ withinDays = 30 } = {}) {
   return null;
 }
 
-export function buildMetricoolPostBody({ platformId, accountId, text, title, mediaUrl, dateTimeStr }) {
+export function buildMetricoolPostBody({ platformId, accountId, text, title, mediaUrl, dateTimeStr, thumbnailUrl, coverMilliseconds }) {
   const networkType = NETWORK_TYPE_MAP[platformId];
   const body = {
     providers: [{ network: networkType, id: accountId }],
@@ -382,14 +393,74 @@ export function buildMetricoolPostBody({ platformId, accountId, text, title, med
   if (networkType === "facebook") body.facebookData = { type: platformId === "fbs" ? "STORY" : "REEL" };
   if (networkType === "tiktok") body.tiktokData = { privacyOption: "PUBLIC_TO_EVERYONE" };
   if (networkType === "youtube") body.youtubeData = { title: title || (text || "").slice(0, 100) || "Video", madeForKids: false };
+  // Custom thumbnail (a specific frame the coach scrubbed to) — sent to every
+  // platform's post body same as the ported dashboard did, not gated to
+  // Instagram in code; Metricool/the platforms themselves ignore it where
+  // it isn't supported (YouTube, Facebook), so there's no need to special-
+  // case which networks get it here.
+  if (thumbnailUrl) body.videoThumbnailUrl = thumbnailUrl;
+  if (Number.isFinite(coverMilliseconds)) body.videoCoverMilliseconds = Math.max(0, Math.round(coverMilliseconds));
   return body;
+}
+
+// Uploads a JPEG thumbnail (base64, no data: prefix) to Metricool's own CDN
+// via its 3-step S3 presigned-upload dance, then normalizes the resulting
+// URL through Metricool's own image proxy (matches the ported dashboard's
+// flow exactly) before handing back a URL usable in videoThumbnailUrl.
+export async function uploadThumbnailToMetricool(auth, thumbnailBase64) {
+  const { apiKey, userId, blogId } = auth;
+  const { createHash } = await import("crypto");
+  const thumbBuf = Buffer.from(thumbnailBase64, "base64");
+  const thumbHash = createHash("sha256").update(thumbBuf).digest("base64");
+
+  const txRes = await fetch(`${METRICOOL_BASE}/v2/media/s3/upload-transactions?userId=${userId}&blogId=${blogId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Mc-Auth": apiKey },
+    body: JSON.stringify({
+      resourceType: "planner", contentType: "image/jpeg", fileExtension: "jpg",
+      parts: [{ size: thumbBuf.length, startByte: 0, endByte: thumbBuf.length, hash: thumbHash }],
+    }),
+  });
+  if (!txRes.ok) throw new Error(`Metricool thumbnail upload-transaction failed: ${txRes.status} ${await txRes.text()}`);
+  const txData = await txRes.json();
+  const { presignedUrl, fileUrl } = txData.data || txData || {};
+  if (!presignedUrl) throw new Error(`Metricool thumbnail: no presignedUrl returned (${JSON.stringify(txData).slice(0, 200)})`);
+
+  const s3Res = await fetch(presignedUrl, {
+    method: "PUT",
+    headers: { "Content-Type": "image/jpeg", "x-amz-checksum-sha256": thumbHash },
+    body: thumbBuf,
+  });
+  if (!s3Res.ok) throw new Error(`Metricool thumbnail S3 upload failed: ${s3Res.status}`);
+
+  const completeRes = await fetch(`${METRICOOL_BASE}/v2/media/s3/upload-transactions?userId=${userId}&blogId=${blogId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "X-Mc-Auth": apiKey },
+    body: JSON.stringify({ simple: { fileUrl: fileUrl || presignedUrl.split("?")[0] } }),
+  });
+  if (!completeRes.ok) throw new Error(`Metricool thumbnail complete failed: ${completeRes.status} ${await completeRes.text()}`);
+  const completeData = await completeRes.json();
+  const thumbnailUrl = completeData.data?.convertedFileUrl || completeData.data?.fileUrl || null;
+  if (!thumbnailUrl) throw new Error("Metricool thumbnail: no resulting URL after upload");
+
+  try {
+    const normRes = await fetch(`${METRICOOL_BASE}/actions/normalize/image/url?url=${encodeURIComponent(thumbnailUrl)}&folder=planner&userId=${userId}&blogId=${blogId}`, {
+      headers: { "X-Mc-Auth": apiKey },
+    });
+    if (normRes.ok) {
+      const normData = await normRes.json();
+      const mcUrl = typeof normData === "string" ? normData : (normData?.data || normData?.url || normData?.result || null);
+      if (mcUrl) return mcUrl;
+    }
+  } catch {}
+  return thumbnailUrl;
 }
 
 // The actual publish call — NOT invoked anywhere in this file's own tests;
 // only the favorite-modal's "Schedule to Powerbatics" button (a real coach
 // clicking a real button) should ever call this in practice.
-export async function schedulePost(postBody) {
-  const { apiKey, userId, blogId } = metricoolAuth();
+export async function schedulePost(auth, postBody) {
+  const { apiKey, userId, blogId } = auth;
   const r = await fetch(`${METRICOOL_BASE}/v2/scheduler/posts?userId=${userId}&blogId=${blogId}`, {
     method: "POST",
     headers: { "X-Mc-Auth": apiKey, "Content-Type": "application/json" },
@@ -464,7 +535,13 @@ export async function handleSocialVideoRequest(req, res, url) {
   // is lost by discarding our temp copy afterward.
   if (p === "/api/social-video/save-and-publish" && req.method === "POST") {
     const body = await readJsonBody(req);
-    const { driveFileId, trimStart, trimEnd, label, videoWidth, videoHeight, keyframes } = body;
+    // thumbnailBase64: a JPEG frame the coach scrubbed to before Save, already
+    // cropped/scaled client-side to match what the reframed video will look
+    // like. thumbnailTimeSec: that frame's timestamp in the ORIGINAL
+    // (untrimmed) clip -- offset against trimStart below since the published
+    // video starts at 0 there, same as the ported dashboard's
+    // savedTime-startTime math.
+    const { driveFileId, trimStart, trimEnd, label, videoWidth, videoHeight, keyframes, thumbnailBase64, thumbnailTimeSec } = body;
     if (!driveFileId) return void sendJson(res, 400, { error: "driveFileId required" });
     if (!label || !label.trim()) return void sendJson(res, 400, { error: "Label required" });
 
@@ -531,7 +608,15 @@ export async function handleSocialVideoRequest(req, res, url) {
       const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
 
       const captions = await generateCaptions({ description: label.trim() });
-      const accounts = await getPbConnectedAccounts();
+      const auth = metricoolAuth(process.env.METRICOOL_PB_BLOG_ID);
+      const accounts = await getConnectedAccounts(auth);
+
+      let thumbnailUrl = null;
+      if (thumbnailBase64) {
+        try { thumbnailUrl = await uploadThumbnailToMetricool(auth, thumbnailBase64); }
+        catch (e) { console.error("[save-and-publish] thumbnail upload failed, publishing without a custom one:", e.message); }
+      }
+      const coverMilliseconds = Number.isFinite(thumbnailTimeSec) ? (thumbnailTimeSec - (Number.isFinite(trimStart) ? trimStart : 0)) * 1000 : undefined;
       // "All available accounts" = every network this brand actually has
       // connected — plus the FB/IG Story variant riding along on the same
       // connected account, per Lee's explicit scoping decision to keep
@@ -540,7 +625,7 @@ export async function handleSocialVideoRequest(req, res, url) {
       const storyPlatform = { facebook: "fbs", instagram: "igs" };
       const platformIds = Object.entries(accounts).filter(([, id]) => !!id).flatMap(([net]) => [networkToPlatform[net], storyPlatform[net]].filter(Boolean));
 
-      const day = await findNextOpenDay({});
+      const day = await findNextOpenDay(auth, {});
       if (!day) throw new Error("Could not find an open day to schedule on");
       const dateTimeStr = day + "T03:00:00";
 
@@ -551,9 +636,9 @@ export async function handleSocialVideoRequest(req, res, url) {
         // has no separate fbs/igs entry (a Story doesn't need its own).
         const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
         const plat = captions[captionKey] || {};
-        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr });
+        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, thumbnailUrl, coverMilliseconds });
         try {
-          await schedulePost(postBody);
+          await schedulePost(auth, postBody);
           results.push({ platformId, ok: true });
         } catch (e) {
           results.push({ platformId, ok: false, error: e.message });

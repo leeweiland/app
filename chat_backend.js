@@ -22,6 +22,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { JSDOM } from "jsdom";
 import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
+import { publishPacificRimClip } from "./pacific_rim_video_backend.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3118,18 +3119,23 @@ export async function handleChatRequest(req, res, url) {
       if (!ct.startsWith("multipart/form-data")) return sendJson(res, 400, { error: "video is required" });
 
       const cfg = getConfig();
-      let label = "", destination = "", trimStart, trimEnd;
+      let label = "", destination = "", trimStart, trimEnd, thumbnailBase64 = "", thumbnailTimeSec;
       let uploadPromise = null;
       await new Promise((resolve, reject) => {
-        const bb = Busboy({ headers: req.headers });
-        // Client appends label/destination/trim fields before the video file
-        // (same FormData-order-is-parse-order convention the in-chat camera
-        // upload already relies on) -- set by the time the file event fires.
+        const bb = Busboy({ headers: req.headers, limits: { fieldSize: 5 * 1024 * 1024 } });
+        // Client appends label/destination/trim/thumbnail fields before the
+        // video file (same FormData-order-is-parse-order convention the
+        // in-chat camera upload already relies on) -- set by the time the
+        // file event fires. thumbnailBase64/thumbnailTimeSec are optional --
+        // a JPEG frame the coach scrubbed to, used as this clip's Metricool
+        // cover image.
         bb.on("field", (name, val) => {
           if (name === "label") label = val;
           if (name === "destination") destination = val;
           if (name === "trimStart") trimStart = Number(val);
           if (name === "trimEnd") trimEnd = Number(val);
+          if (name === "thumbnailBase64") thumbnailBase64 = val;
+          if (name === "thumbnailTimeSec") thumbnailTimeSec = Number(val);
         });
         bb.on("file", (name, stream, info) => {
           const ext = extFromMime(info.mimeType, info.filename);
@@ -3208,6 +3214,14 @@ export async function handleChatRequest(req, res, url) {
       };
       messages.push(msg);
       writeJson(MESSAGES_FILE, messages);
+      // Fire-and-forget -- the coach shouldn't wait on a multi-platform
+      // Metricool schedule (Drive download + vertical reframe + several
+      // publish calls) before their capture flow closes. Both destinations
+      // publish the same way; publishPacificRimClip never throws (it
+      // resolves {published:false, error} on failure), this just logs it.
+      publishPacificRimClip({ driveFileId: uploaded.driveFileId, label, thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec })
+        .then(r => { if (!r.published) console.error("[gym-capture] Pacific Rim Athletics publish failed:", r.error); })
+        .catch(e => console.error("[gym-capture] Pacific Rim Athletics publish threw:", e.message));
       return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });
     }
 
