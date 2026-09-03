@@ -51,6 +51,8 @@
   /* ── Previous Scans ── */
   #pastScans { margin-top: 32px; }
   .past-scan-card { padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+  .search-result-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; margin-bottom: 8px; cursor: pointer; }
+  .search-result-row:hover { border-color: var(--pra-blue); }
   .past-scan-head { display: flex; align-items: center; gap: 10px; }
   .past-scan-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); flex: 1; }
   .past-scan-bf { font-weight: 700; font-size: .85rem; color: var(--pra-blue); }
@@ -116,6 +118,11 @@
     <div class="pra-h1 pra-glow" style="margin-bottom:22px;font-family:var(--font-secondary);font-size:clamp(1.05rem, 4.6vw, 1.7rem);white-space:nowrap">Powerbatics Body Mastery Builder</div>
 
     <div class="hub-tabs" id="hubTabsBar"></div>
+
+    <div id="viewingBanner" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,155,255,0.1);border:1px solid var(--pra-blue-dim);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:.82rem">
+      <div>Viewing <strong id="viewingBannerName"></strong>'s Physique Builder — read only</div>
+      <button id="viewingBannerBackBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.8rem;text-decoration:underline;white-space:nowrap">Back to Search</button>
+    </div>
 
     <div id="hubPanelProfile" class="hub-panel">
       <div class="pra-panel" style="padding:18px;margin-bottom:20px">
@@ -292,6 +299,16 @@
       <div id="movesVideoList"></div>
     </div>
 
+    <!-- Coach/admin only -- search any student's (admin: any coach's too)
+         Physique Builder. Stays in the tab bar even after picking someone,
+         so switching to a different person or back to yourself is always
+         one click away. -->
+    <div id="hubPanelSearch" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Find A Student</div>
+      <input class="pra-input" id="searchInput" placeholder="Search by name…" style="margin-bottom:14px"/>
+      <div id="searchResultsList"></div>
+    </div>
+
     <div id="hubPanelReports" class="hub-panel">
       <div class="pra-h2" style="margin-bottom:14px">Transform Into A Strength Ninja</div>
       <div class="pra-muted profile-summary-line" id="reportsProfileSummary"></div>
@@ -359,7 +376,7 @@ function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 1
 
 // ── Hub tabs: order + active tab are computed, not fixed in HTML -- Profile
 // leads until it's complete, then drops to the end and Nutrition Log leads. ──
-const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', moves: 'Moves', reports: 'Reports' };
+const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', moves: 'Moves', reports: 'Reports', search: 'Search' };
 let profileComplete = false;
 let activeHub = 'profile';
 let physiqueHistoryLoaded = false;
@@ -370,8 +387,84 @@ function computeProfileComplete(d) {
     && d.profile?.activityLevel && d.profile?.goal && d.weightKg);
 }
 
+// ── Coach/admin: view any student's (admin: any coach's too) Physique
+// Builder -- Search finds them by name; picking a result switches every
+// tab's data source to THEM instead of the logged-in staff member's own,
+// via apiFetch's/mediaUrl's asUserId param. Every write route on the
+// backend (resolveTargetUser) never honors asUserId regardless -- disabled
+// here too so browsing someone else's data can't be mistaken for editing
+// it.
+let me = null;
+let viewingUserId = null;
+let viewingUserName = '';
+function isStaffMe() { return !!me && (me.role === 'coach' || me.role === 'admin' || me.role === 'admin2'); }
+function apiFetch(url, opts) {
+  if (viewingUserId) url += (url.includes('?') ? '&' : '?') + 'asUserId=' + encodeURIComponent(viewingUserId);
+  return fetch(url, opts);
+}
+function mediaUrl(path) {
+  return viewingUserId ? path + (path.includes('?') ? '&' : '?') + 'asUserId=' + encodeURIComponent(viewingUserId) : path;
+}
+function applyViewingMode() {
+  const viewing = !!viewingUserId;
+  ['profileSaveBtn', 'foodSaveBtn', 'analyzeBtn', 'reportsMontageRegenBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = viewing;
+  });
+  document.getElementById('viewingBanner').style.display = viewing ? 'flex' : 'none';
+  if (viewing) document.getElementById('viewingBannerName').textContent = viewingUserName;
+}
+async function switchViewingUser(userId, name) {
+  viewingUserId = userId;
+  viewingUserName = name;
+  physiqueHistoryLoaded = false;
+  movesLoaded = false;
+  reportsMontageLoaded = false;
+  applyViewingMode();
+  await loadProfile();
+  activeHub = 'nutrition';
+  renderHubTabs(true);
+}
+function backToSelf() {
+  viewingUserId = null;
+  viewingUserName = '';
+  physiqueHistoryLoaded = false;
+  movesLoaded = false;
+  reportsMontageLoaded = false;
+  applyViewingMode();
+  loadProfile();
+  activeHub = 'search';
+  renderHubTabs(true);
+}
+let userSearchDebounce = null;
+async function runUserSearch(q) {
+  const list = document.getElementById('searchResultsList');
+  try {
+    const r = await fetch('/api/body-reports/search-users?q=' + encodeURIComponent(q));
+    if (!r.ok) return;
+    const d = await r.json();
+    list.innerHTML = d.users.map(u => {
+      const name = `${u.first} ${u.last}`;
+      return `<div class="pra-panel search-result-row" data-id="${u.id}" data-name="${escapeHtml(name)}">
+        <div>${escapeHtml(name)}</div>
+        <span class="pra-muted" style="font-size:.72rem;text-transform:uppercase">${escapeHtml(u.role)}</span>
+      </div>`;
+    }).join('') || '<div class="pra-muted" style="font-size:.85rem">No matches.</div>';
+    list.querySelectorAll('.search-result-row').forEach(row => {
+      row.onclick = () => switchViewingUser(row.dataset.id, row.dataset.name);
+    });
+  } catch {}
+}
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  clearTimeout(userSearchDebounce);
+  const q = e.target.value;
+  userSearchDebounce = setTimeout(() => runUserSearch(q), 250);
+});
+document.getElementById('viewingBannerBackBtn').onclick = backToSelf;
+
 function renderHubTabs(preserveActive) {
-  const order = profileComplete ? ['nutrition', 'physique', 'moves', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'moves', 'reports'];
+  const base = profileComplete ? ['nutrition', 'physique', 'moves', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'moves', 'reports'];
+  const order = isStaffMe() ? [...base, 'search'] : base;
   if (!preserveActive) activeHub = order[0];
   document.getElementById('hubTabsBar').innerHTML = order.map(id =>
     `<div class="hub-tab${id === activeHub ? ' active' : ''}" data-hub="${id}">${HUB_LABELS[id]}</div>`
@@ -390,6 +483,7 @@ function renderHubTabs(preserveActive) {
   if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
   if (activeHub === 'nutrition') loadFoodEntries();
   if (activeHub === 'moves' && !movesLoaded) { movesLoaded = true; loadFavoritedVideos(); }
+  if (activeHub === 'search') runUserSearch(document.getElementById('searchInput').value);
   if (activeHub === 'reports') {
     loadReport();
     // The montage sticks once built (chat_body_montages.json caches it
@@ -408,10 +502,13 @@ async function loadReportsMontage(url = '/api/body-reports/montage', opts = {}) 
   empty.style.display = 'none';
   loading.style.display = 'block';
   try {
-    const r = await fetch(url, opts);
+    // Regenerate's own POST call bypasses apiFetch on purpose -- the button
+    // that triggers it is disabled in viewing mode, and regeneration is
+    // never done on someone else's behalf regardless.
+    const r = await (opts.method === 'POST' ? fetch(url, opts) : apiFetch(url, opts));
     const d = await r.json();
     if (!r.ok || !d.montage) { empty.style.display = 'block'; return; }
-    document.getElementById('reportsMontageVideo').src = `/api/body-reports/montage/media/${d.montage.driveFileId}`;
+    document.getElementById('reportsMontageVideo').src = mediaUrl(`/api/body-reports/montage/media/${d.montage.driveFileId}`);
     section.style.display = 'block';
   } catch {
     empty.style.display = 'block';
@@ -506,28 +603,41 @@ function updateProfileSummaries(d) {
 
 async function loadProfile() {
   try {
-    const r = await fetch('/api/body-stats/profile');
+    const r = await apiFetch('/api/body-stats/profile');
     if (!r.ok) return;
     const d = await r.json();
-    if (d.profile) {
-      if (d.profile.heightCm) {
-        const totalIn = Math.round(d.profile.heightCm / 2.54);
-        document.getElementById('profileHeightFt').value = Math.floor(totalIn / 12);
-        document.getElementById('profileHeightIn').value = totalIn % 12;
-        document.getElementById('profileHeightCm').value = d.profile.heightCm;
-      }
-      if (d.profile.age) document.getElementById('profileAge').value = d.profile.age;
-      if (d.profile.sex) document.getElementById('profileSex').value = d.profile.sex;
-      if (d.profile.goalWeightKg) {
-        document.getElementById('profileGoalWeightLbs').value = kgToLbsVal(d.profile.goalWeightKg);
-        document.getElementById('profileGoalWeightKg').value = d.profile.goalWeightKg;
-      }
-      if (d.profile.activityLevel) document.getElementById('profileActivityLevel').value = d.profile.activityLevel;
-      if (d.profile.goal) document.getElementById('profileGoal').value = d.profile.goal;
+    const p = d.profile || {};
+    // Always sets (with an empty fallback), not just conditionally when a
+    // value is present -- switching to view a different person (or back to
+    // self) needs to actually CLEAR a field the previous person had filled
+    // in, not leave it showing stale data from whoever was viewed before.
+    if (p.heightCm) {
+      const totalIn = Math.round(p.heightCm / 2.54);
+      document.getElementById('profileHeightFt').value = Math.floor(totalIn / 12);
+      document.getElementById('profileHeightIn').value = totalIn % 12;
+      document.getElementById('profileHeightCm').value = p.heightCm;
+    } else {
+      document.getElementById('profileHeightFt').value = '';
+      document.getElementById('profileHeightIn').value = '';
+      document.getElementById('profileHeightCm').value = '';
     }
+    document.getElementById('profileAge').value = p.age || '';
+    document.getElementById('profileSex').value = p.sex || 'male';
+    if (p.goalWeightKg) {
+      document.getElementById('profileGoalWeightLbs').value = kgToLbsVal(p.goalWeightKg);
+      document.getElementById('profileGoalWeightKg').value = p.goalWeightKg;
+    } else {
+      document.getElementById('profileGoalWeightLbs').value = '';
+      document.getElementById('profileGoalWeightKg').value = '';
+    }
+    document.getElementById('profileActivityLevel').value = p.activityLevel || 'light';
+    document.getElementById('profileGoal').value = p.goal || 'reduce';
     if (d.weightKg) {
       document.getElementById('profileWeightLbs').value = kgToLbsVal(d.weightKg);
       document.getElementById('profileWeightKg').value = d.weightKg;
+    } else {
+      document.getElementById('profileWeightLbs').value = '';
+      document.getElementById('profileWeightKg').value = '';
     }
     profileComplete = computeProfileComplete(d);
     showEstimate(d);
@@ -630,7 +740,7 @@ document.getElementById('foodSaveBtn').onclick = async () => {
 async function loadFoodEntries() {
   const dateVal = document.getElementById('foodDate').value;
   try {
-    const r = await fetch('/api/food-log/entries?date=' + encodeURIComponent(dateVal));
+    const r = await apiFetch('/api/food-log/entries?date=' + encodeURIComponent(dateVal));
     if (!r.ok) return;
     const { entries, totals } = await r.json();
     document.getElementById('foodTotalCals').textContent = Math.round(totals.calories);
@@ -645,13 +755,13 @@ async function loadFoodEntries() {
     const list = document.getElementById('foodEntriesList');
     document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';
     list.innerHTML = entries.map(e => `<div class="pra-panel food-entry-row" data-id="${escapeHtml(e.id)}">
-      ${e.driveFileId ? `<img class="food-entry-thumb" src="/api/food-log/media/${escapeHtml(e.driveFileId)}" loading="lazy"/>` : ''}
+      ${e.driveFileId ? `<img class="food-entry-thumb" src="${mediaUrl('/api/food-log/media/' + escapeHtml(e.driveFileId))}" loading="lazy"/>` : ''}
       <span class="food-entry-desc">${escapeHtml(e.description || '')}</span>
       <span class="food-entry-cals">${Math.round(e.calories || 0)} cal</span>
-      <button class="past-scan-del" title="Delete">✕</button>
+      ${viewingUserId ? '' : '<button class="past-scan-del" title="Delete">✕</button>'}
     </div>`).join('');
     list.querySelectorAll('.food-entry-row').forEach(row => {
-      row.querySelector('.past-scan-del').onclick = () => deleteFoodEntry(row.dataset.id);
+      row.querySelector('.past-scan-del')?.addEventListener('click', () => deleteFoodEntry(row.dataset.id));
     });
   } catch {}
 }
@@ -677,7 +787,7 @@ function getScanWeightKg() {
 }
 async function loadCheckinStatus() {
   try {
-    const r = await fetch('/api/body-stats/checkin-status');
+    const r = await apiFetch('/api/body-stats/checkin-status');
     if (!r.ok) return;
     const d = await r.json();
     const el = document.getElementById('checkinStatus');
@@ -820,7 +930,7 @@ function renderResult(d, scrollTo) {
 
 async function loadPastScans() {
   try {
-    const r = await fetch('/api/body-scan/scans');
+    const r = await apiFetch('/api/body-scan/scans');
     if (!r.ok) return;
     const { scans } = await r.json();
     const wrap = document.getElementById('pastScans');
@@ -842,7 +952,7 @@ async function loadPastScans() {
         <div class="past-scan-head">
           <span class="past-scan-date">${date}</span>
           ${bfVal ? `<span class="past-scan-bf">${escapeHtml(bfVal)}</span>` : ''}
-          <button class="past-scan-del" title="Delete">✕</button>
+          ${viewingUserId ? '' : '<button class="past-scan-del" title="Delete">✕</button>'}
         </div>
         ${legacyText ? `<div class="past-scan-body">${escapeHtml(legacyText)}</div>` : ''}
       </div>`;
@@ -880,7 +990,7 @@ let physiqueHistory = []; // ascending by createdAt, {id, rawId, createdAt, driv
 async function loadPhysiqueHistory() {
   try {
     const [scansR, photosR, statsR] = await Promise.all([
-      fetch('/api/body-scan/scans'), fetch('/api/body-stats/photos'), fetch('/api/body-stats/entries'),
+      apiFetch('/api/body-scan/scans'), apiFetch('/api/body-stats/photos'), apiFetch('/api/body-stats/entries'),
     ]);
     const scansD = scansR.ok ? await scansR.json() : { scans: [] };
     const photosD = photosR.ok ? await photosR.json() : { photos: [] };
@@ -925,17 +1035,17 @@ function renderProgressList() {
     if (p.weightKg != null) bits.push(`${kgToDisplay(p.weightKg)} ${unit}`);
     if (p.bodyFatLowPct != null && p.bodyFatHighPct != null) bits.push(`${p.bodyFatLowPct}-${p.bodyFatHighPct}% BF`);
     return `<div class="pra-panel progress-entry-row" data-id="${escapeHtml(p.id)}">
-      <img class="progress-entry-thumb" src="/api/body-stats/media/${escapeHtml(p.driveFileId)}" loading="lazy"/>
+      <img class="progress-entry-thumb" src="${mediaUrl('/api/body-stats/media/' + escapeHtml(p.driveFileId))}" loading="lazy"/>
       <div class="progress-entry-info">
         <div class="progress-entry-date">${date}</div>
         <div class="progress-entry-stats">${escapeHtml(bits.join(' · ') || '—')}</div>
       </div>
-      <button class="photo-thumb-del" title="Delete">✕</button>
+      ${viewingUserId ? '' : '<button class="photo-thumb-del" title="Delete">✕</button>'}
     </div>`;
   }).join('');
   list.querySelectorAll('.progress-entry-row').forEach(el => {
     const item = physiqueHistory.find(p => p.id === el.dataset.id);
-    el.querySelector('.photo-thumb-del').onclick = () => { if (item) deletePhysiqueHistoryItem(item); };
+    el.querySelector('.photo-thumb-del')?.addEventListener('click', () => { if (item) deletePhysiqueHistoryItem(item); });
   });
 }
 
@@ -990,7 +1100,7 @@ document.getElementById('reportNextBtn').onclick = () => shiftReportAnchor(1);
 async function loadReport() {
   const dateStr = reportAnchor.toISOString().slice(0, 10);
   try {
-    const r = await fetch(`/api/body-reports/summary?period=${reportPeriod}&date=${dateStr}`);
+    const r = await apiFetch(`/api/body-reports/summary?period=${reportPeriod}&date=${dateStr}`);
     if (!r.ok) return;
     const d = await r.json();
     const fmt = iso => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1048,6 +1158,10 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
 }
 
 (async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    if (r.ok) me = (await r.json()).user || null;
+  } catch {}
   await loadProfile();
   renderHubTabs();
   loadState();

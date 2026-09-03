@@ -5,7 +5,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, resolveTargetUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig } from "./chat_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
 
@@ -71,7 +71,7 @@ export function estimateFromProfile(profile, weightKg) {
 export async function handleBodyStatsRequest(req, res, url) {
   // ── Profile (height/age/sex/goal weight/activity/goal) ─────────────────
   if (req.method === "GET" && url.pathname === "/api/body-stats/profile") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const profile = readJson(PROFILE_FILE, {})[user.id] || null;
     const weightKg = getLatestWeightKg(user.id);
@@ -106,7 +106,7 @@ export async function handleBodyStatsRequest(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/body-stats/entries") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const all = readJson(STATS_FILE, {});
     // Ascending by createdAt -- chart-ready as-is; the frontend reverses its
@@ -147,7 +147,7 @@ export async function handleBodyStatsRequest(req, res, url) {
   // a fresh weight was submitted alongside the photo). This just reports
   // status off that same getLastCheckinAt() read.
   if (req.method === "GET" && url.pathname === "/api/body-stats/checkin-status") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const lastCheckinAt = getLastCheckinAt(user.id);
     const daysSince = lastCheckinAt ? (Date.now() - new Date(lastCheckinAt).getTime()) / 86400000 : null;
@@ -198,7 +198,7 @@ export async function handleBodyStatsRequest(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/body-stats/photos") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const all = readJson(PHOTOS_FILE, {});
     const photos = (all[user.id] || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -224,7 +224,7 @@ export async function handleBodyStatsRequest(req, res, url) {
   // through Drive's own share link).
   const mediaMatch = url.pathname.match(/^\/api\/body-stats\/media\/([^/]+)$/);
   if (mediaMatch && req.method === "GET") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) { res.writeHead(401); res.end(); return true; }
     const fileId = mediaMatch[1];
     const ownPhotos = readJson(PHOTOS_FILE, {})[user.id] || [];

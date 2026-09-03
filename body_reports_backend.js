@@ -4,12 +4,13 @@
 // four different files (food log, stats, photos, scans) rather than owning
 // one of its own.
 
-import { readJson, getSessionUser, sendJson } from "./chat_backend.js";
+import { readJson, getSessionUser, resolveTargetUser, sendJson, isStaff, isAdmin } from "./chat_backend.js";
 
 const FOOD_LOG_FILE = "chat_food_log.json";
 const STATS_FILE = "chat_body_stats.json";
 const PHOTOS_FILE = "chat_progress_photos.json";
 const SCANS_FILE = "chat_body_scans.json";
+const USERS_FILE = "chat_users.json";
 
 function toDateKey(d) { return d.toISOString().slice(0, 10); }
 
@@ -43,9 +44,27 @@ function inRange(iso, start, end) {
 }
 
 export async function handleBodyReportsRequest(req, res, url) {
+  // Coach/admin "view any student's Physique Builder" search -- a coach's
+  // pool is every non-staff user; an admin's pool is everyone, staff
+  // included, per the explicit ask that admin can also pull up a coach's
+  // own Physique Builder.
+  if (req.method === "GET" && url.pathname === "/api/body-reports/search-users") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+    let pool = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
+    if (!isAdmin(user)) pool = pool.filter(u => !isStaff(u));
+    const matches = (q ? pool.filter(u => `${u.first} ${u.last}`.toLowerCase().includes(q)) : pool)
+      .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`))
+      .slice(0, 50)
+      .map(u => ({ id: u.id, first: u.first, last: u.last, role: u.role }));
+    return sendJson(res, 200, { users: matches });
+  }
+
   if (req.method !== "GET" || url.pathname !== "/api/body-reports/summary") return false;
 
-  const user = getSessionUser(req);
+  const user = resolveTargetUser(req, url);
   if (!user) return sendJson(res, 401, { error: "Not logged in" });
 
   const period = ["daily", "weekly", "monthly"].includes(url.searchParams.get("period")) ? url.searchParams.get("period") : "daily";

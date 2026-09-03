@@ -363,6 +363,31 @@ function setSessionCookie(res, token) {
   res.setHeader("Set-Cookie", `pra_session=${token}; HttpOnly; Path=/; Max-Age=${30 * 24 * 3600}; SameSite=Lax`);
 }
 
+// Physique Builder's coach/admin "view any student" search -- READ-ONLY
+// endpoints (Profile/Fuel/Physique/Reports GETs) call this instead of
+// getSessionUser() directly, so a staff session viewing someone else's data
+// reads THEIR records instead of the logged-in coach's own. Write routes
+// deliberately keep calling getSessionUser() as before (never honor
+// ?asUserId) -- viewing is supported, writing on someone else's behalf
+// isn't, so a coach browsing a student's Physique Builder can never
+// accidentally save/log/analyze something into the wrong account.
+// Falls back to the actual session user whenever the override isn't
+// applicable (no session, no asUserId, self-view, non-staff requester,
+// target doesn't exist, or a coach — not admin — targeting another staff
+// member) rather than erroring, so every call site can treat this exactly
+// like getSessionUser().
+export function resolveTargetUser(req, url) {
+  const user = getSessionUser(req);
+  if (!user) return null;
+  const asUserId = url.searchParams.get("asUserId");
+  if (!asUserId || asUserId === user.id || !isStaff(user)) return user;
+  const target = readJson(USERS_FILE, []).find(u => u.id === asUserId);
+  if (!target) return user;
+  if (isAdmin(user)) return target;
+  if (user.role === "coach" && !isStaff(target)) return target;
+  return user;
+}
+
 // ── JSON body helper ─────────────────────────────────────────────────────
 export function readJsonBody(req) {
   return new Promise((resolve) => {

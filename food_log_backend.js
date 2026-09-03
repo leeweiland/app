@@ -6,7 +6,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, resolveTargetUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI, analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 
@@ -146,7 +146,7 @@ export async function handleFoodLogRequest(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/food-log/entries") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const date = url.searchParams.get("date") || dateKey();
     const all = readJson(LOG_FILE, {});
@@ -181,7 +181,7 @@ export async function handleFoodLogRequest(req, res, url) {
   // -- the fileId must belong to one of the requester's own entries.
   const mediaMatch = url.pathname.match(/^\/api\/food-log\/media\/([^/]+)$/);
   if (mediaMatch && req.method === "GET") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) { res.writeHead(401); res.end(); return true; }
     const fileId = mediaMatch[1];
     const byDate = readJson(LOG_FILE, {})[user.id] || {};

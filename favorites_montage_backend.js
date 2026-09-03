@@ -19,7 +19,7 @@ import { randomUUID } from "crypto";
 import { execFileSync } from "child_process";
 import ffmpegPath from "ffmpeg-static";
 import {
-  readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia, isClientRole,
+  readJson, writeJson, getSessionUser, resolveTargetUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia, isClientRole,
 } from "./chat_backend.js";
 
 const FAVORITES_FILE = "chat_favorites.json";
@@ -153,7 +153,7 @@ export async function handleFavoritesMontageRequest(req, res, url) {
   // Cached-first: once a montage exists for this student it just keeps
   // being served, no rebuild, until they explicitly regenerate it.
   if (url.pathname === "/api/body-reports/montage" && req.method === "GET") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" }), true;
     try {
       let montage = getCachedMontage(user.id);

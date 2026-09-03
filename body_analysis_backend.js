@@ -7,7 +7,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, getConfig } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, resolveTargetUser, getDriveAccessToken, uploadStreamToDrive, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 import { recordWeightEntry, getLatestWeightKg } from "./body_stats_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
@@ -54,7 +54,7 @@ not a clinical or medical measurement, and can be meaningfully off -- just the n
 export async function handleBodyAnalysisRequest(req, res, url) {
   // ── GET saved scans for logged-in user ───────────────────────────────────
   if (req.method === "GET" && url.pathname === "/api/body-scan/scans") {
-    const user = getSessionUser(req);
+    const user = resolveTargetUser(req, url);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const all = readJson(SCANS_FILE, {});
     return sendJson(res, 200, { scans: (all[user.id] || []).slice().reverse() });
