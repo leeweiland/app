@@ -1377,14 +1377,21 @@ function positionPickerNear(panel, anchorEl, preferAbove) {
   // than disappearing under a nav bar.
   const headerBar = document.getElementById('chat-app-header');
   const bottomBar = document.getElementById('chat-app-bottom-bar');
+  // getBoundingClientRect() on a display:none element (the bottom icon bar
+  // is hidden on chat.html's mobile thread view -- the composer takes that
+  // space instead) returns an all-zeros rect, not "nothing there" -- height
+  // 0 is the actual signal a bar isn't rendered; treating its top:0 as real
+  // previously read as "this bar covers the entire top of the screen,"
+  // collapsing the usable height to ~0 and pinning every popup to the very
+  // top regardless of the anchor.
   if (headerBar) {
     const hr = headerBar.getBoundingClientRect();
-    if (hr.bottom > vTop) { vh -= (hr.bottom - vTop); vTop = hr.bottom; }
+    if (hr.height > 0 && hr.bottom > vTop) { vh -= (hr.bottom - vTop); vTop = hr.bottom; }
   }
   if (bottomBar) {
     const br = bottomBar.getBoundingClientRect();
     const usableBottom = vTop + vh;
-    if (br.top < usableBottom) vh -= (usableBottom - br.top);
+    if (br.height > 0 && br.top < usableBottom) vh -= (usableBottom - br.top);
   }
   panel.style.position = 'fixed';
   panel.style.bottom = 'auto';
@@ -1456,14 +1463,21 @@ function positionMessagePopupNear(panel, anchorEl) {
   let vTop = vv ? vv.offsetTop : 0;
   const headerBar = document.getElementById('chat-app-header');
   const bottomBar = document.getElementById('chat-app-bottom-bar');
+  // getBoundingClientRect() on a display:none element (the bottom icon bar
+  // is hidden on chat.html's mobile thread view -- the composer takes that
+  // space instead) returns an all-zeros rect, not "nothing there" -- height
+  // 0 is the actual signal a bar isn't rendered; treating its top:0 as real
+  // previously read as "this bar covers the entire top of the screen,"
+  // collapsing the usable height to ~0 and pinning every popup to the very
+  // top regardless of the anchor.
   if (headerBar) {
     const hr = headerBar.getBoundingClientRect();
-    if (hr.bottom > vTop) { vh -= (hr.bottom - vTop); vTop = hr.bottom; }
+    if (hr.height > 0 && hr.bottom > vTop) { vh -= (hr.bottom - vTop); vTop = hr.bottom; }
   }
   if (bottomBar) {
     const br = bottomBar.getBoundingClientRect();
     const usableBottom = vTop + vh;
-    if (br.top < usableBottom) vh -= (usableBottom - br.top);
+    if (br.height > 0 && br.top < usableBottom) vh -= (usableBottom - br.top);
   }
 
   panel.style.position = 'fixed';
