@@ -79,7 +79,14 @@
   .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
   .convo-time-row { display: flex; align-items: center; gap: 5px; }
-  .convo-time { font-family: Arial, sans-serif; font-weight: 400; font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; }
+  /* Fixed width (not just white-space:nowrap) so a short date ("Aug 13")
+     and a longer time ("11:07 AM") don't leave the badge next to it sitting
+     at a different X position row to row -- a nowrap-only box sizes to
+     its own content, so the badge (flex sibling before it) shifted left or
+     right depending on which format the row happened to have. Right-
+     aligned within this fixed box so the text itself still hugs the row's
+     right edge either way. */
+  .convo-time { font-family: Arial, sans-serif; font-weight: 400; font-size: .68rem; color: var(--pra-dim); white-space: nowrap; min-height: 1em; width: 58px; flex-shrink: 0; text-align: right; }
   .convo-time.has-unread { color: #39ff14; font-weight: 700; }
   /* Badge lives next to the time, not the name -- .sidebar is resizable
      (320px default) independent of the overall window/app width, so
