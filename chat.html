@@ -311,6 +311,13 @@
   .reaction-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .reaction-chip { font-size: .72rem; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; padding: 1px 7px; cursor: pointer; }
   .reaction-chip.mine { border-color: var(--pra-blue); background: var(--pra-blue-dim); }
+  /* Long-press-on-a-chip popup listing who reacted with that emoji --
+     same floating-panel language as .msg-action-bar (fixed, positioned via
+     the same positionPickerNear()), just a plain name list. */
+  .reactor-list-popup { display: none; position: fixed; z-index: 30; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 12px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); max-width: 220px; }
+  .reactor-list-popup.show { display: block; }
+  .reactor-list-emoji { font-size: 1.3rem; text-align: center; margin-bottom: 6px; }
+  .reactor-list-name { font-size: .82rem; padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* The composer used to sit right above #chat-app-bottom-bar, which
      already had its own safe-area-inset-bottom padding — that gave it a
@@ -809,6 +816,7 @@
             <button class="mab-action" id="mabMoreBtn" title="More">⋯</button>
           </div>
         </div>
+        <div class="reactor-list-popup" id="reactorListPopup"></div>
         <div class="composer">
           <div class="reply-preview" id="replyPreview" style="display:none"></div>
           <div class="paste-preview" id="pastePreview" style="display:none"></div>
@@ -3410,6 +3418,24 @@ function renderReactionChips(m) {
   ).join('') + '</div>';
 }
 
+// Long-press (touch) / right-click (desktop) on a reaction chip -- who
+// reacted with that specific emoji. Names resolve against the open
+// conversation's own participant list (reactions can only come from
+// participants of that conversation).
+function showReactorList(chipEl, m) {
+  const emoji = chipEl.dataset.emoji;
+  const convo = conversations.find(c => c.id === activeConvoId);
+  const nameById = new Map((convo?.participants || []).map(p => [p.id, p.id === me.id ? 'You' : `${p.first} ${p.last}`]));
+  const names = (m.reactions || []).filter(r => r.emoji === emoji).map(r => nameById.get(r.userId) || 'Someone');
+  if (!names.length) return;
+  const popup = document.getElementById('reactorListPopup');
+  popup.innerHTML = `<div class="reactor-list-emoji">${emoji}</div>` +
+    names.map(n => `<div class="reactor-list-name">${escapeHtml(n)}</div>`).join('');
+  positionPickerNear(popup, chipEl);
+  popup.classList.add('show');
+}
+function hideReactorList() { document.getElementById('reactorListPopup').classList.remove('show'); }
+
 function escapeHtml(s) {
   const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
 }
@@ -3506,6 +3532,11 @@ function escapeHtml(s) {
   document.getElementById('threadBody').addEventListener('click', (e) => {
     const chip = e.target.closest('.reaction-chip');
     if (chip) {
+      // Suppressed for the trailing synthetic click a long-press's own
+      // touchend still fires -- that gesture already opened the reactor
+      // list; toggling the reaction on top of it would be an unintended
+      // side effect of what was meant as a "show me who" press.
+      if (suppressNextChipClick) { suppressNextChipClick = false; return; }
       const row = chip.closest('.bubble-row');
       sendReaction(row.dataset.mid, chip.dataset.emoji);
       return;
@@ -3530,10 +3561,25 @@ function escapeHtml(s) {
   });
 
   // Long-press (touch) / right-click (desktop) opens the WhatsApp-style
-  // #msgActionBar for that bubble — see openMsgActionBar().
+  // #msgActionBar for that bubble — see openMsgActionBar(). A press that
+  // lands on a reaction chip specifically shows who reacted with that
+  // emoji instead (showReactorList) -- checked first since a chip is
+  // always inside a bubble-row too.
   let longPressTimer = null;
+  let suppressNextChipClick = false;
   const threadBodyEl = document.getElementById('threadBody');
   threadBodyEl.addEventListener('touchstart', (e) => {
+    const chip = e.target.closest('.reaction-chip');
+    if (chip) {
+      const row = chip.closest('.bubble-row');
+      longPressTimer = setTimeout(() => {
+        const m = currentThreadMessages.find(x => x.id === row.dataset.mid);
+        if (m) showReactorList(chip, m);
+        suppressNextChipClick = true;
+        longPressTimer = null;
+      }, 450);
+      return;
+    }
     const row = e.target.closest('.bubble-row');
     if (!row) return;
     longPressTimer = setTimeout(() => { openMsgActionBar(row, row.dataset.mid); longPressTimer = null; }, 450);
@@ -3543,6 +3589,14 @@ function escapeHtml(s) {
   threadBodyEl.addEventListener('touchend', cancelLongPress);
   threadBodyEl.addEventListener('touchcancel', cancelLongPress);
   threadBodyEl.addEventListener('contextmenu', (e) => {
+    const chip = e.target.closest('.reaction-chip');
+    if (chip) {
+      e.preventDefault();
+      const row = chip.closest('.bubble-row');
+      const m = currentThreadMessages.find(x => x.id === row.dataset.mid);
+      if (m) showReactorList(chip, m);
+      return;
+    }
     const row = e.target.closest('.bubble-row');
     if (!row) return;
     e.preventDefault();
@@ -4918,6 +4972,7 @@ function clearActionSelection() {
   setActionSelectedRow(null);
   actionBarMessageId = null;
   moreMenuMessageId = null;
+  hideReactorList();
 }
 function openMsgActionBar(anchorEl, mid) {
   const m = currentThreadMessages.find(x => x.id === mid);
@@ -5034,7 +5089,15 @@ document.addEventListener('click', (e) => {
   if (actionSelectedRow && e.target.closest('.bubble-row')?.isSameNode(actionSelectedRow)) return;
   if (actionSelectedRow || moreMenuMessageId) clearActionSelection();
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearActionSelection(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { clearActionSelection(); hideReactorList(); } });
+// Same "outside click closes it, except the long-press's own trailing
+// synthetic click" shape as the action bar above.
+document.addEventListener('click', (e) => {
+  const popup = document.getElementById('reactorListPopup');
+  if (!popup.classList.contains('show')) return;
+  if (popup.contains(e.target) || e.target.closest('.reaction-chip')) return;
+  hideReactorList();
+});
 
 function startReply(mid) {
   const m = currentThreadMessages.find(x => x.id === mid);
