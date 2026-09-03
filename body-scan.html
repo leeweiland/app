@@ -425,14 +425,21 @@ async function switchViewingUser(userId, name) {
   activeHub = 'nutrition';
   renderHubTabs(true);
 }
-function backToSelf() {
+async function backToSelf() {
   viewingUserId = null;
   viewingUserName = '';
   physiqueHistoryLoaded = false;
   movesLoaded = false;
   reportsMontageLoaded = false;
   applyViewingMode();
-  loadProfile();
+  // Awaited (switchViewingUser does the same) -- renderHubTabs' tab ORDER
+  // depends on profileComplete, which loadProfile is what sets. Firing it
+  // without waiting meant the order was computed off whichever value
+  // profileComplete last held -- the just-viewed student's, not this
+  // account's own -- so Profile could land back at the front of the bar
+  // even though this account's own profile is complete and it belongs at
+  // the end.
+  await loadProfile();
   activeHub = 'profile';
   renderHubTabs(true);
 }
