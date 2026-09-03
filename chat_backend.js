@@ -231,6 +231,10 @@ export function getConfig() {
     // saved in Drive, labeled with whatever the coach typed.
     gymTrainingChannelId: "", gymTrainingFolderId: "1sxSvzkKarlK3QxrnGQufKwKrJ7yd1800",
     gymLevelTestChannelId: "", gymLevelTestFolderId: "1jjtWE3ATlKwJ76qe6JbTWBX4s4O6w7_t",
+    // Online Level Test forward (message action bar, coach/admin only) --
+    // a coach forwards an already-sent video (plus an optional note) into
+    // this channel, no fresh upload/Drive folder involved.
+    onlineLevelTestChannelId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
@@ -253,6 +257,7 @@ export function getConfig() {
   if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
+  if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
@@ -2889,7 +2894,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2907,6 +2912,7 @@ export async function handleChatRequest(req, res, url) {
         if (gymTrainingFolderId !== undefined) cfg.gymTrainingFolderId = gymTrainingFolderId;
         if (gymLevelTestChannelId !== undefined) cfg.gymLevelTestChannelId = gymLevelTestChannelId;
         if (gymLevelTestFolderId !== undefined) cfg.gymLevelTestFolderId = gymLevelTestFolderId;
+        if (onlineLevelTestChannelId !== undefined) cfg.onlineLevelTestChannelId = onlineLevelTestChannelId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
@@ -3203,6 +3209,51 @@ export async function handleChatRequest(req, res, url) {
       messages.push(msg);
       writeJson(MESSAGES_FILE, messages);
       return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });
+    }
+
+    // ─── Online Level Test forward (message action bar, video only) ────────
+    // Forwards an already-sent video into the admin-configured Online Level
+    // Tests channel, with an optional coach note posted right after it (so
+    // it reads as a caption underneath, same as any other video+text pair
+    // in a normal thread) -- no fresh upload, the video's already in Drive.
+    if (p === "/api/chat/level-test-forward" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const { messageId, note } = await readJsonBody(req);
+      if (!messageId) return sendJson(res, 400, { error: "messageId is required" });
+      const messages = readJson(MESSAGES_FILE, []);
+      const srcMsg = messages.find(m => m.id === messageId && m.type === "video");
+      if (!srcMsg) return sendJson(res, 404, { error: "Video message not found" });
+      const convos = readJson(CONVOS_FILE, []);
+      const srcConvo = convos.find(c => c.id === srcMsg.conversationId);
+      if (!srcConvo || !srcConvo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not a participant in that conversation" });
+
+      const cfg = getConfig();
+      if (!cfg.onlineLevelTestChannelId) return sendJson(res, 400, { error: "Online Level Tests channel isn't set up yet — ask an admin to assign it in Admin Settings." });
+      const targetConvo = convos.find(c => c.id === cfg.onlineLevelTestChannelId);
+      if (!targetConvo) return sendJson(res, 400, { error: "The Online Level Tests channel no longer exists — ask an admin to reassign it in Admin Settings." });
+
+      if (!targetConvo.participantIds.includes(user.id)) {
+        targetConvo.participantIds.push(user.id);
+        writeJson(CONVOS_FILE, convos);
+      }
+      const now = Date.now();
+      const videoMsg = {
+        id: randomUUID(), conversationId: targetConvo.id, senderId: user.id,
+        type: "video", driveFileId: srcMsg.driveFileId, mimeType: srcMsg.mimeType, name: srcMsg.name,
+        driveFileName: srcMsg.driveFileName, forwarded: true,
+        createdAt: new Date(now).toISOString(),
+      };
+      messages.push(videoMsg);
+      const trimmedNote = String(note || "").trim();
+      if (trimmedNote) {
+        messages.push({
+          id: randomUUID(), conversationId: targetConvo.id, senderId: user.id,
+          type: "text", text: trimmedNote,
+          createdAt: new Date(now + 1).toISOString(),
+        });
+      }
+      writeJson(MESSAGES_FILE, messages);
+      return sendJson(res, 200, { ok: true, conversationId: targetConvo.id });
     }
 
     // ─── Gym + Online skill levels (combined, searchable) ─────────────────

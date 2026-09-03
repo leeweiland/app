@@ -181,6 +181,10 @@
         <input class="pra-input" id="gymLevelTestFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
+        <label class="pra-label">Online Level Tests Channel/Group (the message action bar's Level Test forward button posts here)</label>
+        <select class="pra-select" id="onlineLevelTestChannelId"><option value="">— Select a group/channel —</option></select>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -940,9 +944,10 @@ async function createUser() {
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// Populates the Gym Training / Gym Level Test channel pickers -- run once
-// per loadConfig() call, before either <select>'s value is set, so the
-// saved id actually has a matching <option> to land on.
+// Populates the Gym Training / Gym Level Test / Online Level Tests channel
+// pickers -- run once per loadConfig() call, before any of their <select>
+// values are set, so the saved id actually has a matching <option> to
+// land on.
 async function loadGymChannelOptions() {
   const r = await fetch('/api/admin/groups');
   if (!r.ok) return;
@@ -952,6 +957,7 @@ async function loadGymChannelOptions() {
   ).join('');
   document.getElementById('gymTrainingChannelId').innerHTML = optionsHtml;
   document.getElementById('gymLevelTestChannelId').innerHTML = optionsHtml;
+  document.getElementById('onlineLevelTestChannelId').innerHTML = optionsHtml;
 }
 
 async function loadConfig() {
@@ -975,6 +981,7 @@ async function loadConfig() {
   document.getElementById('gymTrainingFolderId').value = d.gymTrainingFolderId || '';
   document.getElementById('gymLevelTestChannelId').value = d.gymLevelTestChannelId || '';
   document.getElementById('gymLevelTestFolderId').value = d.gymLevelTestFolderId || '';
+  document.getElementById('onlineLevelTestChannelId').value = d.onlineLevelTestChannelId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -1101,6 +1108,7 @@ async function saveConfig() {
       gymTrainingFolderId: document.getElementById('gymTrainingFolderId').value.trim(),
       gymLevelTestChannelId: document.getElementById('gymLevelTestChannelId').value,
       gymLevelTestFolderId: document.getElementById('gymLevelTestFolderId').value.trim(),
+      onlineLevelTestChannelId: document.getElementById('onlineLevelTestChannelId').value,
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });
