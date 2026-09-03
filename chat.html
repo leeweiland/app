@@ -1336,9 +1336,28 @@ function positionPickerNear(panel, anchorEl, preferAbove) {
   // let the panel get positioned (and clipped) behind the keyboard.
   const vv = window.visualViewport;
   const vw = vv ? vv.width : window.innerWidth;
-  const vh = vv ? vv.height : window.innerHeight;
+  let vh = vv ? vv.height : window.innerHeight;
   const vLeft = vv ? vv.offsetLeft : 0;
-  const vTop = vv ? vv.offsetTop : 0;
+  let vTop = vv ? vv.offsetTop : 0;
+  // chat-header.js's own fixed top/bottom bars (z-index 500, above this
+  // panel's z-index 30) sit on top of whatever's positioned underneath
+  // them -- without this, the clamp below still let the panel land in
+  // that space, "fitting" by raw viewport math while actually rendering
+  // hidden behind an opaque bar instead of genuinely off-screen. Shrinking
+  // the usable viewport to their inner edges keeps the panel inside the
+  // real visible strip, overlapping message content if it must rather
+  // than disappearing under a nav bar.
+  const headerBar = document.getElementById('chat-app-header');
+  const bottomBar = document.getElementById('chat-app-bottom-bar');
+  if (headerBar) {
+    const hr = headerBar.getBoundingClientRect();
+    if (hr.bottom > vTop) { vh -= (hr.bottom - vTop); vTop = hr.bottom; }
+  }
+  if (bottomBar) {
+    const br = bottomBar.getBoundingClientRect();
+    const usableBottom = vTop + vh;
+    if (br.top < usableBottom) vh -= (usableBottom - br.top);
+  }
   panel.style.position = 'fixed';
   panel.style.bottom = 'auto';
   panel.style.right = 'auto';
