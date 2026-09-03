@@ -185,6 +185,10 @@
         <select class="pra-select" id="onlineLevelTestChannelId"><option value="">— Select a group/channel —</option></select>
       </div>
       <div class="field">
+        <label class="pra-label">Physique Builder — Highlight Reel Montage Drive Folder ID (the generated video is saved here)</label>
+        <input class="pra-input" id="physiqueMontageFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -319,6 +323,37 @@
         <label class="pra-label">Own-Words Ratio: <span id="svOwnWordsRatioLabel">60</span>%</label>
         <input type="range" id="svOwnWordsRatio" min="0" max="100" step="5" style="width:100%"/>
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">0% = write completely fresh copy. 100% = reuse the voice bank's exact past sentences as much as possible.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Publish To</label>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;font-size:.86rem">
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-fb"/> Facebook</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-fbs"/> Facebook Story</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-ig"/> Instagram</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-igs"/> Instagram Story</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-li"/> LinkedIn</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-tt"/> TikTok</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-x"/> X</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-yt"/> YouTube Shorts</label>
+        </div>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:6px">Only networks actually connected to this brand in Metricool ever publish, regardless of what's checked here — these just turn a connected network on/off.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Timezone</label>
+        <select class="pra-select" id="svTimezone">
+          <option value="America/Anchorage">Alaska</option>
+          <option value="Pacific/Honolulu">Hawaii</option>
+          <option value="America/Los_Angeles">Pacific</option>
+          <option value="America/Denver">Mountain</option>
+          <option value="America/Chicago">Central</option>
+          <option value="America/New_York">Eastern</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="pra-label">Post Time</label>
+        <select class="pra-select" id="svPostHour"></select>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour in the timezone above.</div>
       </div>
       <div class="field">
         <label class="pra-label">Connections</label>
@@ -1075,6 +1110,7 @@ async function loadConfig() {
   document.getElementById('gymLevelTestChannelId').value = d.gymLevelTestChannelId || '';
   document.getElementById('gymLevelTestFolderId').value = d.gymLevelTestFolderId || '';
   document.getElementById('onlineLevelTestChannelId').value = d.onlineLevelTestChannelId || '';
+  document.getElementById('physiqueMontageFolderId').value = d.physiqueMontageFolderId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -1202,6 +1238,7 @@ async function saveConfig() {
       gymLevelTestChannelId: document.getElementById('gymLevelTestChannelId').value,
       gymLevelTestFolderId: document.getElementById('gymLevelTestFolderId').value.trim(),
       onlineLevelTestChannelId: document.getElementById('onlineLevelTestChannelId').value,
+      physiqueMontageFolderId: document.getElementById('physiqueMontageFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });

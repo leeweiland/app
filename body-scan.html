@@ -298,7 +298,10 @@
 
       <div id="reportsMontageSection" style="display:none;margin-bottom:20px">
         <video id="reportsMontageVideo" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000;display:block"></video>
-        <div class="pra-muted" style="font-size:.72rem;margin-top:6px;text-align:center">Highlight reel of your coach-favorited photos &amp; videos</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px">
+          <div class="pra-muted" style="font-size:.72rem">Highlight reel of your coach-favorited photos &amp; videos</div>
+          <button id="reportsMontageRegenBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.72rem;white-space:nowrap;text-decoration:underline;padding:0">Regenerate</button>
+        </div>
       </div>
       <div class="pra-muted" id="reportsMontageEmpty" style="font-size:.78rem;display:none;margin-bottom:20px">No favorited media yet — once your coach favorites one of your photos or videos, a highlight reel shows up here.</div>
       <div class="pra-muted" id="reportsMontageLoading" style="font-size:.78rem;display:none;margin-bottom:20px">Building your highlight reel…</div>
@@ -389,14 +392,15 @@ function renderHubTabs(preserveActive) {
   if (activeHub === 'moves' && !movesLoaded) { movesLoaded = true; loadFavoritedVideos(); }
   if (activeHub === 'reports') {
     loadReport();
-    // The montage is rebuilt server-side from scratch on every call (no
-    // caching yet -- see favorites_montage_backend.js) -- load once per
-    // session rather than on every tab switch back to Reports.
+    // The montage sticks once built (chat_body_montages.json caches it
+    // server-side) -- load once per session rather than on every tab
+    // switch back to Reports; Regenerate below forces a fresh one on
+    // demand.
     if (!reportsMontageLoaded) { reportsMontageLoaded = true; loadReportsMontage(); }
   }
 }
 let reportsMontageLoaded = false;
-async function loadReportsMontage() {
+async function loadReportsMontage(url = '/api/body-reports/montage', opts = {}) {
   const section = document.getElementById('reportsMontageSection');
   const empty = document.getElementById('reportsMontageEmpty');
   const loading = document.getElementById('reportsMontageLoading');
@@ -404,7 +408,7 @@ async function loadReportsMontage() {
   empty.style.display = 'none';
   loading.style.display = 'block';
   try {
-    const r = await fetch('/api/body-reports/montage');
+    const r = await fetch(url, opts);
     const d = await r.json();
     if (!r.ok || !d.montage) { empty.style.display = 'block'; return; }
     document.getElementById('reportsMontageVideo').src = `/api/body-reports/montage/media/${d.montage.driveFileId}`;
@@ -415,6 +419,9 @@ async function loadReportsMontage() {
     loading.style.display = 'none';
   }
 }
+document.getElementById('reportsMontageRegenBtn').onclick = () => {
+  loadReportsMontage('/api/body-reports/montage/regenerate', { method: 'POST' });
+};
 
 // ── Profile ──────────────────────────────────────────────────────────────
 document.getElementById('profileWeightUnit').addEventListener('change', (e) => {

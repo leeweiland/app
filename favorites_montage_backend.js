@@ -5,10 +5,12 @@
 // (execFileSync + ffmpeg-static), just horizontal (letterboxed 16:9) and
 // drawing from chat_favorites.json instead of one fresh upload.
 //
-// Test-run cut: builds fresh on every request, no caching. Fine for proving
-// the mechanic works; a real ship of this should cache the result (keyed by
-// which favorite ids went into it) so a student loading Reports repeatedly
-// doesn't re-download/re-encode every favorite every time.
+// Once built, a student's montage sticks (chat_body_montages.json caches
+// which Drive file is "the" montage for them) instead of rebuilding on
+// every Reports page load -- a fresh one is only ever built again when the
+// student explicitly hits Regenerate. Each regeneration uploads a NEW file
+// to the assigned Drive folder (the old one is left alone, not deleted) and
+// the cache record is repointed at it.
 
 import { writeFileSync, unlinkSync, createReadStream } from "fs";
 import { join } from "path";
@@ -17,11 +19,12 @@ import { randomUUID } from "crypto";
 import { execFileSync } from "child_process";
 import ffmpegPath from "ffmpeg-static";
 import {
-  readJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia, isClientRole,
+  readJson, writeJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia, isClientRole,
 } from "./chat_backend.js";
 
 const FAVORITES_FILE = "chat_favorites.json";
 const CONVOS_FILE = "chat_conversations.json";
+const MONTAGES_FILE = "chat_body_montages.json"; // { [userId]: { driveFileId, createdAt, clipCount } }
 
 const OUT_W = 1920, OUT_H = 1080;
 const IMAGE_CLIP_SECONDS = 3.5;
@@ -97,7 +100,11 @@ function concatSegments(segmentPaths, outputPath) {
   }
 }
 
-export async function buildFavoritesMontage(user) {
+// Always builds fresh and uploads a NEW Drive file -- callers decide
+// whether that's appropriate (first-ever generation) or explicit
+// (Regenerate); the cache read/write lives in the route handlers below, not
+// here, so this stays a plain "do the work" function.
+async function renderAndUploadMontage(user) {
   const favorites = favoritesForUser(user).slice(-MAX_CLIPS); // most recent MAX_CLIPS
   if (!favorites.length) return null;
 
@@ -122,23 +129,38 @@ export async function buildFavoritesMontage(user) {
 
     const cfg = readJson("chat_admin_config.json", {});
     const uploaded = await uploadStreamToDrive(createReadStream(outPath), {
-      name: `PHYSIQUE MONTAGE ${ts}.mp4`,
+      name: `${user.first} ${user.last} PHYSIQUE MONTAGE ${ts}`.toUpperCase() + ".mp4",
       mimeType: "video/mp4",
-      folderId: cfg.favoritesFolderId || cfg.chatVideosFolderId,
+      folderId: cfg.physiqueMontageFolderId || cfg.favoritesFolderId || cfg.chatVideosFolderId,
       accessToken,
     });
-    return { driveFileId: uploaded.id, clipCount: favorites.length };
+    return { driveFileId: uploaded.id, createdAt: new Date().toISOString(), clipCount: favorites.length };
   } finally {
     tempFiles.forEach(p => { try { unlinkSync(p); } catch {} });
   }
 }
 
+function getCachedMontage(userId) {
+  return readJson(MONTAGES_FILE, {})[userId] || null;
+}
+function setCachedMontage(userId, montage) {
+  const all = readJson(MONTAGES_FILE, {});
+  all[userId] = montage;
+  writeJson(MONTAGES_FILE, all);
+}
+
 export async function handleFavoritesMontageRequest(req, res, url) {
+  // Cached-first: once a montage exists for this student it just keeps
+  // being served, no rebuild, until they explicitly regenerate it.
   if (url.pathname === "/api/body-reports/montage" && req.method === "GET") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" }), true;
     try {
-      const montage = await buildFavoritesMontage(user);
+      let montage = getCachedMontage(user.id);
+      if (!montage) {
+        montage = await renderAndUploadMontage(user);
+        if (montage) setCachedMontage(user.id, montage);
+      }
       sendJson(res, 200, { montage });
     } catch (e) {
       console.error("[favorites-montage]", e.stack || e);
@@ -147,12 +169,27 @@ export async function handleFavoritesMontageRequest(req, res, url) {
     return true;
   }
 
+  // Explicit re-build -- ignores/overwrites whatever was cached, uploads a
+  // fresh Drive file (the old one is left in place, not deleted) with
+  // whatever's currently favorited.
+  if (url.pathname === "/api/body-reports/montage/regenerate" && req.method === "POST") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" }), true;
+    try {
+      const montage = await renderAndUploadMontage(user);
+      if (montage) setCachedMontage(user.id, montage);
+      sendJson(res, 200, { montage });
+    } catch (e) {
+      console.error("[favorites-montage] regenerate", e.stack || e);
+      sendJson(res, 500, { error: e.message });
+    }
+    return true;
+  }
+
   // Authenticated proxy for playing the montage back -- login is enough
   // here (not scoped to "this exact user's own montage") since the file id
-  // is opaque/unguessable and isn't persisted anywhere a listing could leak
-  // it; a real ship of this (once montages are cached/persisted per user)
-  // should tighten this to an actual ownership check, same as the other
-  // media proxies in this app.
+  // is opaque/unguessable and isn't exposed anywhere a listing could leak
+  // it.
   const mediaMatch = url.pathname.match(/^\/api\/body-reports\/montage\/media\/([^/]+)$/);
   if (mediaMatch && req.method === "GET") {
     const user = getSessionUser(req);

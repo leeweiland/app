@@ -236,10 +236,15 @@ export function getConfig() {
     // a coach forwards an already-sent video (plus an optional note) into
     // this channel, no fresh upload/Drive folder involved.
     onlineLevelTestChannelId: "",
+    // Physique Builder's favorites highlight-reel montage -- where the
+    // generated video gets saved. Separate from favoritesFolderId since a
+    // montage is a derived artifact (built from favorites, not itself a
+    // favorite), worth being able to route somewhere else in Drive.
+    physiqueMontageFolderId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
-  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId"].forEach(k => {
+  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
     if (cfg[k]) cfg[k] = extractDriveFolderId(cfg[k]);
   });
   if (!cfg.trainingProtocolVideoLibraryFolderId) cfg.trainingProtocolVideoLibraryFolderId = "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX";
@@ -259,6 +264,7 @@ export function getConfig() {
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
+  if (cfg.physiqueMontageFolderId === undefined) cfg.physiqueMontageFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
@@ -2895,7 +2901,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2914,6 +2920,7 @@ export async function handleChatRequest(req, res, url) {
         if (gymLevelTestChannelId !== undefined) cfg.gymLevelTestChannelId = gymLevelTestChannelId;
         if (gymLevelTestFolderId !== undefined) cfg.gymLevelTestFolderId = gymLevelTestFolderId;
         if (onlineLevelTestChannelId !== undefined) cfg.onlineLevelTestChannelId = onlineLevelTestChannelId;
+        if (physiqueMontageFolderId !== undefined) cfg.physiqueMontageFolderId = physiqueMontageFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
