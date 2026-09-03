@@ -48,8 +48,10 @@
   .convo-item.selected .convo-select-checkbox { background: var(--pra-blue); border-color: var(--pra-blue); }
   .convo-select-checkbox svg { width: 12px; height: 12px; opacity: 0; }
   .convo-item.selected .convo-select-checkbox svg { opacity: 1; }
-  .bulk-select-bar { display: none; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--pra-border); background: rgba(0,155,255,0.06); }
+  .bulk-select-bar { display: none; flex-direction: column; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--pra-border); background: rgba(0,155,255,0.06); }
   .bulk-select-bar.show { display: flex; }
+  .bulk-select-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bulk-select-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .bulk-select-count { font-size: .8rem; color: var(--pra-dim); white-space: nowrap; }
   .bulk-select-actions { display: flex; gap: 8px; }
   .compose-textarea { width: 100%; min-height: 110px; resize: vertical; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 10px 12px; font-family: inherit; font-size: .88rem; }
@@ -728,10 +730,17 @@
         <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
       </div>
       <div class="bulk-select-bar" id="bulkSelectBar">
-        <span class="bulk-select-count" id="bulkSelectCount">0 selected</span>
-        <div class="bulk-select-actions">
-          <button class="pra-btn pra-btn-ghost" style="padding:6px 12px;font-size:.76rem" id="bulkSelectCancelBtn">Cancel</button>
-          <button class="pra-btn" style="padding:6px 14px;font-size:.76rem" id="bulkSelectMessageBtn" disabled>Message</button>
+        <div class="bulk-select-presets">
+          <button class="convo-fav-toggle" id="bulkPresetStudentGroups">All Student Groups</button>
+          <button class="convo-fav-toggle" id="bulkPresetStaff">All Coaches &amp; Admin</button>
+          <button class="convo-fav-toggle" id="bulkPresetAll">All Groups &amp; Staff</button>
+        </div>
+        <div class="bulk-select-bottom-row">
+          <span class="bulk-select-count" id="bulkSelectCount">0 selected</span>
+          <div class="bulk-select-actions">
+            <button class="pra-btn pra-btn-ghost" style="padding:6px 12px;font-size:.76rem" id="bulkSelectCancelBtn">Cancel</button>
+            <button class="pra-btn" style="padding:6px 14px;font-size:.76rem" id="bulkSelectMessageBtn" disabled>Message</button>
+          </div>
         </div>
       </div>
       <div class="convo-list" id="convoList"><div class="empty-hint">Loading…</div></div>
@@ -2084,6 +2093,32 @@ function toggleBulkSelection(item) {
   updateBulkSelectBar();
   renderConvoList();
 }
+
+// Adds every matching row to the selection (doesn't clear first, so the
+// three preset buttons can be combined by clicking more than one) --
+// matches against lastConvoItems, i.e. whatever's currently visible under
+// the active search/unread/favorites/channels filter, same as clicking
+// rows by hand would only ever reach what's on screen.
+function selectBulkItems(items) {
+  items.forEach(item => {
+    if (!bulkSelected.has(item.key)) {
+      bulkSelected.set(item.key, { name: item.name, convoId: item.convoId || null, contactId: item.contactId || null });
+    }
+  });
+  updateBulkSelectBar();
+  renderConvoList();
+}
+document.getElementById('bulkPresetStudentGroups').onclick = () => {
+  selectBulkItems(lastConvoItems.filter(i => i.isGroup && i.hasClient));
+};
+document.getElementById('bulkPresetStaff').onclick = () => {
+  selectBulkItems(lastConvoItems.filter(i => !i.isGroup && i.avatarUser && ['coach', 'admin', 'admin2'].includes(i.avatarUser.role)));
+};
+document.getElementById('bulkPresetAll').onclick = () => {
+  selectBulkItems(lastConvoItems.filter(i =>
+    (i.isGroup && i.hasClient) || (!i.isGroup && i.avatarUser && ['coach', 'admin', 'admin2'].includes(i.avatarUser.role))
+  ));
+};
 
 function updateBulkSelectBar() {
   document.getElementById('bulkSelectCount').textContent = bulkSelected.size + ' selected';
