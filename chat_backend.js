@@ -224,10 +224,17 @@ export function getConfig() {
     // photo" quick-add (same category of photo, one folder for both).
     bodyScanPhotosFolderId: "1Da9BVFV5N8vRAEJiPHOSyabGkNPnUhqw",
     nutritionPhotosFolderId: "",
+    // Gym Capture (the coach/admin header camera icon) -- Channel/Group Id
+    // is a chat_conversations.json id (picked from a dropdown in the admin
+    // panel, not pasted like a Drive folder id) that a captured clip's
+    // message gets posted into; Folder Id is where the clip itself is
+    // saved in Drive, labeled with whatever the coach typed.
+    gymTrainingChannelId: "", gymTrainingFolderId: "",
+    gymLevelTestChannelId: "", gymLevelTestFolderId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
-  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId"].forEach(k => {
+  ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId"].forEach(k => {
     if (cfg[k]) cfg[k] = extractDriveFolderId(cfg[k]);
   });
   if (!cfg.trainingProtocolVideoLibraryFolderId) cfg.trainingProtocolVideoLibraryFolderId = "15dt68-wgb_BVoUw0dmlimBQFcwVf6KTX";
@@ -242,6 +249,10 @@ export function getConfig() {
   if (cfg.favoritesFolderId === undefined) cfg.favoritesFolderId = "";
   if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
   if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
+  if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
+  if (cfg.gymTrainingFolderId === undefined) cfg.gymTrainingFolderId = "";
+  if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
+  if (cfg.gymLevelTestFolderId === undefined) cfg.gymLevelTestFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
   return cfg;
@@ -2878,7 +2889,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, gifApiKey, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -2892,11 +2903,27 @@ export async function handleChatRequest(req, res, url) {
         if (callRecordingsFolderId !== undefined) cfg.callRecordingsFolderId = callRecordingsFolderId;
         if (bodyScanPhotosFolderId !== undefined) cfg.bodyScanPhotosFolderId = bodyScanPhotosFolderId;
         if (nutritionPhotosFolderId !== undefined) cfg.nutritionPhotosFolderId = nutritionPhotosFolderId;
+        if (gymTrainingChannelId !== undefined) cfg.gymTrainingChannelId = gymTrainingChannelId;
+        if (gymTrainingFolderId !== undefined) cfg.gymTrainingFolderId = gymTrainingFolderId;
+        if (gymLevelTestChannelId !== undefined) cfg.gymLevelTestChannelId = gymLevelTestChannelId;
+        if (gymLevelTestFolderId !== undefined) cfg.gymLevelTestFolderId = gymLevelTestFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });
       }
+    }
+
+    // Every group/channel conversation, for the admin panel's Gym Training /
+    // Gym Level Test channel picker -- system-wide, not scoped to the
+    // requesting admin's own participant list, since this is "pick which
+    // channel the feature targets," not "conversations I'm in."
+    if (p === "/api/admin/groups" && req.method === "GET") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const groups = readJson(CONVOS_FILE, []).filter(c => c.type === "group")
+        .map(c => ({ id: c.id, name: c.name || "Untitled group", isChannel: !!c.isChannel }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return sendJson(res, 200, { groups });
     }
 
     // ─── Gym schedule: dates blocked off from booking ──────────────────────
@@ -3071,6 +3098,111 @@ export async function handleChatRequest(req, res, url) {
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
+    }
+
+    // ─── Gym Capture (coach/admin header camera icon) ──────────────────────
+    // Not tied to an open conversation -- a fresh recording, trimmed and
+    // labeled client-side (same shoot/trim flow as the in-chat camera),
+    // lands in whichever admin-configured Gym Training / Gym Level Test
+    // channel the coach picked, and a copy is saved to that category's
+    // Drive folder under the typed label.
+    if (p === "/api/chat/gym-capture" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const ct = req.headers["content-type"] || "";
+      if (!ct.startsWith("multipart/form-data")) return sendJson(res, 400, { error: "video is required" });
+
+      const cfg = getConfig();
+      let label = "", destination = "", trimStart, trimEnd;
+      let uploadPromise = null;
+      await new Promise((resolve, reject) => {
+        const bb = Busboy({ headers: req.headers });
+        // Client appends label/destination/trim fields before the video file
+        // (same FormData-order-is-parse-order convention the in-chat camera
+        // upload already relies on) -- set by the time the file event fires.
+        bb.on("field", (name, val) => {
+          if (name === "label") label = val;
+          if (name === "destination") destination = val;
+          if (name === "trimStart") trimStart = Number(val);
+          if (name === "trimEnd") trimEnd = Number(val);
+        });
+        bb.on("file", (name, stream, info) => {
+          const ext = extFromMime(info.mimeType, info.filename);
+          const tempPath = join(tmpdir(), `gym-capture-${randomUUID()}${ext}`);
+          let trimmedPath = null;
+          uploadPromise = (async () => {
+            try {
+              await new Promise((res, rej) => {
+                const ws = createWriteStream(tempPath);
+                stream.pipe(ws);
+                ws.on("finish", res);
+                ws.on("error", rej);
+                stream.on("error", rej);
+              });
+              let sourcePath = tempPath;
+              if (Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart) {
+                trimmedPath = tempPath + "-trimmed.mp4";
+                try {
+                  trimVideo(tempPath, trimmedPath, trimStart, trimEnd);
+                  sourcePath = trimmedPath;
+                } catch (e) {
+                  console.error("[gym-capture] trim failed:", e.message);
+                  trimmedPath = null;
+                }
+              }
+              const outExt = sourcePath === trimmedPath ? ".mp4" : ext;
+              const outMimeType = sourcePath === trimmedPath ? "video/mp4" : info.mimeType;
+              const folderId = destination === "levelTest" ? cfg.gymLevelTestFolderId : cfg.gymTrainingFolderId;
+              const baseName = (label || "GYM CLIP").trim().toUpperCase();
+              const accessToken = await getDriveAccessToken();
+              const result = await uploadStreamToDrive(createReadStream(sourcePath), {
+                name: baseName + outExt, mimeType: outMimeType, folderId, accessToken,
+              });
+              return { driveFileId: result.id, mimeType: outMimeType, name: info.filename, driveFileName: baseName };
+            } finally {
+              try { unlinkSync(tempPath); } catch {}
+              if (trimmedPath) { try { unlinkSync(trimmedPath); } catch {} }
+            }
+          })();
+        });
+        bb.on("finish", resolve);
+        bb.on("error", reject);
+        req.pipe(bb);
+      });
+
+      if (destination !== "training" && destination !== "levelTest") return sendJson(res, 400, { error: "destination must be 'training' or 'levelTest'" });
+      const channelId = destination === "levelTest" ? cfg.gymLevelTestChannelId : cfg.gymTrainingChannelId;
+      const folderId = destination === "levelTest" ? cfg.gymLevelTestFolderId : cfg.gymTrainingFolderId;
+      const destLabel = destination === "levelTest" ? "Gym Level Test" : "Gym Training";
+      if (!channelId || !folderId) return sendJson(res, 400, { error: `${destLabel} isn't set up yet — ask an admin to assign its channel and Drive folder in Admin Settings.` });
+      const convos = readJson(CONVOS_FILE, []);
+      const convo = convos.find(c => c.id === channelId);
+      if (!convo) return sendJson(res, 400, { error: `The ${destLabel} channel no longer exists — ask an admin to reassign it in Admin Settings.` });
+
+      if (!uploadPromise) return sendJson(res, 400, { error: "video is required" });
+      let uploaded;
+      try {
+        uploaded = await uploadPromise;
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+
+      // Posting into a channel you capture for is a reasonable implicit
+      // join -- otherwise the coach who just sent it couldn't see it land
+      // (the sidebar/thread list are both scoped to participantIds).
+      if (!convo.participantIds.includes(user.id)) {
+        convo.participantIds.push(user.id);
+        writeJson(CONVOS_FILE, convos);
+      }
+      const messages = readJson(MESSAGES_FILE, []);
+      const msg = {
+        id: randomUUID(), conversationId: convo.id, senderId: user.id,
+        type: "video", driveFileId: uploaded.driveFileId, mimeType: uploaded.mimeType, name: uploaded.name,
+        driveFileName: uploaded.driveFileName,
+        createdAt: new Date().toISOString(),
+      };
+      messages.push(msg);
+      writeJson(MESSAGES_FILE, messages);
+      return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });
     }
 
     // ─── Gym + Online skill levels (combined, searchable) ─────────────────

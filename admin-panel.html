@@ -165,6 +165,22 @@
         <input class="pra-input" id="nutritionPhotosFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
       </div>
       <div class="field">
+        <label class="pra-label">Gym Capture — Gym Training Channel/Group (the header camera icon's "Gym Training" button posts here)</label>
+        <select class="pra-select" id="gymTrainingChannelId"><option value="">— Select a group/channel —</option></select>
+      </div>
+      <div class="field">
+        <label class="pra-label">Gym Capture — Gym Training Drive Folder ID (labeled clips are saved here)</label>
+        <input class="pra-input" id="gymTrainingFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
+        <label class="pra-label">Gym Capture — Gym Level Test Channel/Group (the header camera icon's "Gym Level Test" button posts here)</label>
+        <select class="pra-select" id="gymLevelTestChannelId"><option value="">— Select a group/channel —</option></select>
+      </div>
+      <div class="field">
+        <label class="pra-label">Gym Capture — Gym Level Test Drive Folder ID (labeled clips are saved here)</label>
+        <input class="pra-input" id="gymLevelTestFolderId" placeholder="e.g. 1AbCDeFGhijkLmNoPQRstuVWxyz"/>
+      </div>
+      <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
@@ -922,6 +938,22 @@ async function createUser() {
   loadUsers();
 }
 
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Populates the Gym Training / Gym Level Test channel pickers -- run once
+// per loadConfig() call, before either <select>'s value is set, so the
+// saved id actually has a matching <option> to land on.
+async function loadGymChannelOptions() {
+  const r = await fetch('/api/admin/groups');
+  if (!r.ok) return;
+  const { groups } = await r.json();
+  const optionsHtml = '<option value="">— Select a group/channel —</option>' + groups.map(g =>
+    `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}${g.isChannel ? ' (channel)' : ''}</option>`
+  ).join('');
+  document.getElementById('gymTrainingChannelId').innerHTML = optionsHtml;
+  document.getElementById('gymLevelTestChannelId').innerHTML = optionsHtml;
+}
+
 async function loadConfig() {
   const r = await fetch('/api/admin/chat-config');
   if (!r.ok) return;
@@ -938,6 +970,11 @@ async function loadConfig() {
   document.getElementById('callRecordingsFolderId').value = d.callRecordingsFolderId || '';
   document.getElementById('bodyScanPhotosFolderId').value = d.bodyScanPhotosFolderId || '';
   document.getElementById('nutritionPhotosFolderId').value = d.nutritionPhotosFolderId || '';
+  await loadGymChannelOptions();
+  document.getElementById('gymTrainingChannelId').value = d.gymTrainingChannelId || '';
+  document.getElementById('gymTrainingFolderId').value = d.gymTrainingFolderId || '';
+  document.getElementById('gymLevelTestChannelId').value = d.gymLevelTestChannelId || '';
+  document.getElementById('gymLevelTestFolderId').value = d.gymLevelTestFolderId || '';
   document.getElementById('gifApiKey').value = d.gifApiKey || '';
 
   const a = d.appointments || {};
@@ -1060,6 +1097,10 @@ async function saveConfig() {
       callRecordingsFolderId: document.getElementById('callRecordingsFolderId').value.trim(),
       bodyScanPhotosFolderId: document.getElementById('bodyScanPhotosFolderId').value.trim(),
       nutritionPhotosFolderId: document.getElementById('nutritionPhotosFolderId').value.trim(),
+      gymTrainingChannelId: document.getElementById('gymTrainingChannelId').value,
+      gymTrainingFolderId: document.getElementById('gymTrainingFolderId').value.trim(),
+      gymLevelTestChannelId: document.getElementById('gymLevelTestChannelId').value,
+      gymLevelTestFolderId: document.getElementById('gymLevelTestFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
     }),
   });

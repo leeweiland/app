@@ -210,6 +210,10 @@
   const SVG_NS = 'xmlns="http://www.w3.org/2000/svg"';
   const ICON_SVG = {
     chat: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4.5 3.5V17H6a2 2 0 0 1-2-2V6Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="16.5" cy="6.5" r="2.4" fill="#009bff"/></svg>`,
+    // Same camera glyph as chat.html's in-thread camera icon (#cameraCaptureBtn) --
+    // this is the coach/admin-only entry point into that same shoot/trim
+    // flow, just aimed at Gym Training/Gym Level Test instead of an open thread.
+    gymCapture: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg>`,
     bodyScan: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M4 8V6a2 2 0 0 1 2-2h2M18 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M6 20H4a2 2 0 0 1-2-2v-2" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="#009bff" stroke-width="1.6"/><circle cx="12" cy="12" r="0.9" fill="#009bff"/></svg>`,
     video: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><rect x="3.5" y="5" width="17" height="14" rx="2.2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 5 7.8 8.2M10.6 5l1.6 3.2M15 5l1.6 3.2" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M10.2 10.4v5.2l4.5-2.6-4.5-2.6Z" fill="#009bff"/></svg>`,
     map: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><circle cx="12" cy="12" r="8.4" stroke="#fff" stroke-width="1.6"/><ellipse cx="12" cy="12" rx="8.4" ry="3.2" stroke="#fff" stroke-width="1.1" opacity=".65"/><path d="M12 3.6v16.8M4.6 8h14.8M4.6 16h14.8" stroke="#fff" stroke-width="1" opacity=".65"/><circle cx="14.6" cy="9.6" r="1.9" fill="#009bff" stroke="#fff" stroke-width=".6"/></svg>`,
@@ -225,6 +229,7 @@
 
   const ICONS = [
     { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat' },
+    { href: '/chat-app/chat.html?gymCapture=1', icon: ICON_SVG.gymCapture, title: 'Gym Capture', staffOnly: true },
     { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol' },
     { href: '/chat-app/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
     { href: '/chat-app/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
@@ -346,6 +351,7 @@
 
     ICONS.forEach(item => {
       if (item.adminOnly && !isAdmin) return;
+      if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       // Always their own protocol, not a fixed page — skip until we know
       // who's logged in (shouldn't happen in practice, this bar only ever
       // renders on already-authenticated pages).

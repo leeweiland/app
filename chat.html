@@ -1037,6 +1037,26 @@
           <button class="pra-btn pra-btn-outline camera-glow-btn" id="cameraSendAnywayBtn" type="button">Send</button>
         </div>
       </div>
+      <!-- Gym capture only (coach/admin, opened from the header camera icon --
+           not tied to an open conversation) -- Send leads here instead of
+           straight out, same "trim, label, save" shape as the favorite-star
+           Publish flow, then a choice of which gym channel it goes to. -->
+      <div class="camera-untrimmed-confirm" id="cameraGymLabelStep" style="display:none">
+        <div class="camera-handwritten">Label this clip</div>
+        <input class="pra-input" id="cameraGymLabelInput" title="Also saved as the Drive filename — ex. FIRST LAST GYM ELEMENT KATA LEVEL APPARATUS MOVES." placeholder="e.g. FIRST LAST GYM MUSCLE UP TRANSITION" maxlength="200" style="width:100%"/>
+        <div class="camera-untrimmed-actions">
+          <button class="pra-btn pra-btn-ghost" id="cameraGymLabelBackBtn" type="button">Back</button>
+          <button class="pra-btn" id="cameraGymLabelNextBtn" type="button">Continue</button>
+        </div>
+      </div>
+      <div class="camera-untrimmed-confirm" id="cameraGymDestinationStep" style="display:none">
+        <div class="camera-handwritten">Send this clip to…</div>
+        <div class="camera-untrimmed-actions">
+          <button class="pra-btn" id="cameraGymTrainingBtn" type="button">Gym Training</button>
+          <button class="pra-btn" id="cameraGymLevelTestBtn" type="button">Gym Level Test</button>
+        </div>
+        <div class="pra-muted" id="cameraGymStatus" style="font-size:.78rem;min-height:1em"></div>
+      </div>
       <div class="pra-muted" id="cameraSendStatus" style="text-align:center;font-size:.78rem;min-height:1em;padding-bottom:8px"></div>
     </div>
   </div>
@@ -1546,6 +1566,11 @@ async function init() {
     openConvo(deepLinkConvoId);
   }
   setupComposer();
+  // Deep link from the header camera icon (chat-header.js, every page) --
+  // coach/admin only, not tied to any open conversation.
+  if (new URLSearchParams(location.search).get('gymCapture') === '1' && isStaffMe()) {
+    openGymCapture();
+  }
   setupPublishModal();
   setupPush();
   setupSearchClearButtons();
@@ -3589,7 +3614,7 @@ function setupComposer() {
   // there's no reason to hide the entry point in the meantime.
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
   if (isTouchDevice) cameraCaptureBtn.style.display = '';
-  cameraCaptureBtn.onclick = openCameraCapture;
+  cameraCaptureBtn.onclick = () => { cameraGymMode = false; openCameraCapture(); };
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by openMsgActionBar's emoji-row handlers) decides which one a pick means.
@@ -3819,6 +3844,12 @@ let cameraTrimEnd = 0;
 let cameraTrimZoom = 1; // 1 = fit the clip container, higher = pinched-in for finer trim precision
 let cameraTrimPinchStartDist = null;
 let cameraTrimPinchStartZoom = 1;
+// Gym capture (coach/admin, header camera icon) reuses this entire shoot/
+// trim flow -- this flag is the only thing that changes what Send does at
+// the end (label + destination pick, instead of posting straight into
+// whatever conversation is open).
+let cameraGymMode = false;
+let cameraGymLabel = '';
 
 function setupCameraCapture() {
   document.getElementById('cameraCloseBtn').onclick = closeCameraCapture;
@@ -3830,7 +3861,16 @@ function setupCameraCapture() {
   document.getElementById('cameraRetakeBtn').onclick = retakeCameraCapture;
   document.getElementById('cameraSendBtn').onclick = onCameraSendClick;
   document.getElementById('cameraGoTrimBtn').onclick = () => showUntrimmedConfirm(false);
-  document.getElementById('cameraSendAnywayBtn').onclick = () => { showUntrimmedConfirm(false); sendCameraCapture(); };
+  document.getElementById('cameraSendAnywayBtn').onclick = () => { showUntrimmedConfirm(false); onCameraTrimConfirmed(); };
+  document.getElementById('cameraGymLabelBackBtn').onclick = () => showGymLabelStep(false);
+  document.getElementById('cameraGymLabelNextBtn').onclick = () => {
+    cameraGymLabel = document.getElementById('cameraGymLabelInput').value.trim();
+    if (!cameraGymLabel) { document.getElementById('cameraGymLabelInput').focus(); return; }
+    showGymLabelStep(false);
+    showGymDestinationStep(true);
+  };
+  document.getElementById('cameraGymTrainingBtn').onclick = () => sendGymCapture('training');
+  document.getElementById('cameraGymLevelTestBtn').onclick = () => sendGymCapture('levelTest');
 
   const track = document.getElementById('cameraTrimTrack');
   const startHandle = document.getElementById('cameraTrimStartHandle');
@@ -3916,12 +3956,30 @@ function setupCameraCapture() {
 
 async function openCameraCapture() {
   document.getElementById('cameraCaptureModal').classList.add('show');
-  cameraShootMode = 'photo';
-  setCameraShootMode('photo');
+  document.querySelector('.camera-mode-toggle').style.display = cameraGymMode ? 'none' : '';
+  cameraGymLabel = '';
+  document.getElementById('cameraGymLabelInput').value = '';
+  showGymLabelStep(false);
+  showGymDestinationStep(false);
+  if (cameraGymMode) {
+    cameraShootMode = 'video';
+    setCameraShootMode('video');
+    document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Label & send your training clip.';
+  } else {
+    cameraShootMode = 'photo';
+    setCameraShootMode('photo');
+    document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip to your Coach.';
+  }
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim Your Training Clip 👇';
-  document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip to your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = '';
   await startCameraStream();
+}
+
+// Entry point for the coach/admin-only header camera icon -- not tied to an
+// open conversation, so Send leads to label + destination pick instead.
+function openGymCapture() {
+  cameraGymMode = true;
+  openCameraCapture();
 }
 
 // Entry point for a video picked from the file library (paperclip) instead
@@ -3930,7 +3988,11 @@ async function openCameraCapture() {
 // the same review screen, trim track, and send logic as the live-shoot
 // flow; only the labels, Retake button, and starting screen differ.
 function openUploadTrimFlow(file) {
+  cameraGymMode = false;
   document.getElementById('cameraCaptureModal').classList.add('show');
+  document.querySelector('.camera-mode-toggle').style.display = '';
+  showGymLabelStep(false);
+  showGymDestinationStep(false);
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim Your Training Clip 👇';
   document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send Your Training Clip To Your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = 'none';
@@ -3951,6 +4013,7 @@ function closeCameraCapture() {
   reviewVideo.pause();
   reviewVideo.currentTime = 0;
   resetCameraCaptureState();
+  cameraGymMode = false;
 }
 
 function resetCameraCaptureState() {
@@ -3961,6 +4024,8 @@ function resetCameraCaptureState() {
   document.getElementById('cameraSendStatus').textContent = '';
   document.getElementById('cameraSendBtn').disabled = false;
   showUntrimmedConfirm(false);
+  showGymLabelStep(false);
+  showGymDestinationStep(false);
 }
 
 function stopCameraStream() {
@@ -4157,7 +4222,23 @@ function showUntrimmedConfirm(show) {
 }
 function onCameraSendClick() {
   if (!isVideoTrimmed()) { showUntrimmedConfirm(true); return; }
+  onCameraTrimConfirmed();
+}
+// Reached once trimming is settled (either it was already trimmed, or the
+// untrimmed-confirm's own Send was tapped) -- gym mode branches off into
+// label + destination instead of posting straight into an open thread.
+function onCameraTrimConfirmed() {
+  if (cameraGymMode) { showGymLabelStep(true); return; }
   sendCameraCapture();
+}
+function showGymLabelStep(show) {
+  document.getElementById('cameraReviewActions').style.display = show ? 'none' : '';
+  document.getElementById('cameraGymLabelStep').style.display = show ? 'flex' : 'none';
+  if (show) document.getElementById('cameraGymLabelInput').focus();
+}
+function showGymDestinationStep(show) {
+  document.getElementById('cameraGymDestinationStep').style.display = show ? 'flex' : 'none';
+  document.getElementById('cameraGymStatus').textContent = '';
 }
 
 async function sendCameraCapture() {
@@ -4214,6 +4295,50 @@ async function sendCameraCapture() {
   }
 }
 
+// Gym capture's own send -- no open thread to post an optimistic bubble
+// into (this can be triggered from the header, outside any conversation),
+// so the modal just stays up showing progress until the upload finishes,
+// then hands off into whichever gym channel it landed in.
+async function sendGymCapture(destination) {
+  const status = document.getElementById('cameraGymStatus');
+  const trainingBtn = document.getElementById('cameraGymTrainingBtn');
+  const levelTestBtn = document.getElementById('cameraGymLevelTestBtn');
+  if (!cameraCapturedBlob || !cameraCapturedIsVideo) { status.textContent = 'Nothing to send — try again.'; return; }
+
+  const nameExt = /\.([a-z0-9]+)$/i.exec(cameraCapturedBlob.name || '')?.[1]?.toLowerCase();
+  const EXT_MIME = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm' };
+  const blob = cameraCapturedBlob.type
+    ? cameraCapturedBlob
+    : new Blob([cameraCapturedBlob], { type: EXT_MIME[nameExt] || 'video/mp4' });
+  const ext = blob.type.includes('mp4') ? '.mp4' : blob.type.includes('quicktime') ? '.mov' : '.webm';
+
+  const fd = new FormData();
+  fd.append('label', cameraGymLabel);
+  fd.append('destination', destination);
+  if (isVideoTrimmed()) {
+    fd.append('trimStart', String(cameraTrimStart));
+    fd.append('trimEnd', String(cameraTrimEnd));
+  }
+  fd.append('video', blob, 'capture' + ext);
+
+  trainingBtn.disabled = true;
+  levelTestBtn.disabled = true;
+  status.textContent = 'Sending…';
+  try {
+    const result = await uploadFormDataWithProgress('/api/chat/gym-capture', fd, (pct) => {
+      status.textContent = `Sending… ${pct}%`;
+    });
+    closeCameraCapture();
+    if (result?.conversationId) { await loadConversations(); openConvo(result.conversationId); }
+  } catch (e) {
+    console.error('[sendGymCapture]', e);
+    status.textContent = e.message || 'Could not send — try again.';
+  } finally {
+    trainingBtn.disabled = false;
+    levelTestBtn.disabled = false;
+  }
+}
+
 // A local-only bubble shown the instant Send is tapped — same markup shape
 // as a real bubble-row (see renderBubble) so it sits in the thread
 // correctly, but never touches currentThreadMessages/lastRenderedMessagesJson
@@ -4259,7 +4384,17 @@ function uploadFormDataWithProgress(url, formData, onProgress) {
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     });
-    xhr.onload = () => { (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('Upload failed: ' + xhr.status)); };
+    xhr.onload = () => {
+      // Parsed as JSON when possible so callers that need the response body
+      // (e.g. gym capture's conversationId, or a real server error message
+      // instead of a bare status code) can use it -- sendCameraCapture, the
+      // original caller, never reads the resolved value, so this is purely
+      // additive for it.
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body?.error || ('Upload failed: ' + xhr.status)));
+    };
     xhr.onerror = () => reject(new Error('Network error during upload'));
     xhr.send(formData);
   });
