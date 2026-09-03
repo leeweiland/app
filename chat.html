@@ -1028,6 +1028,7 @@
           </div>
         </div>
       </div>
+      <div class="pra-muted" id="cameraGymThumbnailNote" style="display:none;text-align:center;font-size:.72rem;padding:0 20px 6px">💡 Play/scrub the video above to the frame you want as its thumbnail — Instagram supports a custom thumbnail (YouTube and Facebook don't, so this only shows up there).</div>
       <div class="camera-review-actions" id="cameraReviewActions">
         <button class="pra-btn pra-btn-ghost" id="cameraRetakeBtn" type="button">Retake</button>
         <div class="camera-callout camera-callout-step3">
@@ -1137,7 +1138,7 @@
            that shrinks to make everything else below it fit on screen
            without scrolling, instead of eating most of the modal's
            height budget and pushing the label/buttons past the fold. -->
-      <video id="publishSourceVideo" playsinline style="flex:1 1 auto;min-height:60px;width:100%;max-width:100%;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
+      <video id="publishSourceVideo" playsinline controls style="flex:1 1 auto;min-height:60px;width:100%;max-width:100%;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
       <div class="camera-trim-wrap" style="padding:8px 0 0;flex-shrink:0">
         <div class="camera-trim-track" id="publishTrimTrack">
           <div class="camera-trim-range" id="publishTrimRange"></div>
@@ -1145,6 +1146,7 @@
           <div class="camera-trim-handle camera-trim-handle-end" id="publishTrimEndHandle"></div>
         </div>
       </div>
+      <div class="pra-muted" style="font-size:.72rem;margin-top:4px;flex-shrink:0">💡 Use the video's own scrub bar to park on the frame you want as its thumbnail — Instagram supports a custom thumbnail (YouTube and Facebook don't, so this only shows up there).</div>
 
       <div style="margin-top:10px;flex-shrink:0">
         <label class="pra-label">Label (also saved as the Drive filename)</label>
@@ -3224,6 +3226,23 @@ function readReceiptTicksHtml(m, mine) {
 function svgReply() {
   return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 6L4 12l6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12h9.5a6 6 0 0 1 6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
+// Grabs whatever frame a <video> is currently parked on as a JPEG thumbnail
+// (base64, no data: prefix) -- shared by the favorite-star publish modal and
+// gym capture's send step, both of which just use "wherever the coach left
+// the scrubber" as the frame to hand Metricool as a custom cover image.
+// Downscaled to keep the multipart/JSON payload small; returns null if the
+// video hasn't loaded a frame yet (videoWidth still 0).
+function captureVideoFrameBase64(video, maxWidth = 720) {
+  if (!video || !video.videoWidth) return null;
+  const scale = Math.min(1, maxWidth / video.videoWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
 function svgForward() {
   return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 6L20 12l-6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12h-9.5a6 6 0 0 0-6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
@@ -4066,6 +4085,10 @@ async function openCameraCapture() {
   document.getElementById('cameraGymLabelInput').value = '';
   showGymLabelStep(false);
   showGymDestinationStep(false);
+  // Native scrub bar (so a coach can park on a thumbnail frame) is gym-mode
+  // only -- the normal student-to-coach camera message has no use for it.
+  document.getElementById('cameraReviewVideo').controls = cameraGymMode;
+  document.getElementById('cameraGymThumbnailNote').style.display = cameraGymMode ? 'block' : 'none';
   if (cameraGymMode) {
     cameraShootMode = 'video';
     setCameraShootMode('video');
@@ -4098,6 +4121,8 @@ function openUploadTrimFlow(file) {
   document.querySelector('.camera-mode-toggle').style.display = '';
   showGymLabelStep(false);
   showGymDestinationStep(false);
+  document.getElementById('cameraReviewVideo').controls = false;
+  document.getElementById('cameraGymThumbnailNote').style.display = 'none';
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 1: Trim Your Training Clip 👇';
   document.getElementById('cameraSendStepLabel').textContent = 'Step 2: Send Your Training Clip To Your Coach.';
   document.getElementById('cameraRetakeBtn').style.display = 'none';
@@ -4420,9 +4445,19 @@ async function sendGymCapture(destination) {
   const fd = new FormData();
   fd.append('label', cameraGymLabel);
   fd.append('destination', destination);
-  if (isVideoTrimmed()) {
+  const trimmed = isVideoTrimmed();
+  if (trimmed) {
     fd.append('trimStart', String(cameraTrimStart));
     fd.append('trimEnd', String(cameraTrimEnd));
+  }
+  // Whatever frame the coach left the scrubber on, as a JPEG thumbnail --
+  // offset against trimStart since the published clip starts at 0 there,
+  // same as the favorite-star publish flow.
+  const reviewVideo = document.getElementById('cameraReviewVideo');
+  const thumbnailBase64 = captureVideoFrameBase64(reviewVideo);
+  if (thumbnailBase64) {
+    fd.append('thumbnailBase64', thumbnailBase64);
+    fd.append('thumbnailTimeSec', String(Math.max(0, reviewVideo.currentTime - (trimmed ? cameraTrimStart : 0))));
   }
   fd.append('video', blob, 'capture' + ext);
 
@@ -4733,6 +4768,8 @@ async function runPublishSave() {
 
   status.textContent = 'Saving…';
   try {
+    const publishVideo = document.getElementById('publishSourceVideo');
+    const thumbnailBase64 = captureVideoFrameBase64(publishVideo);
     const r = await fetch('/api/social-video/save-and-publish', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -4740,6 +4777,7 @@ async function runPublishSave() {
         videoWidth: publishVideoWidth, videoHeight: publishVideoHeight,
         trimStart: publishTrimStart, trimEnd: publishTrimEnd,
         label, keyframes: publishKeyframes || undefined,
+        thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec: publishVideo.currentTime,
       }),
     });
     const d = await r.json();

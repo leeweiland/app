@@ -3059,6 +3059,22 @@ export async function handleChatRequest(req, res, url) {
       mine.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       return sendJson(res, 200, { favorites: mine });
     }
+
+    // Any logged-in user's own view of "videos favorited about me" -- every
+    // video a coach has starred in a conversation this user participates in
+    // (not staff-gated like the route above, which is a coach's own list of
+    // what THEY starred; this is the reverse view, for the Physique
+    // Builder's Moves tab). No new Drive folder/proxy needed -- favorites
+    // already carry a Drive webViewLink from when they were saved.
+    if (p === "/api/chat/my-favorited-videos" && req.method === "GET") {
+      const convos = readJson(CONVOS_FILE, []);
+      const mine = readJson(FAVORITES_FILE, []).filter(f => {
+        if (f.type !== "video") return false;
+        const convo = convos.find(c => c.id === f.conversationId);
+        return convo && convo.participantIds.includes(user.id);
+      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return sendJson(res, 200, { favorites: mine });
+    }
     if (p === "/api/chat/favorites" && req.method === "POST") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       const { driveFileId, name } = await readJsonBody(req);

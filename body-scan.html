@@ -74,6 +74,7 @@
   /* ── Progress (photo + weight + bodyfat history) ── */
   .progress-entry-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; }
   .progress-entry-thumb { width: 58px; height: 58px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+  .moves-video-icon { width: 58px; height: 58px; border-radius: 8px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0; }
   .progress-entry-info { flex: 1; min-width: 0; }
   .progress-entry-date { font-family: var(--font-secondary); font-size: .72rem; color: var(--pra-dim); }
   .progress-entry-stats { font-weight: 700; font-size: .88rem; margin-top: 2px; }
@@ -282,6 +283,15 @@
       </div>
     </div>
 
+    <div id="hubPanelMoves" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Master Every Move</div>
+      <div class="pra-muted profile-summary-line" id="movesProfileSummary"></div>
+
+      <div class="pra-h2" style="margin:20px 0 10px">Favorited Videos</div>
+      <div id="movesEmpty" class="pra-muted" style="font-size:.85rem;display:none">No favorited videos yet — once a coach favorites one of your videos, it shows up here.</div>
+      <div id="movesVideoList"></div>
+    </div>
+
     <div id="hubPanelReports" class="hub-panel">
       <div class="pra-h2" style="margin-bottom:14px">Transform Into A Strength Ninja</div>
       <div class="pra-muted profile-summary-line" id="reportsProfileSummary"></div>
@@ -346,10 +356,11 @@ function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 1
 
 // ── Hub tabs: order + active tab are computed, not fixed in HTML -- Profile
 // leads until it's complete, then drops to the end and Nutrition Log leads. ──
-const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', reports: 'Reports' };
+const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', moves: 'Moves', reports: 'Reports' };
 let profileComplete = false;
 let activeHub = 'profile';
 let physiqueHistoryLoaded = false;
+let movesLoaded = false;
 
 function computeProfileComplete(d) {
   return !!(d.profile?.heightCm && d.profile?.age && d.profile?.sex && d.profile?.goalWeightKg
@@ -357,7 +368,7 @@ function computeProfileComplete(d) {
 }
 
 function renderHubTabs(preserveActive) {
-  const order = profileComplete ? ['nutrition', 'physique', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'reports'];
+  const order = profileComplete ? ['nutrition', 'physique', 'moves', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'moves', 'reports'];
   if (!preserveActive) activeHub = order[0];
   document.getElementById('hubTabsBar').innerHTML = order.map(id =>
     `<div class="hub-tab${id === activeHub ? ' active' : ''}" data-hub="${id}">${HUB_LABELS[id]}</div>`
@@ -375,6 +386,7 @@ function renderHubTabs(preserveActive) {
   }
   if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
   if (activeHub === 'nutrition') loadFoodEntries();
+  if (activeHub === 'moves' && !movesLoaded) { movesLoaded = true; loadFavoritedVideos(); }
   if (activeHub === 'reports') {
     loadReport();
     // The montage is rebuilt server-side from scratch on every call (no
@@ -481,6 +493,7 @@ function renderProfileSummaryInto(elId, d) {
 function updateProfileSummaries(d) {
   renderProfileSummaryInto('physiqueProfileSummary', d);
   renderProfileSummaryInto('nutritionProfileSummary', d);
+  renderProfileSummaryInto('movesProfileSummary', d);
   renderProfileSummaryInto('reportsProfileSummary', d);
 }
 
@@ -917,6 +930,30 @@ function renderProgressList() {
     const item = physiqueHistory.find(p => p.id === el.dataset.id);
     el.querySelector('.photo-thumb-del').onclick = () => { if (item) deletePhysiqueHistoryItem(item); };
   });
+}
+
+// ── Moves tab: every video a coach has favorited in a conversation this
+// user is part of -- newest first. Opens Drive's own web-view player in a
+// new tab rather than embedding playback here (favorites already carry a
+// webViewLink from when they were saved, so no extra streaming proxy is
+// needed for this).
+async function loadFavoritedVideos() {
+  try {
+    const r = await fetch('/api/chat/my-favorited-videos');
+    if (!r.ok) return;
+    const { favorites } = await r.json();
+    document.getElementById('movesEmpty').style.display = favorites.length ? 'none' : 'block';
+    document.getElementById('movesVideoList').innerHTML = favorites.map(f => {
+      const date = new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `<a class="pra-panel progress-entry-row" href="${escapeHtml(f.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">
+        <div class="moves-video-icon">🎬</div>
+        <div class="progress-entry-info">
+          <div class="progress-entry-date">${date}</div>
+          <div class="progress-entry-stats">${escapeHtml(f.name || 'Untitled')}</div>
+        </div>
+      </a>`;
+    }).join('');
+  } catch {}
 }
 
 // ── Reports: daily/weekly/monthly rollups ───────────────────────────────
