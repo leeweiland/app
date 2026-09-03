@@ -112,7 +112,7 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
-    <div class="pra-h1 pra-glow" style="margin-bottom:22px;font-family:var(--font-secondary)">Powerbatics Body Mastery Builder</div>
+    <div class="pra-h1 pra-glow" style="margin-bottom:22px;font-family:var(--font-secondary);font-size:clamp(1.05rem, 4.6vw, 1.7rem);white-space:nowrap">Powerbatics Body Mastery Builder</div>
 
     <div class="hub-tabs" id="hubTabsBar"></div>
 
@@ -196,7 +196,7 @@
       <div class="pra-muted profile-summary-line" id="nutritionProfileSummary"></div>
 
       <div class="field-row" style="margin-bottom:14px">
-        <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="foodDate" type="date"/></div>
+        <div class="field" style="flex:0 0 auto"><input class="pra-input" id="foodDate" type="date"/></div>
       </div>
 
       <div class="pra-panel" style="margin:0 0 20px;padding:16px">
@@ -241,7 +241,7 @@
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
 
       <div class="field-row" style="margin-bottom:14px">
-        <div class="field" style="flex:0 0 auto"><label class="pra-label">Date</label><input class="pra-input" id="scanDate" type="date"/></div>
+        <div class="field" style="flex:0 0 auto"><input class="pra-input" id="scanDate" type="date"/></div>
       </div>
 
       <div class="pra-panel" style="padding:18px;margin-bottom:22px">
@@ -434,8 +434,9 @@ function profileSummaryHtml(d) {
   }
   const totalIn = Math.round(d.profile.heightCm / 2.54);
   const ftin = `${Math.floor(totalIn / 12)}'${totalIn % 12}"`;
-  const parts = [ftin, `${kgToLbsVal(d.weightKg)} lbs`, d.profile.age || '—', d.profile.sex || '—', d.profile.activityLevel || '—'];
-  return `${escapeHtml(parts.join(', '))} — Goal: ${escapeHtml(d.profile.goal || '—')} — edit on <a class="profile-summary-link" href="#">Profile</a>`;
+  const activityLevel = (d.profile.activityLevel || '—').replace(/_/g, ' ');
+  const parts = [ftin, `${kgToLbsVal(d.weightKg)} lbs`, d.profile.age || '—', d.profile.sex || '—', activityLevel];
+  return `${escapeHtml(parts.join(', '))}<br>Goal: ${escapeHtml(d.profile.goal || '—')} — edit on <a class="profile-summary-link" href="#">Profile</a>`;
 }
 function renderProfileSummaryInto(elId, d) {
   const el = document.getElementById(elId);
