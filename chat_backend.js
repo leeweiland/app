@@ -2039,7 +2039,7 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // "online" and "gym" are both client-facing training roles -- same
 // permissions/behaviors everywhere, just tracking which program someone's
 // actually enrolled in.
-function isClientRole(role) { return role === "online" || role === "gym"; }
+export function isClientRole(role) { return role === "online" || role === "gym"; }
 
 // Every plain "user" and every online/gym client gets their OWN dedicated
 // group (not one shared group for everyone), named "First Last Group" --

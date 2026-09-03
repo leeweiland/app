@@ -17,7 +17,7 @@ import { randomUUID } from "crypto";
 import { execFileSync } from "child_process";
 import ffmpegPath from "ffmpeg-static";
 import {
-  readJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia,
+  readJson, getSessionUser, getDriveAccessToken, uploadStreamToDrive, sendJson, streamDriveMedia, isClientRole,
 } from "./chat_backend.js";
 
 const FAVORITES_FILE = "chat_favorites.json";
@@ -28,14 +28,24 @@ const IMAGE_CLIP_SECONDS = 3.5;
 const MAX_VIDEO_CLIP_SECONDS = 6;
 const MAX_CLIPS = 10; // keeps montage length/compute bounded
 
-// A coach's favorite is tagged with the source conversationId -- every
-// favorite from a conversation this user participates in is "their"
-// favorited media, regardless of which coach starred it.
-function favoritesForUser(userId) {
+// A coach's favorite is tagged with the source conversationId, not with
+// "who this is a highlight of" -- there's no such field. First cut of this
+// scoped "conversation I'm part of" to ANY participant, which broke the
+// first time a coach checked their OWN Reports: a coach/admin is a
+// participant in every one of their students' DMs (they're the one doing
+// the favoriting), so that pulled every student's favorited clips into the
+// coach's own personal montage right along with the student's.
+// Client-role only, DM-only fixes it: a client only ever has their own 1:1
+// coaching DM(s), so "conversations I'm in" is actually scoped to them —
+// staff get an empty montage instead of a leak. A group conversation is
+// left out entirely too, same reasoning (ambiguous whose highlight it is
+// with more than one client in the room).
+function favoritesForUser(user) {
+  if (!isClientRole(user.role)) return [];
   const convos = readJson(CONVOS_FILE, []);
-  const myConvoIds = new Set(convos.filter(c => c.participantIds.includes(userId)).map(c => c.id));
+  const myDmIds = new Set(convos.filter(c => c.type === "dm" && c.participantIds.includes(user.id)).map(c => c.id));
   const all = readJson(FAVORITES_FILE, []);
-  return all.filter(f => f.conversationId && myConvoIds.has(f.conversationId) && f.driveFileId)
+  return all.filter(f => f.conversationId && myDmIds.has(f.conversationId) && f.driveFileId)
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
@@ -87,8 +97,8 @@ function concatSegments(segmentPaths, outputPath) {
   }
 }
 
-export async function buildFavoritesMontage(userId) {
-  const favorites = favoritesForUser(userId).slice(-MAX_CLIPS); // most recent MAX_CLIPS
+export async function buildFavoritesMontage(user) {
+  const favorites = favoritesForUser(user).slice(-MAX_CLIPS); // most recent MAX_CLIPS
   if (!favorites.length) return null;
 
   const accessToken = await getDriveAccessToken();
@@ -128,7 +138,7 @@ export async function handleFavoritesMontageRequest(req, res, url) {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" }), true;
     try {
-      const montage = await buildFavoritesMontage(user.id);
+      const montage = await buildFavoritesMontage(user);
       sendJson(res, 200, { montage });
     } catch (e) {
       console.error("[favorites-montage]", e.stack || e);
