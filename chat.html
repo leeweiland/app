@@ -227,7 +227,12 @@
   @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
   .bubble-row { display: flex; gap: 8px; max-width: 62%; }
   .bubble-row.mine { align-self: flex-end; flex-direction: row-reverse; }
-  .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; font-weight: 400; line-height: 1.4; word-break: break-word; color: #d4d4d8; }
+  /* white-space:pre-wrap -- without it, newlines in a multi-line message
+     (m.text still has the real \n characters, escapeHtml doesn't touch
+     them) just collapse to a single space under the default white-space:
+     normal, rendering as one run-on blob regardless of how the message was
+     actually typed or sent. */
+  .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; font-weight: 400; line-height: 1.4; word-break: break-word; white-space: pre-wrap; color: #d4d4d8; }
   .bubble-row.mine .bubble { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   /* A message that's ENTIRELY emoji (see isEmojiOnlyText) renders like
      WhatsApp — no bubble box, ~4x the normal text size — instead of a tiny
