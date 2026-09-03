@@ -360,6 +360,13 @@
         <div id="svConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
         <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> / <code>METRICOOL_PB_BLOG_ID</code> (scheduling).</div>
       </div>
+      <div class="field">
+        <label class="pra-label">Test Generation</label>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:6px">Runs the real caption pipeline (brand voice + own-words ratio + voice bank) against a description you type — no video/Drive/Metricool involved. Use it to check whether it's actually pulling from your prompt and voice bank, or drifting into generic AI fluff.</div>
+        <input class="pra-input" id="svTestDescription" placeholder="e.g. LAETH NINJA STRENGTH BARS MUSCLE UP" style="margin-bottom:8px"/>
+        <button class="pra-btn pra-btn-outline" id="svTestGenBtn" type="button">Test Generation</button>
+        <div id="svTestResults" style="margin-top:12px"></div>
+      </div>
     </div>
 
     <div class="pra-panel section" id="pacificRimVideoConfigSection">
@@ -410,6 +417,13 @@
         <label class="pra-label">Connections</label>
         <div id="praConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
         <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> (shared with Powerbatics) / <code>METRICOOL_PRA_BLOG_ID</code> (scheduling).</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Test Generation</label>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:6px">Runs the real caption pipeline (brand voice + own-words ratio + voice bank) against a description you type — no video/Drive/Metricool involved. Use it to check whether it's actually pulling from your prompt and voice bank, or drifting into generic AI fluff.</div>
+        <input class="pra-input" id="praTestDescription" placeholder="e.g. LAETH NINJA STRENGTH BARS MUSCLE UP" style="margin-bottom:8px"/>
+        <button class="pra-btn pra-btn-outline" id="praTestGenBtn" type="button">Test Generation</button>
+        <div id="praTestResults" style="margin-top:12px"></div>
       </div>
     </div>
 
@@ -1097,6 +1111,43 @@ async function createUser() {
 }
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Test Generation (both Powerbatics and Pacific Rim Athletics Social Video
+// sections) -- runs the real caption pipeline against a typed-in
+// description, no video/Drive/Metricool involved, so an admin can check
+// what the brand voice prompt + own-words ratio + voice bank actually
+// produce before trusting it on a real clip.
+const CAPTION_PLATFORM_LABELS = { fb: 'Facebook', ig: 'Instagram', yt: 'YouTube', tt: 'TikTok', li: 'LinkedIn', x: 'X' };
+async function runTestGeneration(prefix, endpoint) {
+  const input = document.getElementById(prefix + 'TestDescription');
+  const btn = document.getElementById(prefix + 'TestGenBtn');
+  const results = document.getElementById(prefix + 'TestResults');
+  const description = input.value.trim();
+  if (!description) { results.innerHTML = '<div class="pra-muted" style="font-size:.8rem">Type a test filename/description first.</div>'; return; }
+  btn.disabled = true;
+  results.innerHTML = '<div class="pra-muted" style="font-size:.8rem">Generating…</div>';
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description }),
+    });
+    const d = await r.json();
+    if (!r.ok) { results.innerHTML = `<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">${escapeHtml(d.error || 'Failed.')}</div>`; return; }
+    results.innerHTML = Object.entries(d.captions || {}).map(([id, c]) => `
+      <div class="pra-panel" style="padding:12px;margin-bottom:8px">
+        <div class="pra-label" style="margin-bottom:6px">${escapeHtml(CAPTION_PLATFORM_LABELS[id] || id)}</div>
+        ${c.title ? `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(c.title)}</div>` : ''}
+        <div style="font-size:.85rem;white-space:pre-wrap">${escapeHtml(c.desc || '')}</div>
+      </div>
+    `).join('') || '<div class="pra-muted" style="font-size:.8rem">No captions returned.</div>';
+  } catch (e) {
+    results.innerHTML = '<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">Request failed.</div>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById('svTestGenBtn').onclick = () => runTestGeneration('sv', '/api/social-video/test-caption');
+document.getElementById('praTestGenBtn').onclick = () => runTestGeneration('pra', '/api/pacific-rim-video/test-caption');
 
 // Populates the Gym Training / Gym Level Test / Online Level Tests channel
 // pickers -- run once per loadConfig() call, before any of their <select>

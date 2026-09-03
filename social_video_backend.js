@@ -545,6 +545,24 @@ export async function handleSocialVideoRequest(req, res, url) {
     return true;
   }
 
+  // Caption generation only, no video/Drive/Metricool involved -- lets an
+  // admin sanity-check what the brand voice prompt + own-words ratio +
+  // voice bank actually produce for a given clip description before
+  // trusting it on a real publish. Same generateCaptions() the real
+  // pipeline calls, just fed a typed-in description instead of a real
+  // clip's label.
+  if (p === "/api/social-video/test-caption" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const description = String(body.description || "").trim().slice(0, 500);
+    if (!description) return void sendJson(res, 400, { error: "description required" });
+    try {
+      const captions = await generateCaptions({ description });
+      return void sendJson(res, 200, { captions });
+    } catch (e) {
+      return void sendJson(res, 500, { error: e.message });
+    }
+  }
+
   // The entire favorite-and-publish pipeline behind one call — a coach only
   // ever trims and labels a clip, everything else (tracking, vertical
   // reframe, captions, finding an open day, scheduling to every connected
