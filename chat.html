@@ -59,7 +59,11 @@
   /* ── Video-reply timestamped notes — shared between the compose modal's
      own list and the sent bubble's list (same row/time/text shape, just
      different containers/backgrounds around them). ── */
-  .video-note-row { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; }
+  /* white-space:normal resets the pre-wrap a sent video-note-reply inherits
+     from .bubble -- without it, the indentation/newlines between this row's
+     own tags in the notesHtml template stop collapsing and render as extra
+     blank lines, inflating each note row's height for no reason. */
+  .video-note-row { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; white-space: normal; }
   /* White, not the usual blue accent — a "mine" bubble's own background IS
      that same blue, which made the timestamp unreadable on your own sent
      replies. */
@@ -180,7 +184,11 @@
   .thread-appt-cancel:hover { opacity: 0.75; }
 
   /* ── Appointment bubble ── */
-  .bubble.appt { position: relative; display: flex; align-items: center; gap: 10px; border: 1px solid var(--pra-blue); background: rgba(0,155,255,0.08); }
+  /* white-space:normal resets the pre-wrap .bubble now carries for plain
+     multi-line text messages -- without it, the indentation/newlines
+     between this template's own tags stop collapsing and render as extra
+     blank lines, inflating the whole card's height for no reason. */
+  .bubble.appt { position: relative; display: flex; align-items: center; gap: 10px; border: 1px solid var(--pra-blue); background: rgba(0,155,255,0.08); white-space: normal; }
   .bubble.appt .appt-icon svg { width: 22px; height: 22px; overflow: visible; }
   .status-icon svg { width: 15px; height: 15px; overflow: visible; vertical-align: -3px; }
   .preview-icon svg { width: 13px; height: 13px; overflow: visible; vertical-align: -2px; }
@@ -192,7 +200,12 @@
   .bubble.appt a.appt-zoom-link { display: flex; align-items: center; gap: 4px; font-weight: 700; }
 
   /* ── Call outcome bubble (WhatsApp-style "Missed call" / duration row) ── */
-  .bubble.call-msg { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); }
+  /* white-space:normal resets the pre-wrap .bubble now carries for plain
+     multi-line text messages -- without it, the indentation/newlines
+     between this template's own tags stop collapsing and render as extra
+     blank lines, blowing this up into a tall stacked card instead of the
+     compact icon + two-line-of-text row it's meant to be. */
+  .bubble.call-msg { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); white-space: normal; }
   .bubble.call-msg.missed .call-msg-title { color: #ff6961; }
   .bubble.call-msg .call-msg-icon svg { width: 18px; height: 18px; overflow: visible; }
   .bubble.call-msg .call-msg-title { font-weight: 600; font-size: .85rem; }
