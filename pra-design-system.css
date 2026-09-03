@@ -24,6 +24,7 @@
   --pra-blue: #009bff;
   --pra-blue-glow: rgba(0, 155, 255, 0.55);
   --pra-blue-dim: rgba(0, 155, 255, 0.12);
+  --pra-blue-msg: #006bb3;
   --font-primary: 'Century Gothic', 'Poppins', 'Trebuchet MS', sans-serif;
   --font-secondary: 'Aldrich', 'Century Gothic', 'Poppins', sans-serif;
 }

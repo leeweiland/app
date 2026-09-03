@@ -233,7 +233,7 @@
      normal, rendering as one run-on blob regardless of how the message was
      actually typed or sent. */
   .bubble { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 9px 13px; font-size: .88rem; font-weight: 400; line-height: 1.4; word-break: break-word; white-space: pre-wrap; color: #d4d4d8; }
-  .bubble-row.mine .bubble { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  .bubble-row.mine .bubble { background: var(--pra-blue-msg); border-color: var(--pra-blue-msg); color: #fff; }
   /* A message that's ENTIRELY emoji (see isEmojiOnlyText) renders like
      WhatsApp — no bubble box, ~4x the normal text size — instead of a tiny
      emoji cramped inside a colored pill. */
@@ -3446,12 +3446,14 @@ function renderBubble(m, convo) {
       : mediaIsImage
         ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
         : `<video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" controls preload="metadata" playsinline></video>`;
-    // No timestamp badge on an image note — "time" only means anything for
-    // video, and omitting it here also means the seek-on-click handler
-    // below (which assumes a <video> player) never fires for one.
+    // No timestamp badge on an image note, or on a note sent without one
+    // (plain "good job"-style reply, added straight to Send with no time
+    // attached) — "time" only means anything for video, and omitting it
+    // here also means the seek-on-click handler below (which assumes a
+    // <video> player) never fires for one.
     const notesHtml = m.videoNotes.map(n => `
       <div class="video-note-row">
-        ${mediaIsImage ? '' : `<span class="video-note-time" data-time="${n.time}">${formatVideoTime(n.time)}</span>`}
+        ${mediaIsImage || n.time == null ? '' : `<span class="video-note-time" data-time="${n.time}">${formatVideoTime(n.time)}</span>`}
         <span class="video-note-text">${escapeHtml(n.text)}</span>
       </div>
     `).join('');
@@ -5358,6 +5360,12 @@ document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
 document.getElementById('videoReplyNoteInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addVideoReplyNote(); }
 });
+// Typing alone (without hitting "+ Add Timestamp") is enough to send now —
+// the leftover text just goes out as a plain, untimed note. Add Timestamp
+// stays available for whoever actually wants notes pinned to a moment.
+document.getElementById('videoReplyNoteInput').addEventListener('input', (e) => {
+  document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length && !e.target.value.trim();
+});
 document.getElementById('videoReplyNotesList').addEventListener('click', (e) => {
   const player = document.getElementById('videoReplyPlayer');
   const timeEl = e.target.closest('.video-note-time');
@@ -5366,7 +5374,8 @@ document.getElementById('videoReplyNotesList').addEventListener('click', (e) => 
   if (rmBtn) {
     videoReplyNotes.splice(Number(rmBtn.dataset.idx), 1);
     renderVideoReplyNotes();
-    document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length;
+    const pending = document.getElementById('videoReplyNoteInput').value.trim();
+    document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length && !pending;
   }
 });
 document.getElementById('videoReplyCancelBtn').onclick = () => {
@@ -5374,7 +5383,14 @@ document.getElementById('videoReplyCancelBtn').onclick = () => {
   closeModal('videoReplyModal');
 };
 document.getElementById('videoReplySendBtn').onclick = async () => {
-  if (!videoReplyNotes.length || !videoReplyTargetId) return;
+  const input = document.getElementById('videoReplyNoteInput');
+  const pending = input.value.trim();
+  // Whatever's still sitting in the box when Send is hit goes out as a
+  // plain untimed note, same as the added ones but with no timestamp —
+  // that's what makes a bare "good job" sendable without ever touching
+  // Add Timestamp.
+  const notes = pending ? [...videoReplyNotes, { time: null, text: pending }] : videoReplyNotes;
+  if (!notes.length || !videoReplyTargetId) return;
   const status = document.getElementById('videoReplyStatus');
   const btn = document.getElementById('videoReplySendBtn');
   btn.disabled = true;
@@ -5383,12 +5399,13 @@ document.getElementById('videoReplySendBtn').onclick = async () => {
   // preview, search, and a normal reply-to-this-message all working with
   // zero special-casing; renderBubble still renders the rich version
   // whenever m.videoNotes is present.
-  const text = videoReplyNotes.map(n => `[${formatVideoTime(n.time)}] ${n.text}`).join('\n');
+  const text = notes.map(n => n.time == null ? n.text : `[${formatVideoTime(n.time)}] ${n.text}`).join('\n');
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, replyToId: videoReplyTargetId, videoNotes: videoReplyNotes }),
+    body: JSON.stringify({ text, replyToId: videoReplyTargetId, videoNotes: notes }),
   });
   if (!r.ok) { status.textContent = 'Could not send — try again.'; btn.disabled = false; return; }
+  input.value = '';
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
   refreshThread(true);

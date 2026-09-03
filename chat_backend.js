@@ -4414,8 +4414,13 @@ export async function handleChatRequest(req, res, url) {
               // quoting this message) keeps working with zero special-casing;
               // this field only adds the richer inline-video-with-clickable-
               // timestamps rendering on top.
+              // n.time can be null -- a note sent without ever hitting "Add
+              // Timestamp" (plain "good job"-style reply) -- which must stay
+              // null rather than coercing to 0, or it'd render as a
+              // clickable 0:00 badge indistinguishable from a real
+              // start-of-video timestamp.
               videoNotes: Array.isArray(body.videoNotes) && body.videoNotes.length
-                ? body.videoNotes.map(n => ({ time: Number(n.time) || 0, text: String(n.text || "").slice(0, 2000) }))
+                ? body.videoNotes.map(n => ({ time: n.time == null ? null : (Number(n.time) || 0), text: String(n.text || "").slice(0, 2000) }))
                 : undefined,
               createdAt: new Date().toISOString(),
             };
