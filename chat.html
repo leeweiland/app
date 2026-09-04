@@ -4309,16 +4309,24 @@ function stopCameraStream() {
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
 }
 
-// No aspectRatio constraint here on purpose -- MediaRecorder records this
-// raw track exactly as negotiated (see startCameraRecording), so whatever
-// aspect getUserMedia settles on IS the recorded file's aspect. Without an
-// explicit resolution hint, browsers commonly fall back to a low-res,
-// wrong-aspect default (e.g. a squarish/4:3 negotiated resolution) instead
-// of the device's actual native vertical/horizontal frame -- symmetric
-// `ideal` width/height (not a forced exact size) asks for the camera's best
-// native resolution in whatever orientation it's actually being held,
-// portrait or landscape, full frame, nothing pre-cropped.
-const CAMERA_VIDEO_CONSTRAINTS = { width: { ideal: 1920 }, height: { ideal: 1920 } };
+// MediaRecorder records this raw track exactly as negotiated (see
+// startCameraRecording), so whatever aspect getUserMedia settles on IS the
+// recorded file's aspect -- this constraint IS what was cropping vertical
+// (and horizontal) shots down to 4:5/square. A symmetric ideal (width:1920,
+// height:1920) sounds orientation-neutral, but the constraint solver scores
+// each candidate mode by how close it lands to BOTH numbers independently --
+// a genuinely square (or near-square) mode scores as a "perfect" match for
+// hitting width=1920 AND height=1920 at once, beating the sensor's true
+// full-frame vertical (e.g. 1080x1920) or horizontal (e.g. 1920x1080) mode,
+// which only satisfies one of the two. On a device/browser that offers a
+// cropped square capture mode, that's exactly what gets picked -- full
+// frame content lost off the top/bottom (or sides) to satisfy a constraint
+// that was never meant to force a specific shape. Asking for the sensor's
+// native widescreen mode instead (1920 x 1080, not "as square as possible")
+// avoids that trap: mobile browsers rotate this to match however the phone
+// is actually being held, portrait or landscape, without cropping it, the
+// same way a normal camera app records.
+const CAMERA_VIDEO_CONSTRAINTS = { width: { ideal: 1920 }, height: { ideal: 1080 } };
 
 async function startCameraStream() {
   stopCameraStream();
