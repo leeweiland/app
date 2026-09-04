@@ -1715,6 +1715,19 @@ async function init() {
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
 
+  // Deep link from the header camera icon (chat-header.js, every page) --
+  // opened right away, before any of the sidebar's own data (favorites/
+  // contacts/conversations, several sequential awaits below) has loaded.
+  // Doing this after that data instead meant the full chat UI painted
+  // first -- sidebar, conversation list, everything -- and only then did
+  // the camera modal pop open on top, a visible flash of a screen nobody
+  // asked to see. The modal opens synchronously (see openCameraCapture),
+  // so calling it here shows it almost immediately; the sidebar just keeps
+  // loading underneath it instead of in front of it.
+  if (new URLSearchParams(location.search).get('gymCapture') === '1' && isStaffMe()) {
+    openGymCapture();
+  }
+
   // Self-report the device's own timezone if it's changed since last time —
   // powers per-recipient appointment display (everyone sees times in their
   // own zone) without needing a settings screen.
@@ -1749,11 +1762,6 @@ async function init() {
     openConvo(deepLinkConvoId);
   }
   setupComposer();
-  // Deep link from the header camera icon (chat-header.js, every page) --
-  // coach/admin only, not tied to any open conversation.
-  if (new URLSearchParams(location.search).get('gymCapture') === '1' && isStaffMe()) {
-    openGymCapture();
-  }
   setupPublishModal();
   setupPush();
   setupSearchClearButtons();
@@ -4107,7 +4115,9 @@ function setupComposer() {
 // State lives at module scope (not closed over setupComposer) since the
 // capture flow spans several independent event handlers wired once here.
 let cameraStream = null;
-let cameraFacing = 'user';
+// Back camera by default -- these are training/gym clips of someone else,
+// not selfies; 'user' only kicks in once someone explicitly flips it.
+let cameraFacing = 'environment';
 let cameraShootMode = 'photo';
 let cameraRecorder = null;
 let cameraRecordedChunks = [];
