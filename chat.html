@@ -467,7 +467,12 @@
      flex:1 + min-height:0 lets it shrink to whatever's actually left after
      its siblings take their share; object-fit:contain keeps the full
      frame in view at that size instead of cropping it. */
-  #cameraPreviewVideo { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
+  /* object-fit:contain (not cover) so the live preview is an honest match
+     for what's actually recorded -- MediaRecorder captures the raw
+     getUserMedia stream untouched, so a cover-cropped preview was only
+     ever a CSS illusion of what got framed, not what actually ended up in
+     the file. */
+  #cameraPreviewVideo { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
   #cameraReviewVideo { width: 100%; flex: 1 1 auto; min-height: 0; object-fit: contain; background: #000; display: block; }
   /* Selfie mode mirrors the LIVE PREVIEW only (the natural "looking in a
      mirror" feel) — the frame actually captured/recorded is read straight
@@ -4304,6 +4309,17 @@ function stopCameraStream() {
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
 }
 
+// No aspectRatio constraint here on purpose -- MediaRecorder records this
+// raw track exactly as negotiated (see startCameraRecording), so whatever
+// aspect getUserMedia settles on IS the recorded file's aspect. Without an
+// explicit resolution hint, browsers commonly fall back to a low-res,
+// wrong-aspect default (e.g. a squarish/4:3 negotiated resolution) instead
+// of the device's actual native vertical/horizontal frame -- symmetric
+// `ideal` width/height (not a forced exact size) asks for the camera's best
+// native resolution in whatever orientation it's actually being held,
+// portrait or landscape, full frame, nothing pre-cropped.
+const CAMERA_VIDEO_CONSTRAINTS = { width: { ideal: 1920 }, height: { ideal: 1920 } };
+
 async function startCameraStream() {
   stopCameraStream();
   const preview = document.getElementById('cameraPreviewVideo');
@@ -4311,7 +4327,7 @@ async function startCameraStream() {
     // Audio only matters once actually recording video, but requesting it
     // upfront avoids re-negotiating getUserMedia (and a second permission
     // prompt) the moment someone taps over to Video mode.
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing }, audio: true });
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing, ...CAMERA_VIDEO_CONSTRAINTS }, audio: true });
   } catch (e) {
     console.error('[camera] getUserMedia(video+audio) failed:', e.name, e.message);
     // Android/Capacitor's permission bridge grants/denies the whole
@@ -4321,7 +4337,7 @@ async function startCameraStream() {
     // camera/permission problem isn't confused with "just no audio," and
     // so a clip can still be captured (silently) in that case.
     try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing } });
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing, ...CAMERA_VIDEO_CONSTRAINTS } });
       console.warn('[camera] video-only succeeded — audio permission is likely the actual problem.');
     } catch (e2) {
       console.error('[camera] getUserMedia(video only) also failed:', e2.name, e2.message);

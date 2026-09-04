@@ -213,25 +213,25 @@ function buildDynamicCrop(kfs, vw, vh, outW, outH, startTime) {
 // Vertical source footage (already taller than wide) doesn't need cropping
 // at all — passed straight through with a stream copy (fast, lossless).
 // Horizontal footage gets reframed into 9:16 — AI-tracked (buildDynamicCrop,
-// now fixed) if keyframes came from the client's subject tracker, else a
-// plain static center crop.
+// now fixed) if keyframes came from the client's subject tracker (a coach
+// deliberately chose to follow a subject, discarding the rest on purpose —
+// crop-to-fill is the point there), otherwise the WHOLE frame is scaled
+// down to fit and letterboxed (padded black top/bottom) instead of
+// center-cropped — nothing gets cut off just to fill a vertical canvas
+// when nobody actually chose what to crop to.
 export function reframeVideoVertical(inputPath, outputPath, { videoWidth, videoHeight, startTime = 0, keyframes, squareMode = false }) {
   if (videoWidth <= videoHeight) {
     execFileSync(ffmpegPath, ["-y", "-i", inputPath, "-c", "copy", "-movflags", "+faststart", outputPath], { stdio: ["pipe", "pipe", "pipe"], timeout: 120000 });
     return;
   }
   const outW = 1080, outH = squareMode ? 1080 : 1920;
-  let cropW, cropH, xExpr, yExpr;
+  let vfFilter;
   if (keyframes && keyframes.length >= 2) {
-    ({ cropW, cropH, xExpr, yExpr } = buildDynamicCrop(keyframes, videoWidth, videoHeight, outW, outH, startTime));
+    const { cropW, cropH, xExpr, yExpr } = buildDynamicCrop(keyframes, videoWidth, videoHeight, outW, outH, startTime);
+    vfFilter = `crop=${cropW}:${cropH}:'${xExpr}':'${yExpr}',scale=${outW}:${outH}`;
   } else {
-    const targetAspect = outW / outH;
-    if (videoWidth / videoHeight > targetAspect) { cropH = videoHeight; cropW = Math.round(videoHeight * targetAspect); }
-    else { cropW = videoWidth; cropH = Math.round(videoWidth / targetAspect); }
-    xExpr = String(Math.round((videoWidth - cropW) / 2));
-    yExpr = String(Math.round((videoHeight - cropH) / 2));
+    vfFilter = `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2:color=black`;
   }
-  const vfFilter = `crop=${cropW}:${cropH}:'${xExpr}':'${yExpr}',scale=${outW}:${outH}`;
   const vfScriptPath = outputPath + ".vf.txt";
   writeFileSync(vfScriptPath, vfFilter, "utf8");
   try {

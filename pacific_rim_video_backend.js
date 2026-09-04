@@ -61,7 +61,15 @@ function probeVideoDimensions(path) {
     execFileSync(ffmpegPath, ["-i", path], { stdio: ["pipe", "pipe", "pipe"], timeout: 15000 });
   } catch (e) {
     const stderr = e.stderr?.toString() || "";
-    const m = stderr.match(/Video:.*?(\d{2,5})x(\d{2,5})/);
+    // Phone-recorded MP4/MOV files often carry a second, embedded "video"
+    // stream that's really just a still cover thumbnail (mjpeg, tiny/odd
+    // resolution, ffmpeg tags it "(attached pic)") -- matching the FIRST
+    // "Video:" line indiscriminately can grab that thumbnail's dimensions
+    // instead of the real footage's, feeding reframeVideoVertical a bogus
+    // aspect ratio it then (wrongly) tries to fit the whole clip into.
+    // Skip any such line and match only a real video stream.
+    const line = stderr.split("\n").find(l => /Video:/.test(l) && !/\(attached pic\)/i.test(l));
+    const m = line?.match(/Video:.*?(\d{2,5})x(\d{2,5})/);
     if (m) return { width: Number(m[1]), height: Number(m[2]) };
   }
   return { width: 1920, height: 1080 }; // safe horizontal-video fallback
