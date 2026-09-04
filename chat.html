@@ -443,6 +443,17 @@
   .shortcode-menu.show { display: block; }
   .shortcode-menu-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .8rem; }
   .shortcode-menu-item:hover { background: rgba(255,255,255,0.06); }
+  /* @mention autocomplete -- floats directly above the composer pill
+     (position:absolute against .composer, which is position:relative)
+     regardless of where in the textarea the "@" actually was, same idea
+     as the shortcode menu but keyed off typed text instead of a button. */
+  .mention-dropdown { position: absolute; left: 12px; right: 12px; bottom: 100%; margin-bottom: 6px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 10px; padding: 4px; z-index: 25; display: none; max-height: 220px; overflow-y: auto; }
+  .mention-dropdown.show { display: block; }
+  .mention-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: .84rem; }
+  .mention-item.active, .mention-item:hover { background: var(--pra-blue-dim); }
+  .mention-item-role { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); margin-left: auto; }
+  .mention-tag { color: var(--pra-blue); font-weight: 700; }
+  .bubble-row.mine .mention-tag { color: #fff; text-decoration: underline; }
 
   /* ── In-app camera capture (students/users, touch devices only) ──
      A full-bleed overlay rather than the usual centered .modal-box — a
@@ -859,6 +870,7 @@
         <div class="composer">
           <div class="reply-preview" id="replyPreview" style="display:none"></div>
           <div class="paste-preview" id="pastePreview" style="display:none"></div>
+          <div class="mention-dropdown" id="mentionDropdown"></div>
           <div class="composer-pill">
             <button class="icon-btn composer-icon" id="emojiBtn">😊</button>
             <button class="icon-btn composer-icon" id="gifBtn">GIF</button>
@@ -1381,6 +1393,13 @@ let reactingMessageId = null;
 // block/unblock so the sidebar context menu's Block/Unblock label doesn't
 // need a round-trip every time it opens.
 let blockedUserIds = new Set();
+// @mention autocomplete state — mentionMatches is the currently-filtered
+// participant list, mentionActiveIdx the keyboard-highlighted row,
+// mentionTriggerStart the index (into textInput.value) of the "@" that
+// opened it, so selecting a match knows exactly what span to replace.
+let mentionMatches = [];
+let mentionActiveIdx = 0;
+let mentionTriggerStart = -1;
 // The most recently rendered sidebar item list -- renderConvoList()'s own
 // `items` is local to that call, but the sidebar's long-press/right-click
 // handler (attached once to the stable #convoList container, not
@@ -3502,7 +3521,8 @@ function renderBubble(m, convo) {
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
     const emojiOnlyCls = isEmojiOnlyText(m.text) ? ' emoji-only' : '';
-    content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${escapeHtml(m.text)}${edited}</div>`;
+    const bodyHtml = emojiOnlyCls ? escapeHtml(m.text) : linkifyMentions(escapeHtml(m.text), convo);
+    content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${bodyHtml}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
         <div class="bubble-wrap">${content}</div>
@@ -3622,6 +3642,27 @@ function hideReactorList() { document.getElementById('reactorListPopup').classLi
 
 function escapeHtml(s) {
   const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+// Highlights @mentions (inserted by the composer's autocomplete, see
+// selectMention) inside an already-escaped text bubble. Matches against
+// this conversation's actual participant names rather than a bare
+// `@\w+` pattern, so a stray "@" in ordinary typed text (an email, a
+// handle from somewhere else) never gets highlighted as if it were a
+// mention of someone in the room.
+function linkifyMentions(escapedText, convo) {
+  if (!convo?.participants?.length) return escapedText;
+  const counts = {};
+  convo.participants.forEach(p => { counts[p.first] = (counts[p.first] || 0) + 1; });
+  const labels = [...new Set(convo.participants
+    .map(p => (counts[p.first] > 1 ? `${p.first} ${(p.last || '').charAt(0)}.` : p.first))
+    .filter(Boolean))];
+  if (!labels.length) return escapedText;
+  // Longest first so e.g. "Alexis W." matches whole rather than just "Alexis".
+  const alternation = labels.sort((a, b) => b.length - a.length)
+    .map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`@(?:${alternation})(?=[\\s.,!?)]|$)`, 'g');
+  return escapedText.replace(re, (hit) => `<span class="mention-tag">${hit}</span>`);
 }
 
 // ── Image lightbox (click to open, ctrl+wheel / pinch to zoom, drag to pan) ──
@@ -4051,6 +4092,19 @@ function setupComposer() {
     renderPastePreview();
   });
 
+  document.getElementById('mentionDropdown').addEventListener('mousedown', (e) => {
+    // mousedown (not click) so this fires before the textarea blurs and
+    // steals focus back, which would otherwise drop the selection.
+    const item = e.target.closest('.mention-item');
+    if (!item) return;
+    e.preventDefault();
+    selectMention(Number(item.dataset.idx));
+  });
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('mentionDropdown');
+    if (!dropdown.contains(e.target) && e.target !== textInput) closeMentionDropdown();
+  });
+
   sendBtn.onclick = sendText;
   // Desktop: Enter sends, Shift+Enter inserts a newline (standard chat-app
   // convention). Mobile keeps its own behavior untouched — Enter/return is
@@ -4059,6 +4113,15 @@ function setupComposer() {
   // return. isTouchDevice is computed once at the top of setupComposer.
   if (!isTouchDevice) {
     textInput.addEventListener('keydown', (e) => {
+      // The @mention dropdown, while open, owns these keys instead of its
+      // usual send/newline behavior -- arrow keys move the highlight,
+      // Enter/Tab accept it, Escape backs out without touching send.
+      if (mentionMatches.length && document.getElementById('mentionDropdown').classList.contains('show')) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); mentionActiveIdx = (mentionActiveIdx + 1) % mentionMatches.length; renderMentionDropdown(); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); mentionActiveIdx = (mentionActiveIdx - 1 + mentionMatches.length) % mentionMatches.length; renderMentionDropdown(); return; }
+        if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionActiveIdx); return; }
+        if (e.key === 'Escape') { e.preventDefault(); closeMentionDropdown(); return; }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendText();
@@ -4069,6 +4132,7 @@ function setupComposer() {
     if (!e.isComposing) convertEmoticonAtCaret(textInput);
     textInput.style.height = 'auto';
     textInput.style.height = textInput.scrollHeight + 'px';
+    updateMentionDropdown(textInput);
   });
 
   document.getElementById('searchInput').addEventListener('input', async (e) => {
@@ -5011,7 +5075,82 @@ function renderPastePreview() {
   }).join('');
 }
 
+// ── @mention autocomplete ─────────────────────────────────────────────────
+// This conversation's participants, with a disambiguated display label —
+// bare first name, unless two participants share one (then "First L.").
+function mentionableParticipants() {
+  const convo = conversations.find(c => c.id === activeConvoId);
+  if (!convo) return [];
+  const counts = {};
+  convo.participants.forEach(p => { counts[p.first] = (counts[p.first] || 0) + 1; });
+  return convo.participants.map(p => ({
+    id: p.id, role: p.role,
+    label: counts[p.first] > 1 ? `${p.first} ${(p.last || '').charAt(0)}.` : p.first,
+  })).filter(p => p.label);
+}
+
+// Finds the "@word" the caret currently sits inside of, if any — scans
+// back to the nearest whitespace/start rather than tracking trigger state
+// across keystrokes, so it stays correct through arrow-key cursor moves,
+// cut/paste, etc.
+function getMentionQuery(textarea) {
+  const value = textarea.value;
+  const caret = textarea.selectionStart;
+  let start = caret;
+  while (start > 0 && !/\s/.test(value[start - 1])) start--;
+  if (value[start] !== '@') return null;
+  const query = value.slice(start + 1, caret);
+  if (/\s/.test(query)) return null;
+  return { start, query };
+}
+
+function updateMentionDropdown(textarea) {
+  const hit = getMentionQuery(textarea);
+  if (!hit) { closeMentionDropdown(); return; }
+  const q = hit.query.toLowerCase();
+  mentionMatches = mentionableParticipants().filter(p => p.label.toLowerCase().startsWith(q));
+  if (!mentionMatches.length) { closeMentionDropdown(); return; }
+  mentionTriggerStart = hit.start;
+  mentionActiveIdx = 0;
+  renderMentionDropdown();
+  document.getElementById('mentionDropdown').classList.add('show');
+}
+
+function renderMentionDropdown() {
+  document.getElementById('mentionDropdown').innerHTML = mentionMatches.map((p, i) => `
+    <div class="mention-item${i === mentionActiveIdx ? ' active' : ''}" data-idx="${i}">
+      <span>${escapeHtml(p.label)}</span>
+      <span class="mention-item-role">${escapeHtml(p.role || '')}</span>
+    </div>
+  `).join('');
+}
+
+function closeMentionDropdown() {
+  mentionMatches = [];
+  mentionTriggerStart = -1;
+  mentionActiveIdx = 0;
+  document.getElementById('mentionDropdown').classList.remove('show');
+}
+
+function selectMention(idx) {
+  const p = mentionMatches[idx];
+  const textarea = document.getElementById('textInput');
+  if (!p || mentionTriggerStart < 0) return;
+  const caret = textarea.selectionStart;
+  const before = textarea.value.slice(0, mentionTriggerStart);
+  const after = textarea.value.slice(caret);
+  const insert = '@' + p.label + ' ';
+  textarea.value = before + insert + after;
+  textarea.focus();
+  const newCaret = (before + insert).length;
+  textarea.selectionStart = textarea.selectionEnd = newCaret;
+  textarea.style.height = 'auto';
+  textarea.style.height = textarea.scrollHeight + 'px';
+  closeMentionDropdown();
+}
+
 async function sendText() {
+  closeMentionDropdown();
   const input = document.getElementById('textInput');
   const text = input.value.trim();
   if (!activeConvoId || (!text && !pendingPasteFiles.length)) return;
