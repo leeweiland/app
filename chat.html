@@ -1491,7 +1491,14 @@ function positionPickerNear(panel, anchorEl, preferAbove) {
 // room below, the popup instead docks right above the composer -- a fixed
 // spot at the bottom of the visible content, floating over whatever
 // message happens to be behind it, rather than jumping to the top.
-function positionMessagePopupNear(panel, anchorEl) {
+//
+// bottomReserve additionally holds the dock ceiling that much further up
+// the screen -- used when positioning the action bar itself, so there's
+// always genuine room left underneath it for the Edit/Delete submenu
+// (also positioned with this same function, anchored to the bar) to open
+// directly below the bar instead of having nowhere to go but flipping far
+// above it.
+function positionMessagePopupNear(panel, anchorEl, bottomReserve = 0) {
   const rect = anchorEl.getBoundingClientRect();
   const margin = 8;
   const gap = 6;
@@ -1536,7 +1543,7 @@ function positionMessagePopupNear(panel, anchorEl) {
   // thread with no composer visible), regardless of where the anchor is.
   const composer = document.querySelector('.composer');
   const composerTop = composer ? composer.getBoundingClientRect().top : (vTop + vh);
-  const dockCeiling = Math.min(vTop + vh, composerTop) - gap;
+  const dockCeiling = Math.min(vTop + vh, composerTop) - gap - bottomReserve;
 
   const visBottom = Math.min(rect.bottom, vTop + vh);
   const available = dockCeiling - vTop - margin;
@@ -3543,7 +3550,10 @@ function renderApptBubble(m, senderLabel, sender) {
   const zoomLink = (sender?.zoomLink && !m.isGym)
     ? `<a class="appt-link appt-zoom-link" href="${sender.zoomLink}" target="_blank"><span class="status-icon">${svgVideoCam()}</span> Join Zoom</a>`
     : '';
-  const canCancelBubble = (isStaffMe() && m.senderId === me.id) || (m.isGym && me.role === 'gym' && m.clientIds?.includes(me.id));
+  // Any staff member can cancel any appointment (moderating a shared group/
+  // channel isn't limited to your own posts) -- matches what the backend
+  // already allows (isStaff(user) alone, no senderId check).
+  const canCancelBubble = isStaffMe() || (m.isGym && me.role === 'gym' && m.clientIds?.includes(me.id));
   const deleteBtn = canCancelBubble ? `<button class="appt-delete-btn delete-btn" title="Delete appointment">✕</button>` : '';
   return `<div class="bubble appt">${deleteBtn}${senderLabel}
     <div class="appt-icon">${svgCalendar()}</div>
@@ -5115,20 +5125,26 @@ let actionSelectedRow = null;
 let actionBarMessageId = null;
 
 // "⋯" submenu — Report (anyone else's message) / Edit (your own text,
-// staff) / Delete (your own non-appointment message, staff). Opened either
-// from the action bar's mabMoreBtn (leaves the row selected/highlighted
-// underneath) or, in principle, any other anchor.
-function openMsgMoreMenu(anchorEl, mid, preferAbove) {
+// staff) / Delete (any non-appointment message, staff — moderating a
+// shared group/channel isn't limited to your own posts; matches what the
+// backend already allows). Opened either from the action bar's mabMoreBtn
+// (leaves the row selected/highlighted underneath) or, in principle, any
+// other anchor. Always positioned directly below its anchor via
+// positionMessagePopupNear (never positionPickerNear's flip-above-when-
+// tight-on-room logic) — openMsgActionBar already reserves room below the
+// bar for exactly this menu, so it never has to jump away from the "..."
+// button that opened it to find space.
+function openMsgMoreMenu(anchorEl, mid) {
   const m = currentThreadMessages.find(x => x.id === mid);
   if (!m) return;
   moreMenuMessageId = mid;
   const mine = m.senderId === me.id;
-  const canAct = isStaffMe() && mine;
+  const staff = isStaffMe();
   document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
-  document.getElementById('msgMoreEditBtn').style.display = (canAct && m.type === 'text') ? '' : 'none';
-  document.getElementById('msgMoreDeleteBtn').style.display = (canAct && m.type !== 'appointment') ? '' : 'none';
+  document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
+  document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';
   const menu = document.getElementById('msgMoreMenu');
-  positionPickerNear(menu, anchorEl, preferAbove);
+  positionMessagePopupNear(menu, anchorEl);
   menu.classList.add('show');
 }
 document.getElementById('msgMoreReportBtn').onclick = async () => {
@@ -5196,10 +5212,29 @@ function openMsgActionBar(anchorEl, mid) {
   document.getElementById('mabLevelTestBtn').style.display = canLevelTest ? '' : 'none';
   document.getElementById('mabForwardBtn').style.display = canReplyForward ? '' : 'none';
   document.getElementById('mabReplyBtn').style.display = canReplyForward ? '' : 'none';
-  document.getElementById('mabMoreBtn').style.display = (!mine || canAct) ? '' : 'none';
+  const showMoreBtn = !mine || canAct;
+  document.getElementById('mabMoreBtn').style.display = showMoreBtn ? '' : 'none';
 
   const bar = document.getElementById('msgActionBar');
-  positionMessagePopupNear(bar, anchorEl);
+  // Reserve room below the bar for the "..." submenu it can open (same
+  // Report/Edit/Delete visibility openMsgMoreMenu itself sets — measuring
+  // with the real content this message will actually show, not a fixed
+  // guess) so that submenu always has somewhere to open directly under the
+  // bar instead of finding no room and flipping far above it.
+  let moreMenuReserve = 0;
+  if (showMoreBtn) {
+    const staff = isStaffMe();
+    document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
+    document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
+    document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';
+    const menu = document.getElementById('msgMoreMenu');
+    menu.style.visibility = 'hidden';
+    menu.classList.add('show');
+    moreMenuReserve = menu.offsetHeight + 6; // + gap, matching positionMessagePopupNear's own `gap`
+    menu.classList.remove('show');
+    menu.style.visibility = '';
+  }
+  positionMessagePopupNear(bar, anchorEl, moreMenuReserve);
   bar.classList.add('show');
 }
 document.querySelectorAll('.mab-emoji').forEach(btn => {
