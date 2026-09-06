@@ -2843,6 +2843,21 @@ export async function handleChatRequest(req, res, url) {
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true });
     }
+    // Per-coach on/off switch for the sidebar/thread-header "#/20" content
+    // quota badge (see chat.html's coachQuotaBadgeHtml) -- an admin call,
+    // not a coach setting on themselves, so a coach can't just turn their
+    // own quota tracking off.
+    const coachQuotaMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/coach-quota-badge$/);
+    if (coachQuotaMatch && req.method === "POST") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const { enabled } = await readJsonBody(req);
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === coachQuotaMatch[1]);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      target.showCoachQuota = !!enabled;
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true, user: publicUser(target) });
+    }
     const archiveMatch = p.match(/^\/api\/admin\/users\/([^/]+)\/archived$/);
     if (archiveMatch && req.method === "POST") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });

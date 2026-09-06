@@ -938,6 +938,11 @@ function renderUsers() {
           <input type="checkbox" class="physique-notifs-checkbox" data-id="${u.id}" ${u.physiqueCheckinNotifsEnabled === false ? '' : 'checked'} title="Weekly physique check-in reminders"/>
         `}
       </td>
+      <td style="text-align:center">
+        ${u.role === 'coach' ? `
+          <input type="checkbox" class="coach-quota-checkbox" data-id="${u.id}" ${u.showCoachQuota ? 'checked' : ''} title="Show this coach's monthly favorited/gym-cammed count (#/20) in chat"/>
+        ` : '—'}
+      </td>
       <td>
         ${u.role === 'admin' || u.role === 'admin2' ? '—' : `
           <button class="pra-btn pra-btn-ghost delete-user-btn" data-id="${u.id}" data-name="${escapeAttr(u.first + ' ' + u.last)}" style="padding:5px 12px;font-size:.75rem;border-color:#ff5c5c;color:#ff5c5c">
@@ -957,7 +962,7 @@ function renderUsers() {
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name', 'sticky-col sticky-col-1')}${sortHeader('Email', 'email', 'sticky-col sticky-col-2')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Physique Notifs</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name', 'sticky-col sticky-col-1')}${sortHeader('Email', 'email', 'sticky-col sticky-col-2')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Physique Notifs</th><th>Quota Badge</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
@@ -1029,6 +1034,15 @@ function renderUsers() {
       });
       const target = allUsers.find(u => u.id === cb.dataset.id);
       if (target) target.physiqueCheckinNotifsEnabled = cb.checked;
+    });
+  });
+  document.querySelectorAll('.coach-quota-checkbox').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      await fetch('/api/admin/users/' + cb.dataset.id + '/coach-quota-badge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: cb.checked })
+      });
+      const target = allUsers.find(u => u.id === cb.dataset.id);
+      if (target) target.showCoachQuota = cb.checked;
     });
   });
   document.querySelectorAll('.delete-user-btn').forEach(btn => {

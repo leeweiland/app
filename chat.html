@@ -1919,7 +1919,7 @@ function convoItemHtml(i) {
   // Next to the time, above the pin row -- not next to the name, which
   // truncates on the (resizable, 320px-default) sidebar long before the
   // window itself is anywhere near mobile-narrow.
-  const badge = roleBadgeHtml(i.avatarUser);
+  const badge = roleBadgeHtml(i.avatarUser) + coachQuotaBadgeHtml(i.avatarUser);
   const sideBadge = badge ? `<span class="convo-side-badge">${badge}</span>` : '';
   const isSelected = bulkSelectMode && bulkSelected.has(i.key);
   const checkbox = bulkSelectMode
@@ -2349,7 +2349,7 @@ async function openConvo(id) {
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
-  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser);
+  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser) + coachQuotaBadgeHtml(threadOtherUser);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
@@ -2931,7 +2931,7 @@ async function openLevelsModal(otherUser) {
   document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
   document.getElementById('levelsAvatar').innerHTML = avatarHtml(otherUser);
   document.getElementById('levelsName').textContent = (isStaffMe() || isSelf) ? (otherUser.first + ' ' + otherUser.last) : otherUser.first;
-  document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser);
+  document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser) + coachQuotaBadgeHtml(otherUser);
   document.getElementById('levelsLocation').textContent = '';
   document.getElementById('levelsMsg').textContent = 'Loading…';
   document.getElementById('levelsBody').innerHTML = '';
@@ -5917,10 +5917,12 @@ async function loadCoachMonthlyStats() {
 }
 // p is the participant the badge would be FOR -- coaches only, not admin/
 // admin2 (this is a coach content-quota metric, not something an admin is
-// being tracked against) -- visible to a coach OR admin VIEWER
-// (isStaffMe()), same as the rest of this staff-only feature.
+// being tracked against), AND only a coach an admin has explicitly opted
+// in via Admin Panel > Users & Roles (p.showCoachQuota) -- visible to a
+// coach OR admin VIEWER (isStaffMe()), same as the rest of this
+// staff-only feature.
 function coachQuotaBadgeHtml(p) {
-  if (!isStaffMe() || !p || p.role !== 'coach') return '';
+  if (!isStaffMe() || !p || p.role !== 'coach' || !p.showCoachQuota) return '';
   const n = coachMonthlyStats.counts[p.id] || 0;
   return ` <span class="coach-quota-badge" title="Favorited/gym-cammed this month">${n}/${coachMonthlyStats.goal}</span>`;
 }
