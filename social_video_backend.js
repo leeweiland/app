@@ -83,65 +83,51 @@ export async function semanticRetrieve(query, { topN = 20 } = {}) {
 }
 
 // ── Caption generation (Claude + RAG voice bank) ────────────────────────────
-// hasTitle gates whether a platform gets its own Title field in the caption
-// JSON/UI — matches social-video.html's PLATFORMS table exactly.
-export const CAPTION_PLATFORMS = [
-  { id: "fb", label: "Facebook", hasTitle: true, titleLimit: 255, descLimit: 5000 },
-  { id: "ig", label: "Instagram", hasTitle: false, descLimit: 2200 },
-  { id: "yt", label: "YouTube", hasTitle: true, titleLimit: 100, descLimit: 5000 },
-  { id: "tt", label: "TikTok", hasTitle: false, descLimit: 900 },
-  { id: "li", label: "LinkedIn", hasTitle: false, descLimit: 3000 },
-  { id: "x", label: "X", hasTitle: false, descLimit: 280 },
-];
-
 export function ownWordsRuleFor(ratio) {
-  if (ratio >= 90) return "STRICT COPY-PASTE MODE: reuse the voice bank's exact sentences and phrasing as much as possible — light edits only to make them fit this specific clip.";
+  if (ratio >= 90) return "STRICT COPY-PASTE MODE: reuse the voice bank's exact sentences and phrasing as much as possible — light edits only to make them fit this specific clip. This still never includes copying a signature/sign-off line (see the system instructions) even at this ratio.";
   if (ratio <= 10) return "Write completely fresh copy in the brand voice described below — don't quote the voice bank directly, just match its tone and style.";
   return `Blend roughly ${ratio}% reused phrasing/sentences from the voice bank with your own fresh writing tailored to this clip.`;
 }
 
 // The Claude-calling half of caption generation, shared across brands — each
 // brand builds its own sharedContext (its own settings file, its own brand
-// name/voice) and hands it here. One focused call per platform (run in
-// parallel) rather than one call asked to fill all 6 at once — tested live
-// and found that with the full voice-bank context injected (10-20K+
-// characters), a single combined call reliably nailed the FIRST platform in
-// the schema and left the rest as empty {}, well under the token budget so
-// not a truncation issue — just the model's attention thinning out across a
-// long list of sibling fields. Six small, single-purpose calls can't leave
-// anything blank because there's nothing else in that call's schema to
-// neglect.
-export async function generateCaptionsFromContext(sharedContext) {
+// name/voice) and hands it here. One title + one description, reused as-is
+// across every platform actually published to -- previously this ran one
+// call per platform with that platform's own (much more permissive)
+// hardcoded character limit, e.g. Facebook's 5000 -- which reliably beat out
+// a much stricter limit the brand voice instructions themselves asked for
+// ("280 characters or less"), since "must be <=5000" is a stronger, more
+// concrete signal than a rule stated once earlier in a long voice-bank-
+// stuffed prompt. One call, one set of instructions, nothing competing.
+export async function generateCaptionFromContext(sharedContext) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-  async function writeOnePlatform(id, label, hasTitle, charLimit, titleLimit) {
-    const schema = hasTitle
-      ? { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title", "desc"] }
-      : { type: "object", properties: { desc: { type: "string" } }, required: ["desc"] };
-    const limitLine = hasTitle ? `Title must be <=${titleLimit} characters. Description must be <=${charLimit} characters.` : `Must be <=${charLimit} characters.`;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-opus-5",
-        max_tokens: 1500,
-        system: "You are a social media caption writer.",
-        messages: [{ role: "user", content: `${sharedContext}\n\nWrite the ${label} caption for this clip. ${limitLine}` }],
-        tools: [{ name: "write_caption", description: `Write the ${label} caption.`, input_schema: schema }],
-        tool_choice: { type: "tool", name: "write_caption" },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(`Claude ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
-    const toolUse = data.content?.find(b => b.type === "tool_use");
-    if (!toolUse?.input?.desc) throw new Error(`Claude returned no ${label} caption`);
-    return toolUse.input;
-  }
-
-  const results = await Promise.all(CAPTION_PLATFORMS.map(p => writeOnePlatform(p.id, p.label, p.hasTitle, p.descLimit, p.titleLimit)));
-  const captions = {};
-  CAPTION_PLATFORMS.forEach((p, i) => { captions[p.id] = results[i]; });
-  return captions;
+  const schema = { type: "object", properties: { title: { type: "string" }, desc: { type: "string" } }, required: ["title", "desc"] };
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: "claude-opus-5",
+      max_tokens: 1500,
+      // The brand voice instructions (in the user message below) are
+      // binding constraints, not stylistic suggestions -- a stated
+      // character limit, "no hashtags," "no signature/sign-off," etc. all
+      // win over any competing instruction, including "reuse the voice
+      // bank heavily." A signature/sign-off (a name, business name, or
+      // "reach out to us" closer) is a structural leftover of whatever
+      // email it was pulled from -- it's never part of the caption itself,
+      // regardless of own-words ratio, unless explicitly asked for.
+      system: "You are a social media caption writer. Brand voice instructions in the user message are binding constraints, not suggestions -- follow every rule they state (character limits, no hashtags, no signature/sign-off, tone, etc.) exactly, even when another instruction says to reuse voice-bank phrasing heavily. A signature or sign-off line (a name, business name, or a 'reach out'/'shoot us a message' closer) is a structural artifact of the original email it was pulled from, never part of a social caption -- omit it even in strict-reuse mode unless explicitly told to keep one.",
+      messages: [{ role: "user", content: `${sharedContext}\n\nWrite ONE title and ONE caption/description for this clip, meant to be reused as-is across every social platform. Follow every instruction in the brand voice section above exactly -- especially any stated character limit and any "no hashtags"/"no signature"/formatting rule.` }],
+      tools: [{ name: "write_caption", description: "Write the caption.", input_schema: schema }],
+      tool_choice: { type: "tool", name: "write_caption" },
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
+  const toolUse = data.content?.find(b => b.type === "tool_use");
+  if (!toolUse?.input?.desc) throw new Error("Claude returned no caption");
+  return toolUse.input;
 }
 
 export async function generateCaptions({ description }) {
@@ -157,7 +143,7 @@ export async function generateCaptions({ description }) {
     : "(no voice-bank matches found — write fresh copy in the brand voice below)";
 
   const sharedContext = `BRAND VOICE INSTRUCTIONS:\n${brandPrompt}\n\n${ownWordsRuleFor(ownWordsRatio)}\n\nVOICE BANK (real past writing to draw from):\n${voiceBlock}\n\n${description ? `WHAT'S IN THIS CLIP: ${description}\n\n` : ""}This caption is for the Powerbatics brand.`;
-  return generateCaptionsFromContext(sharedContext);
+  return generateCaptionFromContext(sharedContext);
 }
 
 // ── Vertical reframe (ffmpeg, ported from root server.js's buildDynamicCrop) ──
@@ -683,11 +669,9 @@ export async function handleSocialVideoRequest(req, res, url) {
       const results = [];
       for (const platformId of platformIds) {
         const accountId = accounts[NETWORK_TYPE_MAP[platformId]];
-        // Stories reuse their parent platform's caption — CAPTION_PLATFORMS
-        // has no separate fbs/igs entry (a Story doesn't need its own).
-        const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
-        const plat = captions[captionKey] || {};
-        const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
+        // One reviewed title/description, reused as-is on every platform —
+        // no more per-platform caption variant.
+        const postBody = buildMetricoolPostBody({ platformId, accountId, text: captions.desc, title: captions.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
         try {
           await schedulePost(auth, postBody);
           results.push({ platformId, ok: true });

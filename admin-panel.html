@@ -1130,8 +1130,8 @@ function escapeHtml(s) { const d = document.createElement('div'); d.textContent 
 // sections) -- runs the real caption pipeline against a typed-in
 // description, no video/Drive/Metricool involved, so an admin can check
 // what the brand voice prompt + own-words ratio + voice bank actually
-// produce before trusting it on a real clip.
-const CAPTION_PLATFORM_LABELS = { fb: 'Facebook', ig: 'Instagram', yt: 'YouTube', tt: 'TikTok', li: 'LinkedIn', x: 'X' };
+// produce before trusting it on a real clip. One title + one description,
+// reused as-is across every platform when actually publishing.
 async function runTestGeneration(prefix, endpoint) {
   const input = document.getElementById(prefix + 'TestDescription');
   const btn = document.getElementById(prefix + 'TestGenBtn');
@@ -1147,13 +1147,13 @@ async function runTestGeneration(prefix, endpoint) {
     });
     const d = await r.json();
     if (!r.ok) { results.innerHTML = `<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">${escapeHtml(d.error || 'Failed.')}</div>`; return; }
-    results.innerHTML = Object.entries(d.captions || {}).map(([id, c]) => `
+    const c = d.captions || {};
+    results.innerHTML = c.desc ? `
       <div class="pra-panel" style="padding:12px;margin-bottom:8px">
-        <div class="pra-label" style="margin-bottom:6px">${escapeHtml(CAPTION_PLATFORM_LABELS[id] || id)}</div>
         ${c.title ? `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(c.title)}</div>` : ''}
-        <div style="font-size:.85rem;white-space:pre-wrap">${escapeHtml(c.desc || '')}</div>
+        <div style="font-size:.85rem;white-space:pre-wrap">${escapeHtml(c.desc)}</div>
       </div>
-    `).join('') || '<div class="pra-muted" style="font-size:.8rem">No captions returned.</div>';
+    ` : '<div class="pra-muted" style="font-size:.8rem">No caption returned.</div>';
   } catch (e) {
     results.innerHTML = '<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">Request failed.</div>';
   } finally {

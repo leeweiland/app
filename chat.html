@@ -5060,22 +5060,15 @@ async function runPublishTracking() {
 }
 
 // ── AI caption review — Favorites (save-and-publish) and Gym Capture both
-// stop here before anything actually goes out to Metricool. ─────────────
-const CAPTION_REVIEW_PLATFORMS = [
-  { id: 'fb', label: 'Facebook', hasTitle: true },
-  { id: 'ig', label: 'Instagram', hasTitle: false },
-  { id: 'yt', label: 'YouTube', hasTitle: true },
-  { id: 'tt', label: 'TikTok', hasTitle: false },
-  { id: 'li', label: 'LinkedIn', hasTitle: false },
-  { id: 'x', label: 'X', hasTitle: false },
-];
+// stop here before anything actually goes out to Metricool. One title +
+// one description, reused as-is across every platform actually published
+// to (no more per-platform variants). ────────────────────────────────────
 // Generates a caption draft (testCaptionEndpoint — no video/Drive/Metricool
 // involved, same route Admin Panel's own Test Generation uses) and shows it
-// editable per platform. Resolves with the approved {platformId:{title?,
-// desc}} map to actually publish with, or null if the coach cancels out —
-// deleting all the text in a field and sending anyway is a valid way to
-// approve "no caption" for that one platform, same as leaving it untouched
-// approves the AI draft as-is.
+// editable. Resolves with the approved {title, desc} to actually publish
+// with, or null if the coach cancels out — clearing the fields and sending
+// anyway is a valid way to approve "no caption," same as leaving it
+// untouched approves the AI draft as-is.
 function reviewAndApproveCaptions(testCaptionEndpoint, description) {
   return new Promise((resolve) => {
     const fields = document.getElementById('captionReviewFields');
@@ -5098,14 +5091,10 @@ function reviewAndApproveCaptions(testCaptionEndpoint, description) {
     };
     cancelBtn.onclick = () => finish(null);
     sendBtn.onclick = () => {
-      const captions = {};
-      CAPTION_REVIEW_PLATFORMS.forEach(p => {
-        const desc = document.getElementById('captionReview_' + p.id + '_desc')?.value.trim() || '';
-        captions[p.id] = p.hasTitle
-          ? { title: document.getElementById('captionReview_' + p.id + '_title')?.value.trim() || '', desc }
-          : { desc };
+      finish({
+        title: document.getElementById('captionReview_title')?.value.trim() || '',
+        desc: document.getElementById('captionReview_desc')?.value.trim() || '',
       });
-      finish(captions);
     };
 
     fetch(testCaptionEndpoint, {
@@ -5114,16 +5103,13 @@ function reviewAndApproveCaptions(testCaptionEndpoint, description) {
     }).then(r => r.json()).then(d => {
       if (settled) return;
       if (!d.captions) { status.textContent = d.error || 'Could not generate a caption draft.'; sendBtn.disabled = false; return; }
-      fields.innerHTML = CAPTION_REVIEW_PLATFORMS.map(p => {
-        const c = d.captions[p.id] || {};
-        return `
-          <div class="pra-panel" style="padding:10px;margin-bottom:8px">
-            <div class="pra-label" style="margin-bottom:6px">${p.label}</div>
-            ${p.hasTitle ? `<input class="pra-input" id="captionReview_${p.id}_title" placeholder="Title" value="${escapeHtml(c.title || '')}" style="margin-bottom:6px;width:100%;box-sizing:border-box"/>` : ''}
-            <textarea class="pra-input" id="captionReview_${p.id}_desc" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">${escapeHtml(c.desc || '')}</textarea>
-          </div>
-        `;
-      }).join('');
+      const c = d.captions;
+      fields.innerHTML = `
+        <div class="pra-panel" style="padding:10px;margin-bottom:8px">
+          <input class="pra-input" id="captionReview_title" placeholder="Title" value="${escapeHtml(c.title || '')}" style="margin-bottom:6px;width:100%;box-sizing:border-box"/>
+          <textarea class="pra-input" id="captionReview_desc" rows="6" style="width:100%;box-sizing:border-box;resize:vertical">${escapeHtml(c.desc || '')}</textarea>
+        </div>
+      `;
       status.textContent = '';
       sendBtn.disabled = false;
     }).catch(() => {

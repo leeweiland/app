@@ -17,7 +17,7 @@ import {
   readJson, writeJson, getSessionUser, isStaff, readJsonBody, sendJson, getDriveAccessToken,
 } from "./chat_backend.js";
 import {
-  CAPTION_PLATFORMS, ownWordsRuleFor, generateCaptionsFromContext, semanticRetrieve,
+  ownWordsRuleFor, generateCaptionFromContext, semanticRetrieve,
   reframeVideoVertical, makeDriveFilePublic, metricoolAuth, getConnectedAccounts,
   findNextOpenDay, buildMetricoolPostBody, schedulePost, uploadThumbnailToMetricool,
   NETWORK_TYPE_MAP,
@@ -49,7 +49,7 @@ async function generateCaptions({ description }) {
     ? chunks.map(c => `--- ${c.type === "campaign" ? "EMAIL" : "DOC"}: ${c.source} ---\n${c.text}`).join("\n\n")
     : "(no voice-bank matches found — write fresh copy in the brand voice below)";
   const sharedContext = `BRAND VOICE INSTRUCTIONS:\n${brandPrompt}\n\n${ownWordsRuleFor(settings.ownWordsRatio)}\n\nVOICE BANK (real past writing to draw from):\n${voiceBlock}\n\n${description ? `WHAT'S IN THIS CLIP: ${description}\n\n` : ""}This caption is for the Pacific Rim Athletics brand.`;
-  return generateCaptionsFromContext(sharedContext);
+  return generateCaptionFromContext(sharedContext);
 }
 
 // ffmpeg-static ships only the ffmpeg binary, no ffprobe -- `ffmpeg -i` with
@@ -149,9 +149,8 @@ export async function publishPacificRimClip({ driveFileId, label, thumbnailBase6
     const results = [];
     for (const platformId of platformIds) {
       const accountId = accounts[NETWORK_TYPE_MAP[platformId]];
-      const captionKey = platformId === "fbs" ? "fb" : platformId === "igs" ? "ig" : platformId;
-      const plat = captions[captionKey] || {};
-      const postBody = buildMetricoolPostBody({ platformId, accountId, text: plat.desc, title: plat.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
+      // One reviewed title/description, reused as-is on every platform.
+      const postBody = buildMetricoolPostBody({ platformId, accountId, text: captions.desc, title: captions.title, mediaUrl: publicMediaUrl, dateTimeStr, timezone: settings.timezone, thumbnailUrl, coverMilliseconds });
       try {
         await schedulePost(auth, postBody);
         results.push({ platformId, ok: true });
