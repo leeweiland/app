@@ -4121,6 +4121,10 @@ export async function handleChatRequest(req, res, url) {
             const token = await createDailyMeetingToken(existing.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === existing.initiatorId);
             return sendJson(res, 200, { call: publicCall(existing), token });
           }
+          // Only coaches/admins can PLACE a call -- joining one already
+          // ringing (the branch above) stays open to any participant, since
+          // that's the callee accepting, not initiating.
+          if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
           const calls = readJson(CALLS_FILE, []);
           const room = await createDailyRoom(`call-${randomUUID()}`);
           const call = {

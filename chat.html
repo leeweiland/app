@@ -2387,6 +2387,9 @@ async function openConvo(id) {
   document.getElementById('intakeFormBtn').style.display = (protocolStudent && (isStaffMe() || me.id === protocolStudent.id)) ? '' : 'none';
   document.getElementById('staffNotesBtn').style.display = (protocolStudent && isStaffMe()) ? '' : 'none';
 
+  // Only a coach/admin can PLACE a call -- a client can still receive one
+  // (handleIncomingCallPoll doesn't check role), just not start it.
+  document.getElementById('startCallBtn').style.display = isStaffMe() ? '' : 'none';
   document.getElementById('groupInfoBtn').style.display = (convo.type === 'group' && isStaffMe()) ? '' : 'none';
   const canToggleThreadChannel = convo.type === 'group' && isAdminMe() && (convo.isChannel || !convo.participants.some(p => isClientRole(p.role)));
   const threadChannelBtn = document.getElementById('threadChannelBtn');
