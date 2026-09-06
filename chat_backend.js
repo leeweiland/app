@@ -3215,7 +3215,7 @@ export async function handleChatRequest(req, res, url) {
       if (!ct.startsWith("multipart/form-data")) return sendJson(res, 400, { error: "video is required" });
 
       const cfg = getConfig();
-      let label = "", destination = "", trimStart, trimEnd, thumbnailBase64 = "", thumbnailTimeSec;
+      let label = "", destination = "", trimStart, trimEnd, thumbnailBase64 = "", thumbnailTimeSec, captionsRaw = "";
       let uploadPromise = null;
       await new Promise((resolve, reject) => {
         const bb = Busboy({ headers: req.headers, limits: { fieldSize: 5 * 1024 * 1024 } });
@@ -3224,7 +3224,9 @@ export async function handleChatRequest(req, res, url) {
         // in-chat camera upload already relies on) -- set by the time the
         // file event fires. thumbnailBase64/thumbnailTimeSec are optional --
         // a JPEG frame the coach scrubbed to, used as this clip's Metricool
-        // cover image.
+        // cover image. captions (JSON string) is the coach's reviewed/edited
+        // AI caption draft from the pre-send review step -- optional so an
+        // older client without that step still works.
         bb.on("field", (name, val) => {
           if (name === "label") label = val;
           if (name === "destination") destination = val;
@@ -3232,6 +3234,7 @@ export async function handleChatRequest(req, res, url) {
           if (name === "trimEnd") trimEnd = Number(val);
           if (name === "thumbnailBase64") thumbnailBase64 = val;
           if (name === "thumbnailTimeSec") thumbnailTimeSec = Number(val);
+          if (name === "captions") captionsRaw = val;
         });
         bb.on("file", (name, stream, info) => {
           const ext = extFromMime(info.mimeType, info.filename);
@@ -3315,7 +3318,9 @@ export async function handleChatRequest(req, res, url) {
       // publish calls) before their capture flow closes. Both destinations
       // publish the same way; publishPacificRimClip never throws (it
       // resolves {published:false, error} on failure), this just logs it.
-      publishPacificRimClip({ driveFileId: uploaded.driveFileId, label, thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec })
+      let reviewedCaptions;
+      try { reviewedCaptions = captionsRaw ? JSON.parse(captionsRaw) : undefined; } catch { reviewedCaptions = undefined; }
+      publishPacificRimClip({ driveFileId: uploaded.driveFileId, label, thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec, captions: reviewedCaptions })
         .then(r => { if (!r.published) console.error("[gym-capture] Pacific Rim Athletics publish failed:", r.error); })
         .catch(e => console.error("[gym-capture] Pacific Rim Athletics publish threw:", e.message));
       return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });

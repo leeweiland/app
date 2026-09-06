@@ -581,7 +581,7 @@ export async function handleSocialVideoRequest(req, res, url) {
     // (untrimmed) clip -- offset against trimStart below since the published
     // video starts at 0 there, same as the ported dashboard's
     // savedTime-startTime math.
-    const { driveFileId, trimStart, trimEnd, label, videoWidth, videoHeight, keyframes, thumbnailBase64, thumbnailTimeSec } = body;
+    const { driveFileId, trimStart, trimEnd, label, videoWidth, videoHeight, keyframes, thumbnailBase64, thumbnailTimeSec, captions: reviewedCaptions } = body;
     if (!driveFileId) return void sendJson(res, 400, { error: "driveFileId required" });
     if (!label || !label.trim()) return void sendJson(res, 400, { error: "Label required" });
 
@@ -648,7 +648,12 @@ export async function handleSocialVideoRequest(req, res, url) {
       const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
 
       const settings = getSocialVideoSettings();
-      const captions = await generateCaptions({ description: label.trim() });
+      // The coach reviews/edits the AI draft in the UI before ever hitting
+      // Send -- reviewedCaptions is that approved (possibly hand-edited)
+      // version. Falls back to generating fresh only for a caller that
+      // skips the review step entirely (there isn't one anymore, but this
+      // keeps the route usable standalone).
+      const captions = reviewedCaptions || await generateCaptions({ description: label.trim() });
       const auth = metricoolAuth(process.env.METRICOOL_PB_BLOG_ID);
       const accounts = await getConnectedAccounts(auth);
 

@@ -82,7 +82,7 @@ function probeVideoDimensions(path) {
 // publish there's no trim or "save a copy" step: just reframe, caption,
 // schedule. Never throws -- always resolves with a result object, since
 // callers treat this as best-effort background work.
-export async function publishPacificRimClip({ driveFileId, label, thumbnailBase64, thumbnailTimeSec }) {
+export async function publishPacificRimClip({ driveFileId, label, thumbnailBase64, thumbnailTimeSec, captions: reviewedCaptions }) {
   if (!driveFileId) return { published: false, error: "driveFileId required" };
   const settings = getSettings();
   let auth;
@@ -119,7 +119,9 @@ export async function publishPacificRimClip({ driveFileId, label, thumbnailBase6
     tempVerticalFileId = vertResult.id;
     const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
 
-    const captions = await generateCaptions({ description: label || "" });
+    // The coach reviews/edits the AI draft before ever hitting Send on the
+    // gym-capture flow -- reviewedCaptions is that approved version.
+    const captions = reviewedCaptions || await generateCaptions({ description: label || "" });
     const accounts = await getConnectedAccounts(auth);
 
     let thumbnailUrl = null;

@@ -1225,6 +1225,23 @@
     </div>
   </div>
 
+  <!-- AI caption review — shown before Favorites/Gym Capture actually
+       publish to Metricool. Delete, edit, or leave each platform's
+       AI-drafted title/description as-is; whatever's in the fields when
+       Send is clicked is what goes out (see reviewAndApproveCaptions()). -->
+  <div class="modal-backdrop" id="captionReviewModal">
+    <div class="pra-panel modal-box modal-box-wide modal-box-flex">
+      <div class="pra-h2" style="margin-bottom:4px;flex-shrink:0">Review AI Caption</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px;flex-shrink:0">Delete, modify, or approve the description below before sending.</div>
+      <div id="captionReviewFields" style="overflow-y:auto;flex:1 1 auto;min-height:60px"></div>
+      <div class="pra-muted" id="captionReviewStatus" style="font-size:.78rem;margin-top:6px;min-height:1em;flex-shrink:0"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-shrink:0">
+        <button class="pra-btn" id="captionReviewSendBtn" type="button" style="flex:1">Send</button>
+      </div>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;flex-shrink:0" id="captionReviewCancelBtn" type="button">Cancel</button>
+    </div>
+  </div>
+
   <!-- "My Favorites" list modal (coach/admin only) -->
   <div class="modal-backdrop" id="favoritesModal">
     <div class="pra-panel modal-box">
@@ -4251,8 +4268,8 @@ function setupCameraCapture() {
     showGymLabelStep(false);
     showGymDestinationStep(true);
   };
-  document.getElementById('cameraGymTrainingBtn').onclick = () => sendGymCapture('training');
-  document.getElementById('cameraGymLevelTestBtn').onclick = () => sendGymCapture('levelTest');
+  document.getElementById('cameraGymTrainingBtn').onclick = () => reviewThenSendGymCapture('training');
+  document.getElementById('cameraGymLevelTestBtn').onclick = () => reviewThenSendGymCapture('levelTest');
 
   const track = document.getElementById('cameraTrimTrack');
   const startHandle = document.getElementById('cameraTrimStartHandle');
@@ -4702,11 +4719,21 @@ async function sendCameraCapture() {
   }
 }
 
+// Shows the AI caption review step first (same one Favorites uses) —
+// gym-capture used to publish to Metricool straight from the background
+// with nobody ever seeing the caption; now it stops here first, and only
+// actually uploads/sends once the coach approves (or cancels out).
+async function reviewThenSendGymCapture(destination) {
+  const captions = await reviewAndApproveCaptions('/api/pacific-rim-video/test-caption', cameraGymLabel);
+  if (!captions) return;
+  sendGymCapture(destination, captions);
+}
+
 // Gym capture's own send -- no open thread to post an optimistic bubble
 // into (this can be triggered from the header, outside any conversation),
 // so the modal just stays up showing progress until the upload finishes,
 // then hands off into whichever gym channel it landed in.
-async function sendGymCapture(destination) {
+async function sendGymCapture(destination, captions) {
   const status = document.getElementById('cameraGymStatus');
   const trainingBtn = document.getElementById('cameraGymTrainingBtn');
   const levelTestBtn = document.getElementById('cameraGymLevelTestBtn');
@@ -4736,6 +4763,7 @@ async function sendGymCapture(destination) {
     fd.append('thumbnailBase64', thumbnailBase64);
     fd.append('thumbnailTimeSec', String(Math.max(0, reviewVideo.currentTime - (trimmed ? cameraTrimStart : 0))));
   }
+  if (captions) fd.append('captions', JSON.stringify(captions));
   fd.append('video', blob, 'capture' + ext);
 
   trainingBtn.disabled = true;
@@ -5031,6 +5059,81 @@ async function runPublishTracking() {
   }
 }
 
+// ── AI caption review — Favorites (save-and-publish) and Gym Capture both
+// stop here before anything actually goes out to Metricool. ─────────────
+const CAPTION_REVIEW_PLATFORMS = [
+  { id: 'fb', label: 'Facebook', hasTitle: true },
+  { id: 'ig', label: 'Instagram', hasTitle: false },
+  { id: 'yt', label: 'YouTube', hasTitle: true },
+  { id: 'tt', label: 'TikTok', hasTitle: false },
+  { id: 'li', label: 'LinkedIn', hasTitle: false },
+  { id: 'x', label: 'X', hasTitle: false },
+];
+// Generates a caption draft (testCaptionEndpoint — no video/Drive/Metricool
+// involved, same route Admin Panel's own Test Generation uses) and shows it
+// editable per platform. Resolves with the approved {platformId:{title?,
+// desc}} map to actually publish with, or null if the coach cancels out —
+// deleting all the text in a field and sending anyway is a valid way to
+// approve "no caption" for that one platform, same as leaving it untouched
+// approves the AI draft as-is.
+function reviewAndApproveCaptions(testCaptionEndpoint, description) {
+  return new Promise((resolve) => {
+    const fields = document.getElementById('captionReviewFields');
+    const status = document.getElementById('captionReviewStatus');
+    const sendBtn = document.getElementById('captionReviewSendBtn');
+    const cancelBtn = document.getElementById('captionReviewCancelBtn');
+    fields.innerHTML = '';
+    status.textContent = 'Generating…';
+    sendBtn.disabled = true;
+    openModal('captionReviewModal');
+
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      sendBtn.onclick = null;
+      cancelBtn.onclick = null;
+      closeModal('captionReviewModal');
+      resolve(value);
+    };
+    cancelBtn.onclick = () => finish(null);
+    sendBtn.onclick = () => {
+      const captions = {};
+      CAPTION_REVIEW_PLATFORMS.forEach(p => {
+        const desc = document.getElementById('captionReview_' + p.id + '_desc')?.value.trim() || '';
+        captions[p.id] = p.hasTitle
+          ? { title: document.getElementById('captionReview_' + p.id + '_title')?.value.trim() || '', desc }
+          : { desc };
+      });
+      finish(captions);
+    };
+
+    fetch(testCaptionEndpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description }),
+    }).then(r => r.json()).then(d => {
+      if (settled) return;
+      if (!d.captions) { status.textContent = d.error || 'Could not generate a caption draft.'; sendBtn.disabled = false; return; }
+      fields.innerHTML = CAPTION_REVIEW_PLATFORMS.map(p => {
+        const c = d.captions[p.id] || {};
+        return `
+          <div class="pra-panel" style="padding:10px;margin-bottom:8px">
+            <div class="pra-label" style="margin-bottom:6px">${p.label}</div>
+            ${p.hasTitle ? `<input class="pra-input" id="captionReview_${p.id}_title" placeholder="Title" value="${escapeHtml(c.title || '')}" style="margin-bottom:6px;width:100%;box-sizing:border-box"/>` : ''}
+            <textarea class="pra-input" id="captionReview_${p.id}_desc" rows="3" style="width:100%;box-sizing:border-box;resize:vertical">${escapeHtml(c.desc || '')}</textarea>
+          </div>
+        `;
+      }).join('');
+      status.textContent = '';
+      sendBtn.disabled = false;
+    }).catch(() => {
+      if (settled) return;
+      status.textContent = 'Could not generate a caption draft.';
+      sendBtn.disabled = false;
+    });
+  });
+}
+
 async function runPublishSave() {
   const btn = document.getElementById('publishSaveBtn');
   const status = document.getElementById('publishStatus');
@@ -5042,6 +5145,9 @@ async function runPublishSave() {
   // tracking it would just be wasted TF.js load + per-frame detection time
   // for output the server would never use anyway.
   if (publishVideoWidth > publishVideoHeight) await runPublishTracking();
+
+  const captions = await reviewAndApproveCaptions('/api/social-video/test-caption', label);
+  if (!captions) { btn.disabled = false; return; }
 
   status.textContent = 'Saving…';
   try {
@@ -5055,6 +5161,7 @@ async function runPublishSave() {
         trimStart: publishTrimStart, trimEnd: publishTrimEnd,
         label, keyframes: publishKeyframes || undefined,
         thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec: publishVideo.currentTime,
+        captions,
       }),
     });
     const d = await r.json();
@@ -5750,7 +5857,7 @@ function openModal(id) { document.getElementById(id).classList.add('show'); }
 // panel's own content) — same "bounce in and out, an accidental close
 // isn't costly" reasoning extends to Publish since Cancel already discards
 // the trim with no confirmation of its own.
-['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'groupModal', 'forwardModal', 'levelTestModal'].forEach(id => {
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'captionReviewModal', 'groupModal', 'forwardModal', 'levelTestModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
