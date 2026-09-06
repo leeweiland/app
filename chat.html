@@ -82,9 +82,17 @@
   .convo-item:hover { background: rgba(255,255,255,0.03); }
   .convo-item.active { background: var(--pra-blue-dim); }
   .convo-meta { min-width: 0; flex: 1; }
-  .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .convo-side { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 1px; }
-  .convo-time-row { display: flex; align-items: center; gap: 5px; }
+  /* Name+badges and preview+icons are two INDEPENDENT full-width rows, each
+     with its own flex:1 truncating half and its own flex-shrink:0 trailing
+     half -- not one name/preview column sized against a single shared
+     "widest of the two trailing rows" side column. Before this, the
+     preview line was squeezed to whatever width the (often wider) name
+     row's badge+date left over, truncating far short of where its own,
+     usually-narrower icon row actually started. */
+  .convo-row { display: flex; align-items: center; gap: 6px; }
+  .convo-row + .convo-row { margin-top: 2px; }
+  .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .convo-time-row { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
   /* Fixed width (not just white-space:nowrap) so a short date ("Aug 13")
      and a longer time ("11:07 AM") don't leave the badge next to it sitting
      at a different X position row to row -- a nowrap-only box sizes to
@@ -102,7 +110,7 @@
   /* # / pin / star / count always render in this fixed order — hidden
      (visibility, not display) rather than omitted when a row doesn't have
      one, so every row's icons and count line up in the same columns. */
-  .convo-actions-row { display: flex; align-items: center; gap: 2px; }
+  .convo-actions-row { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
   .convo-unread-badge { background: #39ff14; color: #0a0a0d; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
   .convo-unread-badge.empty { visibility: hidden; }
   /* A read-receipt tick standing in for the count once there's nothing to
@@ -111,7 +119,7 @@
      a number. */
   .convo-unread-badge.ticks-only { background: transparent; padding: 0; min-width: 0; height: auto; }
   /* .role-tag / .role-tag-* now live in pra-design-system.css, shared with the map popup. */
-  .convo-preview { font-family: Arial, sans-serif; font-weight: 400; font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .convo-preview { font-family: Arial, sans-serif; font-weight: 400; font-size: .74rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   .convo-preview-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
   .convo-preview-appt { color: #39ff14; }
   .empty-hint { padding: 24px 16px; color: var(--pra-dim); font-size: .82rem; text-align: center; }
@@ -1919,8 +1927,12 @@ function convoItemHtml(i) {
   // Next to the time, above the pin row -- not next to the name, which
   // truncates on the (resizable, 320px-default) sidebar long before the
   // window itself is anywhere near mobile-narrow.
-  const badge = roleBadgeHtml(i.avatarUser) + coachQuotaBadgeHtml(i.avatarUser);
+  const badge = roleBadgeHtml(i.avatarUser);
   const sideBadge = badge ? `<span class="convo-side-badge">${badge}</span>` : '';
+  // The quota badge specifically goes right next to the NAME, not grouped
+  // with the role badge over in the side column -- explicit ask, unlike
+  // the role badge above.
+  const quotaBadge = coachQuotaBadgeHtml(i.avatarUser);
   const isSelected = bulkSelectMode && bulkSelected.has(i.key);
   const checkbox = bulkSelectMode
     ? `<div class="convo-select-checkbox"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
@@ -1930,19 +1942,21 @@ function convoItemHtml(i) {
       ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
-        <div class="convo-name">${pinnedMark}${i.name}</div>
-        <div class="convo-preview">${i.preview}</div>
-      </div>
-      <div class="convo-side">
-        <div class="convo-time-row">
-          ${sideBadge}
-          <div class="convo-time${i.unread ? ' has-unread' : ''}">${timeLabel}</div>
+        <div class="convo-row">
+          <div class="convo-name">${pinnedMark}${i.name}${quotaBadge}</div>
+          <div class="convo-time-row">
+            ${sideBadge}
+            <div class="convo-time${i.unread ? ' has-unread' : ''}">${timeLabel}</div>
+          </div>
         </div>
-        <div class="convo-actions-row">
-          ${channelBtn}
-          ${pinBtn}
-          ${favBtn}
-          ${unreadBadge}
+        <div class="convo-row">
+          <div class="convo-preview">${i.preview}</div>
+          <div class="convo-actions-row">
+            ${channelBtn}
+            ${pinBtn}
+            ${favBtn}
+            ${unreadBadge}
+          </div>
         </div>
       </div>
     </div>
@@ -2349,7 +2363,7 @@ async function openConvo(id) {
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
-  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + roleBadgeHtml(threadOtherUser) + coachQuotaBadgeHtml(threadOtherUser);
+  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
@@ -2930,8 +2944,8 @@ async function openLevelsModal(otherUser) {
   const isSelf = me && otherUser.id === me.id;
   document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
   document.getElementById('levelsAvatar').innerHTML = avatarHtml(otherUser);
-  document.getElementById('levelsName').textContent = (isStaffMe() || isSelf) ? (otherUser.first + ' ' + otherUser.last) : otherUser.first;
-  document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser) + coachQuotaBadgeHtml(otherUser);
+  document.getElementById('levelsName').innerHTML = escapeHtml((isStaffMe() || isSelf) ? (otherUser.first + ' ' + otherUser.last) : otherUser.first) + coachQuotaBadgeHtml(otherUser);
+  document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser);
   document.getElementById('levelsLocation').textContent = '';
   document.getElementById('levelsMsg').textContent = 'Loading…';
   document.getElementById('levelsBody').innerHTML = '';
@@ -5771,7 +5785,7 @@ async function renderGroupInfoModal() {
   document.getElementById('groupInfoMembers').innerHTML = convo.participants.map(p => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(p)}</div>
-      <div>${p.first} ${p.last}${p.id === me.id ? ' (you)' : ''} <span class="pra-badge">${p.role}</span>${coachQuotaBadgeHtml(p)}</div>
+      <div>${p.first} ${p.last}${coachQuotaBadgeHtml(p)}${p.id === me.id ? ' (you)' : ''} <span class="pra-badge">${p.role}</span></div>
       ${p.id === me.id ? '' : `<button class="pra-btn pra-btn-ghost remove-member-btn" data-id="${p.id}" data-name="${p.first} ${p.last}" style="padding:4px 10px;font-size:.72rem">Remove</button>`}
     </div>
   `).join('');
