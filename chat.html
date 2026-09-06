@@ -175,6 +175,10 @@
      a client member, just not visually implying "this is the trainee." */
   .group-member-link.staff-member-link { color: var(--pra-dim); }
   .group-member-link:hover { opacity: .75; }
+  /* Coach content-quota badge ("favorited + gym-cammed this month / goal")
+     -- coach/admin viewers only, see coachQuotaBadgeHtml. Muted/pill style
+     so it reads as a stat, not another clickable name or role tag. */
+  .coach-quota-badge { display: inline-block; font-family: var(--font-secondary); font-size: .66rem; font-weight: 700; letter-spacing: .02em; color: var(--pra-dim); background: rgba(255,255,255,0.06); border: 1px solid var(--pra-border); border-radius: 999px; padding: 1px 6px; white-space: nowrap; cursor: default; }
   .thread-protocol-link { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-blue); text-decoration: underline; }
   .thread-protocol-link:hover { text-decoration: underline; }
   .thread-appt-row { display: none; font-family: var(--font-secondary); font-size: .66rem; color: #39ff14; margin-top: 3px; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -1377,6 +1381,10 @@ let me = null;
 // favorited — keyed by the SOURCE file, not the Drive copy, so the star
 // on a chat bubble can check membership directly against m.driveFileId.
 let favoritedFileIds = new Set();
+// Every staff member's "favorited + gym-cammed this month" count, for the
+// quota badge next to their name — coach/admin viewers only (see
+// coachQuotaBadgeHtml). Populated once at init, not per-thread-open.
+let coachMonthlyStats = { counts: {}, goal: 20 };
 let conversations = [];
 let activeConvoId = null;
 let editingMessageId = null;
@@ -1765,6 +1773,7 @@ async function init() {
     document.getElementById('templatesBtn').style.display = '';
     document.getElementById('templateAddForm').style.display = isAdminMe() ? '' : 'none';
     await loadFavorites();
+    loadCoachMonthlyStats(); // fire-and-forget -- badges just render blank until it resolves
   }
 
   await loadContacts();
@@ -2345,15 +2354,16 @@ async function openConvo(id) {
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
       const label = p.id === me.id ? 'You' : `${p.first} ${p.last}`;
+      const badge = coachQuotaBadgeHtml(p);
       // Any other member — client, coach, or admin — is clickable, same
       // "click a name to open their profile" behavior a DM header has.
       // Staff get the editable Levels panel; everyone else gets the
       // read-only profile popup (see threadGroupMembers' click handler).
       if (p.id !== me.id) {
         const staffCls = isClientRole(p.role) ? '' : ' staff-member-link';
-        return `<span class="group-member-link${staffCls}" data-uid="${p.id}">${escapeHtml(label)}</span>`;
+        return `<span class="group-member-link${staffCls}" data-uid="${p.id}">${escapeHtml(label)}</span>${badge}`;
       }
-      return escapeHtml(label);
+      return escapeHtml(label) + badge;
     }).join(', ');
     groupMembersEl.style.display = '';
   } else {
@@ -5761,7 +5771,7 @@ async function renderGroupInfoModal() {
   document.getElementById('groupInfoMembers').innerHTML = convo.participants.map(p => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(p)}</div>
-      <div>${p.first} ${p.last}${p.id === me.id ? ' (you)' : ''} <span class="pra-badge">${p.role}</span></div>
+      <div>${p.first} ${p.last}${p.id === me.id ? ' (you)' : ''} <span class="pra-badge">${p.role}</span>${coachQuotaBadgeHtml(p)}</div>
       ${p.id === me.id ? '' : `<button class="pra-btn pra-btn-ghost remove-member-btn" data-id="${p.id}" data-name="${p.first} ${p.last}" style="padding:4px 10px;font-size:.72rem">Remove</button>`}
     </div>
   `).join('');
@@ -5893,6 +5903,26 @@ async function loadFavorites() {
     const d = await r.json();
     favoritedFileIds = new Set((d.favorites || []).map(f => f.originalFileId));
   } catch {}
+}
+
+// ── Coach monthly content quota badge ("favorited + gym-cammed this
+// month / goal") -- coach/admin viewers only, shown next to a staff
+// member's name wherever a group's member list is rendered.
+async function loadCoachMonthlyStats() {
+  try {
+    const r = await fetch('/api/chat/coach-monthly-stats');
+    if (!r.ok) return;
+    coachMonthlyStats = await r.json();
+  } catch {}
+}
+// p is the participant the badge would be FOR -- coaches only, not admin/
+// admin2 (this is a coach content-quota metric, not something an admin is
+// being tracked against) -- visible to a coach OR admin VIEWER
+// (isStaffMe()), same as the rest of this staff-only feature.
+function coachQuotaBadgeHtml(p) {
+  if (!isStaffMe() || !p || p.role !== 'coach') return '';
+  const n = coachMonthlyStats.counts[p.id] || 0;
+  return ` <span class="coach-quota-badge" title="Favorited/gym-cammed this month">${n}/${coachMonthlyStats.goal}</span>`;
 }
 
 let pendingFavoriteFileId = null;

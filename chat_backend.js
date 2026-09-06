@@ -3082,6 +3082,39 @@ export async function handleChatRequest(req, res, url) {
     // Favorites saved before this field existed have no conversationId and
     // so won't match any scoped request — they still show up in the
     // unscoped global lookup, just not attributable to a specific thread.
+    // ── Coach content quota, current calendar month ("favorited + gym-cammed
+    // this month / goal") ── Every staff member's count, not just the
+    // caller's own — the point of the badge is coaches seeing everyone's
+    // pace, same list a shared group's member row already shows.
+    if (p === "/api/chat/coach-monthly-stats" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+      // Plain ISO string comparison is valid here -- every createdAt in this
+      // app comes from the same toISOString() format, so lexicographic order
+      // matches chronological order without parsing each one.
+      const inMonth = (iso) => iso && iso >= monthStart && iso < nextMonthStart;
+      const counts = {};
+      const bump = (userId) => { if (userId) counts[userId] = (counts[userId] || 0) + 1; };
+
+      readJson(FAVORITES_FILE, []).forEach(f => { if (inMonth(f.createdAt)) bump(f.userId); });
+
+      // "Gym-cammed" = a video posted into one of the two Gym Capture
+      // channels -- there's no separate flag on the message itself (the
+      // gym-capture endpoint just posts a normal video message), so this is
+      // the same proxy that channel's own history already represents.
+      const cfg = getConfig();
+      const gymChannelIds = new Set([cfg.gymTrainingChannelId, cfg.gymLevelTestChannelId].filter(Boolean));
+      if (gymChannelIds.size) {
+        readJson(MESSAGES_FILE, []).forEach(m => {
+          if (m.type === "video" && gymChannelIds.has(m.conversationId) && inMonth(m.createdAt)) bump(m.senderId);
+        });
+      }
+
+      return sendJson(res, 200, { counts, goal: 20 });
+    }
+
     if (p === "/api/chat/favorites" && req.method === "GET") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       const all = readJson(FAVORITES_FILE, []);
