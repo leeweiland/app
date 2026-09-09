@@ -2149,25 +2149,45 @@ syncDefaultGroups();
 // "Read" reuses the readState timestamp conversations already track for
 // unread-badge counting: a message is read by someone once their own
 // last-read-at for this conversation is at or after the message's
-// createdAt. A group only shows "read" once EVERY other participant has
-// read it (matches the common simplified-group convention rather than
-// per-person granularity, which the UI has no way to surface here anyway).
+// createdAt.
 // deliveredTo defaults to [] via `m.deliveredTo || []` rather than being
 // set at creation time in each of the several message-creation call
 // sites — one read-side default is simpler than keeping all of them in
 // sync, and functionally identical (nothing reads it before the first
 // GET stamps it anyway).
-function computeMessageStatus(m, convo, users) {
+//
+// Per-recipient, not a single blended verdict for the whole group — a
+// group's tick used to require EVERY participant to have read a message
+// before it went blue (or even delivered a single gray double-check before
+// EVERY participant had merely fetched it), which meant one quiet/inactive
+// member (an admin sitting in the group who never opens chat, say)
+// permanently pinned every message at "sent" even after the person
+// actually being talked to had read and replied. The in-thread bubble
+// renders ONE tick per element of this array (chat.html's
+// readReceiptTicksHtml) — a DM's array is always length 1, so it already
+// behaves exactly like a normal 1:1 read receipt with zero extra logic.
+function computeMessageReceipts(m, convo, users) {
   const recipients = convo.participantIds.filter(id => id !== m.senderId);
-  if (!recipients.length) return "sent";
-  const delivered = recipients.every(id => (m.deliveredTo || []).includes(id));
-  if (!delivered) return "sent";
-  const read = recipients.every(id => {
+  return recipients.map(id => {
     const u = users.find(x => x.id === id);
+    const delivered = (m.deliveredTo || []).includes(id);
     const lastReadAt = u?.readState?.[convo.id];
-    return lastReadAt && new Date(lastReadAt) >= new Date(m.createdAt);
+    const read = !!(lastReadAt && new Date(lastReadAt) >= new Date(m.createdAt));
+    return { userId: id, first: u?.first || "", last: u?.last || "", delivered, read };
   });
-  return read ? "read" : "delivered";
+}
+// Single-glyph summary used ONLY for the sidebar's last-message preview
+// tick, where there's room for exactly one small icon next to the
+// timestamp, not a full per-person breakdown: read (blue) once anyone has
+// read it, delivered (gray double-check) once anyone has it, sent (gray
+// single-check) otherwise. The in-thread view never uses this — it renders
+// computeMessageReceipts directly, one tick per person.
+function computeMessageStatus(m, convo, users) {
+  const receipts = computeMessageReceipts(m, convo, users);
+  if (!receipts.length) return "sent";
+  if (receipts.some(r => r.read)) return "read";
+  if (receipts.some(r => r.delivered)) return "delivered";
+  return "sent";
 }
 
 // ── Video calls ──────────────────────────────────────────────────────────
@@ -4277,9 +4297,13 @@ export async function handleChatRequest(req, res, url) {
         // OWN messages — computed here so the client just renders whatever
         // this says, rather than re-deriving it from raw deliveredTo/
         // readState data it would otherwise need every other participant's
-        // user record for.
+        // user record for. receipts is the real per-person breakdown the
+        // in-thread bubble renders (one tick per recipient); status is only
+        // the sidebar preview's single-glyph shortcut.
         const users = readJson(USERS_FILE, []);
-        msgs = msgs.map(m => m.senderId === user.id ? { ...m, status: computeMessageStatus(m, convo, users) } : m);
+        msgs = msgs.map(m => m.senderId === user.id
+          ? { ...m, status: computeMessageStatus(m, convo, users), receipts: computeMessageReceipts(m, convo, users) }
+          : m);
 
         return sendJson(res, 200, { messages: msgs, typingUserIds: getTypingUserIds(convoId, user.id), activeCall: publicCall(findOpenCall(convoId)) });
       }

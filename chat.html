@@ -284,8 +284,9 @@
      pixels lower than the timestamp text's baseline. text-align:right on
      the parent .bubble-time still right-aligns this together with the
      timestamp text as a single inline run, no flex needed. */
-  .bubble-ticks { display: inline-block; vertical-align: -1px; margin-left: 4px; }
+  .bubble-ticks { display: inline-flex; align-items: center; gap: 3px; vertical-align: -1px; margin-left: 4px; cursor: pointer; }
   .bubble-ticks svg { display: block; }
+  .bubble-tick { display: inline-block; }
 
   /* ── Reactions ── */
   .bubble-wrap { position: relative; display: inline-block; max-width: 100%; }
@@ -3439,11 +3440,44 @@ function svgTick(double, color) {
 }
 function readReceiptTicksHtml(m, mine) {
   if (!mine) return '';
-  const status = m.status || 'sent';
-  const svg = status === 'sent' ? svgTick(false, 'var(--pra-dim)')
-    : status === 'delivered' ? svgTick(true, 'var(--pra-dim)')
-    : svgTick(true, '#009bff');
-  return `<span class="bubble-ticks" title="${status[0].toUpperCase() + status.slice(1)}">${svg}</span>`;
+  // Sidebar last-message preview passes a synthetic {status} with no
+  // receipts array -- one collapsed glyph, no per-person list to render
+  // (see computeMessageStatus's own doc comment server-side).
+  if (!m.receipts) {
+    const status = m.status || 'sent';
+    const svg = status === 'sent' ? svgTick(false, 'var(--pra-dim)')
+      : status === 'delivered' ? svgTick(true, 'var(--pra-dim)')
+      : svgTick(true, '#009bff');
+    return `<span class="bubble-ticks" title="${status[0].toUpperCase() + status.slice(1)}">${svg}</span>`;
+  }
+  // In-thread: one tick per recipient, each reflecting THAT person's own
+  // delivered/read state -- a DM's receipts array is always length 1, so
+  // this already behaves exactly like a normal 1:1 read receipt with no
+  // special-casing; a group just gets one tick per person instead of a
+  // single verdict blended across everyone (which used to stay gray
+  // forever if even one quiet/inactive member never opened the thread).
+  if (!m.receipts.length) return '';
+  const ticksHtml = m.receipts.map(r => {
+    const name = `${r.first} ${r.last}`.trim() || 'Someone';
+    const label = r.read ? 'Read' : r.delivered ? 'Delivered' : 'Sent';
+    const svg = r.read ? svgTick(true, '#009bff') : r.delivered ? svgTick(true, 'var(--pra-dim)') : svgTick(false, 'var(--pra-dim)');
+    return `<span class="bubble-tick" title="${escapeHtml(name)} · ${label}">${svg}</span>`;
+  }).join('');
+  return `<span class="bubble-ticks" data-mid="${m.id}">${ticksHtml}</span>`;
+}
+// Tapping the ticks (mobile has no hover title) shows the same per-person
+// breakdown as a small popup -- reuses the reactor-list-popup markup/CSS
+// ("who reacted"), just filled with read-receipt names/status instead.
+function showReadReceiptsPopup(anchorEl, m) {
+  if (!m.receipts || !m.receipts.length) return;
+  const popup = document.getElementById('reactorListPopup');
+  popup.innerHTML = m.receipts.map(r => {
+    const name = `${r.first} ${r.last}`.trim() || 'Someone';
+    const label = r.read ? 'Read' : r.delivered ? 'Delivered' : 'Sent';
+    return `<div class="reactor-list-name">${escapeHtml(name)} <span class="pra-muted" style="font-size:.7rem">· ${label}</span></div>`;
+  }).join('');
+  positionMessagePopupNear(popup, anchorEl);
+  popup.classList.add('show');
 }
 
 function svgReply() {
@@ -3773,6 +3807,15 @@ function linkifyMentions(escapedText, convo) {
       const vid = e.target.previousElementSibling;
       openVideo(vid.src || vid.dataset.src);
     }
+  });
+  // Tapping the read-receipt ticks shows who's actually read/delivered a
+  // message — hover already does this on desktop (each tick's title), this
+  // is the touch-device (and click-to-confirm) equivalent.
+  document.getElementById('threadBody').addEventListener('click', (e) => {
+    const ticksEl = e.target.closest('.bubble-ticks');
+    if (!ticksEl) return;
+    const m = currentThreadMessages.find(x => x.id === ticksEl.dataset.mid);
+    if (m) showReadReceiptsPopup(ticksEl, m);
   });
   // Clicking a timestamp inside a sent video-notes reply seeks that
   // bubble's OWN inline player (not the lightbox) — .video-note-reply
