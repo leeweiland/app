@@ -467,6 +467,10 @@
   .mention-item-role { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); margin-left: auto; }
   .mention-tag { color: var(--pra-blue); font-weight: 700; }
   .bubble-row.mine .mention-tag { color: #fff; text-decoration: underline; }
+  /* Same "mine bubble is already blue, so white+underline instead of the
+     usual blue link color" swap the mention tag above already does. */
+  .bubble-link { color: var(--pra-blue); text-decoration: underline; word-break: break-all; }
+  .bubble-row.mine .bubble-link { color: #fff; }
 
   /* ── In-app camera capture (students/users, touch devices only) ──
      A full-bleed overlay rather than the usual centered .modal-box — a
@@ -3599,7 +3603,7 @@ function renderBubble(m, convo) {
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
     const emojiOnlyCls = isEmojiOnlyText(m.text) ? ' emoji-only' : '';
-    const bodyHtml = emojiOnlyCls ? escapeHtml(m.text) : linkifyMentions(escapeHtml(m.text), convo);
+    const bodyHtml = emojiOnlyCls ? escapeHtml(m.text) : linkifyUrls(linkifyMentions(escapeHtml(m.text), convo));
     content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${bodyHtml}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
@@ -3741,6 +3745,23 @@ function linkifyMentions(escapedText, convo) {
     .map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const re = new RegExp(`@(?:${alternation})(?=[\\s.,!?)]|$)`, 'g');
   return escapedText.replace(re, (hit) => `<span class="mention-tag">${hit}</span>`);
+}
+
+// Turns a bare http(s):// URL in an already-escaped text bubble into a
+// clickable link, opened in a new tab. Runs after linkifyMentions (whose
+// own output is still plain text/spans, never containing "http") against
+// the ESCAPED text — entities like &amp; inside a query string still work
+// correctly as an href value once the browser decodes them, so no separate
+// unescaped pass is needed.
+function linkifyUrls(escapedText) {
+  return escapedText.replace(/https?:\/\/[^\s<]+/g, (url) => {
+    // Trailing punctuation almost always belongs to the sentence, not the
+    // URL itself ("check this out: https://x.com.") — keep it outside the link.
+    const trailing = url.match(/[).,!?;:]+$/)?.[0] || '';
+    const clean = trailing ? url.slice(0, -trailing.length) : url;
+    if (!clean) return url;
+    return `<a href="${clean}" target="_blank" rel="noopener noreferrer" class="bubble-link">${clean}</a>${trailing}`;
+  });
 }
 
 // ── Image lightbox (click to open, ctrl+wheel / pinch to zoom, drag to pan) ──
