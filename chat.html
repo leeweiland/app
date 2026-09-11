@@ -604,7 +604,10 @@
   .call-status-name { color: #fff; font-size: 1.1rem; font-weight: 600; margin-bottom: 2px; }
   .call-video-grid { flex: 1; display: grid; gap: 4px; padding: 4px; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .call-tile { position: relative; background: #16161d; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
-  .call-tile video { width: 100%; height: 100%; object-fit: cover; }
+  /* object-fit:contain, not cover -- show the whole camera frame, letterboxed
+     (the tile's own dark background) if its aspect ratio doesn't exactly
+     match the tile, rather than cropping/zooming in to fill it edge to edge. */
+  .call-tile video { width: 100%; height: 100%; object-fit: contain; }
   .call-tile.audio-only video { display: none; }
   .call-tile-name { position: absolute; left: 8px; bottom: 6px; font-size: .74rem; color: #fff; background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 999px; }
   .call-tile-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--pra-blue-dim); color: var(--pra-blue); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 700; }
@@ -618,6 +621,26 @@
   .call-video-grid.one-to-one .call-tile[data-local] { position: absolute; right: 12px; bottom: 12px; width: 96px; height: 140px; z-index: 1; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
   .call-controls { display: flex; justify-content: center; gap: 18px; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); flex-shrink: 0; }
   .call-control-btn { width: 54px; height: 54px; border-radius: 50%; border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  /* Minimized -- shrinks from the full-screen overlay down to a small
+     floating tile in the corner, so the chat panel underneath is visible
+     and usable again while the call keeps running. Tapping the tile itself
+     (anywhere that isn't one of its own buttons) restores full-screen; see
+     toggleCallMinimized(). Non-essential controls (mic/cam/switch) hide to
+     leave room -- still reachable by expanding back first. */
+  .call-screen.minimized { inset: auto; right: 14px; bottom: 14px; width: 200px; height: 150px; border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.6); overflow: hidden; z-index: 10002; cursor: pointer; }
+  .call-screen.minimized .call-status-row { display: none; }
+  .call-screen.minimized .call-video-grid { padding: 0; gap: 2px; }
+  .call-screen.minimized .call-tile { border-radius: 0; }
+  .call-screen.minimized .call-video-grid.one-to-one .call-tile[data-local] { right: 6px; bottom: 6px; width: 46px; height: 66px; }
+  /* Group call, minimized -- the full-size grid's 160px-minimum columns
+     would overflow this tiny box, so shrink the minimum way down too. */
+  .call-screen.minimized .call-video-grid:not(.one-to-one) { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); }
+  .call-screen.minimized .call-controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px; gap: 8px; background: linear-gradient(transparent, rgba(0,0,0,0.6)); }
+  .call-screen.minimized .call-control-btn { width: 34px; height: 34px; }
+  .call-screen.minimized .call-control-btn svg { width: 15px; height: 15px; }
+  .call-screen.minimized .call-control-btn:not(.end-call):not(.minimize-btn) { display: none; }
+  .minimize-btn svg { transition: transform .15s; }
+  .call-screen.minimized .minimize-btn svg { transform: rotate(180deg); }
   .call-control-btn.off { background: rgba(255,255,255,0.35); color: #0a0a0f; }
   .call-control-btn.end-call { background: #ff3b30; }
 
@@ -1369,6 +1392,7 @@
         <button class="call-control-btn" id="callSwitchCamBtn" title="Switch camera"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M4 8a8 8 0 0 1 13.5-4.5L20 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M20 3v4h-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16a8 8 0 0 1-13.5 4.5L4 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 21v-4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div class="call-device-menu" id="callCameraMenu"></div>
       </div>
+      <button class="call-control-btn minimize-btn" id="callMinimizeBtn" title="Minimize (back to chat)"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="call-control-btn end-call" id="callEndBtn" title="End call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M4 14c5.5-4.7 10.5-4.7 16 0" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M9 14.3l-1.4 3.4a1 1 0 0 0 .5 1.3c1 .4 2.6.8 3.9.8s2.9-.4 3.9-.8a1 1 0 0 0 .5-1.3L15 14.3" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
     </div>
   </div>
@@ -6291,6 +6315,7 @@ let currentCallConvoId = null;
 let callTiles = new Map();       // Daily session_id -> { el, video, avatar, nameEl }
 let callRingTimeout = null;      // give up if a call we started never gets answered
 let localAudioOn = true, localVideoOn = true;
+let callMinimized = false;       // shrunk to a small corner tile so the chat panel is usable again mid-call
 let pendingIncomingCall = null;  // an offered call not yet accepted/declined
 let pendingIncomingCallName = '';
 // Only the call's initiator holds an is_owner meeting token (see
@@ -6323,6 +6348,7 @@ async function joinCall(call, token, convoId, displayName) {
   currentCall = call;
   currentCallConvoId = convoId;
   document.getElementById('incomingCallBanner').classList.remove('show');
+  setCallMinimized(false); // a fresh call always starts full-screen
   document.getElementById('callScreen').classList.add('show');
   localAudioOn = true; localVideoOn = true;
   document.getElementById('callMicBtn').classList.remove('off');
@@ -6347,12 +6373,24 @@ async function joinCall(call, token, convoId, displayName) {
   renderCallParticipants();
 }
 
+// Shrinks the call to a small corner tile (so the chat panel underneath is
+// visible and usable again while the call keeps running) or restores it
+// full-screen — the call itself (Daily connection, mic/cam) is completely
+// untouched either way, this is purely how much screen it's taking up.
+function setCallMinimized(minimized) {
+  callMinimized = minimized;
+  document.getElementById('callScreen').classList.toggle('minimized', minimized);
+  document.getElementById('callMinimizeBtn').title = minimized ? 'Expand' : 'Minimize (back to chat)';
+}
+function toggleCallMinimized() { setCallMinimized(!callMinimized); }
+
 // Tears down the local call UI/connection only -- does NOT tell the
 // backend the call is over (endCall does that). Also what runs when Daily
 // itself ends our session (kicked, room expired, connection lost), where
 // there's nothing left worth telling the backend anyway.
 function closeCallScreen() {
   clearTimeout(callRingTimeout);
+  setCallMinimized(false);
   document.getElementById('callScreen').classList.remove('show');
   document.getElementById('callVideoGrid').innerHTML = '';
   document.getElementById('callCameraMenu').classList.remove('show');
@@ -6501,6 +6539,14 @@ function setupCallUI() {
     if (menu.classList.contains('show') && !menu.contains(e.target) && !e.target.closest('#callSwitchCamBtn')) menu.classList.remove('show');
   });
   document.getElementById('callEndBtn').onclick = endCall;
+  document.getElementById('callMinimizeBtn').onclick = (e) => { e.stopPropagation(); toggleCallMinimized(); };
+  // While minimized, tapping the tile itself (not one of its own buttons —
+  // stopPropagation above already keeps the minimize/end-call buttons from
+  // reaching here) restores full-screen, same as tapping any other
+  // "you're in a call" indicator to jump back into it.
+  document.getElementById('callScreen').addEventListener('click', (e) => {
+    if (callMinimized) setCallMinimized(false);
+  });
   document.getElementById('callMicBtn').onclick = () => {
     localAudioOn = !localAudioOn;
     dailyCallObject?.setLocalAudio(localAudioOn);
