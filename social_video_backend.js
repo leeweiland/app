@@ -25,7 +25,7 @@ export const DEFAULT_PLATFORMS = { fb: true, fbs: true, ig: true, igs: true, li:
 export function getSocialVideoSettings() {
   const saved = readJson(SETTINGS_FILE, {});
   return {
-    aiPrompt: "", ownWordsRatio: 60, postHour: 3, timezone: "America/Anchorage",
+    aiPrompt: "", ownWordsRatio: 60, postHour: 3, timezone: "America/Anchorage", enabled: true,
     ...saved,
     platforms: { ...DEFAULT_PLATFORMS, ...(saved.platforms || {}) },
   };
@@ -494,6 +494,7 @@ export async function handleSocialVideoRequest(req, res, url) {
     if (req.method === "POST") {
       const body = await readJsonBody(req);
       const current = getSocialVideoSettings();
+      if (body.enabled !== undefined) current.enabled = !!body.enabled;
       if (body.aiPrompt !== undefined) current.aiPrompt = String(body.aiPrompt).slice(0, 8000);
       if (body.ownWordsRatio !== undefined) current.ownWordsRatio = Math.max(0, Math.min(100, Number(body.ownWordsRatio) || 0));
       if (body.postHour !== undefined) current.postHour = Math.max(0, Math.min(23, Number(body.postHour) || 0));
@@ -619,6 +620,17 @@ export async function handleSocialVideoRequest(req, res, url) {
     // done above) — publishing is best-effort on top of it.
     const publish = { published: false };
     try {
+      // Admin's Pause/Active switch for this brand — the clip is already
+      // safely saved to Drive above regardless, this only skips the
+      // reframe/caption/schedule work that would otherwise post it to
+      // Metricool. Checked before any of that (rather than just skipping
+      // the final schedulePost calls) so a paused brand doesn't
+      // burn ffmpeg/Drive/Claude work on a publish nobody wanted to happen.
+      const settings = getSocialVideoSettings();
+      if (!settings.enabled) {
+        publish.error = "Publishing is paused for Powerbatics — clip saved to Drive only.";
+        throw new Error(publish.error);
+      }
       reframeVideoVertical(tmpTrimmed, tmpVertical, {
         videoWidth: videoWidth || 1920, videoHeight: videoHeight || 1080,
         startTime: 0, keyframes,
@@ -633,7 +645,6 @@ export async function handleSocialVideoRequest(req, res, url) {
       tempVerticalFileId = vertResult.id;
       const publicMediaUrl = await makeDriveFilePublic(tempVerticalFileId, accessToken);
 
-      const settings = getSocialVideoSettings();
       // The coach reviews/edits the AI draft in the UI before ever hitting
       // Send -- reviewedCaptions is that approved (possibly hand-edited)
       // version. Falls back to generating fresh only for a caller that

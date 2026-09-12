@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
   platforms: { fb: true, fbs: true, ig: true, igs: true, li: true, tt: true, x: true, yt: true },
   postHour: 3, // wall-clock hour, in `timezone` below -- see buildMetricoolPostBody's dateTimeStr
   timezone: "America/Anchorage",
+  enabled: true, // admin's Pause/Active switch -- see publishPacificRimClip
 };
 
 function getSettings() {
@@ -85,6 +86,11 @@ function probeVideoDimensions(path) {
 export async function publishPacificRimClip({ driveFileId, label, thumbnailBase64, thumbnailTimeSec, captions: reviewedCaptions }) {
   if (!driveFileId) return { published: false, error: "driveFileId required" };
   const settings = getSettings();
+  // Admin's Pause/Active switch for this brand -- checked before any Drive
+  // download/ffmpeg/Claude work, not just before the final schedule calls,
+  // since the gym-capture clip is already permanently saved to Drive by the
+  // caller regardless of whether this publish step runs at all.
+  if (!settings.enabled) return { published: false, error: "Publishing is paused for Pacific Rim Athletics." };
   let auth;
   try {
     auth = metricoolAuth(process.env.METRICOOL_PRA_BLOG_ID);
@@ -197,6 +203,7 @@ export async function handlePacificRimVideoRequest(req, res, url) {
     if (req.method === "POST") {
       const body = await readJsonBody(req);
       const current = getSettings();
+      if (body.enabled !== undefined) current.enabled = !!body.enabled;
       if (body.aiPrompt !== undefined) current.aiPrompt = String(body.aiPrompt).slice(0, 8000);
       if (body.ownWordsRatio !== undefined) current.ownWordsRatio = Math.max(0, Math.min(100, Number(body.ownWordsRatio) || 0));
       if (body.postHour !== undefined) current.postHour = Math.max(0, Math.min(23, Number(body.postHour) || 0));

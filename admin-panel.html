@@ -312,7 +312,10 @@
     </div>
 
     <div class="pra-panel section" id="socialVideoConfigSection">
-      <div class="pra-h2" style="margin-bottom:6px">Powerbatics Social Video</div>
+      <div class="pra-h2" style="margin-bottom:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        Powerbatics Social Video
+        <button class="pra-btn pra-btn-outline" id="svPauseToggleBtn" type="button" title="Pause to stop favorited clips from publishing to Metricool (they still save to Drive)" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:999px">Active</button>
+      </div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Powers the favorite-star pipeline (trim → AI reframe/track → AI caption → schedule to Metricool). Every field saves itself — no Save button. API keys live in Railway's environment variables, not here.</div>
       <div class="save-msg" id="socialVideoSaveMsg"></div>
       <div class="field">
@@ -370,7 +373,10 @@
     </div>
 
     <div class="pra-panel section" id="pacificRimVideoConfigSection">
-      <div class="pra-h2" style="margin-bottom:6px">Pacific Rim Athletics Social Video</div>
+      <div class="pra-h2" style="margin-bottom:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        Pacific Rim Athletics Social Video
+        <button class="pra-btn pra-btn-outline" id="praPauseToggleBtn" type="button" title="Pause to stop Gym Capture clips from publishing to Metricool (they still save to Drive and post to chat)" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:999px">Active</button>
+      </div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Same pipeline as Powerbatics Social Video above (trim → AI reframe/track → AI caption → schedule to Metricool), publishing to the Pacific Rim Athletics brand instead — triggered by the Gym Capture header camera icon (both Gym Training and Gym Level Test clips get scheduled here automatically). Every field saves itself — no Save button.</div>
       <div class="save-msg" id="pacificRimVideoSaveMsg"></div>
       <div class="field">
@@ -536,10 +542,34 @@ function fmtHour12(h) {
   return `${h12}:00 ${period}`;
 }
 
+// Pause/Active toggle -- shared by both brands (Powerbatics "sv" / Pacific
+// Rim "pra"). Independent of the auto-save-every-field pattern the other
+// settings use -- this one posts and updates its own button immediately
+// rather than waiting on any other field's own save.
+function renderPauseToggle(prefix, enabled) {
+  const btn = document.getElementById(prefix + 'PauseToggleBtn');
+  btn.textContent = enabled ? 'Active' : 'Paused';
+  btn.dataset.enabled = enabled ? '1' : '0';
+  btn.style.color = enabled ? '#2ecc71' : '#ff5c5c';
+  btn.style.borderColor = enabled ? '#2ecc71' : '#ff5c5c';
+}
+async function toggleVideoPublishing(prefix, endpoint) {
+  const btn = document.getElementById(prefix + 'PauseToggleBtn');
+  const next = btn.dataset.enabled !== '1';
+  renderPauseToggle(prefix, next); // optimistic -- this toggle should feel instant
+  await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: next }),
+  });
+}
+document.getElementById('svPauseToggleBtn').onclick = () => toggleVideoPublishing('sv', '/api/social-video/settings');
+document.getElementById('praPauseToggleBtn').onclick = () => toggleVideoPublishing('pra', '/api/pacific-rim-video/settings');
+
 async function loadSocialVideoSettings() {
   const r = await fetch('/api/social-video/settings');
   if (!r.ok) return;
   const s = await r.json();
+  renderPauseToggle('sv', s.enabled !== false);
   document.getElementById('svAiPrompt').value = s.aiPrompt || '';
   document.getElementById('svOwnWordsRatio').value = s.ownWordsRatio ?? 60;
   document.getElementById('svOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
@@ -582,6 +612,7 @@ async function loadPacificRimVideoSettings() {
   const r = await fetch('/api/pacific-rim-video/settings');
   if (!r.ok) return;
   const s = await r.json();
+  renderPauseToggle('pra', s.enabled !== false);
   document.getElementById('praAiPrompt').value = s.aiPrompt || '';
   document.getElementById('praOwnWordsRatio').value = s.ownWordsRatio ?? 60;
   document.getElementById('praOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
