@@ -26,7 +26,17 @@ export function calcCalorieTarget({ heightCm, weightKg, age, sex, activityLevel,
   const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9 };
   const tdee = bmr * (activityMultipliers[activityLevel] || 1.375);
   const goalMultipliers = { reduce: 0.8, maintain: 1.0, increase: 1.1 };
-  return Math.round(tdee * (goalMultipliers[goal] || goalMultipliers.reduce));
+  const effectiveGoal = goalMultipliers[goal] !== undefined ? goal : "reduce";
+  let calories = tdee * goalMultipliers[effectiveGoal];
+  // For a cut, Mifflin-St Jeor's multiplier alone can still land above the
+  // simple, aggressive-deficit heuristic coaches actually cap to: 10
+  // calories per pound of bodyweight at most. Enforce that ceiling here so
+  // "reduce" never comes out higher than a coach would ever prescribe.
+  if (effectiveGoal === "reduce") {
+    const weightLbs = w * 2.2046226218;
+    calories = Math.min(calories, weightLbs * 10);
+  }
+  return Math.round(calories);
 }
 
 export function calcMacros(calories) {
