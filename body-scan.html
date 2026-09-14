@@ -155,9 +155,9 @@
           <div class="field">
             <label class="pra-label">Height</label>
             <div class="unit-row">
-              <input class="pra-input" id="profileHeightFt" type="number" placeholder="ft"/>
-              <input class="pra-input" id="profileHeightIn" type="number" placeholder="in"/>
-              <input class="pra-input" id="profileHeightCm" type="number" placeholder="cm" style="display:none"/>
+              <input class="pra-input" id="profileHeightFt" type="number" placeholder="ft" min="0" max="8"/>
+              <input class="pra-input" id="profileHeightIn" type="number" placeholder="in" min="0" max="11"/>
+              <input class="pra-input" id="profileHeightCm" type="number" placeholder="cm" min="50" max="300" style="display:none"/>
               <select class="pra-select" id="profileHeightUnit">
                 <option value="ftin" selected>ft/in</option>
                 <option value="cm">cm</option>
@@ -572,6 +572,20 @@ document.getElementById('profileHeightUnit').addEventListener('change', (e) => {
   document.getElementById('profileHeightFt').style.display = isCm ? 'none' : '';
   document.getElementById('profileHeightIn').style.display = isCm ? 'none' : '';
 });
+// min/max attributes alone don't stop a typed (not spinner-clicked) value
+// from landing way outside them -- a stray extra digit in the ft box (or
+// pasting a whole height into what's only meant to hold the feet part)
+// used to flow straight into calcCalorieTarget's formula unchecked,
+// producing a multi-million-calorie target. Snap back into range the
+// moment the field loses focus, so a bad value never survives to save.
+[['profileHeightFt', 0, 8], ['profileHeightIn', 0, 11], ['profileHeightCm', 50, 300]].forEach(([id, min, max]) => {
+  document.getElementById(id).addEventListener('blur', (e) => {
+    if (e.target.value === '') return;
+    const n = Number(e.target.value);
+    if (!Number.isFinite(n)) { e.target.value = ''; return; }
+    e.target.value = Math.min(max, Math.max(min, n));
+  });
+});
 
 function getProfileWeightKg() {
   if (document.getElementById('profileWeightUnit').value === 'kg') return document.getElementById('profileWeightKg').value;
@@ -612,7 +626,11 @@ function showEstimate(d) {
 // Shown on Nutrition Log, Physique Scan, and Reports -- same line, same
 // "edit on Profile" link (switches to the Profile tab in place) everywhere.
 function profileSummaryHtml(d) {
-  if (!d.profile?.heightCm || !d.weightKg) {
+  const h = d.profile?.heightCm;
+  // Same plausible-range guard as loadProfile's own hydration -- a
+  // pre-existing bad save (something like 1,695,005cm) otherwise showed as
+  // a garbled "55610'5"" here instead of prompting a real re-entry.
+  if (!h || h < 50 || h > 300 || !d.weightKg) {
     return `Fill in your profile to get a personalized calorie/macro plan. <a class="profile-summary-link" href="#">Go to Profile</a>`;
   }
   const totalIn = Math.round(d.profile.heightCm / 2.54);
@@ -646,7 +664,13 @@ async function loadProfile() {
     // value is present -- switching to view a different person (or back to
     // self) needs to actually CLEAR a field the previous person had filled
     // in, not leave it showing stale data from whoever was viewed before.
-    if (p.heightCm) {
+    // A height outside plausible human range (a pre-existing bad save, from
+    // before the ft/in inputs had min/max + blur-clamping) is treated as
+    // unset rather than hydrated as-is -- shows blank + placeholder,
+    // prompting a real re-entry, instead of a garbled number like "55610"
+    // in the ft box that both looks broken and (until re-saved) kept
+    // feeding calcCalorieTarget an absurd height.
+    if (p.heightCm && p.heightCm >= 50 && p.heightCm <= 300) {
       const totalIn = Math.round(p.heightCm / 2.54);
       document.getElementById('profileHeightFt').value = Math.floor(totalIn / 12);
       document.getElementById('profileHeightIn').value = totalIn % 12;
