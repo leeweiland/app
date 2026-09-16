@@ -11,15 +11,15 @@
   /* ── Hub tabs -- the outermost level of this page. Order is rebuilt by JS
      (renderHubTabs): Profile leads until the profile is complete, then it
      drops to the end and Nutrition Log becomes the lead tab. ── */
-  .hub-tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); overflow-x: auto; scrollbar-width: none; }
-  .hub-tabs::-webkit-scrollbar { display: none; }
-  /* The scrollbar is deliberately hidden above, which otherwise left a
-     truncated tab (e.g. an admin's 7th, "Search") with zero visual cue
-     that scrolling would reveal the rest of it -- just looked cut off and
-     broken. Only applied once JS confirms the bar actually overflows (see
-     renderHubTabs), so a bar that already fits isn't needlessly faded. */
-  .hub-tabs.overflowing { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 28px, #000 calc(100% - 28px), transparent 100%); }
-  .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
+  /* Wraps to a second row once there are too many tabs to fit (e.g. an
+     admin's extra Activity tab) instead of scrolling -- a hidden-scrollbar
+     horizontal scroll had no drag/wheel affordance on desktop at all (no
+     way to reach the tabs past the edge with just a mouse), and a visible
+     scrollbar clashed with the rest of the app's chrome-free look. Wrapping
+     keeps every tab always visible and clickable regardless of device or
+     input method. */
+  .hub-tabs { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 24px; border-bottom: 1px solid var(--pra-border); }
+  .hub-tab { padding: 10px 4px; margin-right: 18px; cursor: pointer; font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border-bottom: 2px solid transparent; white-space: nowrap; }
   .hub-tab.active { color: var(--pra-blue); border-bottom-color: var(--pra-blue); }
   .hub-panel { display: none; }
   .hub-panel.active { display: block; }
@@ -593,13 +593,6 @@ function renderHubTabs(preserveActive) {
   });
   document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('hubPanel' + activeHub[0].toUpperCase() + activeHub.slice(1)).classList.add('active');
-  // Reveals whichever tab is now active even if it was scrolled out of
-  // view, and (via the overflow check right after) fades the trailing
-  // edge of the bar whenever it doesn't all fit -- the scrollbar itself is
-  // hidden for looks, so this is the only cue that there's more to scroll to.
-  const tabsBar = document.getElementById('hubTabsBar');
-  tabsBar.querySelector('.hub-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  tabsBar.classList.toggle('overflowing', tabsBar.scrollWidth > tabsBar.clientWidth + 1);
   // The merged scan+photo history drives the Physique tab's Progress list --
   // load it once, whichever of Physique/Reports is visited first.
   if ((activeHub === 'physique' || activeHub === 'reports') && !physiqueHistoryLoaded) {
