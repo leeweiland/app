@@ -45,6 +45,18 @@
   .macro-tile { text-align: center; padding: 12px; border-radius: 10px; background: rgba(255,255,255,0.03); }
   .macro-tile .val { font-size: 1.3rem; font-weight: 700; color: var(--pra-blue); }
   .macro-tile .lab { font-family: var(--font-secondary); font-size: .65rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .06em; }
+  /* Admin-editable calorie/% fields (see applyViewingMode) -- a plain
+     number input reset to look exactly like the surrounding text when
+     readonly (everyone else, and admin viewing a non-override context),
+     picking up a dashed underline + text cursor only once readonly is
+     lifted for an admin, as the only hint these are actually editable. */
+  .tile-val-input, .pct-input { border: none; background: transparent; color: inherit; font: inherit; text-align: center; padding: 0; -moz-appearance: textfield; }
+  .tile-val-input::-webkit-outer-spin-button, .tile-val-input::-webkit-inner-spin-button,
+  .pct-input::-webkit-outer-spin-button, .pct-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .tile-val-input { width: 100%; }
+  .pct-input { width: 30px; }
+  .tile-val-input:not([readonly]), .pct-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
+  .tile-val-input[readonly], .pct-input[readonly] { cursor: default; }
   .meal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--pra-border); font-size: .84rem; }
   .disclaimer { font-family: var(--font-secondary); font-size: .7rem; color: var(--pra-dim); margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--pra-border); line-height: 1.5; }
   .spinner { display: none; text-align: center; padding: 20px; color: var(--pra-blue); }
@@ -191,23 +203,24 @@
         <button class="pra-btn" id="profileSaveBtn" style="width:100%;margin-top:6px">SAVE PROFILE</button>
 
         <div class="macro-grid" id="profileEstimateGrid" style="display:none;margin-top:16px">
-          <div class="macro-tile"><div class="val" id="profileCals">0</div><div class="lab">Calories</div></div>
-          <div class="macro-tile"><div class="val" id="profileProtein">0g</div><div class="lab" id="profileProteinLabel">Protein 40%</div></div>
-          <div class="macro-tile"><div class="val" id="profileFat">0g</div><div class="lab" id="profileFatLabel">Fat 30%</div></div>
-          <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="profileCarb">0g</div><div class="lab" id="profileCarbLabel">Carbs 30%</div></div>
+          <div class="macro-tile">
+            <input class="val tile-val-input" id="profileCals" type="number" readonly inputmode="numeric"/>
+            <div class="lab">Calories</div>
+          </div>
+          <div class="macro-tile">
+            <div class="val" id="profileProtein">0g</div>
+            <div class="lab">Protein <input class="pct-input" id="profileProteinPct" type="number" readonly inputmode="numeric"/>%</div>
+          </div>
+          <div class="macro-tile">
+            <div class="val" id="profileFat">0g</div>
+            <div class="lab">Fat <input class="pct-input" id="profileFatPct" type="number" readonly inputmode="numeric"/>%</div>
+          </div>
+          <div class="macro-tile" style="grid-column:1/-1">
+            <div class="val" id="profileCarb">0g</div>
+            <div class="lab">Carbs <input class="pct-input" id="profileCarbPct" type="number" readonly inputmode="numeric"/>%</div>
+          </div>
         </div>
-      </div>
-
-      <div class="pra-panel" id="adminOverridePanel" style="display:none;padding:18px;margin-bottom:20px;border-color:var(--pra-blue-dim)">
-        <div class="pra-label" style="margin-bottom:10px">Admin Override — Manual Calorie / Macro Targets</div>
-        <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Leave blank to keep using the automatic calculation above. Setting a value here locks this member's daily target and macro split until cleared.</div>
-        <div class="field"><label class="pra-label">Calorie Target Override</label><input class="pra-input" id="adminOverrideCals" type="number" placeholder="Auto"/></div>
-        <div class="field-row">
-          <div class="field"><label class="pra-label">Protein %</label><input class="pra-input" id="adminOverrideProteinPct" type="number" placeholder="40"/></div>
-          <div class="field"><label class="pra-label">Fat %</label><input class="pra-input" id="adminOverrideFatPct" type="number" placeholder="30"/></div>
-          <div class="field"><label class="pra-label">Carbs %</label><input class="pra-input" id="adminOverrideCarbPct" type="number" placeholder="30"/></div>
-        </div>
-        <button class="pra-btn pra-btn-outline" id="adminOverrideClearBtn" style="width:100%;margin-top:6px" type="button">Clear Override</button>
+        <div class="pra-muted" id="adminEditHint" style="display:none;font-size:.72rem;margin-top:8px">Admin: tap the calorie number or a % above to set a manual override — it saves the moment you tap away, and stays until you edit it back to the automatic value's field (clear it) or change it again.</div>
       </div>
     </div>
 
@@ -435,7 +448,10 @@ function applyViewingMode() {
       ? ' — you can edit their profile & calorie/macro overrides'
       : ' — read only';
   }
-  document.getElementById('adminOverridePanel').style.display = adminCanEdit ? 'block' : 'none';
+  ['profileCals', 'profileProteinPct', 'profileFatPct', 'profileCarbPct'].forEach(id => {
+    document.getElementById(id).readOnly = !adminCanEdit;
+  });
+  document.getElementById('adminEditHint').style.display = adminCanEdit ? 'block' : 'none';
 }
 async function switchViewingUser(userId, name) {
   viewingUserId = userId;
@@ -639,14 +655,19 @@ function showEstimate(d) {
   currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros };
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
-  document.getElementById('profileCals').textContent = d.calorieTarget;
+  document.getElementById('profileCals').value = d.calorieTarget;
   document.getElementById('profileProtein').textContent = d.macros.proteinG + 'g';
   document.getElementById('profileFat').textContent = d.macros.fatG + 'g';
   document.getElementById('profileCarb').textContent = d.macros.carbG + 'g';
   const pct = d.macroPercents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
-  document.getElementById('profileProteinLabel').textContent = `Protein ${pct.proteinPct}%`;
-  document.getElementById('profileFatLabel').textContent = `Fat ${pct.fatPct}%`;
-  document.getElementById('profileCarbLabel').textContent = `Carbs ${pct.carbPct}%`;
+  document.getElementById('profileProteinPct').value = pct.proteinPct;
+  document.getElementById('profileFatPct').value = pct.fatPct;
+  document.getElementById('profileCarbPct').value = pct.carbPct;
+  // Freshly (re)populated from the server -- these values are the new clean
+  // baseline, not an unsaved admin edit, so a stray blur right after a load
+  // doesn't re-save the very number that was just loaded as if it were a
+  // new override (see the dirty-tracking near saveProfile).
+  calsDirty = proteinPctDirty = fatPctDirty = carbPctDirty = false;
   grid.style.display = 'grid';
 }
 
@@ -718,10 +739,6 @@ async function loadProfile() {
     }
     document.getElementById('profileActivityLevel').value = p.activityLevel || 'light';
     document.getElementById('profileGoal').value = p.goal || 'reduce';
-    document.getElementById('adminOverrideCals').value = p.manualCalorieTarget || '';
-    document.getElementById('adminOverrideProteinPct').value = p.manualMacroPercents?.proteinPct ?? '';
-    document.getElementById('adminOverrideFatPct').value = p.manualMacroPercents?.fatPct ?? '';
-    document.getElementById('adminOverrideCarbPct').value = p.manualMacroPercents?.carbPct ?? '';
     if (d.weightKg) {
       document.getElementById('profileWeightLbs').value = kgToLbsVal(d.weightKg);
       document.getElementById('profileWeightKg').value = d.weightKg;
@@ -735,43 +752,76 @@ async function loadProfile() {
   } catch {}
 }
 
+// Tracks whether the admin has actually typed into one of the editable
+// calorie/% tiles since the last load/save -- these fields always show
+// SOME number (either a stored override or the live auto-calculated one),
+// so without this, saving an unrelated field (say, activity level) would
+// re-send whatever number happened to be displayed and silently freeze it
+// in as a manual override. Only a genuinely dirty field gets included in
+// the next save's manualCalorieTarget/manualMacroPercents.
+let calsDirty = false, proteinPctDirty = false, fatPctDirty = false, carbPctDirty = false;
+// Debounced save on every keystroke (not just on blur) -- some mobile
+// webviews are inconsistent about firing a real blur when a text field
+// loses focus via tapping a nav tab rather than another input, so typing
+// pausing for a beat is the primary trigger; blur (below) is a belt-and-
+// suspenders immediate flush for the common desktop case.
+let overrideSaveTimer = null;
+function scheduleOverrideSave() {
+  if (!isAdminMe()) return;
+  clearTimeout(overrideSaveTimer);
+  overrideSaveTimer = setTimeout(() => { saveProfile(); }, 700);
+}
+document.getElementById('profileCals').addEventListener('input', () => { calsDirty = true; scheduleOverrideSave(); });
+document.getElementById('profileProteinPct').addEventListener('input', () => { proteinPctDirty = true; scheduleOverrideSave(); });
+document.getElementById('profileFatPct').addEventListener('input', () => { fatPctDirty = true; scheduleOverrideSave(); });
+document.getElementById('profileCarbPct').addEventListener('input', () => { carbPctDirty = true; scheduleOverrideSave(); });
+
+async function saveProfile() {
+  const payload = {
+    weightKg: getProfileWeightKg() || null,
+    heightCm: getProfileHeightCm() || null,
+    age: document.getElementById('profileAge').value || null,
+    sex: document.getElementById('profileSex').value,
+    goalWeightKg: getProfileGoalWeightKg() || null,
+    activityLevel: document.getElementById('profileActivityLevel').value,
+    goal: document.getElementById('profileGoal').value,
+  };
+  // Only sent at all when the admin actually edited that specific field
+  // (see the dirty flags above) -- the backend only touches
+  // manualCalorieTarget/manualMacroPercents when the request explicitly
+  // names them, so every other save (a client's own, or an admin tweaking
+  // an unrelated field) leaves whatever override already existed untouched.
+  if (isAdminMe() && calsDirty) {
+    const calVal = document.getElementById('profileCals').value;
+    payload.manualCalorieTarget = calVal ? Number(calVal) : null;
+  }
+  if (isAdminMe() && (proteinPctDirty || fatPctDirty || carbPctDirty)) {
+    const pPct = document.getElementById('profileProteinPct').value;
+    const fPct = document.getElementById('profileFatPct').value;
+    const cPct = document.getElementById('profileCarbPct').value;
+    payload.manualMacroPercents = (pPct || fPct || cPct)
+      ? { proteinPct: Number(pPct) || 0, fatPct: Number(fPct) || 0, carbPct: Number(cPct) || 0 }
+      : null;
+  }
+  // apiFetch (not a plain fetch) so this targets whoever's being viewed --
+  // the backend only honors that for an admin (see the route's own gate).
+  const r = await apiFetch('/api/body-stats/profile', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const d = await r.json();
+  if (!r.ok) { alert(d.error || 'Save failed'); return null; }
+  showEstimate(d);
+  updateProfileSummaries(d);
+  return d;
+}
+
 document.getElementById('profileSaveBtn').onclick = async () => {
   const btn = document.getElementById('profileSaveBtn');
   btn.disabled = true;
   try {
-    const payload = {
-      weightKg: getProfileWeightKg() || null,
-      heightCm: getProfileHeightCm() || null,
-      age: document.getElementById('profileAge').value || null,
-      sex: document.getElementById('profileSex').value,
-      goalWeightKg: getProfileGoalWeightKg() || null,
-      activityLevel: document.getElementById('profileActivityLevel').value,
-      goal: document.getElementById('profileGoal').value,
-    };
-    // Only an admin's own save includes these two keys at all -- the
-    // backend only touches manualCalorieTarget/manualMacroPercents when the
-    // request explicitly names them, so a client's own profile save (which
-    // never reaches this branch) can't blow away an admin's override.
-    if (isAdminMe()) {
-      const calOverride = document.getElementById('adminOverrideCals').value;
-      payload.manualCalorieTarget = calOverride ? Number(calOverride) : null;
-      const pPct = document.getElementById('adminOverrideProteinPct').value;
-      const fPct = document.getElementById('adminOverrideFatPct').value;
-      const cPct = document.getElementById('adminOverrideCarbPct').value;
-      payload.manualMacroPercents = (pPct || fPct || cPct)
-        ? { proteinPct: Number(pPct) || 0, fatPct: Number(fPct) || 0, carbPct: Number(cPct) || 0 }
-        : null;
-    }
-    // apiFetch (not a plain fetch) so this targets whoever's being viewed --
-    // the backend only honors that for an admin (see the route's own gate).
-    const r = await apiFetch('/api/body-stats/profile', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Save failed'); return; }
-    showEstimate(d);
-    updateProfileSummaries(d);
+    const d = await saveProfile();
+    if (!d) return;
     const wasComplete = profileComplete;
     profileComplete = computeProfileComplete(d);
     if (profileComplete && !wasComplete) {
@@ -785,17 +835,19 @@ document.getElementById('profileSaveBtn').onclick = async () => {
   }
 };
 
-// Blanks the four override fields then reuses the normal save path -- since
-// isAdminMe() is true here and all four inputs are now empty, the payload
-// sends explicit nulls, which the backend applies (rather than preserving
-// whatever was there before, the way it would if the keys were left out).
-document.getElementById('adminOverrideClearBtn').onclick = () => {
-  document.getElementById('adminOverrideCals').value = '';
-  document.getElementById('adminOverrideProteinPct').value = '';
-  document.getElementById('adminOverrideFatPct').value = '';
-  document.getElementById('adminOverrideCarbPct').value = '';
-  document.getElementById('profileSaveBtn').click();
-};
+// Admin-only: editing the calorie tile or a % field saves the instant focus
+// leaves it (tab, click away, or navigate to another hub tab) -- no separate
+// Save button for these, per how the rest of the tile already looks/behaves
+// like a plain readout. Ignored unless that specific field was actually
+// touched (dirty), so tabbing through without typing anything is a no-op.
+['profileCals', 'profileProteinPct', 'profileFatPct', 'profileCarbPct'].forEach(id => {
+  document.getElementById(id).addEventListener('blur', () => {
+    if (!isAdminMe()) return;
+    if (!calsDirty && !proteinPctDirty && !fatPctDirty && !carbPctDirty) return;
+    clearTimeout(overrideSaveTimer);
+    saveProfile();
+  });
+});
 
 // ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
 let foodMode = 'photo';
