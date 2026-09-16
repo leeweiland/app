@@ -120,7 +120,7 @@
     <div class="hub-tabs" id="hubTabsBar"></div>
 
     <div id="viewingBanner" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,155,255,0.1);border:1px solid var(--pra-blue-dim);border-radius:10px;padding:10px 14px;margin-bottom:18px;font-size:.82rem">
-      <div>Viewing <strong id="viewingBannerName"></strong>'s Physique Builder — read only</div>
+      <div>Viewing <strong id="viewingBannerName"></strong>'s Physique Builder<span id="viewingBannerMode"> — read only</span></div>
       <button id="viewingBannerBackBtn" style="background:none;border:none;color:var(--pra-blue);cursor:pointer;font-size:.8rem;text-decoration:underline;white-space:nowrap">Back to My Profile</button>
     </div>
 
@@ -192,10 +192,22 @@
 
         <div class="macro-grid" id="profileEstimateGrid" style="display:none;margin-top:16px">
           <div class="macro-tile"><div class="val" id="profileCals">0</div><div class="lab">Calories</div></div>
-          <div class="macro-tile"><div class="val" id="profileProtein">0g</div><div class="lab">Protein 40%</div></div>
-          <div class="macro-tile"><div class="val" id="profileFat">0g</div><div class="lab">Fat 30%</div></div>
-          <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="profileCarb">0g</div><div class="lab">Carbs 30%</div></div>
+          <div class="macro-tile"><div class="val" id="profileProtein">0g</div><div class="lab" id="profileProteinLabel">Protein 40%</div></div>
+          <div class="macro-tile"><div class="val" id="profileFat">0g</div><div class="lab" id="profileFatLabel">Fat 30%</div></div>
+          <div class="macro-tile" style="grid-column:1/-1"><div class="val" id="profileCarb">0g</div><div class="lab" id="profileCarbLabel">Carbs 30%</div></div>
         </div>
+      </div>
+
+      <div class="pra-panel" id="adminOverridePanel" style="display:none;padding:18px;margin-bottom:20px;border-color:var(--pra-blue-dim)">
+        <div class="pra-label" style="margin-bottom:10px">Admin Override — Manual Calorie / Macro Targets</div>
+        <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px">Leave blank to keep using the automatic calculation above. Setting a value here locks this member's daily target and macro split until cleared.</div>
+        <div class="field"><label class="pra-label">Calorie Target Override</label><input class="pra-input" id="adminOverrideCals" type="number" placeholder="Auto"/></div>
+        <div class="field-row">
+          <div class="field"><label class="pra-label">Protein %</label><input class="pra-input" id="adminOverrideProteinPct" type="number" placeholder="40"/></div>
+          <div class="field"><label class="pra-label">Fat %</label><input class="pra-input" id="adminOverrideFatPct" type="number" placeholder="30"/></div>
+          <div class="field"><label class="pra-label">Carbs %</label><input class="pra-input" id="adminOverrideCarbPct" type="number" placeholder="30"/></div>
+        </div>
+        <button class="pra-btn pra-btn-outline" id="adminOverrideClearBtn" style="width:100%;margin-top:6px" type="button">Clear Override</button>
       </div>
     </div>
 
@@ -390,14 +402,16 @@ function computeProfileComplete(d) {
 // ── Coach/admin: view any student's (admin: any coach's too) Physique
 // Builder -- Search finds them by name; picking a result switches every
 // tab's data source to THEM instead of the logged-in staff member's own,
-// via apiFetch's/mediaUrl's asUserId param. Every write route on the
-// backend (resolveTargetUser) never honors asUserId regardless -- disabled
-// here too so browsing someone else's data can't be mistaken for editing
-// it.
+// via apiFetch's/mediaUrl's asUserId param. Only the profile-save route
+// honors asUserId, and only for an admin (see the backend's own gate on
+// this) -- a coach viewing someone stays read only, same as every other
+// write route here (logging a meal, running a scan, regenerating the
+// montage) which none of this extends to.
 let me = null;
 let viewingUserId = null;
 let viewingUserName = '';
 function isStaffMe() { return !!me && (me.role === 'coach' || me.role === 'admin' || me.role === 'admin2'); }
+function isAdminMe() { return !!me && (me.role === 'admin' || me.role === 'admin2'); }
 function apiFetch(url, opts) {
   if (viewingUserId) url += (url.includes('?') ? '&' : '?') + 'asUserId=' + encodeURIComponent(viewingUserId);
   return fetch(url, opts);
@@ -407,12 +421,21 @@ function mediaUrl(path) {
 }
 function applyViewingMode() {
   const viewing = !!viewingUserId;
-  ['profileSaveBtn', 'foodSaveBtn', 'analyzeBtn', 'reportsMontageRegenBtn'].forEach(id => {
+  const adminCanEdit = isAdminMe();
+  ['foodSaveBtn', 'analyzeBtn', 'reportsMontageRegenBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = viewing;
   });
+  const profileBtn = document.getElementById('profileSaveBtn');
+  if (profileBtn) profileBtn.disabled = viewing && !adminCanEdit;
   document.getElementById('viewingBanner').style.display = viewing ? 'flex' : 'none';
-  if (viewing) document.getElementById('viewingBannerName').textContent = viewingUserName;
+  if (viewing) {
+    document.getElementById('viewingBannerName').textContent = viewingUserName;
+    document.getElementById('viewingBannerMode').textContent = adminCanEdit
+      ? ' — you can edit their profile & calorie/macro overrides'
+      : ' — read only';
+  }
+  document.getElementById('adminOverridePanel').style.display = adminCanEdit ? 'block' : 'none';
 }
 async function switchViewingUser(userId, name) {
   viewingUserId = userId;
@@ -620,6 +643,10 @@ function showEstimate(d) {
   document.getElementById('profileProtein').textContent = d.macros.proteinG + 'g';
   document.getElementById('profileFat').textContent = d.macros.fatG + 'g';
   document.getElementById('profileCarb').textContent = d.macros.carbG + 'g';
+  const pct = d.macroPercents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
+  document.getElementById('profileProteinLabel').textContent = `Protein ${pct.proteinPct}%`;
+  document.getElementById('profileFatLabel').textContent = `Fat ${pct.fatPct}%`;
+  document.getElementById('profileCarbLabel').textContent = `Carbs ${pct.carbPct}%`;
   grid.style.display = 'grid';
 }
 
@@ -691,6 +718,10 @@ async function loadProfile() {
     }
     document.getElementById('profileActivityLevel').value = p.activityLevel || 'light';
     document.getElementById('profileGoal').value = p.goal || 'reduce';
+    document.getElementById('adminOverrideCals').value = p.manualCalorieTarget || '';
+    document.getElementById('adminOverrideProteinPct').value = p.manualMacroPercents?.proteinPct ?? '';
+    document.getElementById('adminOverrideFatPct').value = p.manualMacroPercents?.fatPct ?? '';
+    document.getElementById('adminOverrideCarbPct').value = p.manualMacroPercents?.carbPct ?? '';
     if (d.weightKg) {
       document.getElementById('profileWeightLbs').value = kgToLbsVal(d.weightKg);
       document.getElementById('profileWeightKg').value = d.weightKg;
@@ -708,17 +739,34 @@ document.getElementById('profileSaveBtn').onclick = async () => {
   const btn = document.getElementById('profileSaveBtn');
   btn.disabled = true;
   try {
-    const r = await fetch('/api/body-stats/profile', {
+    const payload = {
+      weightKg: getProfileWeightKg() || null,
+      heightCm: getProfileHeightCm() || null,
+      age: document.getElementById('profileAge').value || null,
+      sex: document.getElementById('profileSex').value,
+      goalWeightKg: getProfileGoalWeightKg() || null,
+      activityLevel: document.getElementById('profileActivityLevel').value,
+      goal: document.getElementById('profileGoal').value,
+    };
+    // Only an admin's own save includes these two keys at all -- the
+    // backend only touches manualCalorieTarget/manualMacroPercents when the
+    // request explicitly names them, so a client's own profile save (which
+    // never reaches this branch) can't blow away an admin's override.
+    if (isAdminMe()) {
+      const calOverride = document.getElementById('adminOverrideCals').value;
+      payload.manualCalorieTarget = calOverride ? Number(calOverride) : null;
+      const pPct = document.getElementById('adminOverrideProteinPct').value;
+      const fPct = document.getElementById('adminOverrideFatPct').value;
+      const cPct = document.getElementById('adminOverrideCarbPct').value;
+      payload.manualMacroPercents = (pPct || fPct || cPct)
+        ? { proteinPct: Number(pPct) || 0, fatPct: Number(fPct) || 0, carbPct: Number(cPct) || 0 }
+        : null;
+    }
+    // apiFetch (not a plain fetch) so this targets whoever's being viewed --
+    // the backend only honors that for an admin (see the route's own gate).
+    const r = await apiFetch('/api/body-stats/profile', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        weightKg: getProfileWeightKg() || null,
-        heightCm: getProfileHeightCm() || null,
-        age: document.getElementById('profileAge').value || null,
-        sex: document.getElementById('profileSex').value,
-        goalWeightKg: getProfileGoalWeightKg() || null,
-        activityLevel: document.getElementById('profileActivityLevel').value,
-        goal: document.getElementById('profileGoal').value,
-      }),
+      body: JSON.stringify(payload),
     });
     const d = await r.json();
     if (!r.ok) { alert(d.error || 'Save failed'); return; }
@@ -735,6 +783,18 @@ document.getElementById('profileSaveBtn').onclick = async () => {
   } finally {
     btn.disabled = false;
   }
+};
+
+// Blanks the four override fields then reuses the normal save path -- since
+// isAdminMe() is true here and all four inputs are now empty, the payload
+// sends explicit nulls, which the backend applies (rather than preserving
+// whatever was there before, the way it would if the keys were left out).
+document.getElementById('adminOverrideClearBtn').onclick = () => {
+  document.getElementById('adminOverrideCals').value = '';
+  document.getElementById('adminOverrideProteinPct').value = '';
+  document.getElementById('adminOverrideFatPct').value = '';
+  document.getElementById('adminOverrideCarbPct').value = '';
+  document.getElementById('profileSaveBtn').click();
 };
 
 // ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
@@ -1221,6 +1281,7 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
     const r = await fetch('/api/auth/me');
     if (r.ok) me = (await r.json()).user || null;
   } catch {}
+  applyViewingMode(); // shows the admin override panel on load, not just after switching to view someone
   await loadProfile();
   renderHubTabs();
   loadState();

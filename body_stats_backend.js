@@ -5,7 +5,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, resolveTargetUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, resolveTargetUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig, isAdmin } from "./chat_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
 
@@ -58,14 +58,22 @@ export function getLastCheckinAt(userId) {
 // below and by body_analysis_backend.js's fallback when a scan doesn't
 // supply its own explicit values.
 export function estimateFromProfile(profile, weightKg) {
-  if (!profile?.heightCm || !weightKg) return { calorieTarget: null, macros: null, mealPlan: null };
-  const calorieTarget = calcCalorieTarget({
-    heightCm: profile.heightCm, weightKg, age: profile.age, sex: profile.sex,
-    activityLevel: profile.activityLevel, goal: profile.goal,
-  });
-  const macros = calcMacros(calorieTarget);
+  // An admin's manual override (see the POST route below) takes over both
+  // knobs independently -- a fixed calorie target skips the Mifflin-St Jeor
+  // math entirely, and custom macro percentages replace the 40/30/30
+  // default, regardless of whether the other knob was also overridden.
+  const macroPercents = profile?.manualMacroPercents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
+  let calorieTarget = profile?.manualCalorieTarget || null;
+  if (!calorieTarget) {
+    if (!profile?.heightCm || !weightKg) return { calorieTarget: null, macros: null, mealPlan: null, macroPercents };
+    calorieTarget = calcCalorieTarget({
+      heightCm: profile.heightCm, weightKg, age: profile.age, sex: profile.sex,
+      activityLevel: profile.activityLevel, goal: profile.goal,
+    });
+  }
+  const macros = calcMacros(calorieTarget, macroPercents);
   const mealPlan = buildMealPlan(macros, calorieTarget);
-  return { calorieTarget, macros, mealPlan };
+  return { calorieTarget, macros, mealPlan, macroPercents };
 }
 
 export async function handleBodyStatsRequest(req, res, url) {
@@ -80,10 +88,22 @@ export async function handleBodyStatsRequest(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/body-stats/profile") {
-    const user = getSessionUser(req);
-    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const requester = getSessionUser(req);
+    if (!requester) return sendJson(res, 401, { error: "Not logged in" });
+    // Editing someone else's profile is admin-only -- coaches can already
+    // VIEW any client's Physique Builder via asUserId (see viewingUserId in
+    // body-scan.html), but writing to it is a separate, more consequential
+    // capability this doesn't extend to them.
+    const asUserId = url.searchParams.get("asUserId");
+    let user = requester;
+    if (asUserId && asUserId !== requester.id) {
+      if (!isAdmin(requester)) return sendJson(res, 403, { error: "Only an admin can edit another member's profile." });
+      user = resolveTargetUser(req, url);
+      if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    }
     const body = await readJsonBody(req);
     const all = readJson(PROFILE_FILE, {});
+    const existing = all[user.id] || {};
     const profile = {
       heightCm: body.heightCm ? Number(body.heightCm) : null,
       age: body.age ? Number(body.age) : null,
@@ -91,6 +111,20 @@ export async function handleBodyStatsRequest(req, res, url) {
       goalWeightKg: body.goalWeightKg ? Number(body.goalWeightKg) : null,
       activityLevel: body.activityLevel || null,
       goal: body.goal || null,
+      // Admin-only manual override (see estimateFromProfile) -- only
+      // touched when the request explicitly names the field, so a regular
+      // client re-saving their own basic profile fields (which never sends
+      // these two keys) can't silently wipe out an admin's override.
+      manualCalorieTarget: "manualCalorieTarget" in body
+        ? (body.manualCalorieTarget ? Number(body.manualCalorieTarget) : null)
+        : (existing.manualCalorieTarget ?? null),
+      manualMacroPercents: "manualMacroPercents" in body
+        ? (body.manualMacroPercents ? {
+            proteinPct: Number(body.manualMacroPercents.proteinPct) || 0,
+            fatPct: Number(body.manualMacroPercents.fatPct) || 0,
+            carbPct: Number(body.manualMacroPercents.carbPct) || 0,
+          } : null)
+        : (existing.manualMacroPercents ?? null),
       updatedAt: new Date().toISOString(),
     };
     all[user.id] = profile;

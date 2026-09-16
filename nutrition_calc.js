@@ -39,9 +39,12 @@ export function calcCalorieTarget({ heightCm, weightKg, age, sex, activityLevel,
   return Math.round(calories);
 }
 
-export function calcMacros(calories) {
-  // 40% protein / 30% fat / 30% carb, per the requested split.
-  const proteinCal = calories * 0.40, fatCal = calories * 0.30, carbCal = calories * 0.30;
+export function calcMacros(calories, percents) {
+  // 40% protein / 30% fat / 30% carb by default -- overridable per-member
+  // (see body_stats_backend.js's manualMacroPercents) for an admin's manual
+  // adjustment.
+  const p = percents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
+  const proteinCal = calories * (p.proteinPct / 100), fatCal = calories * (p.fatPct / 100), carbCal = calories * (p.carbPct / 100);
   return {
     proteinG: Math.round(proteinCal / 4),
     fatG: Math.round(fatCal / 9),
