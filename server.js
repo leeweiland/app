@@ -12,6 +12,7 @@ import { handleMovesDictionaryRequest } from "./moves_dictionary_backend.js";
 import { handleSocialVideoRequest } from "./social_video_backend.js";
 import { handlePacificRimVideoRequest } from "./pacific_rim_video_backend.js";
 import { handleFavoritesMontageRequest } from "./favorites_montage_backend.js";
+import { handleActivityLogRequest } from "./activity_log_backend.js";
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ createServer(async (req, res) => {
   if (await handleSocialVideoRequest(req, res, url)) return;
   if (await handlePacificRimVideoRequest(req, res, url)) return;
   if (await handleFavoritesMontageRequest(req, res, url)) return;
+  if (await handleActivityLogRequest(req, res, url)) return;
 
   // Serve static files — strip /chat-app/ prefix if present
   let pathname = url.pathname.replace(/^\/chat-app\//, "/");

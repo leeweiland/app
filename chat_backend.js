@@ -23,6 +23,7 @@ import { JSDOM } from "jsdom";
 import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { publishPacificRimClip } from "./pacific_rim_video_backend.js";
+import { logActivity } from "./activity_log_backend.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3343,6 +3344,7 @@ export async function handleChatRequest(req, res, url) {
       publishPacificRimClip({ driveFileId: uploaded.driveFileId, label, thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec, captions: reviewedCaptions })
         .then(r => { if (!r.published) console.error("[gym-capture] Pacific Rim Athletics publish failed:", r.error); })
         .catch(e => console.error("[gym-capture] Pacific Rim Athletics publish threw:", e.message));
+      logActivity(user.id, "video_favorited", `Sent a gym capture video: ${label}`, { conversationId: convo.id });
       return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });
     }
 
@@ -4519,6 +4521,7 @@ export async function handleChatRequest(req, res, url) {
             : first.type === "gif" ? "sent a GIF"
             : created.length > 1 ? `sent ${created.length} ${first.type}s` : `sent a ${first.type}`;
           notifyParticipants(convoId, user.id, { title: senderName, body: preview, conversationId: convoId }).catch(() => {});
+          logActivity(user.id, "message_sent", first.forwarded ? "Forwarded a message" : `Sent a message: ${preview}`, { conversationId: convoId });
         }
         return sendJson(res, 200, { messages: created });
       }
@@ -4841,9 +4844,11 @@ export async function handleChatRequest(req, res, url) {
         if (!msg) return sendJson(res, 404, { error: "Message not found" });
         msg.reactions = msg.reactions || [];
         const idx = msg.reactions.findIndex(r => r.userId === user.id && r.emoji === emoji);
-        if (idx >= 0) msg.reactions.splice(idx, 1);
+        const removing = idx >= 0;
+        if (removing) msg.reactions.splice(idx, 1);
         else msg.reactions.push({ userId: user.id, emoji });
         writeJson(MESSAGES_FILE, messages);
+        if (!removing) logActivity(user.id, "reaction_added", `Reacted ${emoji} to a message`, { conversationId: convoId, messageId });
         return sendJson(res, 200, { reactions: msg.reactions });
       }
 

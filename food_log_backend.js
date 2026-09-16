@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, resolveTargetUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI, analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
+import { logActivity } from "./activity_log_backend.js";
 
 const LOG_FILE = "chat_food_log.json";
 
@@ -141,6 +142,7 @@ export async function handleFoodLogRequest(req, res, url) {
     if (!all[user.id][key]) all[user.id][key] = [];
     all[user.id][key].push(entry);
     writeJson(LOG_FILE, all);
+    logActivity(user.id, "nutrition_logged", `Logged a meal: ${entry.description} (${Math.round(entry.calories)} cal)`, { entryId: entry.id });
 
     return sendJson(res, 200, { entry });
   }

@@ -14,6 +14,7 @@ import {
   DATA_DIR, readJson, writeJson, getSessionUser, isStaff,
   readJsonBody, sendJson, getDriveAccessToken,
 } from "./chat_backend.js";
+import { logActivity } from "./activity_log_backend.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SETTINGS_FILE = "social_video_settings.json"; // DATA_DIR — admin-editable brand voice + own-words ratio
@@ -712,6 +713,12 @@ export async function handleSocialVideoRequest(req, res, url) {
       }
     }
 
+    const actor = getSessionUser(req);
+    if (actor) {
+      logActivity(actor.id, "video_favorited", publish.published
+        ? `Favorited and published a video: ${label.trim()}`
+        : `Favorited a video (saved to Drive only): ${label.trim()}`, { driveFileId: savedFileId });
+    }
     sendJson(res, 200, { savedFileId, ...publish });
     return true;
   }

@@ -12,6 +12,7 @@ import { analyzeImageWithOpenAI } from "./openai_vision_backend.js";
 import { recordWeightEntry, getLatestWeightKg } from "./body_stats_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
+import { logActivity } from "./activity_log_backend.js";
 
 const SCANS_FILE = "chat_body_scans.json";
 const PROFILE_FILE = "chat_body_profile.json";
@@ -164,6 +165,7 @@ export async function handleBodyAnalysisRequest(req, res, url) {
           driveFileId,
         });
         writeJson(SCANS_FILE, all);
+        logActivity(user.id, "scan_analyzed", "Ran a physique scan", { scanId });
 
         // Every scan with a usable weight (fresh or carried over from the
         // profile/latest weigh-in) adds a stats entry -- a fresh bodyFatPct

@@ -8,6 +8,7 @@ import { randomUUID } from "crypto";
 import { readJson, writeJson, getSessionUser, resolveTargetUser, readJsonBody, sendJson, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, getConfig, isAdmin } from "./chat_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { calcCalorieTarget, calcMacros, buildMealPlan } from "./nutrition_calc.js";
+import { logActivity } from "./activity_log_backend.js";
 
 const STATS_FILE = "chat_body_stats.json";
 const PHOTOS_FILE = "chat_progress_photos.json";
@@ -31,6 +32,8 @@ export function recordWeightEntry(userId, { weightKg, heightCm = null, bodyFatPc
   };
   all[userId].push(entry);
   writeJson(STATS_FILE, all);
+  const lbs = Math.round(entry.weightKg / 0.453592 * 10) / 10;
+  logActivity(userId, "weigh_in", `Logged a weigh-in: ${lbs} lbs${source === "scan" ? " (from a scan)" : ""}`, { source, scanId });
   return entry;
 }
 
@@ -137,6 +140,16 @@ export async function handleBodyStatsRequest(req, res, url) {
     // Entering "current weight" alongside the profile is a weigh-in, same
     // as the Stats-tab entry it replaced.
     if (body.weightKg) recordWeightEntry(user.id, { weightKg: body.weightKg, heightCm: profile.heightCm, source: "manual" });
+
+    // Logged against the ACTOR (requester), not the target -- this is the
+    // requester's own action (an admin editing a client's plan shows up in
+    // the admin's timeline, not silently attributed to the client).
+    const isOverrideOnly = (has("manualCalorieTarget") || has("manualMacroPercents"))
+      && !has("heightCm") && !has("age") && !has("sex") && !has("goalWeightKg") && !has("activityLevel") && !has("goal");
+    const targetLabel = user.id === requester.id ? "their own profile" : `${user.first} ${user.last}'s profile`;
+    logActivity(requester.id, "profile_saved", isOverrideOnly
+      ? `Set a manual calorie/macro override on ${targetLabel}`
+      : `Updated ${targetLabel}`, { targetUserId: user.id });
 
     const weightKg = getLatestWeightKg(user.id);
     const estimate = estimateFromProfile(profile, weightKg);
