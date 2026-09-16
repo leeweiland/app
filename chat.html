@@ -277,6 +277,15 @@
   .optimistic-overlay { position: absolute; inset: 5px; border-radius: 10px; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; }
   .optimistic-pct { color: #fff; font-size: .8rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.6); padding: 0 12px; text-align: center; }
   .optimistic-overlay-error { background: rgba(120,0,0,0.55); }
+  /* WhatsApp-style grid for a multi-file send (see sendFilesImmediately /
+     renderGridBubble) — one bubble holding up to 4 visible tiles, the last
+     one dimmed with a "+N" count when the batch has more than that. */
+  .msg-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; width: 259px; border-radius: 10px; overflow: hidden; }
+  .msg-grid-item { position: relative; cursor: pointer; }
+  .msg-grid-item img, .msg-grid-item video { width: 100%; height: 128px; object-fit: cover; display: block; background: rgba(255,255,255,0.04); }
+  .msg-grid-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.15); }
+  .msg-grid-play svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
+  .msg-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; }
   /* Inline-block (not inline) so vertical-align actually applies — a plain
@@ -1075,7 +1084,7 @@
   <!-- Media gallery modal -->
   <div class="modal-backdrop" id="mediaModal">
     <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:14px">Shared Media</div>
+      <div class="pra-h2" style="margin-bottom:14px" id="mediaModalTitle">Shared Media</div>
       <div class="media-grid" id="mediaGrid"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('mediaModal')">Close</button>
     </div>
@@ -3296,6 +3305,28 @@ function patchVolatileBubbleParts(row, m) {
 // position, all just survive untouched. replaceChildren with the same
 // node references present just reorders them in place; a real browser
 // does not restart a <video>'s load for that.
+// A multi-file send (see sendFilesImmediately) stamps every message it
+// creates with the same feedGroupId server-side — this collapses consecutive
+// runs of them back into one array each, so renderMessages can render one
+// WhatsApp-style grid bubble per batch instead of N separate bubbles.
+function groupMessagesForRender(messages) {
+  const groups = [];
+  let i = 0;
+  while (i < messages.length) {
+    const m = messages[i];
+    if (m.feedGroupId) {
+      let j = i + 1;
+      while (j < messages.length && messages[j].feedGroupId === m.feedGroupId) j++;
+      groups.push(messages.slice(i, j));
+      i = j;
+    } else {
+      groups.push([m]);
+      i++;
+    }
+  }
+  return groups;
+}
+
 function renderMessages(messages, forceScrollDown) {
   const body = document.getElementById('threadBody');
   const wasAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
@@ -3306,7 +3337,7 @@ function renderMessages(messages, forceScrollDown) {
   const existingByMid = new Map();
   body.querySelectorAll(':scope > .bubble-row[data-mid]').forEach(row => existingByMid.set(row.dataset.mid, row));
 
-  const finalRows = messages.map(m => {
+  const finalRows = groupMessagesForRender(messages).map(group => {
     // reactions/status are excluded from the rebuild-decision snapshot —
     // both update passively (someone reacts, or a read receipt flips) with
     // no change to the message's actual content, but including them here
@@ -3317,6 +3348,18 @@ function renderMessages(messages, forceScrollDown) {
     // instead (patchVolatileBubbleParts), same "don't touch the DOM node
     // if nothing that actually renders differently changed" idea as the
     // rebuild-skip itself.
+    if (group.length > 1) {
+      const key = group[0].feedGroupId;
+      const json = JSON.stringify(group.map(({ reactions, status, ...s }) => s));
+      const existing = existingByMid.get(key);
+      if (existing && existing.dataset.json === json) return existing;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = renderGridBubble(group, convo);
+      const row = wrap.firstElementChild;
+      row.dataset.json = json;
+      return row;
+    }
+    const m = group[0];
     const { reactions, status, ...structural } = m;
     const json = JSON.stringify(structural);
     const existing = existingByMid.get(m.id);
@@ -3653,6 +3696,37 @@ function renderBubble(m, convo) {
   </div>`;
 }
 
+function msgGridCellHtml(m, moreCount) {
+  const src = `/api/chat/media/${m.driveFileId}`;
+  const overlay = moreCount ? `<div class="msg-grid-more">+${moreCount}</div>` : '';
+  return m.type === 'video'
+    ? `<div class="msg-grid-item" data-type="video" data-src="${src}"><video src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
+    : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img src="${src}"/>${overlay}</div>`;
+}
+
+// One bubble for a whole multi-file send (see sendFilesImmediately /
+// groupMessagesForRender) — up to 4 visible thumbnails, WhatsApp-style,
+// with the last one dimmed and stamped "+N" when the batch is bigger than
+// that. Tapping a plain tile opens the normal lightbox (see setupLightbox's
+// .msg-grid-item delegation); tapping the "+N" tile opens the full batch in
+// the existing Shared Media modal instead of hiding the rest of the send.
+function renderGridBubble(group, convo) {
+  const first = group[0], last = group[group.length - 1];
+  const mine = first.senderId === me.id;
+  const sender = convo?.participants.find(p => p.id === first.senderId);
+  const senderLabel = (!mine && convo?.type === 'group' && sender) ? `<div class="bubble-sender">${sender.first}</div>` : '';
+  const visible = group.slice(0, 4);
+  const extra = group.length - visible.length;
+  const cellsHtml = visible.map((m, i) => msgGridCellHtml(m, (i === visible.length - 1 && extra > 0) ? extra : 0)).join('');
+  const time = new Date(last.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${first.feedGroupId}">
+    <div>
+      <div class="bubble-wrap"><div class="bubble media">${senderLabel}<div class="msg-grid" data-group-ids="${group.map(m => m.id).join(',')}">${cellsHtml}</div></div></div>
+      <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}${readReceiptTicksHtml(last, mine)}</div>
+    </div>
+  </div>`;
+}
+
 // Shared icon set for the scheduling feature — same two-tone (white shape,
 // blue accent) line-icon language as the other header buttons (see
 // mediaGalleryBtn/newGroupBtn), so this doesn't read as a different UI system.
@@ -3852,6 +3926,25 @@ function linkifyUrls(escapedText) {
       const vid = e.target.previousElementSibling;
       openVideo(vid.src || vid.dataset.src);
     }
+  });
+  // A multi-file send's grid bubble (see renderGridBubble) — a plain tile
+  // opens straight into the lightbox same as any other media bubble; the
+  // "+N" overflow tile instead opens the whole batch in the Shared Media
+  // modal (repurposed with a batch-specific title) so the rest of the send
+  // is still reachable instead of being permanently hidden behind the count.
+  document.getElementById('threadBody').addEventListener('click', (e) => {
+    const cell = e.target.closest('.msg-grid-item');
+    if (!cell) return;
+    if (cell.querySelector('.msg-grid-more')) {
+      const groupIds = cell.closest('.msg-grid').dataset.groupIds.split(',');
+      const items = currentThreadMessages.filter(m => groupIds.includes(m.id));
+      document.getElementById('mediaModalTitle').textContent = `${items.length} items`;
+      document.getElementById('mediaGrid').innerHTML = items.map(m => mediaGridCellHtml(m.type, `/api/chat/media/${m.driveFileId}`)).join('');
+      openModal('mediaModal');
+      return;
+    }
+    if (cell.dataset.type === 'video') openVideo(cell.dataset.src);
+    else openImage(cell.dataset.src);
   });
   // Tapping the read-receipt ticks shows who's actually read/delivered a
   // message — hover already does this on desktop (each tick's title), this
@@ -4151,6 +4244,13 @@ function setupComposer() {
     const files = Array.from(fileInput.files || []);
     fileInput.value = '';
     if (!files.length) return;
+    // Multiple files at once skip trimming/staging entirely and upload
+    // right away as one WhatsApp-style grid message (see
+    // sendFilesImmediately) — the trim panel and the staged-preview strip
+    // both only ever handled a single item at a time, and stopping to
+    // review/trim each of several files one-by-one is exactly the friction
+    // this was asked to remove.
+    if (files.length > 1) { sendFilesImmediately(files); return; }
     // Anyone picking a video gets a trim step before it sends — staff
     // included (this isn't student-only; that scoping was leftover from
     // the earlier camera-icon logic and was hiding the trim panel for
@@ -4192,6 +4292,7 @@ function setupComposer() {
     const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
     if (!files.length) return;
     e.preventDefault();
+    if (files.length > 1) { sendFilesImmediately(files); return; }
     pendingPasteFiles.push(...files);
     renderPastePreview();
   });
@@ -4213,6 +4314,7 @@ function setupComposer() {
     }
     if (!files.length) return;
     e.preventDefault();
+    if (files.length > 1) { sendFilesImmediately(files); return; }
     pendingPasteFiles.push(...files);
     renderPastePreview();
   });
@@ -4903,6 +5005,70 @@ function addOptimisticMediaBubble(blob, isVideo) {
     },
     remove() { row.remove(); URL.revokeObjectURL(url); },
   };
+}
+
+// Multi-file version of addOptimisticMediaBubble above — one WhatsApp-style
+// grid tile (see .msg-grid CSS / renderGridBubble) instead of N separate
+// bubbles, with the same single "Sending… NN%" overlay covering the whole
+// grid rather than one per file.
+function addOptimisticMediaGridBubble(files) {
+  const threadBody = document.getElementById('threadBody');
+  const items = files.map(f => ({ url: URL.createObjectURL(f), isVideo: f.type.startsWith('video/') }));
+  const visible = items.slice(0, 4);
+  const extra = items.length - visible.length;
+  const cellsHtml = visible.map((it, i) => {
+    const moreCount = (i === visible.length - 1 && extra > 0) ? extra : 0;
+    const media = it.isVideo ? `<video src="${it.url}" muted playsinline></video>` : `<img src="${it.url}"/>`;
+    return `<div class="msg-grid-item">${media}${moreCount ? `<div class="msg-grid-more">+${moreCount}</div>` : ''}</div>`;
+  }).join('');
+  const row = document.createElement('div');
+  row.className = 'bubble-row mine';
+  row.innerHTML = `
+    <div>
+      <div class="bubble-wrap">
+        <div class="bubble media optimistic-bubble">
+          <div class="msg-grid">${cellsHtml}</div>
+          <div class="optimistic-overlay"><div class="optimistic-pct">Sending…</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+  threadBody.appendChild(row);
+  threadBody.scrollTop = threadBody.scrollHeight;
+  const pctEl = row.querySelector('.optimistic-pct');
+  return {
+    setProgress(pct) { pctEl.textContent = `Sending… ${pct}%`; },
+    setError(msg) {
+      row.querySelector('.optimistic-overlay').classList.add('optimistic-overlay-error');
+      pctEl.textContent = msg;
+    },
+    remove() { row.remove(); items.forEach(it => URL.revokeObjectURL(it.url)); },
+  };
+}
+
+// Entry point for picking/dropping/pasting MORE THAN ONE file at once —
+// skips the staged-preview strip and (for video) the trim panel entirely,
+// since neither makes sense once several files are involved at once, and
+// uploads straight away with the grid bubble above standing in for it
+// immediately. The convoId is pinned up front so a mid-upload conversation
+// switch still lands the finished send in the right thread instead of
+// wherever the coach happened to navigate to next.
+async function sendFilesImmediately(files) {
+  if (!activeConvoId) return;
+  const convoId = activeConvoId;
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+  const optimistic = addOptimisticMediaGridBubble(files);
+  try {
+    await uploadFormDataWithProgress('/api/chat/conversations/' + convoId + '/messages', fd, (pct) => {
+      optimistic.setProgress(pct);
+    });
+    optimistic.remove();
+    if (convoId === activeConvoId) refreshThread(true);
+  } catch (e) {
+    console.error('[sendFilesImmediately]', e);
+    optimistic.setError('Could not send — try again from the attach icon.');
+  }
 }
 
 // XHR instead of fetch specifically for this upload — WKWebView (iOS)
@@ -6081,6 +6247,7 @@ function mediaGridCellHtml(type, src) {
 async function openMediaGallery() {
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/media');
   const d = await r.json();
+  document.getElementById('mediaModalTitle').textContent = 'Shared Media';
   const grid = document.getElementById('mediaGrid');
   grid.innerHTML = d.media.map(m => mediaGridCellHtml(m.type, `/api/chat/media/${m.driveFileId}`)).join('')
     || '<div class="empty-hint">No media shared yet.</div>';
