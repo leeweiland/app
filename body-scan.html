@@ -57,6 +57,9 @@
   .pct-input { width: 30px; }
   .tile-val-input:not([readonly]), .pct-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   .tile-val-input[readonly], .pct-input[readonly] { cursor: default; }
+  /* Brief flash when an admin's typed override value fails validation
+     (out of range, not a number) and gets reverted -- see flashInvalid. */
+  .tile-input-invalid, .pct-input.tile-input-invalid { color: #ff5c5c !important; }
   .meal-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--pra-border); font-size: .84rem; }
   .disclaimer { font-family: var(--font-secondary); font-size: .7rem; color: var(--pra-dim); margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--pra-border); line-height: 1.5; }
   .spinner { display: none; text-align: center; padding: 20px; color: var(--pra-blue); }
@@ -234,13 +237,13 @@
 
       <div class="pra-panel" style="margin:0 0 20px;padding:16px">
         <div class="totals-cal-row">
-          <span class="val" id="foodTotalCals">0</span><span class="sep"> / </span><span class="goal" id="foodGoalCals">—</span>
+          <span class="val" id="foodTotalCals">0</span><span class="sep"> / </span><input class="goal tile-val-input" id="foodGoalCals" type="number" readonly inputmode="numeric" placeholder="—" style="width:70px;font-size:1.7rem"/>
           <span class="lab">Calories</span>
         </div>
         <div class="totals-macro-row">
-          <div class="macro-cell"><span class="val" id="foodTotalProtein">0</span><span class="sep">/</span><span class="goal" id="foodGoalProtein">—</span><span class="unit">g</span><span class="lab">Protein</span></div>
-          <div class="macro-cell"><span class="val" id="foodTotalFat">0</span><span class="sep">/</span><span class="goal" id="foodGoalFat">—</span><span class="unit">g</span><span class="lab">Fat</span></div>
-          <div class="macro-cell"><span class="val" id="foodTotalCarb">0</span><span class="sep">/</span><span class="goal" id="foodGoalCarb">—</span><span class="unit">g</span><span class="lab">Carbs</span></div>
+          <div class="macro-cell"><span class="val" id="foodTotalProtein">0</span><span class="sep">/</span><input class="goal tile-val-input" id="foodGoalProtein" type="number" readonly inputmode="numeric" placeholder="—" style="width:45px;font-size:1rem"/><span class="unit">g</span><span class="lab">Protein</span></div>
+          <div class="macro-cell"><span class="val" id="foodTotalFat">0</span><span class="sep">/</span><input class="goal tile-val-input" id="foodGoalFat" type="number" readonly inputmode="numeric" placeholder="—" style="width:45px;font-size:1rem"/><span class="unit">g</span><span class="lab">Fat</span></div>
+          <div class="macro-cell"><span class="val" id="foodTotalCarb">0</span><span class="sep">/</span><input class="goal tile-val-input" id="foodGoalCarb" type="number" readonly inputmode="numeric" placeholder="—" style="width:45px;font-size:1rem"/><span class="unit">g</span><span class="lab">Carbs</span></div>
         </div>
       </div>
 
@@ -448,7 +451,8 @@ function applyViewingMode() {
       ? ' — you can edit their profile & calorie/macro overrides'
       : ' — read only';
   }
-  ['profileCals', 'profileProteinPct', 'profileFatPct', 'profileCarbPct'].forEach(id => {
+  ['profileCals', 'profileProteinPct', 'profileFatPct', 'profileCarbPct',
+   'foodGoalCals', 'foodGoalProtein', 'foodGoalFat', 'foodGoalCarb'].forEach(id => {
     document.getElementById(id).readOnly = !adminCanEdit;
   });
   document.getElementById('adminEditHint').style.display = adminCanEdit ? 'block' : 'none';
@@ -649,10 +653,10 @@ function kgToDisplay(kg) {
   return weightDisplayUnit() === 'kg' ? kg : kgToLbsVal(kg);
 }
 
-let currentEstimate = { calorieTarget: null, macros: null };
+let currentEstimate = { calorieTarget: null, macros: null, macroPercents: null };
 
 function showEstimate(d) {
-  currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros };
+  currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros, macroPercents: d.macroPercents };
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
   document.getElementById('profileCals').value = d.calorieTarget;
@@ -663,11 +667,6 @@ function showEstimate(d) {
   document.getElementById('profileProteinPct').value = pct.proteinPct;
   document.getElementById('profileFatPct').value = pct.fatPct;
   document.getElementById('profileCarbPct').value = pct.carbPct;
-  // Freshly (re)populated from the server -- these values are the new clean
-  // baseline, not an unsaved admin edit, so a stray blur right after a load
-  // doesn't re-save the very number that was just loaded as if it were a
-  // new override (see the dirty-tracking near saveProfile).
-  calsDirty = proteinPctDirty = fatPctDirty = carbPctDirty = false;
   grid.style.display = 'grid';
 }
 
@@ -752,30 +751,6 @@ async function loadProfile() {
   } catch {}
 }
 
-// Tracks whether the admin has actually typed into one of the editable
-// calorie/% tiles since the last load/save -- these fields always show
-// SOME number (either a stored override or the live auto-calculated one),
-// so without this, saving an unrelated field (say, activity level) would
-// re-send whatever number happened to be displayed and silently freeze it
-// in as a manual override. Only a genuinely dirty field gets included in
-// the next save's manualCalorieTarget/manualMacroPercents.
-let calsDirty = false, proteinPctDirty = false, fatPctDirty = false, carbPctDirty = false;
-// Debounced save on every keystroke (not just on blur) -- some mobile
-// webviews are inconsistent about firing a real blur when a text field
-// loses focus via tapping a nav tab rather than another input, so typing
-// pausing for a beat is the primary trigger; blur (below) is a belt-and-
-// suspenders immediate flush for the common desktop case.
-let overrideSaveTimer = null;
-function scheduleOverrideSave() {
-  if (!isAdminMe()) return;
-  clearTimeout(overrideSaveTimer);
-  overrideSaveTimer = setTimeout(() => { saveProfile(); }, 700);
-}
-document.getElementById('profileCals').addEventListener('input', () => { calsDirty = true; scheduleOverrideSave(); });
-document.getElementById('profileProteinPct').addEventListener('input', () => { proteinPctDirty = true; scheduleOverrideSave(); });
-document.getElementById('profileFatPct').addEventListener('input', () => { fatPctDirty = true; scheduleOverrideSave(); });
-document.getElementById('profileCarbPct').addEventListener('input', () => { carbPctDirty = true; scheduleOverrideSave(); });
-
 async function saveProfile() {
   const payload = {
     weightKg: getProfileWeightKg() || null,
@@ -786,25 +761,10 @@ async function saveProfile() {
     activityLevel: document.getElementById('profileActivityLevel').value,
     goal: document.getElementById('profileGoal').value,
   };
-  // Only sent at all when the admin actually edited that specific field
-  // (see the dirty flags above) -- the backend only touches
-  // manualCalorieTarget/manualMacroPercents when the request explicitly
-  // names them, so every other save (a client's own, or an admin tweaking
-  // an unrelated field) leaves whatever override already existed untouched.
-  if (isAdminMe() && calsDirty) {
-    const calVal = document.getElementById('profileCals').value;
-    payload.manualCalorieTarget = calVal ? Number(calVal) : null;
-  }
-  if (isAdminMe() && (proteinPctDirty || fatPctDirty || carbPctDirty)) {
-    const pPct = document.getElementById('profileProteinPct').value;
-    const fPct = document.getElementById('profileFatPct').value;
-    const cPct = document.getElementById('profileCarbPct').value;
-    payload.manualMacroPercents = (pPct || fPct || cPct)
-      ? { proteinPct: Number(pPct) || 0, fatPct: Number(fPct) || 0, carbPct: Number(cPct) || 0 }
-      : null;
-  }
-  // apiFetch (not a plain fetch) so this targets whoever's being viewed --
-  // the backend only honors that for an admin (see the route's own gate).
+  // Never touches manualCalorieTarget/manualMacroPercents -- those save
+  // themselves independently (see commitCalorieEdit/commitMacroEdit below),
+  // and the backend's merge-per-field semantics mean omitting them here
+  // just leaves whatever override was last saved untouched.
   const r = await apiFetch('/api/body-stats/profile', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -835,19 +795,100 @@ document.getElementById('profileSaveBtn').onclick = async () => {
   }
 };
 
-// Admin-only: editing the calorie tile or a % field saves the instant focus
-// leaves it (tab, click away, or navigate to another hub tab) -- no separate
-// Save button for these, per how the rest of the tile already looks/behaves
-// like a plain readout. Ignored unless that specific field was actually
-// touched (dirty), so tabbing through without typing anything is a no-op.
-['profileCals', 'profileProteinPct', 'profileFatPct', 'profileCarbPct'].forEach(id => {
-  document.getElementById(id).addEventListener('blur', () => {
-    if (!isAdminMe()) return;
-    if (!calsDirty && !proteinPctDirty && !fatPctDirty && !carbPctDirty) return;
-    clearTimeout(overrideSaveTimer);
-    saveProfile();
+// ── Admin inline calorie/macro override editing -- the Profile tab's
+// calorie tile + protein/fat/carb % fields, and the Fuel tab's calorie
+// goal + protein/fat/carb GRAM goals (see wireOverrideInput below for how
+// grams get converted). Committed only on blur/Enter, and only when the
+// value actually changed since the field was focused -- an earlier version
+// auto-saved on a timer after every keystroke, which meant clearing a
+// field partway through retyping it (or a stray keypress the number input
+// otherwise ignores) could get saved mid-edit as a real override. This
+// also sends ONLY the one override key that changed (via saveOverrideOnly),
+// never the base profile fields, so it can't affect anything else.
+const CAL_MIN = 500, CAL_MAX = 10000;
+
+function flashInvalid(el) {
+  el.classList.add('tile-input-invalid');
+  setTimeout(() => el.classList.remove('tile-input-invalid'), 900);
+}
+
+function currentMacroPercents() {
+  return currentEstimate.macroPercents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
+}
+
+async function saveOverrideOnly(partial) {
+  const r = await apiFetch('/api/body-stats/profile', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(partial),
   });
-});
+  const d = await r.json();
+  if (!r.ok) { alert(d.error || 'Save failed'); return; }
+  showEstimate(d);
+  updateProfileSummaries(d);
+  if (activeHub === 'nutrition') loadFoodEntries();
+}
+
+function commitCalorieEdit(el) {
+  const raw = el.value.trim();
+  if (raw === '') { saveOverrideOnly({ manualCalorieTarget: null }); return; }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < CAL_MIN || n > CAL_MAX) {
+    el.value = currentEstimate.calorieTarget ?? '';
+    flashInvalid(el);
+    return;
+  }
+  saveOverrideOnly({ manualCalorieTarget: Math.round(n) });
+}
+
+// pctKey is 'proteinPct' | 'fatPct' | 'carbPct'. calPerGram is only passed
+// for the Fuel tab's gram fields (4 for protein/carb, 9 for fat) -- when
+// present, el.value is grams and gets converted against the live calorie
+// target; the Profile tab's own % fields pass nothing and are used as-is.
+// Either way this only ever touches its OWN macro's percentage -- the
+// other two keep whatever was last saved, read fresh off currentEstimate
+// rather than re-derived from their own (already-rounded) display value.
+function commitMacroEdit(el, pctKey, calPerGram) {
+  const current = currentMacroPercents();
+  const raw = el.value.trim();
+  if (raw === '') { saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: 0 } }); return; }
+  const n = Number(raw);
+  if (calPerGram) {
+    if (!currentEstimate.calorieTarget || !Number.isFinite(n) || n < 0 || n > 1000) {
+      flashInvalid(el);
+      loadFoodEntries(); // restores the last-good displayed value
+      return;
+    }
+    const pct = Math.round((n * calPerGram / currentEstimate.calorieTarget) * 1000) / 10;
+    saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: pct } });
+  } else {
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      el.value = current[pctKey];
+      flashInvalid(el);
+      return;
+    }
+    saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: n } });
+  }
+}
+
+function wireOverrideInput(el, commitFn) {
+  if (!el) return;
+  let valueOnFocus = null;
+  el.addEventListener('focus', () => { valueOnFocus = el.value; });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
+  el.addEventListener('blur', () => {
+    if (!isAdminMe()) return;
+    if (el.value === valueOnFocus) return; // untouched -- nothing to save
+    commitFn(el);
+  });
+}
+wireOverrideInput(document.getElementById('profileCals'), commitCalorieEdit);
+wireOverrideInput(document.getElementById('profileProteinPct'), (el) => commitMacroEdit(el, 'proteinPct'));
+wireOverrideInput(document.getElementById('profileFatPct'), (el) => commitMacroEdit(el, 'fatPct'));
+wireOverrideInput(document.getElementById('profileCarbPct'), (el) => commitMacroEdit(el, 'carbPct'));
+wireOverrideInput(document.getElementById('foodGoalCals'), commitCalorieEdit);
+wireOverrideInput(document.getElementById('foodGoalProtein'), (el) => commitMacroEdit(el, 'proteinPct', 4));
+wireOverrideInput(document.getElementById('foodGoalFat'), (el) => commitMacroEdit(el, 'fatPct', 9));
+wireOverrideInput(document.getElementById('foodGoalCarb'), (el) => commitMacroEdit(el, 'carbPct', 4));
 
 // ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
 let foodMode = 'photo';
@@ -915,13 +956,13 @@ async function loadFoodEntries() {
     if (!r.ok) return;
     const { entries, totals } = await r.json();
     document.getElementById('foodTotalCals').textContent = Math.round(totals.calories);
-    document.getElementById('foodGoalCals').textContent = currentEstimate.calorieTarget ?? '—';
+    document.getElementById('foodGoalCals').value = currentEstimate.calorieTarget ?? '';
     document.getElementById('foodTotalProtein').textContent = Math.round(totals.proteinG);
-    document.getElementById('foodGoalProtein').textContent = currentEstimate.macros?.proteinG ?? '—';
+    document.getElementById('foodGoalProtein').value = currentEstimate.macros?.proteinG ?? '';
     document.getElementById('foodTotalFat').textContent = Math.round(totals.fatG);
-    document.getElementById('foodGoalFat').textContent = currentEstimate.macros?.fatG ?? '—';
+    document.getElementById('foodGoalFat').value = currentEstimate.macros?.fatG ?? '';
     document.getElementById('foodTotalCarb').textContent = Math.round(totals.carbG);
-    document.getElementById('foodGoalCarb').textContent = currentEstimate.macros?.carbG ?? '—';
+    document.getElementById('foodGoalCarb').value = currentEstimate.macros?.carbG ?? '';
 
     const list = document.getElementById('foodEntriesList');
     document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';

@@ -104,21 +104,25 @@ export async function handleBodyStatsRequest(req, res, url) {
     const body = await readJsonBody(req);
     const all = readJson(PROFILE_FILE, {});
     const existing = all[user.id] || {};
+    // Every field is a merge -- only touched when the request explicitly
+    // names it, everything else keeps whatever was already stored. This is
+    // what lets a lean override-only save (from the inline calorie/% tiles,
+    // which send just those two keys) coexist safely with the full profile
+    // form's save (which always sends every key) without either one able to
+    // blow away fields the other doesn't know about.
+    const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
     const profile = {
-      heightCm: body.heightCm ? Number(body.heightCm) : null,
-      age: body.age ? Number(body.age) : null,
-      sex: body.sex || null,
-      goalWeightKg: body.goalWeightKg ? Number(body.goalWeightKg) : null,
-      activityLevel: body.activityLevel || null,
-      goal: body.goal || null,
-      // Admin-only manual override (see estimateFromProfile) -- only
-      // touched when the request explicitly names the field, so a regular
-      // client re-saving their own basic profile fields (which never sends
-      // these two keys) can't silently wipe out an admin's override.
-      manualCalorieTarget: "manualCalorieTarget" in body
+      heightCm: has("heightCm") ? (body.heightCm ? Number(body.heightCm) : null) : (existing.heightCm ?? null),
+      age: has("age") ? (body.age ? Number(body.age) : null) : (existing.age ?? null),
+      sex: has("sex") ? (body.sex || null) : (existing.sex ?? null),
+      goalWeightKg: has("goalWeightKg") ? (body.goalWeightKg ? Number(body.goalWeightKg) : null) : (existing.goalWeightKg ?? null),
+      activityLevel: has("activityLevel") ? (body.activityLevel || null) : (existing.activityLevel ?? null),
+      goal: has("goal") ? (body.goal || null) : (existing.goal ?? null),
+      // Admin-only manual override (see estimateFromProfile).
+      manualCalorieTarget: has("manualCalorieTarget")
         ? (body.manualCalorieTarget ? Number(body.manualCalorieTarget) : null)
         : (existing.manualCalorieTarget ?? null),
-      manualMacroPercents: "manualMacroPercents" in body
+      manualMacroPercents: has("manualMacroPercents")
         ? (body.manualMacroPercents ? {
             proteinPct: Number(body.manualMacroPercents.proteinPct) || 0,
             fatPct: Number(body.manualMacroPercents.fatPct) || 0,
