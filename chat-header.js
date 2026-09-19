@@ -97,15 +97,15 @@
       }
       #chat-app-bottom-bar .cah-bottom-item {
         display: flex; align-items: center; justify-content: center;
-        width: 44px; height: 44px;
-        text-decoration: none; border-radius: 10px;
+        width: 36px; height: 36px;
+        text-decoration: none; border-radius: 8px;
         border: 1px solid transparent; transition: border-color .15s, background .15s;
       }
       #chat-app-bottom-bar .cah-bottom-item:hover, #chat-app-bottom-bar .cah-bottom-item.active {
         border-color: #009bff; background: rgba(0,155,255,0.1);
       }
       #chat-app-bottom-bar .cah-bottom-item svg {
-        width: 22px; height: 22px; overflow: visible;
+        width: 19px; height: 19px; overflow: visible;
         filter: drop-shadow(0 0 3px rgba(255,255,255,.7));
         transition: filter .15s;
       }
