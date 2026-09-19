@@ -113,6 +113,19 @@
   .convo-actions-row { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
   .convo-unread-badge { background: #39ff14; color: #0a0a0d; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
   .convo-unread-badge.empty { visibility: hidden; }
+  /* Renewal alerts (staff only): a student -- or their coaching group -- within 2 months
+     (orange) / 1 month (pink) of their end date. The ring overrides the role-colored glow;
+     the badge shows "R" until there's an unread message, then the count in the same color. */
+  .pra-avatar[class*="role-"].renew-orange, .pra-avatar.renew-orange { border-color: #ff9f1c; box-shadow: 0 0 0 2px rgba(255,159,28,.35), 0 0 10px 2px rgba(255,159,28,.65); }
+  .pra-avatar[class*="role-"].renew-pink, .pra-avatar.renew-pink { border-color: #ff4fa3; box-shadow: 0 0 0 2px rgba(255,79,163,.35), 0 0 10px 2px rgba(255,79,163,.65); }
+  .convo-unread-badge.renew-orange { background: #ff9f1c; }
+  .convo-unread-badge.renew-pink { background: #ff4fa3; }
+  .renew-tag { font-weight: 700; white-space: nowrap; }
+  .renew-tag.renew-orange { color: #ff9f1c; }
+  .renew-tag.renew-pink { color: #ff4fa3; }
+  .renew-pill { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 10px; border: 1px solid currentColor; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+  .renew-pill.renew-orange { color: #ff9f1c; background: rgba(255,159,28,.13); }
+  .renew-pill.renew-pink { color: #ff4fa3; background: rgba(255,79,163,.13); }
   /* A read-receipt tick standing in for the count once there's nothing to
      count — same slot, but it's not a count, so the green pill background
      has to go or it'd look like an unread badge that just failed to show
@@ -1768,6 +1781,22 @@ function roleBadgeHtml(u) {
   if (u?.role === 'user') return '<span class="role-tag role-tag-user">User</span>';
   return '';
 }
+// "Renew by <end date>" (server sends `renewal` to coaches/admins only).
+function fmtRenewDate(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function renewPillHtml(rn) {
+  return rn ? `<span class="renew-pill renew-${rn.level}" title="Enrolled student -- end date ${fmtRenewDate(rn.endDate)}">Renew by ${fmtRenewDate(rn.endDate)}</span>` : '';
+}
+// Seeing a student's thread acknowledges their (single, per-student) renewal alert -- clear it on
+// every row for that student here (their own row, their coaching group) instead of waiting for a reload.
+function clearRenewalAlert(convo) {
+  const sid = convoAvatarUser(convo)?.id;
+  if (!sid) return;
+  conversations.forEach(c => { if (c.renewal && convoAvatarUser(c)?.id === sid) c.renewal.unhandled = false; });
+  contacts.forEach(c => { if (c.id === sid && c.renewal) c.renewal.unhandled = false; });
+}
 function otherParticipant(convo) { return convo.participants.find(p => p.id !== me.id); }
 function convoDisplayName(convo) {
   if (convo.type === 'group') return convo.name;
@@ -1883,8 +1912,9 @@ async function loadConversations() {
   // Whatever's currently open is being read right now — don't let a poll
   // that lands mid-view flip it back to "unread" under the user.
   const active = conversations.find(c => c.id === activeConvoId);
-  if (active?.unread) {
+  if (active && (active.unread || active.renewal?.unhandled)) {
     active.unread = false;
+    clearRenewalAlert(active);
     fetch(`/api/chat/conversations/${activeConvoId}/read`, { method: 'POST' }).catch(() => {});
   }
   renderConvoList();
@@ -1908,6 +1938,7 @@ function buildDirectory() {
     hasClient: c.type === 'group' && c.participants.some(p => isClientRole(p.role)),
     unread: !!c.unread,
     unreadCount: c.unreadCount || 0,
+    renewal: c.renewal || null,
     // Only ever set when the last message was mine (see the backend's
     // lastMessage.status) — used to show a read-receipt tick in the
     // unread-count badge's slot once there's nothing left to count.
@@ -1923,7 +1954,7 @@ function buildDirectory() {
       // c.lastMessage?.createdAt || c.createdAt line above) -- the
       // contact's own account creation date stands in until pinning/
       // favoriting (or a real message) creates the conversation for real.
-      key: 'u:' + c.id, contactId: c.id, virtual: true,
+      key: 'u:' + c.id, contactId: c.id, virtual: true, renewal: c.renewal || null,
       name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
       preview: 'No messages yet', timestamp: c.createdAt,
     });
@@ -1972,11 +2003,14 @@ function convoItemHtml(i) {
   // empty — if YOUR last message has a status, its read-receipt tick
   // takes over that same slot, so "did they read it" is visible at a
   // glance from the sidebar without opening the thread.
-  const showReceiptTick = i.unreadCount === 0 && i.lastMessageStatus;
+  const rn = i.renewal || null;
+  // "R" for an unhandled renewal alert when there's nothing unread (the real count wins once a message arrives).
+  const showR = !!rn && rn.unhandled && !(i.unreadCount > 0); // virtual (no-conversation-yet) rows have no count at all
+  const showReceiptTick = i.unreadCount === 0 && i.lastMessageStatus && !showR;
   const unreadBadgeContent = i.unreadCount > 0
     ? (i.unreadCount > 99 ? '99+' : i.unreadCount)
-    : (showReceiptTick ? readReceiptTicksHtml({ status: i.lastMessageStatus }, true) : '');
-  const unreadBadge = `<div class="convo-unread-badge${(i.unreadCount > 0 || showReceiptTick) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
+    : (showR ? 'R' : (showReceiptTick ? readReceiptTicksHtml({ status: i.lastMessageStatus }, true) : ''));
+  const unreadBadge = `<div class="convo-unread-badge${rn ? ' renew-' + rn.level : ''}${(i.unreadCount > 0 || showReceiptTick || showR) ? '' : ' empty'}${showReceiptTick ? ' ticks-only' : ''}">${unreadBadgeContent}</div>`;
   const timeLabel = i.timestamp ? convoTimeLabel(i.timestamp) : '';
   const pinnedMark = i.pinned ? `<span class="convo-pinned-mark" title="Pinned">${PIN_ICON}</span>` : '';
   // Next to the time, above the pin row -- not next to the name, which
@@ -1995,7 +2029,7 @@ function convoItemHtml(i) {
   return `
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}">
       ${checkbox}
-      <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}">${avatarHtml(i.avatarUser)}</div>
+      <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}${rn ? ' renew-' + rn.level : ''}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
         <div class="convo-row">
           <div class="convo-name">${pinnedMark}${i.name}${quotaBadge}</div>
@@ -2005,7 +2039,7 @@ function convoItemHtml(i) {
           </div>
         </div>
         <div class="convo-row">
-          <div class="convo-preview">${i.preview}</div>
+          <div class="convo-preview">${rn ? `<span class="renew-tag renew-${rn.level}">Renew by ${fmtRenewDate(rn.endDate)}</span> ` : ''}${i.preview}</div>
           <div class="convo-actions-row">
             ${channelBtn}
             ${pinBtn}
@@ -2319,7 +2353,7 @@ function renderConvoList() {
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
   let items = buildDirectory();
   if (favoritesOnlyView) items = items.filter(i => i.favorite);
-  if (unreadOnlyView) items = items.filter(i => i.unread);
+  if (unreadOnlyView) items = items.filter(i => i.unread || i.renewal?.unhandled);
   if (channelsOnlyView) items = items.filter(i => i.isChannel);
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
   lastConvoItems = items;
@@ -2418,7 +2452,7 @@ async function openConvo(id) {
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
-  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser);
+  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser) + renewPillHtml(convo.renewal);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
@@ -2479,8 +2513,9 @@ async function openConvo(id) {
   const apptInfo = document.getElementById('threadApptInfo');
   if (apptInfo) apptInfo.style.display = 'none';
 
-  if (convo.unread) {
+  if (convo.unread || convo.renewal?.unhandled) {
     convo.unread = false;
+    clearRenewalAlert(convo);
     fetch(`/api/chat/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
   }
 

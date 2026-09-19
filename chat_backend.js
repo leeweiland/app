@@ -1037,8 +1037,89 @@ async function fetchStudentEligibility() {
     });
     return eligible;
   }
-  studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows) };
+  // Column D is "End Date". A student can have several rows (each renewal adds one) --
+  // the LATEST end date wins, so renewing clears the renewal alert on its own.
+  function toEndDateMap(rows) {
+    const ends = new Map();
+    rows.forEach(([first, last, , endDate, status]) => {
+      if (!first && !last) return;
+      const key = nameKey(first, last);
+      if (blacklisted.has(key) || String(status || "").toUpperCase().includes("BLACKLIST")) return;
+      const ms = parseSheetDateMs(endDate);
+      if (ms != null && (!ends.has(key) || ms > ends.get(key))) ends.set(key, ms);
+    });
+    return ends;
+  }
+  studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows), endDates: { online: toEndDateMap(onlineRows), gym: toEndDateMap(gymRows) } };
   return studentEligibilityCache;
+}
+
+// ── Renewal alerts (2026-09-19) ──────────────────────────────────────────
+// Staff (coach/admin) see a student's chat -- and their coaching group -- flagged when
+// the student's END DATE is within 2 months (orange) or 1 month (pink). Same rule as
+// the CRM Inbox (crm-app/sqlite_inbox.js): the alert runs through 30 days past the end
+// date, then drops. Never sent to non-staff.
+const RENEW_DAY_MS = 86400000;
+function alaskaTodayMs() {
+  return Date.parse(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Anchorage" }).format(new Date()) + "T00:00:00Z");
+}
+function addMonthsMs(ms, n) {
+  const d = new Date(ms), day = d.getUTCDate();
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n);
+  const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, dim));
+  return d.getTime();
+}
+// The sheet's End Date column is hand- and form-entered over years: 2026-09-11, 9/11/26,
+// 9/11/2026, "Sep 11, 2026", "11 Sep 2026", ... Returns UTC-midnight ms, or null.
+export function parseSheetDateMs(text) {
+  const t = String(text ?? "").trim();
+  if (!t) return null;
+  let y, m, d, mt;
+  if ((mt = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t))) { y = +mt[1]; m = +mt[2]; d = +mt[3]; }
+  else if ((mt = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/.exec(t))) {
+    y = +mt[3]; if (y < 100) y += 2000;
+    m = +mt[1]; d = +mt[2];
+    if (m > 12 && d <= 12) { const x = m; m = d; d = x; } // 25/12/2026 -> day-first
+  } else {
+    const dt = new Date(t.replace(/(\d)(st|nd|rd|th)\b/gi, "$1") + " 12:00 UTC");
+    if (isNaN(dt)) return null;
+    y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; d = dt.getUTCDate();
+  }
+  if (y < 2015 || y > 2040) return null;
+  const ms = Date.UTC(y, m - 1, d), chk = new Date(ms);
+  return chk.getUTCFullYear() === y && chk.getUTCMonth() === m - 1 && chk.getUTCDate() === d ? ms : null;
+}
+// 0 none, 1 orange (<= 2 months), 2 pink (<= 1 month)
+export function renewalLevelFor(endMs, today = alaskaTodayMs()) {
+  if (endMs == null) return 0;
+  if (endMs < today - 30 * RENEW_DAY_MS || endMs > addMonthsMs(today, 2)) return 0;
+  return endMs <= addMonthsMs(today, 1) ? 2 : 1;
+}
+// The student a conversation is about: the other person in a DM with a student, or
+// the owner of an auto "<Name> Group". Anything else (team chats, staff DMs) has none.
+function renewalStudentFor(convo, users, viewerId) {
+  let student = null;
+  if (convo.type === "dm") student = users.find(u => convo.participantIds.includes(u.id) && u.id !== viewerId);
+  else if (convo.autoGroupType === "student") student = users.find(u => u.id === convo.autoGroupUserId);
+  return student && isClientRole(student.role) ? student : null;
+}
+// One alert per STUDENT (not per thread): their own row and their coaching group share it,
+// and a staff member seeing either one acknowledges both (viewer.renewAck is keyed by student id).
+function renewalForConvo(convo, users, viewer, eligibility) {
+  if (!eligibility || !isStaff(viewer)) return null;
+  const student = renewalStudentFor(convo, users, viewer.id);
+  return student ? renewalForStudent(student, viewer, eligibility) : null;
+}
+function renewalForStudent(student, viewer, eligibility) {
+  if (!eligibility || !isStaff(viewer) || !isClientRole(student.role)) return null;
+  const key = nameKey(student.first, student.last);
+  const primary = student.role === "gym" ? eligibility.endDates.gym : eligibility.endDates.online;
+  const other = student.role === "gym" ? eligibility.endDates.online : eligibility.endDates.gym;
+  const endMs = primary.get(key) ?? other.get(key);
+  const level = renewalLevelFor(endMs);
+  if (!level) return null;
+  return { level: level === 2 ? "pink" : "orange", levelNum: level, studentId: student.id, endDate: new Date(endMs).toISOString().slice(0, 10), unhandled: ((viewer.renewAck || {})[student.id] || 0) < level };
 }
 // Auto-promotes any plain "user" whose name is now sheet-eligible to
 // "online" or "gym" (gym takes priority if somehow eligible for both) — a
@@ -3048,7 +3129,14 @@ export async function handleChatRequest(req, res, url) {
       // (syncDefaultGroups) plus whatever an admin starts with them
       // directly remain the only real conversations a client ever has.
       const users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
-      return sendJson(res, 200, { contacts: users.map(publicUser) });
+      // Staff also get each student's renewal alert (see renewalForStudent) so a student's own
+      // row -- often with no conversation yet -- is flagged like their coaching group.
+      let renewalEligibility = null;
+      if (isStaff(user)) { try { renewalEligibility = await fetchStudentEligibility(); } catch { renewalEligibility = null; } }
+      return sendJson(res, 200, { contacts: users.map(u => {
+        const rn = renewalForStudent(u, user, renewalEligibility);
+        return rn ? { ...publicUser(u), renewal: { level: rn.level, endDate: rn.endDate, unhandled: rn.unhandled } } : publicUser(u);
+      }) });
     }
 
     // ─── Users map ──────────────────────────────────────────────────────
@@ -3984,6 +4072,9 @@ export async function handleChatRequest(req, res, url) {
       const favoriteIds = new Set(user.favoriteConvoIds || []);
       const pinnedIds = new Set(user.pinnedConvoIds || []);
       const readState = user.readState || {};
+      // Staff only; best-effort (a Sheets hiccup just means no alerts this poll).
+      let renewalEligibility = null;
+      if (isStaff(user)) { try { renewalEligibility = await fetchStudentEligibility(); } catch { renewalEligibility = null; } }
       const enriched = convos.map(c => {
         const convoMsgs = messages.filter(m => m.conversationId === c.id);
         const last = convoMsgs[convoMsgs.length - 1];
@@ -4002,6 +4093,7 @@ export async function handleChatRequest(req, res, url) {
           pinned: pinnedIds.has(c.id),
           unreadCount,
           unread: unreadCount > 0,
+          renewal: (() => { const r = renewalForConvo(c, users, user, renewalEligibility); return r ? { level: r.level, endDate: r.endDate, unhandled: r.unhandled } : null; })(),
         };
       }).sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -4072,6 +4164,15 @@ export async function handleChatRequest(req, res, url) {
       const target = users.find(u => u.id === user.id);
       target.readState = target.readState || {};
       target.readState[convoId] = new Date().toISOString();
+      // Seeing the conversation also acknowledges its renewal alert (per staff member) --
+      // it comes back when the alert steps up from orange to pink.
+      if (isStaff(target)) {
+        try {
+          const convo = convos.find(c => c.id === convoId);
+          const rn = renewalForConvo(convo, users, target, await fetchStudentEligibility());
+          if (rn) { target.renewAck = target.renewAck || {}; target.renewAck[rn.studentId] = rn.levelNum; }
+        } catch { /* best-effort */ }
+      }
       writeJson(USERS_FILE, users);
       return sendJson(res, 200, { ok: true });
     }
