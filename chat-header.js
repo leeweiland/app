@@ -112,6 +112,17 @@
       #chat-app-bottom-bar .cah-bottom-item:hover svg, #chat-app-bottom-bar .cah-bottom-item.active svg {
         filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9));
       }
+      /* Two-letter text icons (OK / GK kickoff links) -- same box and same
+         white glow as the SVG icons beside them, just letters instead. */
+      #chat-app-bottom-bar .cah-bottom-glyph {
+        font-family: var(--font-primary, inherit); font-weight: 800; font-size: .72rem;
+        letter-spacing: .03em; color: #fff;
+        text-shadow: 0 0 3px rgba(255,255,255,.7);
+        transition: border-color .15s, background .15s, text-shadow .15s;
+      }
+      #chat-app-bottom-bar .cah-bottom-glyph:hover {
+        text-shadow: 0 0 5px rgba(0,155,255,.9), 0 0 3px rgba(255,255,255,.9);
+      }
       #chat-app-bottom-bar .cah-bottom-label {
         width: auto; padding: 0 16px;
         background: #009bff; border-color: #009bff;
@@ -246,6 +257,8 @@
     // Retreats icon (plane) temporarily pulled from the bottom bar — page
     // itself is untouched, just not linked from here for now.
     { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
+    { href: 'https://www.pacificrimathletics.com/online-kickoff', glyph: 'OK', title: 'Online Kickoff', external: true, staffOnly: true },
+    { href: 'https://www.pacificrimathletics.com/gym-kickoff', glyph: 'GK', title: 'Gym Kickoff', external: true, staffOnly: true },
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
 
@@ -480,6 +493,10 @@
       if (item.label) {
         a.textContent = item.label;
         bottomRightGroup.appendChild(a);
+      } else if (item.glyph) {
+        a.classList.add('cah-bottom-glyph');
+        a.textContent = item.glyph;
+        bottomLeftGroup.appendChild(a);
       } else {
         const iconWrap = document.createElement('span');
         iconWrap.innerHTML = item.icon;
