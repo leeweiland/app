@@ -60,7 +60,8 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
   .modal-box { width: 100%; max-width: 400px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
-  /* Gym availability calendar (see the gymBlockedDatesModal markup). */
+  /* Gym availability calendar (inline in the Appointments settings). */
+  .ga-wrap { max-width: 440px; }
   .ga-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .ga-title { font-weight: 700; font-size: .95rem; }
   .ga-nav { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: #fff; cursor: pointer; }
@@ -251,8 +252,28 @@
         <input class="pra-input" id="apptGymCalendarId" placeholder="e.g. c_abc123@group.calendar.google.com" style="width:100%"/>
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">The Google Calendar Gym self-serve bookings (4:15pm/6:15pm, Mon-Fri, 90 min) get created on directly — find it under that calendar's Settings → "Integrate calendar" → Calendar ID.</div>
       </div>
+      <!-- Gym Availability — global, not per-student: one shared facility. A
+           month calendar where any weekday (or a range of them) can be
+           blocked whole, or just its 4:15pm / 6:15pm slot. Applies to the
+           public booking page and to in-chat Gym scheduling alike. Saves on
+           its own button, separate from the rest of this settings form. -->
       <div class="field">
-        <button class="pra-btn pra-btn-ghost" id="manageGymBlockedDatesBtn" type="button" style="width:100%">Manage Gym Availability (block dates &amp; times)</button>
+        <label class="pra-label">Gym Availability — block dates &amp; times</label>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:10px">Click a day to select it (Shift-click a range, Ctrl/Cmd-click to add days), then block or open the whole day or just one time. Applies to every Gym booking — online and in chat.</div>
+        <div class="ga-wrap">
+          <div class="ga-head">
+            <button type="button" class="ga-nav" id="gaPrev" aria-label="Previous month">‹</button>
+            <div class="ga-title" id="gaTitle"></div>
+            <button type="button" class="ga-nav" id="gaNext" aria-label="Next month">›</button>
+          </div>
+          <div class="ga-grid" id="gaGrid"></div>
+          <div class="ga-legend"><span><i class="ga-dot ga-open"></i>Open</span><span><i class="ga-dot ga-blocked"></i>Blocked</span><span>Left dot 4:15 PM · right dot 6:15 PM</span></div>
+
+          <div class="ga-panel" id="gaPanel"></div>
+
+          <button class="pra-btn" id="gymBlockedDatesSaveBtn" type="button" style="width:100%;margin-top:12px">Save Availability</button>
+          <div class="save-msg" id="gymBlockedDatesMsg"></div>
+        </div>
       </div>
 
       <div class="field">
@@ -509,33 +530,6 @@
       <div style="display:flex;gap:10px;margin-top:10px">
         <button class="pra-btn" id="addUserSaveBtn" style="flex:1">Create</button>
         <button class="pra-btn pra-btn-ghost" onclick="closeModal('addUserModal')">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Gym Availability — global, not per-student: one shared facility. A
-       month calendar where any weekday (or a range of them) can be blocked
-       whole, or just its 4:15pm / 6:15pm slot. Applies to the public booking
-       page and to in-chat Gym scheduling alike. -->
-  <div class="modal-backdrop" id="gymBlockedDatesModal">
-    <div class="pra-panel modal-box" style="max-width:460px">
-      <div class="pra-h2" style="margin-bottom:6px">Gym Availability</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Click a day to select it (Shift-click a range, Ctrl/Cmd-click to add days), then block or open the whole day or just one time. Applies to every Gym booking — online and in chat.</div>
-
-      <div class="ga-head">
-        <button type="button" class="ga-nav" id="gaPrev" aria-label="Previous month">‹</button>
-        <div class="ga-title" id="gaTitle"></div>
-        <button type="button" class="ga-nav" id="gaNext" aria-label="Next month">›</button>
-      </div>
-      <div class="ga-grid" id="gaGrid"></div>
-      <div class="ga-legend"><span><i class="ga-dot ga-open"></i>Open</span><span><i class="ga-dot ga-blocked"></i>Blocked</span><span>Left dot 4:15 PM · right dot 6:15 PM</span></div>
-
-      <div class="ga-panel" id="gaPanel"></div>
-
-      <div class="save-msg" id="gymBlockedDatesMsg"></div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="pra-btn" id="gymBlockedDatesSaveBtn" style="flex:1">Save</button>
-        <button class="pra-btn pra-btn-ghost" onclick="closeModal('gymBlockedDatesModal')">Close</button>
       </div>
     </div>
   </div>
@@ -844,8 +838,8 @@ async function init() {
   };
   document.getElementById('addUserSaveBtn').onclick = createUser;
 
-  document.getElementById('manageGymBlockedDatesBtn').onclick = openGymBlockedDatesModal;
   document.getElementById('gymBlockedDatesSaveBtn').onclick = saveGymBlockedDates;
+  loadGymAvailability();
 }
 
 // ── Gym availability calendar ───────────────────────────────────────────
@@ -867,11 +861,11 @@ function gaSelectable(ds) {
 }
 function gaLabel(ds, opts) { return new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' }); }
 
-async function openGymBlockedDatesModal() {
+async function loadGymAvailability() {
   const msg = document.getElementById('gymBlockedDatesMsg');
   msg.textContent = 'Loading…';
-  openModal('gymBlockedDatesModal');
   const r = await fetch('/api/chat/gym-blocked-dates');
+  if (!r.ok) { msg.textContent = 'Could not load availability.'; return; }
   const d = await r.json();
   gaBlocked = {};
   (d.dates || []).forEach(ds => { gaBlocked[ds] = new Set(GA_SLOTS); });
@@ -969,7 +963,7 @@ async function saveGymBlockedDates() {
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); msg.textContent = d.error || 'Could not save.'; return; }
   msg.textContent = 'Saved.';
-  setTimeout(() => { msg.textContent = ''; closeModal('gymBlockedDatesModal'); }, 700);
+  setTimeout(() => { msg.textContent = ''; }, 1500);
 }
 
 document.getElementById('gaPrev').onclick = () => { gaMonth--; if (gaMonth < 0) { gaMonth = 11; gaYear--; } gaRender(); };
