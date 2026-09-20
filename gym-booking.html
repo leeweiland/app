@@ -6,25 +6,50 @@
 <title>Book Gym Training — Pacific Rim Athletics</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
-  /* Same pinned-body/own-scroll pattern as the other standalone pages
-     (levels.html etc.) so the iOS app's disabled native page scroll doesn't
-     break scrolling here. */
   html { height: 100%; overflow: hidden; }
   body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; overflow: hidden; }
   .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  .wrap { max-width: 520px; margin: 0 auto; padding: 36px 20px 60px; }
-  .logo-row { display: flex; justify-content: center; margin-bottom: 26px; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 32px 18px 70px; }
+  .logo-row { display: flex; justify-content: center; margin-bottom: 24px; }
   .logo-row img { width: 180px; height: auto; display: block; }
-  .logo-fallback { font-family: var(--font-secondary); font-size: 1.4rem; font-weight: 700; letter-spacing: .08em; }
-  .field { margin-bottom: 16px; }
+  .logo-fallback { font-family: var(--font-secondary); font-size: 1.3rem; font-weight: 700; letter-spacing: .08em; }
+  .hidden { display: none !important; }
+
+  .step-label { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--pra-dim); margin: 22px 0 10px; }
+  .step-label.first { margin-top: 0; }
+
+  /* ── Calendar ── */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cal-title { font-weight: 700; font-size: 1rem; }
+  .cal-nav { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-text, #fff); cursor: pointer; font-size: 1rem; line-height: 1; }
+  .cal-nav:hover:not(:disabled) { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .cal-nav:disabled { opacity: .3; cursor: default; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-dow { text-align: center; font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .06em; color: var(--pra-dim); padding: 4px 0 6px; }
+  .cal-day { aspect-ratio: 1; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--pra-text, #fff); font-size: .88rem; font-weight: 600; cursor: pointer; padding: 0; position: relative; }
+  .cal-day.open { background: rgba(0,155,255,0.10); border-color: rgba(0,155,255,0.35); }
+  .cal-day.open:hover { background: rgba(0,155,255,0.22); }
+  .cal-day.off { color: var(--pra-dim); opacity: .35; cursor: default; }
+  .cal-day.today::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--pra-blue); }
+  .cal-day.selected { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  .cal-day.selected::after { background: #fff; }
+  .cal-empty { visibility: hidden; }
+
+  /* ── Time slots ── */
   .slot-row { display: flex; gap: 10px; }
+  .slot-btn { flex: 1; padding: 12px 8px; }
+  .slot-btn .local { display: block; font-size: .66rem; font-weight: 400; opacity: .75; margin-top: 3px; }
   .slot-btn.on { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
-  .status-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; padding: 6px 0; }
-  .status-ok { color: #3fb950; }
-  .status-fail { color: #ff3b3b; }
-  .msg { font-size: .8rem; margin-top: 10px; min-height: 1em; }
-  .done-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
-  .hidden { display: none; }
+  .slot-btn:disabled { opacity: .35; cursor: default; text-decoration: line-through; }
+
+  /* ── Details form ── */
+  .field { margin-bottom: 12px; }
+  .row2 { display: flex; gap: 10px; }
+  .row2 .field { flex: 1; min-width: 0; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .msg { font-size: .8rem; margin-top: 10px; min-height: 1.1em; color: #ff8a8a; }
+  .summary { font-size: .84rem; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); margin-bottom: 14px; }
+  .done-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
 </style>
 </head>
 <body>
@@ -37,159 +62,202 @@
 
     <div id="loading" class="pra-muted" style="text-align:center;font-size:.9rem">Loading…</div>
 
-    <!-- Shown to anyone who isn't a Gym student (coaches/admins book from
-         inside the client's own chat instead, where the coach/client link
-         is unambiguous). -->
-    <div id="notGym" class="pra-panel hidden" style="padding:22px">
-      <div class="pra-h2" style="margin-bottom:8px">Gym students only</div>
-      <div class="pra-muted" id="notGymText" style="font-size:.86rem;margin-bottom:16px"></div>
-      <a class="pra-btn" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none">Go to chat</a>
-    </div>
-
-    <div id="noCoach" class="pra-panel hidden" style="padding:22px">
-      <div class="pra-h2" style="margin-bottom:8px">No coach chat yet</div>
-      <div class="pra-muted" style="font-size:.86rem;margin-bottom:16px">Booking goes through your one-on-one chat with your coach, and we couldn't find one on your account. Reach out to the team and we'll get you set up.</div>
-      <a class="pra-btn" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none">Go to chat</a>
-    </div>
-
     <div id="bookPanel" class="pra-panel hidden" style="padding:22px">
       <div class="pra-h2" style="margin-bottom:6px">Book Gym Training</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:18px">90 minutes · Monday–Friday · Anchorage time</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:20px">90 minutes · Monday–Friday · Anchorage time</div>
 
-      <div class="field">
-        <label class="pra-label">Date</label>
-        <input class="pra-input" type="date" id="date"/>
-        <div class="pra-muted" id="dateMsg" style="font-size:.76rem;margin-top:6px;min-height:1em"></div>
+      <div class="step-label first">1 · Pick a date</div>
+      <div class="cal-head">
+        <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">‹</button>
+        <div class="cal-title" id="calTitle"></div>
+        <button type="button" class="cal-nav" id="calNext" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+
+      <div id="slotStep" class="hidden">
+        <div class="step-label">2 · Pick a time</div>
+        <div class="slot-row" id="slotRow"></div>
       </div>
 
-      <div class="field">
-        <label class="pra-label">Time</label>
-        <div class="slot-row">
-          <button type="button" class="pra-btn pra-btn-ghost slot-btn" data-slot="1615" style="flex:1">4:15 PM</button>
-          <button type="button" class="pra-btn pra-btn-ghost slot-btn" data-slot="1815" style="flex:1">6:15 PM</button>
+      <div id="detailsStep" class="hidden">
+        <div class="step-label">3 · Your details</div>
+        <div class="summary" id="summary"></div>
+        <div class="row2">
+          <div class="field"><label class="pra-label" for="first">First name</label><input class="pra-input" id="first" autocomplete="given-name" maxlength="60"/></div>
+          <div class="field"><label class="pra-label" for="last">Last name</label><input class="pra-input" id="last" autocomplete="family-name" maxlength="60"/></div>
         </div>
+        <div class="field"><label class="pra-label" for="email">Email</label><input class="pra-input" id="email" type="email" autocomplete="email" inputmode="email" maxlength="254"/></div>
+        <div class="field"><label class="pra-label" for="phone">Phone</label><input class="pra-input" id="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30"/></div>
+        <!-- Honeypot: invisible to people, tempting to bots. -->
+        <div class="hp" aria-hidden="true"><label>Website<input id="website" tabindex="-1" autocomplete="off"/></label></div>
+        <button class="pra-btn" id="confirmBtn" style="width:100%;margin-top:6px">Confirm Booking</button>
+        <div class="msg" id="msg" role="alert"></div>
       </div>
-
-      <button class="pra-btn" id="confirmBtn" style="width:100%">Confirm Booking</button>
-      <div class="msg pra-muted" id="msg"></div>
     </div>
 
     <div id="donePanel" class="pra-panel hidden" style="padding:22px">
       <div class="done-title">You're booked</div>
-      <div class="pra-muted" id="doneWhen" style="font-size:.86rem;margin-bottom:14px"></div>
-      <div id="statusRows"></div>
-      <a class="pra-btn pra-btn-ghost" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none;margin-top:16px">Back to chat</a>
+      <div class="pra-muted" id="doneWhen" style="font-size:.9rem;margin-bottom:12px"></div>
+      <div class="pra-muted" id="doneNote" style="font-size:.84rem"></div>
     </div>
   </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-const show = (id) => { ['loading', 'notGym', 'noCoach', 'bookPanel', 'donePanel'].forEach(x => $(x).classList.toggle('hidden', x !== id)); };
+const GYM_TZ = 'America/Anchorage';
+const SLOTS = [{ id: '1615', label: '4:15 PM', time: '16:15' }, { id: '1815', label: '6:15 PM', time: '18:15' }];
 
 $('logo').onerror = () => {
   $('logo').replaceWith(Object.assign(document.createElement('div'), { className: 'logo-fallback', textContent: 'PACIFIC RIM ATHLETICS' }));
 };
 
-let convoId = null;
-let blockedDates = new Set();
-let selectedSlot = null;
+let avail = { dates: [], slots: {}, today: '', maxAdvanceDays: 120 };
+let viewYear, viewMonth; // month currently shown (0-based month)
+let selectedDate = null, selectedSlot = null;
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-async function init() {
-  const meRes = await fetch('/api/auth/me').catch(() => null);
-  if (!meRes || !meRes.ok) {
-    // Not signed in -- send them through login and straight back here.
-    location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname);
-    return;
-  }
-  const me = (await meRes.json()).user;
-
-  if (me.role !== 'gym') {
-    const staff = ['coach', 'admin', 'admin2'].includes(me.role);
-    $('notGymText').textContent = staff
-      ? "This page is for Gym students to book their own sessions. To book for a student, open their chat and use the calendar button there."
-      : "This page is for Gym students. If you're a Gym student and this looks wrong, reach out to the team.";
-    show('notGym');
-    return;
-  }
-
-  // The schedule endpoint hangs off a conversation -- a Gym student books
-  // through their 1:1 chat with a coach, so find that DM.
-  const convRes = await fetch('/api/chat/conversations');
-  const convData = convRes.ok ? await convRes.json() : {};
-  const convos = convData.conversations || [];
-  const isStaffRole = (r) => ['coach', 'admin', 'admin2'].includes(r);
-  const dm = convos.find(c => c.type === 'dm' && c.participants.some(p => p.id !== me.id && isStaffRole(p.role)));
-  if (!dm) { show('noCoach'); return; }
-  convoId = dm.id;
-
-  const today = new Date();
-  $('date').min = today.toISOString().slice(0, 10);
-  try {
-    const r = await fetch('/api/chat/gym-blocked-dates');
-    blockedDates = new Set((await r.json()).dates || []);
-  } catch { blockedDates = new Set(); }
-  show('bookPanel');
+const pad = (n) => String(n).padStart(2, '0');
+const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+function addDaysIso(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function dayStatus(dateStr) {
+  const dow = new Date(dateStr + 'T12:00:00Z').getUTCDay();
+  if (dow === 0 || dow === 6) return 'off';
+  if (dateStr < avail.today || dateStr > addDaysIso(avail.today, avail.maxAdvanceDays)) return 'off';
+  if (avail.dates.includes(dateStr)) return 'off';
+  const blocked = avail.slots[dateStr] || [];
+  if (SLOTS.every(s => blocked.includes(s.id))) return 'off';
+  return 'open';
 }
 
-function validateDate() {
-  const val = $('date').value;
-  const msg = $('dateMsg');
-  if (!val) { msg.textContent = ''; return false; }
-  // A bare YYYY-MM-DD's weekday is the same everywhere; noon UTC just dodges
-  // any date-boundary edge case.
-  const weekday = new Date(val + 'T12:00:00Z').getUTCDay();
-  if (weekday === 0 || weekday === 6) { msg.textContent = 'Gym sessions are only available Monday–Friday.'; return false; }
-  if (blockedDates.has(val)) { msg.textContent = 'That date is blocked off — pick another.'; return false; }
-  msg.textContent = '';
-  return true;
-}
-$('date').addEventListener('change', validateDate);
+function renderCalendar() {
+  const first = new Date(Date.UTC(viewYear, viewMonth, 1));
+  $('calTitle').textContent = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const daysInMonth = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
+  const lead = first.getUTCDay();
+  let html = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+  for (let i = 0; i < lead; i++) html += '<div class="cal-empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = iso(viewYear, viewMonth, d);
+    const st = dayStatus(ds);
+    const cls = ['cal-day', st, ds === avail.today ? 'today' : '', ds === selectedDate ? 'selected' : ''].filter(Boolean).join(' ');
+    const label = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+    html += `<button type="button" class="${cls}" data-date="${ds}" ${st === 'off' ? 'disabled' : ''} aria-label="${label}${st === 'off' ? ' (unavailable)' : ''}" aria-pressed="${ds === selectedDate}">${d}</button>`;
+  }
+  $('calGrid').innerHTML = html;
 
-document.querySelectorAll('.slot-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    selectedSlot = btn.dataset.slot;
-    document.querySelectorAll('.slot-btn').forEach(b => b.classList.toggle('on', b === btn));
-  });
+  // Can't page before this month or past the booking window.
+  const [ty, tm] = avail.today.split('-').map(Number);
+  $('calPrev').disabled = viewYear === ty && viewMonth === tm - 1;
+  const [my, mm] = addDaysIso(avail.today, avail.maxAdvanceDays).split('-').map(Number);
+  $('calNext').disabled = viewYear === my && viewMonth === mm - 1;
+}
+
+$('calPrev').onclick = () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } renderCalendar(); };
+$('calNext').onclick = () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } renderCalendar(); };
+$('calGrid').addEventListener('click', (e) => {
+  const btn = e.target.closest('.cal-day.open');
+  if (!btn) return;
+  selectedDate = btn.dataset.date;
+  selectedSlot = null;
+  renderCalendar();
+  renderSlots();
+  $('detailsStep').classList.add('hidden');
+  $('msg').textContent = '';
+  $('slotStep').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+// Anchorage wall-clock -> the viewer's own local time, so someone booking
+// from another timezone can see when it actually lands for them.
+function anchorageToUtc(dateStr, timeStr) {
+  const asIfUtc = new Date(`${dateStr}T${timeStr}:00Z`);
+  const offset = new Date(asIfUtc.toLocaleString('en-US', { timeZone: GYM_TZ })).getTime() - new Date(asIfUtc.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+  return new Date(asIfUtc.getTime() - offset);
+}
+const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function localHint(dateStr, timeStr) {
+  if (viewerTz === GYM_TZ) return '';
+  return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(anchorageToUtc(dateStr, timeStr)) + ' your time';
+}
+
+function renderSlots() {
+  $('slotStep').classList.remove('hidden');
+  const blocked = avail.slots[selectedDate] || [];
+  $('slotRow').innerHTML = SLOTS.map(s => {
+    const hint = localHint(selectedDate, s.time);
+    return `<button type="button" class="pra-btn pra-btn-ghost slot-btn${selectedSlot === s.id ? ' on' : ''}" data-slot="${s.id}" ${blocked.includes(s.id) ? 'disabled' : ''}>${s.label}${hint ? `<span class="local">${hint}</span>` : ''}</button>`;
+  }).join('');
+}
+$('slotRow').addEventListener('click', (e) => {
+  const btn = e.target.closest('.slot-btn');
+  if (!btn || btn.disabled) return;
+  selectedSlot = btn.dataset.slot;
+  renderSlots();
+  const s = SLOTS.find(x => x.id === selectedSlot);
+  const when = new Date(selectedDate + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  $('summary').textContent = `${when} at ${s.label} Anchorage time`;
+  $('detailsStep').classList.remove('hidden');
+  $('detailsStep').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
 $('confirmBtn').addEventListener('click', async () => {
   const msg = $('msg');
-  const date = $('date').value;
-  if (!validateDate()) { msg.textContent = 'Pick a valid date first.'; return; }
-  if (!selectedSlot) { msg.textContent = 'Pick a time slot.'; return; }
+  const first = $('first').value.trim(), last = $('last').value.trim();
+  const email = $('email').value.trim(), phone = $('phone').value.trim();
+  if (!first || !last) { msg.textContent = 'Please enter your first and last name.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = 'Please enter a valid email address.'; return; }
+  if (phone.replace(/\D/g, '').length < 7) { msg.textContent = 'Please enter a valid phone number.'; return; }
+  if (!selectedDate || !selectedSlot) { msg.textContent = 'Pick a date and time first.'; return; }
 
   const btn = $('confirmBtn');
   btn.disabled = true; btn.textContent = 'Booking…';
   msg.textContent = '';
   try {
-    const r = await fetch('/api/chat/conversations/' + convoId + '/schedule-gym', {
+    const r = await fetch('/api/public/gym-book', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, slot: selectedSlot }),
+      body: JSON.stringify({ first, last, email, phone, date: selectedDate, slot: selectedSlot, website: $('website').value }),
     });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
     if (!r.ok) {
-      msg.textContent = d.error || 'Something went wrong — try again.';
+      msg.textContent = d.error || 'Something went wrong — please try again.';
       btn.disabled = false; btn.textContent = 'Confirm Booking';
+      // The slot may have just been blocked or the date passed -- refresh so
+      // the calendar reflects what's really open.
+      if (r.status === 400) loadAvailability(false);
       return;
     }
-    const when = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
-    $('doneWhen').textContent = `${when} at ${selectedSlot === '1615' ? '4:15 PM' : '6:15 PM'} Anchorage time · 90 minutes`;
-    $('statusRows').innerHTML = [['Calendar invite', d.status?.calendar], ['Email', d.status?.email], ['Text', d.status?.sms]].map(([label, s]) => {
-      const ok = s?.ok;
-      const detail = ok ? 'Sent' : (s?.error === 'disabled' ? 'Not sent' : 'Not sent');
-      return `<div class="status-row"><span class="${ok ? 'status-ok' : 'status-fail'}">${ok ? '✓' : '–'}</span> ${esc(label)}: ${detail}</div>`;
-    }).join('');
-    show('donePanel');
+    $('doneWhen').textContent = `${d.whenLabel || ''} Anchorage time · 90 minutes`.trim();
+    $('doneNote').textContent = `A calendar invite and confirmation are on their way to ${email}.`;
+    $('bookPanel').classList.add('hidden');
+    $('donePanel').classList.remove('hidden');
+    window.scrollTo?.(0, 0);
   } catch {
-    msg.textContent = 'Connection problem — try again.';
+    msg.textContent = 'Connection problem — please try again.';
     btn.disabled = false; btn.textContent = 'Confirm Booking';
   }
 });
 
-init().catch(() => { $('loading').textContent = 'Something went wrong loading this page — refresh to try again.'; });
+async function loadAvailability(initial) {
+  const r = await fetch('/api/public/gym-availability');
+  if (!r.ok) throw new Error('availability');
+  avail = await r.json();
+  if (initial) {
+    const [y, m] = avail.today.split('-').map(Number);
+    viewYear = y; viewMonth = m - 1;
+  }
+  // A previously picked date/slot that just became unavailable gets dropped.
+  if (selectedDate && dayStatus(selectedDate) === 'off') { selectedDate = null; selectedSlot = null; $('slotStep').classList.add('hidden'); $('detailsStep').classList.add('hidden'); }
+  else if (selectedDate) { if ((avail.slots[selectedDate] || []).includes(selectedSlot)) { selectedSlot = null; $('detailsStep').classList.add('hidden'); } renderSlots(); }
+  renderCalendar();
+}
+
+loadAvailability(true).then(() => {
+  $('loading').classList.add('hidden');
+  $('bookPanel').classList.remove('hidden');
+}).catch(() => { $('loading').textContent = 'Something went wrong loading this page — refresh to try again.'; });
 </script>
 </body>
 </html>

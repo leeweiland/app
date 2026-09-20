@@ -53,6 +53,14 @@ const INTAKE_FORMS_FILE = "chat_intake_forms.json";
 // separate from both the intake form and the chat history itself.
 const NOTES_FILE = "chat_notes.json";
 const GYM_BLOCKED_DATES_FILE = "chat_gym_blocked_dates.json";
+// Finer-grained than the whole-date list above: { "YYYY-MM-DD": ["1615", ...] }
+// blocks just those time slots on that date, leaving the others bookable.
+const GYM_BLOCKED_SLOTS_FILE = "chat_gym_blocked_slots.json";
+// Public (signed-out) bookings from /chat-app/gym-booking.html -- kept apart
+// from chat_appointments.json since these people aren't chat users, so the
+// reminder poller (which resolves clientIds to user records) never sees them.
+const GYM_BOOKINGS_FILE = "chat_gym_bookings.json";
+const GYM_SLOTS = { "1615": "16:15", "1815": "18:15" };
 const CALLS_FILE = "chat_calls.json";
 
 const APP_SHEET_ID = "1SQPcRayDql4Fe4BJ5kcHUczMzJGCocy6jAblt3hPplI";
@@ -1533,6 +1541,148 @@ function weekdayInZone(dateStr, timeZone) {
   return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd];
 }
 
+// ── Gym availability: whole-date blocks + per-slot blocks ──────────────────
+// Shared by the in-chat Gym scheduling, the admin editor, and the public
+// booking page -- one facility, one set of blocks for all of them.
+function getGymAvailability() {
+  return { dates: readJson(GYM_BLOCKED_DATES_FILE, []), slots: readJson(GYM_BLOCKED_SLOTS_FILE, {}) };
+}
+function isGymSlotBlocked(date, slot) {
+  const { dates, slots } = getGymAvailability();
+  return dates.includes(date) || (slots[date] || []).includes(slot);
+}
+// Today's calendar date (YYYY-MM-DD) as read in a specific zone.
+function todayInZone(timeZone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+// ── Public Gym booking (signed-out, from /chat-app/gym-booking.html) ───────
+const GYM_TZ = "America/Anchorage";
+const GYM_MAX_ADVANCE_DAYS = 120;
+const publicBookAttempts = new Map(); // ip -> [timestamps within the last hour]
+function publicBookRateLimited(req) {
+  // Last X-Forwarded-For entry: the one the platform's own proxy appended,
+  // not anything the caller could have put in the header themselves.
+  const xff = String(req.headers["x-forwarded-for"] || "").split(",").map(s => s.trim()).filter(Boolean);
+  const ip = xff[xff.length - 1] || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const recent = (publicBookAttempts.get(ip) || []).filter(t => now - t < 3600000);
+  const limited = recent.length >= 10;
+  if (!limited) recent.push(now);
+  publicBookAttempts.set(ip, recent);
+  if (publicBookAttempts.size > 5000) {
+    for (const [k, v] of publicBookAttempts) if (!v.some(t => now - t < 3600000)) publicBookAttempts.delete(k);
+  }
+  return limited;
+}
+const escHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function handlePublicGymRequest(req, res, url) {
+  const p = url.pathname;
+
+  if (req.method === "GET" && p === "/api/public/gym-availability") {
+    const { dates, slots } = getGymAvailability();
+    const today = todayInZone(GYM_TZ);
+    const futureSlots = Object.fromEntries(Object.entries(slots).filter(([d]) => d >= today));
+    return sendJson(res, 200, { dates: dates.filter(d => d >= today), slots: futureSlots, today, maxAdvanceDays: GYM_MAX_ADVANCE_DAYS });
+  }
+
+  if (req.method === "POST" && p === "/api/public/gym-book") {
+    if (publicBookRateLimited(req)) return sendJson(res, 429, { error: "Too many attempts -- please try again in a bit." });
+    const body = await readJsonBody(req);
+    // Honeypot: a real visitor never sees or fills this field. Acts like it
+    // worked so a bot has nothing to learn from the response.
+    if (body.website) return sendJson(res, 200, { ok: true });
+
+    const clean = (s) => String(s || "").replace(/[\r\n"<>]/g, "").replace(/\s+/g, " ").trim();
+    const first = clean(body.first), last = clean(body.last);
+    const email = String(body.email || "").trim().toLowerCase();
+    const phone = String(body.phone || "").trim();
+    const { date, slot } = body;
+    if (!first || !last || first.length > 60 || last.length > 60) return sendJson(res, 400, { error: "Please enter your first and last name." });
+    if (email.length > 254 || !/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(email)) return sendJson(res, 400, { error: "Please enter a valid email address." });
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phoneDigits.length < 7 || phoneDigits.length > 15 || !/^[+\d\s().-]+$/.test(phone)) return sendJson(res, 400, { error: "Please enter a valid phone number." });
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return sendJson(res, 400, { error: "Please pick a date." });
+    if (!GYM_SLOTS[slot]) return sendJson(res, 400, { error: "Please pick a time." });
+
+    const weekday = weekdayInZone(date, GYM_TZ);
+    if (weekday === 0 || weekday === 6) return sendJson(res, 400, { error: "Gym sessions are only available Monday through Friday." });
+    if (isGymSlotBlocked(date, slot)) return sendJson(res, 400, { error: "That time isn't available -- please pick another." });
+
+    const start = zonedTimeToUtc(date, GYM_SLOTS[slot], GYM_TZ);
+    if (isNaN(start.getTime())) return sendJson(res, 400, { error: "Please pick a valid date." });
+    if (start.getTime() <= Date.now()) return sendJson(res, 400, { error: "That time has already passed." });
+    if (start.getTime() > Date.now() + GYM_MAX_ADVANCE_DAYS * 86400000) return sendJson(res, 400, { error: `Bookings open up to ${GYM_MAX_ADVANCE_DAYS} days ahead.` });
+
+    const bookings = readJson(GYM_BOOKINGS_FILE, []);
+    if (bookings.some(b => b.email === email && b.date === date && b.slot === slot)) {
+      return sendJson(res, 409, { error: "You're already booked for that session." });
+    }
+    if (bookings.filter(b => b.email === email && new Date(b.startISO) > new Date()).length >= 5) {
+      return sendJson(res, 429, { error: "You already have several upcoming sessions booked -- reach out to the team to change them." });
+    }
+
+    const apptCfg = getConfig().appointments;
+    if (!apptCfg.gymCalendarId) return sendJson(res, 503, { error: "Online booking isn't available right now -- please reach out to the team." });
+
+    const durationMinutes = 90;
+    const end = new Date(start.getTime() + durationMinutes * 60000);
+    const bookingId = randomUUID();
+    const evSummary = `GYM 90 MINUTE TRAINING BLOCK — ${first} ${last}`;
+    const evDescription = `Booked online.\nPhone: ${phone}\nEmail: ${email}`;
+
+    // The calendar event is what the gym team actually works from, so a
+    // failure here fails the whole booking (nothing gets recorded that the
+    // team can't see) instead of telling the person they're booked.
+    let googleEventId = null, googleEventLink = null;
+    try {
+      const ev = await createCalendarEvent({
+        summary: evSummary, description: evDescription, startISO: start.toISOString(), durationMinutes,
+        attendees: [{ email, name: `${first} ${last}` }], timezone: GYM_TZ, calendarId: apptCfg.gymCalendarId,
+      });
+      googleEventId = ev.id; googleEventLink = ev.htmlLink;
+    } catch (e) {
+      console.error("[public-gym-book] calendar event failed:", e.message);
+      return sendJson(res, 502, { error: "We couldn't complete your booking -- please try again, or reach out to the team." });
+    }
+
+    const dateStr = start.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: GYM_TZ });
+    const timeStr = start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: GYM_TZ });
+    const coachName = "Pacific Rim Athletics";
+    const vars = { coachName, firstName: first, lastName: last, date: dateStr, time: timeStr, duration: durationMinutes };
+    const status = { calendar: { ok: true }, email: null, sms: null };
+
+    if (apptCfg.emailEnabled) {
+      try {
+        const calButtons = addToCalendarButtonsHtml({ summary: evSummary, description: evDescription, start, end, timezone: GYM_TZ, uid: bookingId });
+        // Names came from a public form, so they're escaped before landing in
+        // the HTML body (the subject/SMS are plain text and don't need it).
+        const html = fillTemplate(apptCfg.emailBodyTemplate, { ...vars, firstName: escHtml(first), lastName: escHtml(last) }) + calButtons;
+        const ics = buildIcs({ summary: evSummary, description: evDescription, start, end, uid: bookingId });
+        await sendEmail(email, `${first} ${last}`, fillTemplate(apptCfg.emailSubjectTemplate, vars), html, [
+          { filename: "invite.ics", mimeType: "text/calendar", content: ics },
+        ]);
+        status.email = { ok: true };
+      } catch (e) { status.email = { ok: false, error: e.message }; }
+    } else status.email = { ok: false, error: "disabled" };
+
+    if (apptCfg.smsEnabled) {
+      try {
+        await sendApptSms(email, phone, fillTemplate(apptCfg.smsTemplate, vars));
+        status.sms = { ok: true };
+      } catch (e) { status.sms = { ok: false, error: e.message }; }
+    } else status.sms = { ok: false, error: "disabled" };
+
+    bookings.push({ id: bookingId, first, last, email, phone, date, slot, startISO: start.toISOString(), durationMinutes, googleEventId, googleEventLink, status, createdAt: new Date().toISOString() });
+    writeJson(GYM_BOOKINGS_FILE, bookings);
+
+    return sendJson(res, 200, { ok: true, whenLabel: `${dateStr} at ${timeStr}`, status });
+  }
+
+  return false;
+}
+
 // ── Appointment reminders ───────────────────────────────────────────────
 // Polls booked appointments (chat_appointments.json) and fires email/SMS
 // reminders at the admin-configured lead times before each session. Each
@@ -2358,6 +2508,9 @@ async function archiveCallRecording(call) {
 export async function handleChatRequest(req, res, url) {
   const p = url.pathname;
 
+  // Signed-out Gym booking page -- checked before anything that needs a session.
+  if (await handlePublicGymRequest(req, res, url)) return true;
+
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {
     const ct = req.headers["content-type"] || "";
@@ -3087,15 +3240,29 @@ export async function handleChatRequest(req, res, url) {
     // facility resource, so blocking a date (holiday, gym closure, etc.)
     // blocks it for every Gym client's booking, not just one person's.
     if (p === "/api/chat/gym-blocked-dates" && req.method === "GET") {
-      return sendJson(res, 200, { dates: readJson(GYM_BLOCKED_DATES_FILE, []) });
+      // `dates` = whole days blocked (unchanged shape); `slots` = individual
+      // time slots blocked on otherwise-open days.
+      return sendJson(res, 200, getGymAvailability());
     }
-    if (p === "/api/admin/gym-blocked-dates" && req.method === "POST") {
+    // The admin availability editor saves both kinds at once. Past dates are
+    // dropped on the way in -- they can't matter anymore and would otherwise
+    // pile up forever.
+    if (p === "/api/admin/gym-availability" && req.method === "POST") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-      const { dates } = await readJsonBody(req);
-      if (!Array.isArray(dates) || dates.some(d => typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d))) {
-        return sendJson(res, 400, { error: "dates must be an array of 'YYYY-MM-DD' strings" });
+      const { dates, slots } = await readJsonBody(req);
+      const isDate = (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+      if (!Array.isArray(dates) || !dates.every(isDate)) return sendJson(res, 400, { error: "dates must be an array of 'YYYY-MM-DD' strings" });
+      if (!slots || typeof slots !== "object" || Array.isArray(slots)
+        || !Object.entries(slots).every(([d, arr]) => isDate(d) && Array.isArray(arr) && arr.every(s => GYM_SLOTS[s]))) {
+        return sendJson(res, 400, { error: "slots must map 'YYYY-MM-DD' to arrays of slot ids" });
       }
-      writeJson(GYM_BLOCKED_DATES_FILE, Array.from(new Set(dates)).sort());
+      const today = todayInZone(GYM_TZ);
+      writeJson(GYM_BLOCKED_DATES_FILE, Array.from(new Set(dates.filter(d => d >= today))).sort());
+      const cleanSlots = {};
+      for (const [d, arr] of Object.entries(slots)) {
+        if (d >= today && arr.length) cleanSlots[d] = Array.from(new Set(arr)).sort();
+      }
+      writeJson(GYM_BLOCKED_SLOTS_FILE, cleanSlots);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -4829,8 +4996,7 @@ export async function handleChatRequest(req, res, url) {
         const weekday = weekdayInZone(date, ANCHORAGE);
         if (weekday === 0 || weekday === 6) return sendJson(res, 400, { error: "Gym sessions are only available Monday through Friday" });
 
-        const blockedDates = readJson(GYM_BLOCKED_DATES_FILE, []);
-        if (blockedDates.includes(date)) return sendJson(res, 400, { error: "That date isn't available for scheduling" });
+        if (isGymSlotBlocked(date, slot)) return sendJson(res, 400, { error: "That date or time isn't available for scheduling" });
 
         const start = zonedTimeToUtc(date, SLOTS[slot], ANCHORAGE);
         if (start.getTime() <= Date.now()) return sendJson(res, 400, { error: "That slot is in the past" });

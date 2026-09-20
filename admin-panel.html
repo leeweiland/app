@@ -60,6 +60,35 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
   .modal-box { width: 100%; max-width: 400px; max-height: 80vh; max-height: 80dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
+  /* Gym availability calendar (see the gymBlockedDatesModal markup). */
+  .ga-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .ga-title { font-weight: 700; font-size: .95rem; }
+  .ga-nav { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: #fff; cursor: pointer; }
+  .ga-nav:hover:not(:disabled) { border-color: var(--pra-blue); }
+  .ga-nav:disabled { opacity: .3; cursor: default; }
+  .ga-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; user-select: none; }
+  .ga-dow { text-align: center; font-size: .62rem; letter-spacing: .06em; color: var(--pra-dim); padding: 3px 0 5px; }
+  .ga-day { aspect-ratio: 1; border-radius: 9px; border: 1px solid var(--pra-border); background: transparent; color: #fff; font-size: .82rem; font-weight: 600; cursor: pointer; padding: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .ga-day:hover:not(.ga-off) { border-color: var(--pra-blue); }
+  .ga-day.ga-off { opacity: .28; cursor: default; border-color: transparent; }
+  .ga-day.ga-full { background: rgba(255,92,92,0.14); border-color: rgba(255,92,92,0.5); }
+  .ga-day.ga-sel { background: rgba(0,155,255,0.28); border-color: var(--pra-blue); box-shadow: 0 0 0 1px var(--pra-blue); }
+  .ga-empty { visibility: hidden; }
+  .ga-dots { display: flex; gap: 4px; }
+  .ga-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+  .ga-dot.ga-open { background: #3fb950; }
+  .ga-dot.ga-blocked { background: #ff5c5c; }
+  .ga-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .68rem; color: var(--pra-dim); margin-top: 10px; align-items: center; }
+  .ga-legend .ga-dot { margin-right: 5px; }
+  .ga-panel { margin-top: 14px; padding: 12px; border: 1px solid var(--pra-border); border-radius: 10px; }
+  .ga-panel-title { font-size: .82rem; font-weight: 700; margin-bottom: 10px; }
+  .ga-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+  .ga-row-label { font-size: .84rem; }
+  .ga-mixed { font-size: .68rem; color: var(--pra-dim); margin-right: 8px; }
+  .ga-seg { display: inline-flex; border: 1px solid var(--pra-border); border-radius: 8px; overflow: hidden; }
+  .ga-seg button { border: none; background: transparent; color: var(--pra-dim); padding: 6px 12px; font-size: .76rem; font-weight: 700; cursor: pointer; }
+  .ga-seg button.on-open { background: rgba(63,185,80,0.22); color: #3fb950; }
+  .ga-seg button.on-blocked { background: rgba(255,92,92,0.22); color: #ff5c5c; }
   .reminder-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .reminder-row .reminder-label { font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
   .reminder-row .reminder-value { width: 70px; flex: none; }
@@ -223,7 +252,7 @@
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">The Google Calendar Gym self-serve bookings (4:15pm/6:15pm, Mon-Fri, 90 min) get created on directly — find it under that calendar's Settings → "Integrate calendar" → Calendar ID.</div>
       </div>
       <div class="field">
-        <button class="pra-btn pra-btn-ghost" id="manageGymBlockedDatesBtn" type="button" style="width:100%">Manage Gym Blocked Dates</button>
+        <button class="pra-btn pra-btn-ghost" id="manageGymBlockedDatesBtn" type="button" style="width:100%">Manage Gym Availability (block dates &amp; times)</button>
       </div>
 
       <div class="field">
@@ -484,14 +513,25 @@
     </div>
   </div>
 
-  <!-- Gym Blocked Dates — global, not per-student (see the endpoint's own
-       comment for why): the next 8 weeks of Mon-Fri dates, toggle any off
-       to block that date from Gym self-serve/staff booking entirely. -->
+  <!-- Gym Availability — global, not per-student: one shared facility. A
+       month calendar where any weekday (or a range of them) can be blocked
+       whole, or just its 4:15pm / 6:15pm slot. Applies to the public booking
+       page and to in-chat Gym scheduling alike. -->
   <div class="modal-backdrop" id="gymBlockedDatesModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:6px">Gym Blocked Dates</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Tap a date to block or unblock it from Gym scheduling (4:15pm/6:15pm slots). Applies to every Gym client — not per-student.</div>
-      <div id="gymBlockedDatesList" style="display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto"></div>
+    <div class="pra-panel modal-box" style="max-width:460px">
+      <div class="pra-h2" style="margin-bottom:6px">Gym Availability</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Click a day to select it (Shift-click a range, Ctrl/Cmd-click to add days), then block or open the whole day or just one time. Applies to every Gym booking — online and in chat.</div>
+
+      <div class="ga-head">
+        <button type="button" class="ga-nav" id="gaPrev" aria-label="Previous month">‹</button>
+        <div class="ga-title" id="gaTitle"></div>
+        <button type="button" class="ga-nav" id="gaNext" aria-label="Next month">›</button>
+      </div>
+      <div class="ga-grid" id="gaGrid"></div>
+      <div class="ga-legend"><span><i class="ga-dot ga-open"></i>Open</span><span><i class="ga-dot ga-blocked"></i>Blocked</span><span>Left dot 4:15 PM · right dot 6:15 PM</span></div>
+
+      <div class="ga-panel" id="gaPanel"></div>
+
       <div class="save-msg" id="gymBlockedDatesMsg"></div>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="pra-btn" id="gymBlockedDatesSaveBtn" style="flex:1">Save</button>
@@ -808,54 +848,151 @@ async function init() {
   document.getElementById('gymBlockedDatesSaveBtn').onclick = saveGymBlockedDates;
 }
 
-let gymBlockedDatesSelected = new Set();
+// ── Gym availability calendar ───────────────────────────────────────────
+// Model: gaBlocked[date] = Set of blocked slot ids (the *effective* state --
+// a whole-day block is just "every slot blocked"). On save it's split back
+// out: all slots blocked -> the whole-date list, some -> the per-slot map.
+const GA_SLOTS = ['1615', '1815'];
+const GA_LABELS = { '1615': '4:15 PM', '1815': '6:15 PM' };
+let gaBlocked = {};
+let gaSelected = new Set();
+let gaAnchor = null;
+let gaYear, gaMonth, gaToday = '';
+
+const gaPad = (n) => String(n).padStart(2, '0');
+const gaIso = (y, m, d) => `${y}-${gaPad(m + 1)}-${gaPad(d)}`;
+function gaSelectable(ds) {
+  const dow = new Date(ds + 'T12:00:00Z').getUTCDay();
+  return dow !== 0 && dow !== 6 && ds >= gaToday;
+}
+function gaLabel(ds, opts) { return new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' }); }
+
 async function openGymBlockedDatesModal() {
   const msg = document.getElementById('gymBlockedDatesMsg');
   msg.textContent = 'Loading…';
   openModal('gymBlockedDatesModal');
   const r = await fetch('/api/chat/gym-blocked-dates');
   const d = await r.json();
-  gymBlockedDatesSelected = new Set(d.dates || []);
+  gaBlocked = {};
+  (d.dates || []).forEach(ds => { gaBlocked[ds] = new Set(GA_SLOTS); });
+  Object.entries(d.slots || {}).forEach(([ds, arr]) => { gaBlocked[ds] = new Set([...(gaBlocked[ds] || []), ...arr]); });
+  // "Today" is the gym's own calendar day (Anchorage), not the admin's device's.
+  gaToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Anchorage', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [y, m] = gaToday.split('-').map(Number);
+  gaYear = y; gaMonth = m - 1;
+  gaSelected = new Set(); gaAnchor = null;
   msg.textContent = '';
-  renderGymBlockedDatesList();
+  gaRender();
 }
-function renderGymBlockedDatesList() {
-  const list = document.getElementById('gymBlockedDatesList');
-  const days = [];
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  while (days.length < 40) {
-    const dow = cursor.getDay();
-    if (dow !== 0 && dow !== 6) {
-      const iso = cursor.toISOString().slice(0, 10);
-      days.push({ iso, label: cursor.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) });
-    }
-    cursor.setDate(cursor.getDate() + 1);
+
+function gaRender() {
+  const first = new Date(Date.UTC(gaYear, gaMonth, 1));
+  document.getElementById('gaTitle').textContent = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const days = new Date(Date.UTC(gaYear, gaMonth + 1, 0)).getUTCDate();
+  let html = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(x => `<div class="ga-dow">${x}</div>`).join('');
+  for (let i = 0; i < first.getUTCDay(); i++) html += '<div class="ga-empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const ds = gaIso(gaYear, gaMonth, d);
+    const ok = gaSelectable(ds);
+    const set = gaBlocked[ds] || new Set();
+    const full = GA_SLOTS.every(s => set.has(s));
+    const cls = ['ga-day', ok ? '' : 'ga-off', full ? 'ga-full' : '', gaSelected.has(ds) ? 'ga-sel' : ''].filter(Boolean).join(' ');
+    const dots = ok ? `<span class="ga-dots">${GA_SLOTS.map(s => `<i class="ga-dot ${set.has(s) ? 'ga-blocked' : 'ga-open'}"></i>`).join('')}</span>` : '';
+    html += `<button type="button" class="${cls}" data-date="${ds}" ${ok ? '' : 'disabled'}>${d}${dots}</button>`;
   }
-  list.innerHTML = days.map(d => `
-    <button type="button" class="pra-btn pra-btn-ghost gym-blocked-date-btn" data-date="${d.iso}" style="width:100%;text-align:left;font-size:.82rem${gymBlockedDatesSelected.has(d.iso) ? ';border-color:#ff5c5c;color:#ff5c5c' : ''}">
-      ${d.label}${gymBlockedDatesSelected.has(d.iso) ? ' — BLOCKED' : ''}
-    </button>
-  `).join('');
-  list.querySelectorAll('.gym-blocked-date-btn').forEach(btn => {
-    btn.onclick = () => {
-      const iso = btn.dataset.date;
-      if (gymBlockedDatesSelected.has(iso)) gymBlockedDatesSelected.delete(iso);
-      else gymBlockedDatesSelected.add(iso);
-      renderGymBlockedDatesList();
-    };
-  });
+  document.getElementById('gaGrid').innerHTML = html;
+  // Nothing before the current month; a year ahead is plenty.
+  const [ty, tm] = gaToday.split('-').map(Number);
+  document.getElementById('gaPrev').disabled = gaYear === ty && gaMonth === tm - 1;
+  document.getElementById('gaNext').disabled = (gaYear - ty) * 12 + (gaMonth - (tm - 1)) >= 12;
+  gaRenderPanel();
 }
+
+function gaRowState(slotIds) {
+  let blocked = 0, open = 0;
+  for (const ds of gaSelected) {
+    const set = gaBlocked[ds] || new Set();
+    if (slotIds.every(s => set.has(s))) blocked++;
+    else if (slotIds.every(s => !set.has(s))) open++;
+    else return 'mixed';
+  }
+  return blocked && open ? 'mixed' : blocked ? 'blocked' : 'open';
+}
+
+function gaRenderPanel() {
+  const panel = document.getElementById('gaPanel');
+  if (!gaSelected.size) { panel.innerHTML = '<div class="pra-muted" style="font-size:.78rem">Select one or more days above.</div>'; return; }
+  const sorted = [...gaSelected].sort();
+  const title = sorted.length === 1
+    ? gaLabel(sorted[0], { weekday: 'long', month: 'long', day: 'numeric' })
+    : `${sorted.length} days · ${gaLabel(sorted[0], { month: 'short', day: 'numeric' })} – ${gaLabel(sorted[sorted.length - 1], { month: 'short', day: 'numeric' })}`;
+  const row = (label, ids, key) => {
+    const st = gaRowState(ids);
+    return `<div class="ga-row"><div class="ga-row-label">${label}</div><div>${st === 'mixed' ? '<span class="ga-mixed">mixed</span>' : ''}<span class="ga-seg">
+      <button type="button" class="${st === 'open' ? 'on-open' : ''}" data-set="open" data-key="${key}">Open</button>
+      <button type="button" class="${st === 'blocked' ? 'on-blocked' : ''}" data-set="blocked" data-key="${key}">Blocked</button>
+    </span></div></div>`;
+  };
+  panel.innerHTML = `<div class="ga-panel-title">${title}</div>`
+    + row('Whole day', GA_SLOTS, 'all')
+    + GA_SLOTS.map(s => row(GA_LABELS[s], [s], s)).join('');
+}
+
+function gaApply(key, blocked) {
+  const ids = key === 'all' ? GA_SLOTS : [key];
+  for (const ds of gaSelected) {
+    const set = gaBlocked[ds] || new Set();
+    ids.forEach(s => blocked ? set.add(s) : set.delete(s));
+    if (set.size) gaBlocked[ds] = set; else delete gaBlocked[ds];
+  }
+  document.getElementById('gymBlockedDatesMsg').textContent = 'Unsaved changes';
+  gaRender();
+}
+
+function gaDaysBetween(a, b) {
+  const [lo, hi] = a <= b ? [a, b] : [b, a];
+  const out = [];
+  for (let d = new Date(lo + 'T12:00:00Z'); d.toISOString().slice(0, 10) <= hi; d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
+}
+
 async function saveGymBlockedDates() {
   const msg = document.getElementById('gymBlockedDatesMsg');
   msg.textContent = 'Saving…';
-  const r = await fetch('/api/admin/gym-blocked-dates', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dates: Array.from(gymBlockedDatesSelected) }),
+  const dates = [], slots = {};
+  for (const [ds, set] of Object.entries(gaBlocked)) {
+    if (GA_SLOTS.every(s => set.has(s))) dates.push(ds);
+    else if (set.size) slots[ds] = [...set].sort();
+  }
+  const r = await fetch('/api/admin/gym-availability', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dates, slots }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); msg.textContent = d.error || 'Could not save.'; return; }
   msg.textContent = 'Saved.';
   setTimeout(() => { msg.textContent = ''; closeModal('gymBlockedDatesModal'); }, 700);
 }
+
+document.getElementById('gaPrev').onclick = () => { gaMonth--; if (gaMonth < 0) { gaMonth = 11; gaYear--; } gaRender(); };
+document.getElementById('gaNext').onclick = () => { gaMonth++; if (gaMonth > 11) { gaMonth = 0; gaYear++; } gaRender(); };
+document.getElementById('gaGrid').addEventListener('click', (e) => {
+  const btn = e.target.closest('.ga-day:not(.ga-off)');
+  if (!btn) return;
+  const ds = btn.dataset.date;
+  if (e.shiftKey && gaAnchor) {
+    gaSelected = new Set(gaDaysBetween(gaAnchor, ds).filter(gaSelectable));
+  } else if (e.ctrlKey || e.metaKey) {
+    if (gaSelected.has(ds)) gaSelected.delete(ds); else gaSelected.add(ds);
+    gaAnchor = ds;
+  } else {
+    gaSelected = new Set([ds]);
+    gaAnchor = ds;
+  }
+  gaRender();
+});
+document.getElementById('gaPanel').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-set]');
+  if (btn) gaApply(btn.dataset.key, btn.dataset.set === 'blocked');
+});
 
 async function loadUsers() {
   const r = await fetch('/api/admin/users');

@@ -2864,6 +2864,7 @@ async function submitSchedule() {
 
 // ── Gym schedule (fixed slots, self-serve for Gym clients too) ───────────
 let gymBlockedDates = new Set();
+let gymBlockedSlots = {}; // { 'YYYY-MM-DD': ['1615', ...] } -- individual slots blocked on an otherwise-open day
 let gymScheduleSelectedSlot = null;
 
 async function openGymScheduleModal() {
@@ -2872,7 +2873,7 @@ async function openGymScheduleModal() {
   document.getElementById('gymScheduleSaveBtn').disabled = false;
   document.getElementById('gymScheduleSaveBtn').textContent = 'Confirm & Send';
   gymScheduleSelectedSlot = null;
-  document.querySelectorAll('.gym-slot-btn').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.gym-slot-btn').forEach(b => { b.classList.remove('on'); b.disabled = false; });
 
   const dateInput = document.getElementById('gymScheduleDate');
   const today = new Date();
@@ -2884,7 +2885,8 @@ async function openGymScheduleModal() {
     const r = await fetch('/api/chat/gym-blocked-dates');
     const d = await r.json();
     gymBlockedDates = new Set(d.dates || []);
-  } catch { gymBlockedDates = new Set(); }
+    gymBlockedSlots = d.slots || {};
+  } catch { gymBlockedDates = new Set(); gymBlockedSlots = {}; }
 
   openModal('gymScheduleModal');
 }
@@ -2899,7 +2901,16 @@ function validateGymDate() {
   const weekday = new Date(val + 'T12:00:00Z').getUTCDay();
   if (weekday === 0 || weekday === 6) { msg.textContent = 'Gym sessions are only available Monday–Friday.'; return false; }
   if (gymBlockedDates.has(val)) { msg.textContent = 'That date is blocked off — pick another.'; return false; }
-  msg.textContent = '';
+  // Individual slots can be blocked on an otherwise-open day -- grey those
+  // out, and treat the day as unavailable if that leaves none.
+  const blockedHere = gymBlockedSlots[val] || [];
+  document.querySelectorAll('.gym-slot-btn').forEach(b => {
+    const blocked = blockedHere.includes(b.dataset.slot);
+    b.disabled = blocked;
+    if (blocked && gymScheduleSelectedSlot === b.dataset.slot) { gymScheduleSelectedSlot = null; b.classList.remove('on'); }
+  });
+  if (document.querySelectorAll('.gym-slot-btn:not(:disabled)').length === 0) { msg.textContent = 'Every time that day is blocked off — pick another.'; return false; }
+  msg.textContent = blockedHere.length ? 'One of the times that day is unavailable.' : '';
   return true;
 }
 document.getElementById('gymScheduleDate').addEventListener('change', validateGymDate);
