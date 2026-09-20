@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Book Gym Training — Pacific Rim Athletics</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  /* Same pinned-body/own-scroll pattern as the other standalone pages
+     (levels.html etc.) so the iOS app's disabled native page scroll doesn't
+     break scrolling here. */
+  html { height: 100%; overflow: hidden; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; overflow: hidden; }
+  .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 36px 20px 60px; }
+  .logo-row { display: flex; justify-content: center; margin-bottom: 26px; }
+  .logo-row img { width: 180px; height: auto; display: block; }
+  .logo-fallback { font-family: var(--font-secondary); font-size: 1.4rem; font-weight: 700; letter-spacing: .08em; }
+  .field { margin-bottom: 16px; }
+  .slot-row { display: flex; gap: 10px; }
+  .slot-btn.on { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; padding: 6px 0; }
+  .status-ok { color: #3fb950; }
+  .status-fail { color: #ff3b3b; }
+  .msg { font-size: .8rem; margin-top: 10px; min-height: 1em; }
+  .done-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 6px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <div class="wrap">
+    <div class="logo-row">
+      <img id="logo" src="/chat-app/assets/pra-logo.png" alt="Pacific Rim Athletics" width="180" height="54"/>
+    </div>
+
+    <div id="loading" class="pra-muted" style="text-align:center;font-size:.9rem">Loading…</div>
+
+    <!-- Shown to anyone who isn't a Gym student (coaches/admins book from
+         inside the client's own chat instead, where the coach/client link
+         is unambiguous). -->
+    <div id="notGym" class="pra-panel hidden" style="padding:22px">
+      <div class="pra-h2" style="margin-bottom:8px">Gym students only</div>
+      <div class="pra-muted" id="notGymText" style="font-size:.86rem;margin-bottom:16px"></div>
+      <a class="pra-btn" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none">Go to chat</a>
+    </div>
+
+    <div id="noCoach" class="pra-panel hidden" style="padding:22px">
+      <div class="pra-h2" style="margin-bottom:8px">No coach chat yet</div>
+      <div class="pra-muted" style="font-size:.86rem;margin-bottom:16px">Booking goes through your one-on-one chat with your coach, and we couldn't find one on your account. Reach out to the team and we'll get you set up.</div>
+      <a class="pra-btn" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none">Go to chat</a>
+    </div>
+
+    <div id="bookPanel" class="pra-panel hidden" style="padding:22px">
+      <div class="pra-h2" style="margin-bottom:6px">Book Gym Training</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:18px">90 minutes · Monday–Friday · Anchorage time</div>
+
+      <div class="field">
+        <label class="pra-label">Date</label>
+        <input class="pra-input" type="date" id="date"/>
+        <div class="pra-muted" id="dateMsg" style="font-size:.76rem;margin-top:6px;min-height:1em"></div>
+      </div>
+
+      <div class="field">
+        <label class="pra-label">Time</label>
+        <div class="slot-row">
+          <button type="button" class="pra-btn pra-btn-ghost slot-btn" data-slot="1615" style="flex:1">4:15 PM</button>
+          <button type="button" class="pra-btn pra-btn-ghost slot-btn" data-slot="1815" style="flex:1">6:15 PM</button>
+        </div>
+      </div>
+
+      <button class="pra-btn" id="confirmBtn" style="width:100%">Confirm Booking</button>
+      <div class="msg pra-muted" id="msg"></div>
+    </div>
+
+    <div id="donePanel" class="pra-panel hidden" style="padding:22px">
+      <div class="done-title">You're booked</div>
+      <div class="pra-muted" id="doneWhen" style="font-size:.86rem;margin-bottom:14px"></div>
+      <div id="statusRows"></div>
+      <a class="pra-btn pra-btn-ghost" href="/chat-app/chat.html" style="display:block;text-align:center;text-decoration:none;margin-top:16px">Back to chat</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id) => { ['loading', 'notGym', 'noCoach', 'bookPanel', 'donePanel'].forEach(x => $(x).classList.toggle('hidden', x !== id)); };
+
+$('logo').onerror = () => {
+  $('logo').replaceWith(Object.assign(document.createElement('div'), { className: 'logo-fallback', textContent: 'PACIFIC RIM ATHLETICS' }));
+};
+
+let convoId = null;
+let blockedDates = new Set();
+let selectedSlot = null;
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function init() {
+  const meRes = await fetch('/api/auth/me').catch(() => null);
+  if (!meRes || !meRes.ok) {
+    // Not signed in -- send them through login and straight back here.
+    location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname);
+    return;
+  }
+  const me = (await meRes.json()).user;
+
+  if (me.role !== 'gym') {
+    const staff = ['coach', 'admin', 'admin2'].includes(me.role);
+    $('notGymText').textContent = staff
+      ? "This page is for Gym students to book their own sessions. To book for a student, open their chat and use the calendar button there."
+      : "This page is for Gym students. If you're a Gym student and this looks wrong, reach out to the team.";
+    show('notGym');
+    return;
+  }
+
+  // The schedule endpoint hangs off a conversation -- a Gym student books
+  // through their 1:1 chat with a coach, so find that DM.
+  const convRes = await fetch('/api/chat/conversations');
+  const convData = convRes.ok ? await convRes.json() : {};
+  const convos = convData.conversations || [];
+  const isStaffRole = (r) => ['coach', 'admin', 'admin2'].includes(r);
+  const dm = convos.find(c => c.type === 'dm' && c.participants.some(p => p.id !== me.id && isStaffRole(p.role)));
+  if (!dm) { show('noCoach'); return; }
+  convoId = dm.id;
+
+  const today = new Date();
+  $('date').min = today.toISOString().slice(0, 10);
+  try {
+    const r = await fetch('/api/chat/gym-blocked-dates');
+    blockedDates = new Set((await r.json()).dates || []);
+  } catch { blockedDates = new Set(); }
+  show('bookPanel');
+}
+
+function validateDate() {
+  const val = $('date').value;
+  const msg = $('dateMsg');
+  if (!val) { msg.textContent = ''; return false; }
+  // A bare YYYY-MM-DD's weekday is the same everywhere; noon UTC just dodges
+  // any date-boundary edge case.
+  const weekday = new Date(val + 'T12:00:00Z').getUTCDay();
+  if (weekday === 0 || weekday === 6) { msg.textContent = 'Gym sessions are only available Monday–Friday.'; return false; }
+  if (blockedDates.has(val)) { msg.textContent = 'That date is blocked off — pick another.'; return false; }
+  msg.textContent = '';
+  return true;
+}
+$('date').addEventListener('change', validateDate);
+
+document.querySelectorAll('.slot-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedSlot = btn.dataset.slot;
+    document.querySelectorAll('.slot-btn').forEach(b => b.classList.toggle('on', b === btn));
+  });
+});
+
+$('confirmBtn').addEventListener('click', async () => {
+  const msg = $('msg');
+  const date = $('date').value;
+  if (!validateDate()) { msg.textContent = 'Pick a valid date first.'; return; }
+  if (!selectedSlot) { msg.textContent = 'Pick a time slot.'; return; }
+
+  const btn = $('confirmBtn');
+  btn.disabled = true; btn.textContent = 'Booking…';
+  msg.textContent = '';
+  try {
+    const r = await fetch('/api/chat/conversations/' + convoId + '/schedule-gym', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, slot: selectedSlot }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      msg.textContent = d.error || 'Something went wrong — try again.';
+      btn.disabled = false; btn.textContent = 'Confirm Booking';
+      return;
+    }
+    const when = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+    $('doneWhen').textContent = `${when} at ${selectedSlot === '1615' ? '4:15 PM' : '6:15 PM'} Anchorage time · 90 minutes`;
+    $('statusRows').innerHTML = [['Calendar invite', d.status?.calendar], ['Email', d.status?.email], ['Text', d.status?.sms]].map(([label, s]) => {
+      const ok = s?.ok;
+      const detail = ok ? 'Sent' : (s?.error === 'disabled' ? 'Not sent' : 'Not sent');
+      return `<div class="status-row"><span class="${ok ? 'status-ok' : 'status-fail'}">${ok ? '✓' : '–'}</span> ${esc(label)}: ${detail}</div>`;
+    }).join('');
+    show('donePanel');
+  } catch {
+    msg.textContent = 'Connection problem — try again.';
+    btn.disabled = false; btn.textContent = 'Confirm Booking';
+  }
+});
+
+init().catch(() => { $('loading').textContent = 'Something went wrong loading this page — refresh to try again.'; });
+</script>
+</body>
+</html>
