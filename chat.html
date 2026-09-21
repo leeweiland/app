@@ -2433,6 +2433,10 @@ function updateHeaderForThreadView() {
 window.addEventListener('resize', updateHeaderForThreadView);
 
 async function openConvo(id) {
+  // The thread panel still holds the previous conversation's bubbles until
+  // refreshThread's fetch comes back -- on a slow connection that showed the
+  // last person's chat for a second or two before swapping in the new one.
+  if (id !== activeConvoId) clearThreadView();
   activeConvoId = id;
   reportActiveConversation();
   lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
@@ -3219,8 +3223,15 @@ function attachLevelsChipHandlers() {
   });
 }
 
+function clearThreadView() {
+  document.getElementById('threadBody').replaceChildren();
+  currentThreadMessages = [];
+  lastRenderedMessagesJson = null;
+}
+
 function closeConvo() {
   activeConvoId = null;
+  clearThreadView();
   reportActiveConversation();
   // A video message bubble tapped to play keeps playing (audio and all)
   // behind the sidebar otherwise -- display:none on the thread panel
@@ -3267,8 +3278,12 @@ let lastRenderedMessagesJson = null;
 async function refreshThread(scrollDown) {
   if (!activeConvoId) return;
   if (editingMessageId) return;
-  const r = await fetch('/api/chat/conversations/' + activeConvoId + '/messages?limit=100');
+  const convoIdAtStart = activeConvoId;
+  const r = await fetch('/api/chat/conversations/' + convoIdAtStart + '/messages?limit=100');
   const d = await r.json();
+  // A slow response for a conversation the user has since left (or switched
+  // away from) must not paint over whatever is on screen now.
+  if (activeConvoId !== convoIdAtStart) return;
   const json = JSON.stringify(d.messages);
   if (json !== lastRenderedMessagesJson || scrollDown) {
     lastRenderedMessagesJson = json;
