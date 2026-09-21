@@ -235,6 +235,10 @@
     retreats: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M10.5 14.5 3.5 12l1-1.6 8 1.4 3.7-3.7c.6-.6 1.6-.6 2.2 0 .6.6.6 1.6 0 2.2l-3.7 3.7 1.4 8-1.6 1-2.5-7-4 4 .3 2.1-1.3 1.3-1.6-2.9-2.9-1.6 1.3-1.3 2.1.3 4-4Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="18.5" cy="5.5" r="1.3" fill="#009bff"/></svg>`,
     shop: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M8.5 4 5 6.5 3 9l2.5 2 1.5-1.3V20h10V9.7L18.5 11 21 9l-2-2.5L15.5 4c-.5 1.7-2 2.8-3.5 2.8S9 5.7 8.5 4Z" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M8.5 4c.5 1.7 2 2.8 3.5 2.8S15 5.7 15.5 4" stroke="#009bff" stroke-width="1.4"/></svg>`,
     protocol: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3.5V4" stroke="#fff" stroke-width="1.6"/><path d="M8.5 11.5l2 2 4-4.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16.5h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    // Online Kickoff: a laptop with a person on its screen (remote session).
+    onlineKickoff: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><rect x="4.5" y="5" width="15" height="10.5" rx="1.8" stroke="#fff" stroke-width="1.6"/><path d="M2.5 18.8h19" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="8.9" r="1.6" stroke="#009bff" stroke-width="1.5"/><path d="M9.2 13.4c.4-1.6 1.5-2.4 2.8-2.4s2.4.8 2.8 2.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+    // Gym Kickoff: a location pin with a person inside (in-person, at the gym).
+    gymKickoff: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M12 21.3s-6.6-5.5-6.6-11.1A6.6 6.6 0 0 1 12 3.6a6.6 6.6 0 0 1 6.6 6.6c0 5.6-6.6 11.1-6.6 11.1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="8.3" r="1.7" stroke="#009bff" stroke-width="1.5"/><path d="M8.9 13.3c.5-1.7 1.7-2.6 3.1-2.6s2.6.9 3.1 2.6" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>`,
     apply: `<svg viewBox="0 0 24 24" fill="none" ${SVG_NS}><path d="M6 3.5v17" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4.5h12.5c.7 0 1 .8.5 1.3l-3.3 3.4 3.3 3.4c.5.5.2 1.3-.5 1.3H6V4.5Z" stroke="#009bff" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   };
 
@@ -257,8 +261,8 @@
     // Retreats icon (plane) temporarily pulled from the bottom bar — page
     // itself is untouched, just not linked from here for now.
     { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
-    { href: 'https://www.pacificrimathletics.com/online-kickoff', glyph: 'OK', title: 'Online Kickoff', external: true, staffOnly: true },
-    { href: 'https://www.pacificrimathletics.com/gym-kickoff', glyph: 'GK', title: 'Gym Kickoff', external: true, staffOnly: true },
+    { href: 'https://www.pacificrimathletics.com/online-kickoff', icon: ICON_SVG.onlineKickoff, title: 'Online Kickoff', external: true, staffOnly: true },
+    { href: 'https://www.pacificrimathletics.com/gym-kickoff', icon: ICON_SVG.gymKickoff, title: 'Gym Kickoff', external: true, staffOnly: true },
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
 
