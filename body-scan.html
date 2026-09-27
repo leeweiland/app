@@ -765,18 +765,33 @@ function kgToDisplay(kg) {
 
 let currentEstimate = { calorieTarget: null, macros: null, macroPercents: null };
 
+// Baseline "known good" value for each admin-editable override tile, keyed
+// by element id -- a field only counts as dirty (see commitPendingOverrideEdits
+// and wireOverrideInput's blur handler) when its current value diverges from
+// THIS, so every place that programmatically (re)populates one of these
+// fields must update its baseline here too via setOverrideFieldValue,
+// or the field would look "edited" the very next time nothing had actually
+// changed and get needlessly (and for a Fuel-tab gram field, lossily)
+// re-committed on the next Save Profile click.
+const overrideValueOnFocus = {};
+function setOverrideFieldValue(id, value) {
+  const el = document.getElementById(id);
+  el.value = value;
+  overrideValueOnFocus[id] = el.value;
+}
+
 function showEstimate(d) {
   currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros, macroPercents: d.macroPercents };
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
-  document.getElementById('profileCals').value = d.calorieTarget;
+  setOverrideFieldValue('profileCals', d.calorieTarget);
   document.getElementById('profileProtein').textContent = d.macros.proteinG + 'g';
   document.getElementById('profileFat').textContent = d.macros.fatG + 'g';
   document.getElementById('profileCarb').textContent = d.macros.carbG + 'g';
   const pct = d.macroPercents || { proteinPct: 40, fatPct: 30, carbPct: 30 };
-  document.getElementById('profileProteinPct').value = pct.proteinPct;
-  document.getElementById('profileFatPct').value = pct.fatPct;
-  document.getElementById('profileCarbPct').value = pct.carbPct;
+  setOverrideFieldValue('profileProteinPct', pct.proteinPct);
+  setOverrideFieldValue('profileFatPct', pct.fatPct);
+  setOverrideFieldValue('profileCarbPct', pct.carbPct);
   grid.style.display = 'grid';
 }
 
@@ -985,11 +1000,10 @@ function commitMacroEdit(el, pctKey, calPerGram) {
   }
 }
 
-// Tracked outside wireOverrideInput's own closure (not a local variable
-// per field) so commitPendingOverrideEdits can also see whether a field is
-// genuinely mid-edit -- e.g. Save Profile clicked while a tile still has
-// an uncommitted keystroke in it, never blurred.
-const overrideValueOnFocus = {}; // element id -> its value as of the last focus
+// overrideValueOnFocus itself is declared up by showEstimate/
+// setOverrideFieldValue -- shared here so a field's dirty check also
+// accounts for whatever it was last programmatically set to, not just
+// the last time it happened to receive focus.
 const OVERRIDE_FIELDS = [
   ['profileCals', commitCalorieEdit],
   ['profileProteinPct', (el) => commitMacroEdit(el, 'proteinPct')],
@@ -1022,7 +1036,15 @@ async function commitPendingOverrideEdits() {
   if (!isAdminMe()) return;
   for (const [id, commit] of OVERRIDE_FIELDS) {
     const el = document.getElementById(id);
-    if (!el || el.value === overrideValueOnFocus[id]) continue;
+    if (!el) continue;
+    // No established baseline (e.g. the Fuel tab, whose foodGoal* fields
+    // only ever get one via loadFoodEntries, was never visited this
+    // session) means we have no idea what "unedited" looks like here --
+    // treating its blank starting value as a deliberate clear is exactly
+    // what corrupted a real override to null/0% earlier. Skip it rather
+    // than guess.
+    if (overrideValueOnFocus[id] === undefined) continue;
+    if (el.value === overrideValueOnFocus[id]) continue;
     overrideValueOnFocus[id] = el.value; // mark handled before awaiting -- a stray blur mid-save can't double-fire it
     await commit(el);
   }
@@ -1094,13 +1116,13 @@ async function loadFoodEntries() {
     if (!r.ok) return;
     const { entries, totals } = await r.json();
     document.getElementById('foodTotalCals').textContent = Math.round(totals.calories);
-    document.getElementById('foodGoalCals').value = currentEstimate.calorieTarget ?? '';
+    setOverrideFieldValue('foodGoalCals', currentEstimate.calorieTarget ?? '');
     document.getElementById('foodTotalProtein').textContent = Math.round(totals.proteinG);
-    document.getElementById('foodGoalProtein').value = currentEstimate.macros?.proteinG ?? '';
+    setOverrideFieldValue('foodGoalProtein', currentEstimate.macros?.proteinG ?? '');
     document.getElementById('foodTotalFat').textContent = Math.round(totals.fatG);
-    document.getElementById('foodGoalFat').value = currentEstimate.macros?.fatG ?? '';
+    setOverrideFieldValue('foodGoalFat', currentEstimate.macros?.fatG ?? '');
     document.getElementById('foodTotalCarb').textContent = Math.round(totals.carbG);
-    document.getElementById('foodGoalCarb').value = currentEstimate.macros?.carbG ?? '';
+    setOverrideFieldValue('foodGoalCarb', currentEstimate.macros?.carbG ?? '');
 
     const list = document.getElementById('foodEntriesList');
     document.getElementById('foodEntriesEmpty').style.display = entries.length ? 'none' : 'block';
