@@ -927,7 +927,16 @@ document.getElementById('profileSaveBtn').onclick = async () => {
     // blurred) when Save Profile is clicked -- commit those first, through
     // their own validated path, so the button actually captures whatever's
     // on screen instead of only the base fields below.
-    await commitPendingOverrideEdits();
+    const editedOverride = await commitPendingOverrideEdits();
+    // Save Profile means "recompute my calorie/macro numbers from what's in
+    // this form" -- a manual override from an earlier, easy-to-forget edit
+    // (possibly not even from this session) shouldn't keep silently
+    // locking the displayed numbers to a stale value every time the admin
+    // saves an unrelated field. It only survives a save that itself just
+    // set it (the branch above).
+    if (isAdminMe() && !editedOverride) {
+      await saveOverrideOnly({ manualCalorieTarget: null, manualMacroPercents: null });
+    }
     const d = await saveProfile();
     if (!d) return;
     const wasComplete = profileComplete;
@@ -1066,7 +1075,8 @@ OVERRIDE_FIELDS.forEach(([id, commit]) => wireOverrideInput(document.getElementB
 // Each commit*Edit call awaits its own save so Save Profile's subsequent
 // base-fields save reads back a server response that already reflects it.
 async function commitPendingOverrideEdits() {
-  if (!isAdminMe()) return;
+  if (!isAdminMe()) return false;
+  let editedAny = false;
   for (const [id, commit] of OVERRIDE_FIELDS) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -1080,7 +1090,9 @@ async function commitPendingOverrideEdits() {
     if (el.value === overrideValueOnFocus[id]) continue;
     overrideValueOnFocus[id] = el.value; // mark handled before awaiting -- a stray blur mid-save can't double-fire it
     await commit(el);
+    editedAny = true;
   }
+  return editedAny;
 }
 
 // ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
