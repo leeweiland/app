@@ -890,6 +890,11 @@ document.getElementById('profileSaveBtn').onclick = async () => {
   const btn = document.getElementById('profileSaveBtn');
   btn.disabled = true;
   try {
+    // A calorie/% override tile can still be sitting mid-edit (typed, never
+    // blurred) when Save Profile is clicked -- commit those first, through
+    // their own validated path, so the button actually captures whatever's
+    // on screen instead of only the base fields below.
+    await commitPendingOverrideEdits();
     const d = await saveProfile();
     if (!d) return;
     const wasComplete = profileComplete;
@@ -940,14 +945,14 @@ async function saveOverrideOnly(partial) {
 
 function commitCalorieEdit(el) {
   const raw = el.value.trim();
-  if (raw === '') { saveOverrideOnly({ manualCalorieTarget: null }); return; }
+  if (raw === '') return saveOverrideOnly({ manualCalorieTarget: null });
   const n = Number(raw);
   if (!Number.isFinite(n) || n < CAL_MIN || n > CAL_MAX) {
     el.value = currentEstimate.calorieTarget ?? '';
     flashInvalid(el);
-    return;
+    return Promise.resolve();
   }
-  saveOverrideOnly({ manualCalorieTarget: Math.round(n) });
+  return saveOverrideOnly({ manualCalorieTarget: Math.round(n) });
 }
 
 // pctKey is 'proteinPct' | 'fatPct' | 'carbPct'. calPerGram is only passed
@@ -960,45 +965,68 @@ function commitCalorieEdit(el) {
 function commitMacroEdit(el, pctKey, calPerGram) {
   const current = currentMacroPercents();
   const raw = el.value.trim();
-  if (raw === '') { saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: 0 } }); return; }
+  if (raw === '') return saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: 0 } });
   const n = Number(raw);
   if (calPerGram) {
     if (!currentEstimate.calorieTarget || !Number.isFinite(n) || n < 0 || n > 1000) {
       flashInvalid(el);
       loadFoodEntries(); // restores the last-good displayed value
-      return;
+      return Promise.resolve();
     }
     const pct = Math.round((n * calPerGram / currentEstimate.calorieTarget) * 1000) / 10;
-    saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: pct } });
+    return saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: pct } });
   } else {
     if (!Number.isFinite(n) || n < 0 || n > 100) {
       el.value = current[pctKey];
       flashInvalid(el);
-      return;
+      return Promise.resolve();
     }
-    saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: n } });
+    return saveOverrideOnly({ manualMacroPercents: { ...current, [pctKey]: n } });
   }
 }
 
+// Tracked outside wireOverrideInput's own closure (not a local variable
+// per field) so commitPendingOverrideEdits can also see whether a field is
+// genuinely mid-edit -- e.g. Save Profile clicked while a tile still has
+// an uncommitted keystroke in it, never blurred.
+const overrideValueOnFocus = {}; // element id -> its value as of the last focus
+const OVERRIDE_FIELDS = [
+  ['profileCals', commitCalorieEdit],
+  ['profileProteinPct', (el) => commitMacroEdit(el, 'proteinPct')],
+  ['profileFatPct', (el) => commitMacroEdit(el, 'fatPct')],
+  ['profileCarbPct', (el) => commitMacroEdit(el, 'carbPct')],
+  ['foodGoalCals', commitCalorieEdit],
+  ['foodGoalProtein', (el) => commitMacroEdit(el, 'proteinPct', 4)],
+  ['foodGoalFat', (el) => commitMacroEdit(el, 'fatPct', 9)],
+  ['foodGoalCarb', (el) => commitMacroEdit(el, 'carbPct', 4)],
+];
+
 function wireOverrideInput(el, commitFn) {
   if (!el) return;
-  let valueOnFocus = null;
-  el.addEventListener('focus', () => { valueOnFocus = el.value; });
+  el.addEventListener('focus', () => { overrideValueOnFocus[el.id] = el.value; });
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
   el.addEventListener('blur', () => {
     if (!isAdminMe()) return;
-    if (el.value === valueOnFocus) return; // untouched -- nothing to save
+    if (el.value === overrideValueOnFocus[el.id]) return; // untouched -- nothing to save
     commitFn(el);
   });
 }
-wireOverrideInput(document.getElementById('profileCals'), commitCalorieEdit);
-wireOverrideInput(document.getElementById('profileProteinPct'), (el) => commitMacroEdit(el, 'proteinPct'));
-wireOverrideInput(document.getElementById('profileFatPct'), (el) => commitMacroEdit(el, 'fatPct'));
-wireOverrideInput(document.getElementById('profileCarbPct'), (el) => commitMacroEdit(el, 'carbPct'));
-wireOverrideInput(document.getElementById('foodGoalCals'), commitCalorieEdit);
-wireOverrideInput(document.getElementById('foodGoalProtein'), (el) => commitMacroEdit(el, 'proteinPct', 4));
-wireOverrideInput(document.getElementById('foodGoalFat'), (el) => commitMacroEdit(el, 'fatPct', 9));
-wireOverrideInput(document.getElementById('foodGoalCarb'), (el) => commitMacroEdit(el, 'carbPct', 4));
+OVERRIDE_FIELDS.forEach(([id, commit]) => wireOverrideInput(document.getElementById(id), commit));
+
+// Called from the main Save Profile button -- a tile's own blur/Enter
+// already covers the common case, but a value typed and left sitting
+// there (Save clicked without ever leaving the field) needs this too.
+// Each commit*Edit call awaits its own save so Save Profile's subsequent
+// base-fields save reads back a server response that already reflects it.
+async function commitPendingOverrideEdits() {
+  if (!isAdminMe()) return;
+  for (const [id, commit] of OVERRIDE_FIELDS) {
+    const el = document.getElementById(id);
+    if (!el || el.value === overrideValueOnFocus[id]) continue;
+    overrideValueOnFocus[id] = el.value; // mark handled before awaiting -- a stray blur mid-save can't double-fire it
+    await commit(el);
+  }
+}
 
 // ── Nutrition Log: date, totals ("so far / goal"), log-a-meal, history ──
 let foodMode = 'photo';
