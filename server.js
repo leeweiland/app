@@ -17,7 +17,12 @@ import { handleActivityLogRequest } from "./activity_log_backend.js";
 dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3456;
+const PORT = process.env.PORT || 3458;
+// Changes every time this process starts (i.e. every deploy) -- pages poll
+// this so a tab left open across a deploy can notice and reload itself
+// instead of silently running whatever JS it happened to load with,
+// possibly hours or days out of date, no matter how many fixes ship.
+const BOOT_ID = String(Date.now());
 
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason instanceof Error ? reason.stack : reason);
@@ -41,6 +46,12 @@ const MIME = {
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (url.pathname === "/api/app-boot-id") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ bootId: BOOT_ID }));
+    return;
+  }
 
   if (await handleChatRequest(req, res, url)) return;
   if (await handleBodyAnalysisRequest(req, res, url)) return;

@@ -235,7 +235,6 @@
           </div>
         </div>
         <div class="pra-muted" id="adminEditHint" style="display:none;font-size:.72rem;margin-top:8px">Admin: tap the calorie number or a % above to set a manual override — it saves the moment you tap away, and stays until you edit it back to the automatic value's field (clear it) or change it again.</div>
-        <button class="pra-btn pra-btn-ghost" id="clearOverrideBtn" type="button" style="display:none;width:100%;margin-top:10px">Clear Manual Override</button>
       </div>
     </div>
 
@@ -783,9 +782,6 @@ function setOverrideFieldValue(id, value) {
 
 function showEstimate(d) {
   currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros, macroPercents: d.macroPercents };
-  const clearBtn = document.getElementById('clearOverrideBtn');
-  const hasOverride = !!(d.profile?.manualCalorieTarget || d.profile?.manualMacroPercents);
-  clearBtn.style.display = (isAdminMe() && hasOverride) ? 'block' : 'none';
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
   setOverrideFieldValue('profileCals', d.calorieTarget);
@@ -1030,18 +1026,6 @@ function wireOverrideInput(el, commitFn) {
   });
 }
 OVERRIDE_FIELDS.forEach(([id, commit]) => wireOverrideInput(document.getElementById(id), commit));
-
-// One unambiguous click to get a member off a manual override entirely --
-// no need to find/clear the tiny inline calorie/% fields by hand.
-document.getElementById('clearOverrideBtn').onclick = async () => {
-  const btn = document.getElementById('clearOverrideBtn');
-  btn.disabled = true;
-  try {
-    await saveOverrideOnly({ manualCalorieTarget: null, manualMacroPercents: null });
-  } finally {
-    btn.disabled = false;
-  }
-};
 
 // Called from the main Save Profile button -- a tile's own blur/Enter
 // already covers the common case, but a value typed and left sitting
@@ -1545,11 +1529,31 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
   svgEl.innerHTML = svg;
 }
 
+// A tab left open across a deploy otherwise keeps running whatever JS it
+// loaded with -- possibly hours old -- no matter how many fixes ship,
+// since Cache-Control:no-store only ever affects the NEXT navigation, not
+// a page that's already sitting open. Polling the server's boot id (which
+// changes every process start, i.e. every deploy) and reloading on a
+// mismatch means an open tab self-heals within a minute of any deploy
+// instead of silently running stale code until someone thinks to
+// hard-refresh it.
+let pageBootId = null;
+async function watchForNewDeploy() {
+  try {
+    const r = await fetch('/api/app-boot-id', { cache: 'no-store' });
+    const { bootId } = await r.json();
+    if (pageBootId === null) { pageBootId = bootId; return; }
+    if (bootId !== pageBootId) location.reload();
+  } catch {}
+}
+setInterval(watchForNewDeploy, 30000);
+
 (async () => {
   try {
     const r = await fetch('/api/auth/me');
     if (r.ok) me = (await r.json()).user || null;
   } catch {}
+  watchForNewDeploy();
   applyViewingMode(); // shows the admin override panel on load, not just after switching to view someone
   activityLoadSentinelObserver.observe(document.getElementById('activityLoadSentinel'));
   await loadProfile();
