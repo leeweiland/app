@@ -65,6 +65,22 @@
   .pct-input { width: 30px; }
   .tile-val-input:not([readonly]), .pct-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   .tile-val-input[readonly], .pct-input[readonly] { cursor: default; }
+  /* A dashed underline on the number itself is easy to miss/hard to hit
+     precisely -- while admin-editable (see applyViewingMode), the whole
+     surrounding tile/cell gets a visible border + hover highlight + pointer
+     cursor, and a click anywhere in it focuses the actual input (see the
+     click-delegation next to wireOverrideInput), not just a click that
+     lands exactly on the tiny number. */
+  #profileEstimateGrid.admin-editable .macro-tile,
+  #fuelTotalsPanel.admin-editable .totals-cal-row,
+  #fuelTotalsPanel.admin-editable .macro-cell {
+    cursor: pointer; box-shadow: inset 0 0 0 1px var(--pra-blue-dim); transition: background .15s;
+  }
+  #profileEstimateGrid.admin-editable .macro-tile:hover,
+  #fuelTotalsPanel.admin-editable .totals-cal-row:hover,
+  #fuelTotalsPanel.admin-editable .macro-cell:hover {
+    background: rgba(0,155,255,0.1);
+  }
   /* Brief flash when an admin's typed override value fails validation
      (out of range, not a number) and gets reverted -- see flashInvalid. */
   .tile-input-invalid, .pct-input.tile-input-invalid { color: #ff5c5c !important; }
@@ -246,7 +262,7 @@
         <div class="field" style="flex:0 0 auto"><input class="pra-input" id="foodDate" type="date"/></div>
       </div>
 
-      <div class="pra-panel" style="margin:0 0 20px;padding:16px">
+      <div class="pra-panel" id="fuelTotalsPanel" style="margin:0 0 20px;padding:16px">
         <div class="totals-cal-row">
           <span class="val" id="foodTotalCals">0</span><span class="sep"> / </span><input class="goal tile-val-input" id="foodGoalCals" type="number" readonly inputmode="numeric" placeholder="—" style="width:70px;font-size:1.7rem"/>
           <span class="lab">Calories</span>
@@ -489,6 +505,8 @@ function applyViewingMode() {
     document.getElementById(id).readOnly = !adminCanEdit;
   });
   document.getElementById('adminEditHint').style.display = adminCanEdit ? 'block' : 'none';
+  document.getElementById('profileEstimateGrid').classList.toggle('admin-editable', adminCanEdit);
+  document.getElementById('fuelTotalsPanel').classList.toggle('admin-editable', adminCanEdit);
 }
 async function switchViewingUser(userId, name) {
   viewingUserId = userId;
@@ -1017,7 +1035,10 @@ const OVERRIDE_FIELDS = [
 
 function wireOverrideInput(el, commitFn) {
   if (!el) return;
-  el.addEventListener('focus', () => { overrideValueOnFocus[el.id] = el.value; });
+  el.addEventListener('focus', () => {
+    overrideValueOnFocus[el.id] = el.value;
+    el.select(); // typing immediately replaces the old number instead of inserting into/appending onto it
+  });
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
   el.addEventListener('blur', () => {
     if (!isAdminMe()) return;
@@ -1026,6 +1047,18 @@ function wireOverrideInput(el, commitFn) {
   });
 }
 OVERRIDE_FIELDS.forEach(([id, commit]) => wireOverrideInput(document.getElementById(id), commit));
+
+// The number itself is a small target (just a dashed underline) -- a click
+// anywhere in its surrounding tile/cell (see the .admin-editable CSS)
+// focuses the actual input instead, so hitting the tiny field precisely
+// isn't required.
+['profileEstimateGrid', 'fuelTotalsPanel'].forEach(containerId => {
+  document.getElementById(containerId).addEventListener('click', (e) => {
+    if (e.target.tagName === 'INPUT') return; // already focused natively
+    const input = e.target.closest('.macro-tile, .totals-cal-row, .macro-cell')?.querySelector('input');
+    if (input && !input.readOnly) input.focus();
+  });
+});
 
 // Called from the main Save Profile button -- a tile's own blur/Enter
 // already covers the common case, but a value typed and left sitting
