@@ -235,6 +235,7 @@
           </div>
         </div>
         <div class="pra-muted" id="adminEditHint" style="display:none;font-size:.72rem;margin-top:8px">Admin: tap the calorie number or a % above to set a manual override — it saves the moment you tap away, and stays until you edit it back to the automatic value's field (clear it) or change it again.</div>
+        <button class="pra-btn pra-btn-ghost" id="clearOverrideBtn" type="button" style="display:none;width:100%;margin-top:10px">Clear Manual Override</button>
       </div>
     </div>
 
@@ -782,6 +783,9 @@ function setOverrideFieldValue(id, value) {
 
 function showEstimate(d) {
   currentEstimate = { calorieTarget: d.calorieTarget, macros: d.macros, macroPercents: d.macroPercents };
+  const clearBtn = document.getElementById('clearOverrideBtn');
+  const hasOverride = !!(d.profile?.manualCalorieTarget || d.profile?.manualMacroPercents);
+  clearBtn.style.display = (isAdminMe() && hasOverride) ? 'block' : 'none';
   const grid = document.getElementById('profileEstimateGrid');
   if (!d.calorieTarget) { grid.style.display = 'none'; return; }
   setOverrideFieldValue('profileCals', d.calorieTarget);
@@ -1026,6 +1030,18 @@ function wireOverrideInput(el, commitFn) {
   });
 }
 OVERRIDE_FIELDS.forEach(([id, commit]) => wireOverrideInput(document.getElementById(id), commit));
+
+// One unambiguous click to get a member off a manual override entirely --
+// no need to find/clear the tiny inline calorie/% fields by hand.
+document.getElementById('clearOverrideBtn').onclick = async () => {
+  const btn = document.getElementById('clearOverrideBtn');
+  btn.disabled = true;
+  try {
+    await saveOverrideOnly({ manualCalorieTarget: null, manualMacroPercents: null });
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // Called from the main Save Profile button -- a tile's own blur/Enter
 // already covers the common case, but a value typed and left sitting
