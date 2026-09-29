@@ -363,7 +363,7 @@
   .bubble-row.mine .bubble-forwarded-label { color: rgba(255,255,255,0.75); }
   /* Reply-preview strip above the composer — same floating-above pattern as
      the paste-preview strip, with an X to cancel out of replying. */
-  .reply-preview { position: absolute; bottom: 62px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-left: 3px solid var(--pra-blue); border-radius: 10px; z-index: 20; }
+  .reply-preview { position: absolute; bottom: calc(100% + 8px); left: 16px; right: 16px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-left: 3px solid var(--pra-blue); border-radius: 10px; z-index: 20; }
   .reply-preview-body { flex: 1; min-width: 0; }
   .reply-preview-sender { font-weight: 700; font-size: .76rem; color: var(--pra-blue); }
   .reply-preview-text { font-size: .78rem; color: var(--pra-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -427,14 +427,14 @@
   .composer-send:active { transform: scale(.92); }
 
   /* ── Pickers ── */
-  .picker-panel { position: absolute; bottom: 62px; left: 16px; width: 320px; max-height: 340px; overflow-y: auto; z-index: 20; padding: 12px; display: none; }
+  .picker-panel { position: absolute; bottom: calc(100% + 8px); left: 16px; width: 320px; max-height: 340px; overflow-y: auto; z-index: 20; padding: 12px; display: none; }
   /* Pasted-image staging strip — same floating-above-the-composer approach
      as the emoji/GIF panels, so pasting doesn't need to restructure the
      composer's own flex row. Send picks these up alongside (or instead of)
      typed text; nothing uploads until Send/Enter, matching how Slack/
      Discord/iMessage handle an image paste rather than firing the upload
      the instant you paste. */
-  .paste-preview { position: absolute; bottom: 62px; left: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; padding: 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 10px; z-index: 20; }
+  .paste-preview { position: absolute; bottom: calc(100% + 8px); left: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; padding: 10px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 10px; z-index: 20; }
   .paste-preview-item { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: #000; flex-shrink: 0; }
   .paste-preview-item img, .paste-preview-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .paste-preview-remove { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
