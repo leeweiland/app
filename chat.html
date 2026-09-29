@@ -1913,6 +1913,18 @@ async function init() {
   const deepLinkConvoId = new URLSearchParams(location.search).get('convo');
   if (deepLinkConvoId && conversations.some(c => c.id === deepLinkConvoId)) {
     openConvo(deepLinkConvoId);
+  } else {
+    // Plain tab refresh with no explicit deep link -- reopen whatever
+    // conversation was on screen (see openConvo's sessionStorage.setItem
+    // and closeConvo's matching removeItem), restoring the scroll position
+    // it was left at instead of jumping to the bottom. Nothing was
+    // selected -> nothing is stored -> this is simply skipped, leaving the
+    // sidebar-only view exactly as it was.
+    const restoreConvoId = sessionStorage.getItem('pra-chat-active-convo');
+    if (restoreConvoId && conversations.some(c => c.id === restoreConvoId)) {
+      const savedScroll = sessionStorage.getItem('pra-chat-scroll-' + restoreConvoId);
+      openConvo(restoreConvoId, { restoreScrollTop: savedScroll != null ? Number(savedScroll) : undefined });
+    }
   }
   setupComposer();
   setupPublishModal();
@@ -2466,12 +2478,17 @@ function updateHeaderForThreadView() {
 }
 window.addEventListener('resize', updateHeaderForThreadView);
 
-async function openConvo(id) {
+async function openConvo(id, { restoreScrollTop } = {}) {
   // The thread panel still holds the previous conversation's bubbles until
   // refreshThread's fetch comes back -- on a slow connection that showed the
   // last person's chat for a second or two before swapping in the new one.
   if (id !== activeConvoId) clearThreadView();
   activeConvoId = id;
+  // Remembered so a plain tab refresh reopens the same conversation (see
+  // the restore branch in init() and closeConvo's matching removeItem) --
+  // sessionStorage rather than localStorage since this should only survive
+  // a refresh of THIS tab, not follow into a fresh tab or another device.
+  sessionStorage.setItem('pra-chat-active-convo', id);
   reportActiveConversation();
   lastRenderedMessagesJson = null; // force the next refreshThread to render, even if it happens to match whatever the previous conversation last rendered
   hideNewMsgPill();
@@ -2559,6 +2576,10 @@ async function openConvo(id) {
 
   renderConvoList();
   await refreshThread(true);
+  // Overrides refreshThread's own scroll-to-bottom -- only passed on the
+  // page-load restore path (see init()), never on a normal user-initiated
+  // open, where jumping to the bottom is the right default.
+  if (restoreScrollTop != null) document.getElementById('threadBody').scrollTop = restoreScrollTop;
 }
 
 function isAdminMe() { return !!me && (me.role === 'admin' || me.role === 'admin2'); }
@@ -3266,6 +3287,7 @@ function clearThreadView() {
 
 function closeConvo() {
   activeConvoId = null;
+  sessionStorage.removeItem('pra-chat-active-convo');
   clearThreadView();
   reportActiveConversation();
   // A video message bubble tapped to play keeps playing (audio and all)
@@ -3301,6 +3323,27 @@ document.addEventListener('visibilitychange', reportActiveConversation);
 // still-open conversation's record fresh so that TTL never lapses while
 // you're actually still looking at it.
 setInterval(reportActiveConversation, 10000);
+
+// Remembers where you were scrolled to in each conversation (keyed per
+// convo id, not just one global value) so a tab refresh restores the exact
+// spot instead of always jumping back to the bottom -- see the restore
+// branch in init() and openConvo's restoreScrollTop param. Debounced since
+// 'scroll' can fire dozens of times a second; beforeunload's immediate,
+// non-debounced write catches whatever the debounce timer hasn't flushed
+// yet if the tab closes/refreshes mid-scroll.
+let threadScrollSaveTimer;
+function saveThreadScrollPosition() {
+  if (!activeConvoId) return;
+  clearTimeout(threadScrollSaveTimer);
+  threadScrollSaveTimer = setTimeout(() => {
+    sessionStorage.setItem('pra-chat-scroll-' + activeConvoId, String(document.getElementById('threadBody').scrollTop));
+  }, 200);
+}
+document.getElementById('threadBody').addEventListener('scroll', saveThreadScrollPosition);
+window.addEventListener('beforeunload', () => {
+  if (!activeConvoId) return;
+  sessionStorage.setItem('pra-chat-scroll-' + activeConvoId, String(document.getElementById('threadBody').scrollTop));
+});
 
 // Set by refreshThread, compared against on the next poll tick — lets it
 // skip re-rendering entirely when the fetch comes back identical (the
