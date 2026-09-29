@@ -4001,6 +4001,10 @@ function linkifyUrls(escapedText) {
     // startVideoReply) -- every video click in the thread goes there now.
     if (e.target.tagName === 'IMG') openImage(e.target.src || e.target.dataset.src);
     else if (e.target.classList.contains('expand-video-btn')) {
+      // Stop the inline player before switching to the reply panel's own
+      // player -- otherwise the bubble's video keeps playing (and making
+      // sound) behind the modal.
+      e.target.previousElementSibling?.pause();
       const mid = e.target.closest('.bubble-row')?.dataset.mid;
       if (mid) startVideoReply(mid);
     }
