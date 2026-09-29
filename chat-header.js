@@ -7,6 +7,28 @@
 // itself gets hidden.
 
 (function () {
+  // A tab/app instance left open across a deploy otherwise keeps running
+  // whatever JS it loaded with -- possibly days old -- no matter how many
+  // fixes ship, since Cache-Control:no-store only ever affects the NEXT
+  // navigation, not a page that's already open. This header is loaded on
+  // every page in the app, so putting the watcher here once covers all of
+  // them: polling the server's boot id (changes every process start, i.e.
+  // every deploy) and reloading on a mismatch means any page self-heals
+  // within about a minute of a new deploy, instead of silently running
+  // stale code (a stuck permission bug, a fixed data bug, etc.) until
+  // someone thinks to force-quit/refresh it.
+  let pageBootId = null;
+  async function watchForNewDeploy() {
+    try {
+      const r = await fetch('/api/app-boot-id', { cache: 'no-store' });
+      const { bootId } = await r.json();
+      if (pageBootId === null) { pageBootId = bootId; return; }
+      if (bootId !== pageBootId) location.reload();
+    } catch {}
+  }
+  watchForNewDeploy();
+  setInterval(watchForNewDeploy, 30000);
+
   function injectStyles() {
     if (document.getElementById('chat-header-style')) return;
     const s = document.createElement('style');

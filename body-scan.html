@@ -1574,31 +1574,13 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
   svgEl.innerHTML = svg;
 }
 
-// A tab left open across a deploy otherwise keeps running whatever JS it
-// loaded with -- possibly hours old -- no matter how many fixes ship,
-// since Cache-Control:no-store only ever affects the NEXT navigation, not
-// a page that's already sitting open. Polling the server's boot id (which
-// changes every process start, i.e. every deploy) and reloading on a
-// mismatch means an open tab self-heals within a minute of any deploy
-// instead of silently running stale code until someone thinks to
-// hard-refresh it.
-let pageBootId = null;
-async function watchForNewDeploy() {
-  try {
-    const r = await fetch('/api/app-boot-id', { cache: 'no-store' });
-    const { bootId } = await r.json();
-    if (pageBootId === null) { pageBootId = bootId; return; }
-    if (bootId !== pageBootId) location.reload();
-  } catch {}
-}
-setInterval(watchForNewDeploy, 30000);
-
 (async () => {
   try {
     const r = await fetch('/api/auth/me');
     if (r.ok) me = (await r.json()).user || null;
   } catch {}
-  watchForNewDeploy();
+  // The new-deploy watcher itself now lives in chat-header.js (loaded on
+  // every page) so it covers the whole app, not just this one.
   applyViewingMode(); // shows the admin override panel on load, not just after switching to view someone
   activityLoadSentinelObserver.observe(document.getElementById('activityLoadSentinel'));
   await loadProfile();
