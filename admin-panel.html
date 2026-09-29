@@ -361,128 +361,6 @@
       <div class="save-msg" id="apptSaveMsg"></div>
     </div>
 
-    <div class="pra-panel section" id="socialVideoConfigSection">
-      <div class="pra-h2" style="margin-bottom:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        Powerbatics Social Video
-        <button class="pra-btn pra-btn-outline" id="svPauseToggleBtn" type="button" title="Pause to stop favorited clips from publishing to Metricool (they still save to Drive)" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:999px">Active</button>
-      </div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Powers the favorite-star pipeline (trim → AI reframe/track → AI caption → schedule to Metricool). Every field saves itself — no Save button. API keys live in Railway's environment variables, not here.</div>
-      <div class="save-msg" id="socialVideoSaveMsg"></div>
-      <div class="field">
-        <label class="pra-label">Brand Voice Instructions (used to write every caption)</label>
-        <textarea class="pra-input" id="svAiPrompt" rows="6" style="width:100%;font-family:var(--font-primary);resize:vertical" placeholder="e.g. Bold, direct, no-fluff. Speak to the pain of stalled progress. Never mention a student's job or career."></textarea>
-      </div>
-      <div class="field">
-        <label class="pra-label">Own-Words Ratio: <span id="svOwnWordsRatioLabel">60</span>%</label>
-        <input type="range" id="svOwnWordsRatio" min="0" max="100" step="5" style="width:100%"/>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">0% = write completely fresh copy. 100% = reuse the voice bank's exact past sentences as much as possible.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Publish To</label>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;font-size:.86rem">
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-fb"/> Facebook</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-fbs"/> Facebook Story</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-ig"/> Instagram</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-igs"/> Instagram Story</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-li"/> LinkedIn</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-tt"/> TikTok</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-x"/> X</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="svPlatform-yt"/> YouTube Shorts</label>
-        </div>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:6px">Only networks actually connected to this brand in Metricool ever publish, regardless of what's checked here — these just turn a connected network on/off.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Timezone</label>
-        <select class="pra-select" id="svTimezone">
-          <option value="America/Anchorage">Alaska</option>
-          <option value="Pacific/Honolulu">Hawaii</option>
-          <option value="America/Los_Angeles">Pacific</option>
-          <option value="America/Denver">Mountain</option>
-          <option value="America/Chicago">Central</option>
-          <option value="America/New_York">Eastern</option>
-          <option value="UTC">UTC</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="pra-label">Post Time</label>
-        <select class="pra-select" id="svPostHour"></select>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour in the timezone above.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Connections</label>
-        <div id="svConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
-        <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> / <code>METRICOOL_PB_BLOG_ID</code> (scheduling).</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Test Generation</label>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:6px">Runs the real caption pipeline (brand voice + own-words ratio + voice bank) against a description you type — no video/Drive/Metricool involved. Use it to check whether it's actually pulling from your prompt and voice bank, or drifting into generic AI fluff.</div>
-        <input class="pra-input" id="svTestDescription" placeholder="e.g. LAETH NINJA STRENGTH BARS MUSCLE UP" autocomplete="off" style="margin-bottom:8px"/>
-        <button class="pra-btn pra-btn-outline" id="svTestGenBtn" type="button">Test Generation</button>
-        <div id="svTestResults" style="margin-top:12px"></div>
-      </div>
-    </div>
-
-    <div class="pra-panel section" id="pacificRimVideoConfigSection">
-      <div class="pra-h2" style="margin-bottom:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        Pacific Rim Athletics Social Video
-        <button class="pra-btn pra-btn-outline" id="praPauseToggleBtn" type="button" title="Pause to stop Gym Capture clips from publishing to Metricool (they still save to Drive and post to chat)" style="font-size:.72rem;font-weight:700;padding:5px 14px;border-radius:999px">Active</button>
-      </div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">Same pipeline as Powerbatics Social Video above (trim → AI reframe/track → AI caption → schedule to Metricool), publishing to the Pacific Rim Athletics brand instead — triggered by the Gym Capture header camera icon (both Gym Training and Gym Level Test clips get scheduled here automatically). Every field saves itself — no Save button.</div>
-      <div class="save-msg" id="pacificRimVideoSaveMsg"></div>
-      <div class="field">
-        <label class="pra-label">Brand Voice Instructions (used to write every caption)</label>
-        <textarea class="pra-input" id="praAiPrompt" rows="6" style="width:100%;font-family:var(--font-primary);resize:vertical" placeholder="e.g. Bold, direct, no-fluff. Speak to the pain of stalled progress. Never mention a student's job or career."></textarea>
-      </div>
-      <div class="field">
-        <label class="pra-label">Own-Words Ratio: <span id="praOwnWordsRatioLabel">60</span>%</label>
-        <input type="range" id="praOwnWordsRatio" min="0" max="100" step="5" style="width:100%"/>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">0% = write completely fresh copy. 100% = reuse the voice bank's exact past sentences as much as possible.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Publish To</label>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;font-size:.86rem">
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-fb"/> Facebook</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-fbs"/> Facebook Story</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-ig"/> Instagram</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-igs"/> Instagram Story</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-li"/> LinkedIn</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-tt"/> TikTok</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-x"/> X</label>
-          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="praPlatform-yt"/> YouTube Shorts</label>
-        </div>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:6px">Only networks actually connected to this brand in Metricool ever publish, regardless of what's checked here — these just turn a connected network on/off.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Timezone</label>
-        <select class="pra-select" id="praTimezone">
-          <option value="America/Anchorage">Alaska</option>
-          <option value="Pacific/Honolulu">Hawaii</option>
-          <option value="America/Los_Angeles">Pacific</option>
-          <option value="America/Denver">Mountain</option>
-          <option value="America/Chicago">Central</option>
-          <option value="America/New_York">Eastern</option>
-          <option value="UTC">UTC</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="pra-label">Post Time</label>
-        <select class="pra-select" id="praPostHour"></select>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Every clip schedules for the next day with nothing already booked on it (any platform on a day counts as booked), at this wall-clock hour in the timezone above.</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Connections</label>
-        <div id="praConnectionStatus" style="font-size:.85rem;padding:8px 0">Checking…</div>
-        <div class="pra-muted" style="font-size:.74rem;line-height:1.5">Set on Railway, not here: <code>ANTHROPIC_API_KEY</code> (captions), <code>OPENAI_API_KEY</code> (voice-bank search), <code>METRICOOL_API_KEY</code> / <code>METRICOOL_USER_ID</code> (shared with Powerbatics) / <code>METRICOOL_PRA_BLOG_ID</code> (scheduling).</div>
-      </div>
-      <div class="field">
-        <label class="pra-label">Test Generation</label>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:6px">Runs the real caption pipeline (brand voice + own-words ratio + voice bank) against a description you type — no video/Drive/Metricool involved. Use it to check whether it's actually pulling from your prompt and voice bank, or drifting into generic AI fluff.</div>
-        <input class="pra-input" id="praTestDescription" placeholder="e.g. LAETH NINJA STRENGTH BARS MUSCLE UP" autocomplete="off" style="margin-bottom:8px"/>
-        <button class="pra-btn pra-btn-outline" id="praTestGenBtn" type="button">Test Generation</button>
-        <div id="praTestResults" style="margin-top:12px"></div>
-      </div>
-    </div>
-
     <div class="pra-panel section">
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
@@ -564,123 +442,6 @@ async function saveArchetypes() {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ARCH_CONFIG),
   });
   const msg = document.getElementById('archSaveMsg');
-  msg.textContent = 'Saved.';
-  setTimeout(() => msg.textContent = '', 2000);
-}
-
-const SOCIAL_VIDEO_PLATFORMS = ['fb', 'fbs', 'ig', 'igs', 'li', 'tt', 'x', 'yt'];
-
-function fmtHour12(h) {
-  const period = h < 12 ? 'AM' : 'PM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:00 ${period}`;
-}
-
-// Pause/Active toggle -- shared by both brands (Powerbatics "sv" / Pacific
-// Rim "pra"). Independent of the auto-save-every-field pattern the other
-// settings use -- this one posts and updates its own button immediately
-// rather than waiting on any other field's own save.
-function renderPauseToggle(prefix, enabled) {
-  const btn = document.getElementById(prefix + 'PauseToggleBtn');
-  btn.textContent = enabled ? 'Active' : 'Paused';
-  btn.dataset.enabled = enabled ? '1' : '0';
-  btn.style.color = enabled ? '#2ecc71' : '#ff5c5c';
-  btn.style.borderColor = enabled ? '#2ecc71' : '#ff5c5c';
-}
-async function toggleVideoPublishing(prefix, endpoint) {
-  const btn = document.getElementById(prefix + 'PauseToggleBtn');
-  const next = btn.dataset.enabled !== '1';
-  renderPauseToggle(prefix, next); // optimistic -- this toggle should feel instant
-  await fetch(endpoint, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: next }),
-  });
-}
-document.getElementById('svPauseToggleBtn').onclick = () => toggleVideoPublishing('sv', '/api/social-video/settings');
-document.getElementById('praPauseToggleBtn').onclick = () => toggleVideoPublishing('pra', '/api/pacific-rim-video/settings');
-
-async function loadSocialVideoSettings() {
-  const r = await fetch('/api/social-video/settings');
-  if (!r.ok) return;
-  const s = await r.json();
-  renderPauseToggle('sv', s.enabled !== false);
-  document.getElementById('svAiPrompt').value = s.aiPrompt || '';
-  document.getElementById('svOwnWordsRatio').value = s.ownWordsRatio ?? 60;
-  document.getElementById('svOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
-  SOCIAL_VIDEO_PLATFORMS.forEach(id => { document.getElementById(`svPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
-  document.getElementById('svTimezone').value = s.timezone || 'America/Anchorage';
-  const hourSelect = document.getElementById('svPostHour');
-  if (!hourSelect.options.length) {
-    hourSelect.innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${fmtHour12(h)}</option>`).join('');
-  }
-  hourSelect.value = s.postHour ?? 3;
-  const rows = [
-    ['Anthropic (captions)', s.anthropicConfigured],
-    ['OpenAI (voice-bank search)', s.openaiConfigured],
-    ['Metricool (scheduling)', s.metricoolConfigured],
-  ];
-  document.getElementById('svConnectionStatus').innerHTML = rows.map(([label, ok]) =>
-    `<div>${ok ? '✅' : '❌'} ${label}</div>`
-  ).join('');
-}
-
-async function saveSocialVideoSettings() {
-  const platforms = {};
-  SOCIAL_VIDEO_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`svPlatform-${id}`).checked; });
-  await fetch('/api/social-video/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      aiPrompt: document.getElementById('svAiPrompt').value,
-      ownWordsRatio: Number(document.getElementById('svOwnWordsRatio').value),
-      postHour: Number(document.getElementById('svPostHour').value),
-      timezone: document.getElementById('svTimezone').value,
-      platforms,
-    }),
-  });
-  const msg = document.getElementById('socialVideoSaveMsg');
-  msg.textContent = 'Saved.';
-  setTimeout(() => msg.textContent = '', 2000);
-}
-
-async function loadPacificRimVideoSettings() {
-  const r = await fetch('/api/pacific-rim-video/settings');
-  if (!r.ok) return;
-  const s = await r.json();
-  renderPauseToggle('pra', s.enabled !== false);
-  document.getElementById('praAiPrompt').value = s.aiPrompt || '';
-  document.getElementById('praOwnWordsRatio').value = s.ownWordsRatio ?? 60;
-  document.getElementById('praOwnWordsRatioLabel').textContent = s.ownWordsRatio ?? 60;
-  SOCIAL_VIDEO_PLATFORMS.forEach(id => { document.getElementById(`praPlatform-${id}`).checked = !!(s.platforms || {})[id]; });
-  document.getElementById('praTimezone').value = s.timezone || 'America/Anchorage';
-  const hourSelect = document.getElementById('praPostHour');
-  if (!hourSelect.options.length) {
-    hourSelect.innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${fmtHour12(h)}</option>`).join('');
-  }
-  hourSelect.value = s.postHour ?? 3;
-  const rows = [
-    ['Anthropic (captions)', s.anthropicConfigured],
-    ['OpenAI (voice-bank search)', s.openaiConfigured],
-    ['Metricool (scheduling)', s.metricoolConfigured],
-  ];
-  document.getElementById('praConnectionStatus').innerHTML = rows.map(([label, ok]) =>
-    `<div>${ok ? '✅' : '❌'} ${label}</div>`
-  ).join('');
-}
-
-async function savePacificRimVideoSettings() {
-  const platforms = {};
-  SOCIAL_VIDEO_PLATFORMS.forEach(id => { platforms[id] = document.getElementById(`praPlatform-${id}`).checked; });
-  await fetch('/api/pacific-rim-video/settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      aiPrompt: document.getElementById('praAiPrompt').value,
-      ownWordsRatio: Number(document.getElementById('praOwnWordsRatio').value),
-      postHour: Number(document.getElementById('praPostHour').value),
-      timezone: document.getElementById('praTimezone').value,
-      platforms,
-    }),
-  });
-  const msg = document.getElementById('pacificRimVideoSaveMsg');
   msg.textContent = 'Saved.';
   setTimeout(() => msg.textContent = '', 2000);
 }
@@ -793,8 +554,6 @@ async function init() {
   loadConfig();
   loadCalendarStatus();
   loadArchetypes();
-  loadSocialVideoSettings();
-  loadPacificRimVideoSettings();
   // No Save buttons — every field in these two sections saves itself.
   // 'change' catches selects/checkboxes immediately; 'focusout' (the
   // bubbling version of blur) catches text/textarea fields once you tab or
@@ -811,16 +570,6 @@ async function init() {
   wireReminderCount('apptEmailReminderCount', 'apptEmailReminderRows', [1440, 60, 15]);
   wireReminderCount('apptSmsReminderCount', 'apptSmsReminderRows', [60, 15, 5]);
   wireReminderCount('apptMessengerReminderCount', 'apptMessengerReminderRows', [60, 15, 5]);
-
-  let socialVideoSaveTimer;
-  document.getElementById('socialVideoConfigSection').addEventListener('change', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
-  document.getElementById('socialVideoConfigSection').addEventListener('focusout', () => { clearTimeout(socialVideoSaveTimer); socialVideoSaveTimer = setTimeout(saveSocialVideoSettings, 400); });
-  document.getElementById('svOwnWordsRatio').addEventListener('input', (e) => { document.getElementById('svOwnWordsRatioLabel').textContent = e.target.value; });
-
-  let pacificRimVideoSaveTimer;
-  document.getElementById('pacificRimVideoConfigSection').addEventListener('change', () => { clearTimeout(pacificRimVideoSaveTimer); pacificRimVideoSaveTimer = setTimeout(savePacificRimVideoSettings, 400); });
-  document.getElementById('pacificRimVideoConfigSection').addEventListener('focusout', () => { clearTimeout(pacificRimVideoSaveTimer); pacificRimVideoSaveTimer = setTimeout(savePacificRimVideoSettings, 400); });
-  document.getElementById('praOwnWordsRatio').addEventListener('input', (e) => { document.getElementById('praOwnWordsRatioLabel').textContent = e.target.value; });
 
   let searchTimer;
   document.getElementById('userSearchInput').addEventListener('input', () => {
@@ -1287,43 +1036,6 @@ async function createUser() {
 }
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-// Test Generation (both Powerbatics and Pacific Rim Athletics Social Video
-// sections) -- runs the real caption pipeline against a typed-in
-// description, no video/Drive/Metricool involved, so an admin can check
-// what the brand voice prompt + own-words ratio + voice bank actually
-// produce before trusting it on a real clip. One title + one description,
-// reused as-is across every platform when actually publishing.
-async function runTestGeneration(prefix, endpoint) {
-  const input = document.getElementById(prefix + 'TestDescription');
-  const btn = document.getElementById(prefix + 'TestGenBtn');
-  const results = document.getElementById(prefix + 'TestResults');
-  const description = input.value.trim();
-  if (!description) { results.innerHTML = '<div class="pra-muted" style="font-size:.8rem">Type a test filename/description first.</div>'; return; }
-  btn.disabled = true;
-  results.innerHTML = '<div class="pra-muted" style="font-size:.8rem">Generating…</div>';
-  try {
-    const r = await fetch(endpoint, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
-    });
-    const d = await r.json();
-    if (!r.ok) { results.innerHTML = `<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">${escapeHtml(d.error || 'Failed.')}</div>`; return; }
-    const c = d.captions || {};
-    results.innerHTML = c.desc ? `
-      <div class="pra-panel" style="padding:12px;margin-bottom:8px">
-        ${c.title ? `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(c.title)}</div>` : ''}
-        <div style="font-size:.85rem;white-space:pre-wrap">${escapeHtml(c.desc)}</div>
-      </div>
-    ` : '<div class="pra-muted" style="font-size:.8rem">No caption returned.</div>';
-  } catch (e) {
-    results.innerHTML = '<div class="pra-muted" style="font-size:.8rem;color:#e74c3c">Request failed.</div>';
-  } finally {
-    btn.disabled = false;
-  }
-}
-document.getElementById('svTestGenBtn').onclick = () => runTestGeneration('sv', '/api/social-video/test-caption');
-document.getElementById('praTestGenBtn').onclick = () => runTestGeneration('pra', '/api/pacific-rim-video/test-caption');
 
 // Populates the Gym Training / Gym Level Test / Online Level Tests channel
 // pickers -- run once per loadConfig() call, before any of their <select>

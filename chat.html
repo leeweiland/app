@@ -1238,11 +1238,9 @@
     </div>
   </div>
 
-  <!-- Publish to Powerbatics — video favorites only. Everything past trim
-       and label is automatic (tracking, vertical reframe, captions, next-
-       open-day scheduling to every connected platform) — a coach only
-       trims, types a label, and clicks Save. Images keep the plain
-       rename-and-favorite flow above. -->
+  <!-- Save Training Clip — video favorites only. A coach trims, types a
+       label, and clicks Save; the trimmed clip is saved to Drive under that
+       label. Images keep the plain rename-and-favorite flow above. -->
   <div class="modal-backdrop" id="publishModal">
     <div class="pra-panel modal-box modal-box-wide modal-box-flex">
       <div class="pra-h2" style="margin-bottom:10px;flex-shrink:0">Save Training Clip</div>
@@ -1259,7 +1257,6 @@
           <div class="camera-trim-handle camera-trim-handle-end" id="publishTrimEndHandle"></div>
         </div>
       </div>
-      <div class="pra-muted" style="font-size:.72rem;margin-top:4px;flex-shrink:0">Set the frame you want for the video thumbnail.</div>
 
       <div style="margin-top:10px;flex-shrink:0">
         <label class="pra-label">Label (also saved as the Drive filename)</label>
@@ -1272,23 +1269,6 @@
         <button class="pra-btn" id="publishSaveBtn" type="button" style="flex:1">Save</button>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;flex-shrink:0" id="publishCancelBtn" type="button">Cancel</button>
-    </div>
-  </div>
-
-  <!-- AI caption review — shown before Favorites/Gym Capture actually
-       publish to Metricool. Delete, edit, or leave each platform's
-       AI-drafted title/description as-is; whatever's in the fields when
-       Send is clicked is what goes out (see reviewAndApproveCaptions()). -->
-  <div class="modal-backdrop" id="captionReviewModal">
-    <div class="pra-panel modal-box modal-box-wide modal-box-flex">
-      <div class="pra-h2" style="margin-bottom:4px;flex-shrink:0">Review AI Caption</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px;flex-shrink:0">Delete, modify, or approve the description below before sending.</div>
-      <div id="captionReviewFields" style="overflow-y:auto;flex:1 1 auto;min-height:60px"></div>
-      <div class="pra-muted" id="captionReviewStatus" style="font-size:.78rem;margin-top:6px;min-height:1em;flex-shrink:0"></div>
-      <div style="display:flex;gap:10px;margin-top:10px;flex-shrink:0">
-        <button class="pra-btn" id="captionReviewSendBtn" type="button" style="flex:1">Send</button>
-      </div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;flex-shrink:0" id="captionReviewCancelBtn" type="button">Cancel</button>
     </div>
   </div>
 
@@ -3615,23 +3595,6 @@ function showReadReceiptsPopup(anchorEl, m) {
 function svgReply() {
   return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 6L4 12l6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12h9.5a6 6 0 0 1 6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
-// Grabs whatever frame a <video> is currently parked on as a JPEG thumbnail
-// (base64, no data: prefix) -- shared by the favorite-star publish modal and
-// gym capture's send step, both of which just use "wherever the coach left
-// the scrubber" as the frame to hand Metricool as a custom cover image.
-// Downscaled to keep the multipart/JSON payload small; returns null if the
-// video hasn't loaded a frame yet (videoWidth still 0).
-function captureVideoFrameBase64(video, maxWidth = 720) {
-  if (!video || !video.videoWidth) return null;
-  const scale = Math.min(1, maxWidth / video.videoWidth);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(video.videoWidth * scale);
-  canvas.height = Math.round(video.videoHeight * scale);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-}
-
 function svgForward() {
   return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 6L20 12l-6.5 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12h-9.5a6 6 0 0 0-6 6v1" stroke="#009bff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
@@ -4519,8 +4482,8 @@ function setupCameraCapture() {
     showGymLabelStep(false);
     showGymDestinationStep(true);
   };
-  document.getElementById('cameraGymTrainingBtn').onclick = () => reviewThenSendGymCapture('training');
-  document.getElementById('cameraGymLevelTestBtn').onclick = () => reviewThenSendGymCapture('levelTest');
+  document.getElementById('cameraGymTrainingBtn').onclick = () => sendGymCapture('training');
+  document.getElementById('cameraGymLevelTestBtn').onclick = () => sendGymCapture('levelTest');
 
   const track = document.getElementById('cameraTrimTrack');
   const startHandle = document.getElementById('cameraTrimStartHandle');
@@ -4970,21 +4933,11 @@ async function sendCameraCapture() {
   }
 }
 
-// Shows the AI caption review step first (same one Favorites uses) —
-// gym-capture used to publish to Metricool straight from the background
-// with nobody ever seeing the caption; now it stops here first, and only
-// actually uploads/sends once the coach approves (or cancels out).
-async function reviewThenSendGymCapture(destination) {
-  const captions = await reviewAndApproveCaptions('/api/pacific-rim-video/test-caption', cameraGymLabel);
-  if (!captions) return;
-  sendGymCapture(destination, captions);
-}
-
 // Gym capture's own send -- no open thread to post an optimistic bubble
 // into (this can be triggered from the header, outside any conversation),
 // so the modal just stays up showing progress until the upload finishes,
 // then hands off into whichever gym channel it landed in.
-async function sendGymCapture(destination, captions) {
+async function sendGymCapture(destination) {
   const status = document.getElementById('cameraGymStatus');
   const trainingBtn = document.getElementById('cameraGymTrainingBtn');
   const levelTestBtn = document.getElementById('cameraGymLevelTestBtn');
@@ -5000,21 +4953,10 @@ async function sendGymCapture(destination, captions) {
   const fd = new FormData();
   fd.append('label', cameraGymLabel);
   fd.append('destination', destination);
-  const trimmed = isVideoTrimmed();
-  if (trimmed) {
+  if (isVideoTrimmed()) {
     fd.append('trimStart', String(cameraTrimStart));
     fd.append('trimEnd', String(cameraTrimEnd));
   }
-  // Whatever frame the coach left the scrubber on, as a JPEG thumbnail --
-  // offset against trimStart since the published clip starts at 0 there,
-  // same as the favorite-star publish flow.
-  const reviewVideo = document.getElementById('cameraReviewVideo');
-  const thumbnailBase64 = captureVideoFrameBase64(reviewVideo);
-  if (thumbnailBase64) {
-    fd.append('thumbnailBase64', thumbnailBase64);
-    fd.append('thumbnailTimeSec', String(Math.max(0, reviewVideo.currentTime - (trimmed ? cameraTrimStart : 0))));
-  }
-  if (captions) fd.append('captions', JSON.stringify(captions));
   fd.append('video', blob, 'capture' + ext);
 
   trainingBtn.disabled = true;
@@ -5160,15 +5102,12 @@ function uploadFormDataWithProgress(url, formData, onProgress) {
   });
 }
 
-// ── Publish to Powerbatics (favorite-star on a video) ──────────────────────
-// A coach only trims and labels — tracking, vertical reframe, captions, and
-// scheduling to every connected platform all happen server-side in one call
-// (see /api/social-video/save-and-publish) once Save is clicked.
+// ── Save Training Clip (favorite-star on a video) ──────────────────────────
+// A coach trims and labels a clip; the trimmed clip is saved to Drive under
+// that label (see /api/social-video/save) once Save is clicked.
 let publishSourceFileId = null;
-let publishVideoWidth = 1920, publishVideoHeight = 1080;
 let publishTrimDragging = null;
 let publishTrimStart = 0, publishTrimEnd = 0;
-let publishKeyframes = null; // filled in automatically by runPublishTracking before save
 
 function setupPublishModal() {
   document.getElementById('publishSaveBtn').onclick = runPublishSave;
@@ -5210,7 +5149,6 @@ function renderPublishTrim() {
 
 async function openPublishModal(fileId, suggestedName) {
   publishSourceFileId = fileId;
-  publishKeyframes = null;
   document.getElementById('publishLabelInput').value = suggestedName || '';
   document.getElementById('publishStatus').textContent = '';
   document.getElementById('publishSaveBtn').disabled = false;
@@ -5224,8 +5162,6 @@ async function openPublishModal(fileId, suggestedName) {
   // video, which is why the black screen came back.
   openModal('publishModal');
   await new Promise((resolve) => video.addEventListener('loadedmetadata', resolve, { once: true }));
-  publishVideoWidth = video.videoWidth || 1920;
-  publishVideoHeight = video.videoHeight || 1080;
   publishTrimStart = 0;
   publishTrimEnd = video.duration;
   renderPublishTrim();
@@ -5251,237 +5187,27 @@ async function openPublishModal(fileId, suggestedName) {
   video.muted = wasMuted;
 }
 
-// ── AI motion tracking (TF.js + COCO-SSD, ported from social-video.html) ───
-// Loaded on demand — most favorite-clicks won't need it, and it's a couple
-// MB of model weights nobody should pay for until they actually click
-// "Track Subject".
-let _publishTrackModel = null;
-const PUBLISH_TRACK_CLASSES = new Set(['person', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'bird', 'car', 'truck', 'bus', 'motorcycle', 'bicycle', 'boat', 'airplane']);
-
-function loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-async function ensurePublishTrackModel() {
-  if (_publishTrackModel) return _publishTrackModel;
-  await loadScriptOnce('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js');
-  await loadScriptOnce('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
-  _publishTrackModel = await window.cocoSsd.load({ base: 'mobilenet_v2' });
-  return _publishTrackModel;
-}
-
-// Frame dimensions the crop math is expressed against (matches the fixed
-// 9:16 target this pipeline always outputs) — the actual output is scaled
-// up to 1080x1920 server-side afterward, this is just the proportional
-// reference frame the pan/scale numbers are computed relative to.
-const PUBLISH_FRAME_W = 240, PUBLISH_FRAME_H = 426;
-const PUBLISH_TRACK_SCALE = 130; // % zoom — gives room to pan without exposing background
-
-// No dedicated button/status of its own anymore — called automatically by
-// runPublishSave before it saves, with progress written to the shared
-// publishStatus line.
-async function runPublishTracking() {
-  const status = document.getElementById('publishStatus');
-  const video = document.getElementById('publishSourceVideo');
-  status.textContent = '⏳ loading AI…';
-  try {
-    const model = await ensurePublishTrackModel();
-    status.textContent = '🔍 detecting…';
-
-    const vw = publishVideoWidth, vh = publishVideoHeight;
-    const scaledW = vw * PUBLISH_TRACK_SCALE / 100, scaledH = vh * PUBLISH_TRACK_SCALE / 100;
-    const maxPanX = Math.max(0, (scaledW - PUBLISH_FRAME_W) / 2), maxPanY = Math.max(0, (scaledH - PUBLISH_FRAME_H) / 2);
-    const dcW = Math.min(vw, 416), dcH = Math.round(dcW * vh / vw);
-    const dc = document.createElement('canvas'); dc.width = dcW; dc.height = dcH;
-    const dctx = dc.getContext('2d');
-
-    let lastCx = 0.5, lastCy = 0.35, hasLocked = false;
-    const STEP = 0.1;
-    const startT = publishTrimStart, endT = publishTrimEnd;
-    const steps = Math.max(1, Math.ceil((endT - startT) / STEP));
-    const raw = [];
-
-    for (let i = 0; i <= steps; i++) {
-      const t = Math.min(startT + i * STEP, endT - 0.01);
-      video.currentTime = t;
-      await new Promise(r => { const h = () => r(); video.addEventListener('seeked', h, { once: true }); setTimeout(h, 1500); });
-      dctx.drawImage(video, 0, 0, dcW, dcH);
-
-      let cx = lastCx, cy = lastCy, detected = false;
-      try {
-        const preds = await model.detect(dc);
-        const subjects = preds.filter(p => PUBLISH_TRACK_CLASSES.has(p.class) && p.score > 0.38)
-          .sort((a, b) => (b.bbox[2] * b.bbox[3]) - (a.bbox[2] * a.bbox[3]));
-        if (subjects.length > 0) {
-          const MAX_JUMP = 0.4;
-          const pick = subjects.reduce((best, p) => {
-            const pc = [(p.bbox[0] + p.bbox[2] / 2) / dcW, (p.bbox[1] + p.bbox[3] / 2) / dcH];
-            const bc = [(best.bbox[0] + best.bbox[2] / 2) / dcW, (best.bbox[1] + best.bbox[3] / 2) / dcH];
-            return Math.hypot(pc[0] - lastCx, pc[1] - lastCy) < Math.hypot(bc[0] - lastCx, bc[1] - lastCy) ? p : best;
-          });
-          const pickedCx = (pick.bbox[0] + pick.bbox[2] / 2) / dcW, pickedCy = (pick.bbox[1] + pick.bbox[3] / 2) / dcH;
-          const jumpDist = Math.hypot(pickedCx - lastCx, pickedCy - lastCy);
-          if (!hasLocked || jumpDist <= MAX_JUMP) { cx = pickedCx; cy = pickedCy; lastCx = cx; lastCy = cy; detected = true; hasLocked = true; }
-        }
-      } catch {}
-      raw.push({ t, cx, cy, detected });
-      status.textContent = `🔍 detecting… ${Math.round((i / steps) * 100)}%`;
-    }
-
-    // Gap-fill undetected frames by interpolating between surrounding real detections.
-    for (let i = 0; i < raw.length; i++) {
-      if (!raw[i].detected) {
-        let j = i + 1;
-        while (j < raw.length && !raw[j].detected) j++;
-        if (j < raw.length) {
-          const a = i > 0 ? raw[i - 1] : raw[j], b = raw[j];
-          const span = j - (i > 0 ? i - 1 : 0);
-          for (let k = i; k < j; k++) {
-            const frac = (k - (i > 0 ? i - 1 : 0)) / span;
-            raw[k].cx = a.cx + (b.cx - a.cx) * frac;
-            raw[k].cy = a.cy + (b.cy - a.cy) * frac;
-          }
-        }
-        i = j - 1;
-      }
-    }
-
-    // Bidirectional EMA smoothing.
-    const S = 0.15;
-    const fwd = [{ ...raw[0] }];
-    for (let i = 1; i < raw.length; i++) fwd.push({ t: raw[i].t, cx: fwd[i - 1].cx + (raw[i].cx - fwd[i - 1].cx) * S, cy: fwd[i - 1].cy + (raw[i].cy - fwd[i - 1].cy) * S });
-    const smoothed = [...fwd];
-    for (let i = smoothed.length - 2; i >= 0; i--) smoothed[i] = { t: fwd[i].t, cx: smoothed[i + 1].cx + (fwd[i].cx - smoothed[i + 1].cx) * S, cy: smoothed[i + 1].cy + (fwd[i].cy - smoothed[i + 1].cy) * S };
-
-    publishKeyframes = smoothed.map(pos => ({
-      time: parseFloat(pos.t.toFixed(3)),
-      scale: PUBLISH_TRACK_SCALE,
-      offsetX: Math.max(-maxPanX, Math.min(maxPanX, Math.round(-(pos.cx - 0.5) * scaledW))),
-      offsetY: Math.max(-maxPanY, Math.min(maxPanY, Math.round(-(pos.cy - 0.5) * scaledH))),
-    }));
-    status.textContent = `✓ tracked · ${publishKeyframes.length} keyframes`;
-  } catch (e) {
-    // Tracking is a nice-to-have, not a hard requirement — the backend
-    // already falls back to a plain center crop when no keyframes are
-    // sent, so a tracking failure shouldn't block the save.
-    console.error('[publish] tracking failed, falling back to center crop:', e);
-    publishKeyframes = null;
-  }
-}
-
-// ── AI caption review — Favorites (save-and-publish) and Gym Capture both
-// stop here before anything actually goes out to Metricool. One title +
-// one description, reused as-is across every platform actually published
-// to (no more per-platform variants). ────────────────────────────────────
-// Generates a caption draft (testCaptionEndpoint — no video/Drive/Metricool
-// involved, same route Admin Panel's own Test Generation uses) and shows it
-// editable. Resolves with the approved {title, desc} to actually publish
-// with, or null if the coach cancels out — clearing the fields and sending
-// anyway is a valid way to approve "no caption," same as leaving it
-// untouched approves the AI draft as-is.
-function reviewAndApproveCaptions(testCaptionEndpoint, description) {
-  return new Promise((resolve) => {
-    const fields = document.getElementById('captionReviewFields');
-    const status = document.getElementById('captionReviewStatus');
-    const sendBtn = document.getElementById('captionReviewSendBtn');
-    const cancelBtn = document.getElementById('captionReviewCancelBtn');
-    fields.innerHTML = '';
-    status.textContent = 'Generating…';
-    sendBtn.disabled = true;
-    openModal('captionReviewModal');
-
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      sendBtn.onclick = null;
-      cancelBtn.onclick = null;
-      closeModal('captionReviewModal');
-      resolve(value);
-    };
-    cancelBtn.onclick = () => finish(null);
-    sendBtn.onclick = () => {
-      finish({
-        title: document.getElementById('captionReview_title')?.value.trim() || '',
-        desc: document.getElementById('captionReview_desc')?.value.trim() || '',
-      });
-    };
-
-    fetch(testCaptionEndpoint, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
-    }).then(r => r.json()).then(d => {
-      if (settled) return;
-      if (!d.captions) { status.textContent = d.error || 'Could not generate a caption draft.'; sendBtn.disabled = false; return; }
-      const c = d.captions;
-      fields.innerHTML = `
-        <div class="pra-panel" style="padding:10px;margin-bottom:8px">
-          <input class="pra-input" id="captionReview_title" placeholder="Title" value="${escapeHtml(c.title || '')}" style="margin-bottom:6px;width:100%;box-sizing:border-box"/>
-          <textarea class="pra-input" id="captionReview_desc" rows="6" style="width:100%;box-sizing:border-box;resize:vertical">${escapeHtml(c.desc || '')}</textarea>
-        </div>
-      `;
-      status.textContent = '';
-      sendBtn.disabled = false;
-    }).catch(() => {
-      if (settled) return;
-      status.textContent = 'Could not generate a caption draft.';
-      sendBtn.disabled = false;
-    });
-  });
-}
-
 async function runPublishSave() {
   const btn = document.getElementById('publishSaveBtn');
   const status = document.getElementById('publishStatus');
   const label = document.getElementById('publishLabelInput').value.trim();
   if (!label) { status.textContent = 'Give it a label first.'; return; }
   btn.disabled = true;
-
-  // Vertical source video is never cropped (see reframeVideoVertical) —
-  // tracking it would just be wasted TF.js load + per-frame detection time
-  // for output the server would never use anyway.
-  if (publishVideoWidth > publishVideoHeight) await runPublishTracking();
-
-  const captions = await reviewAndApproveCaptions('/api/social-video/test-caption', label);
-  if (!captions) { btn.disabled = false; return; }
-
   status.textContent = 'Saving…';
   try {
-    const publishVideo = document.getElementById('publishSourceVideo');
-    const thumbnailBase64 = captureVideoFrameBase64(publishVideo);
-    const r = await fetch('/api/social-video/save-and-publish', {
+    const r = await fetch('/api/social-video/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         driveFileId: publishSourceFileId,
-        videoWidth: publishVideoWidth, videoHeight: publishVideoHeight,
         trimStart: publishTrimStart, trimEnd: publishTrimEnd,
-        label, keyframes: publishKeyframes || undefined,
-        thumbnailBase64: thumbnailBase64 || undefined, thumbnailTimeSec: publishVideo.currentTime,
-        captions,
+        label,
       }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Could not save.');
-    if (!d.published) {
-      status.textContent = `Saved to Drive. ${d.error || 'Publish failed.'}`;
-      return;
-    }
-    const failed = (d.results || []).filter(x => !x.ok);
-    if (failed.length) {
-      status.textContent = `Saved to Drive. Published with errors: ${failed.map(f => f.platformId + ': ' + f.error).join('; ')}`;
-    } else {
-      status.textContent = 'Saved to Drive. Published.';
-      setTimeout(() => closeModal('publishModal'), 2500);
-    }
+    status.textContent = 'Saved to Drive.';
+    setTimeout(() => closeModal('publishModal'), 1500);
   } catch (e) {
-    // Reaching here means the save itself failed (a non-200 response, or a
-    // network error) — the publish-only failure paths above already say
-    // "Saved to Drive." on their own since the save step succeeded there.
     status.textContent = e.message;
   } finally {
     btn.disabled = false;
@@ -6158,7 +5884,7 @@ function openModal(id) { document.getElementById(id).classList.add('show'); }
 // panel's own content) — same "bounce in and out, an accidental close
 // isn't costly" reasoning extends to Publish since Cancel already discards
 // the trim with no confirmation of its own.
-['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'captionReviewModal', 'groupModal', 'forwardModal', 'levelTestModal'].forEach(id => {
+['intakeFormModal', 'staffNotesModal', 'favoritesModal', 'mediaModal', 'publishModal', 'groupModal', 'forwardModal', 'levelTestModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
