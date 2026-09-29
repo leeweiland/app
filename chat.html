@@ -31,6 +31,14 @@
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
   .sidebar-resizer:hover::after, .sidebar-resizer.dragging::after { left: 0; width: 5px; background: var(--pra-blue); }
+
+  /* Drag handle along the top edge of the message composer -- same
+     hover/dragging convention as .sidebar-resizer, just row-resize instead
+     of col-resize. Absolutely positioned against .composer's own
+     position:relative so it doesn't add to the composer's layout height. */
+  .composer-resizer { height: 7px; cursor: row-resize; background: transparent; position: absolute; top: -4px; left: 0; right: 0; z-index: 3; touch-action: none; }
+  .composer-resizer::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: var(--pra-border); }
+  .composer-resizer:hover::after, .composer-resizer.dragging::after { top: 1px; height: 5px; background: var(--pra-blue); }
   .sidebar-head { padding: 16px; border-bottom: 1px solid var(--pra-border); display: flex; align-items: center; justify-content: space-between; }
   .sidebar-actions { display: flex; gap: 8px; }
   .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--pra-border); }
@@ -410,7 +418,7 @@
      fresh page load carries no zoom). 16px flat (not the .92rem/~14.7px
      used elsewhere) sits right at the threshold that keeps iOS from
      triggering it at all. */
-  .composer-textarea { flex: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-weight: 400; font-size: 16px; line-height: 1.35; padding: 7px 4px; max-height: 120px; overflow-y: auto; }
+  .composer-textarea { flex: 1; min-width: 0; max-width: 100%; overflow-wrap: anywhere; resize: none; border: none; background: transparent; color: var(--pra-text); font: inherit; font-weight: 400; font-size: 16px; line-height: 1.35; padding: 7px 4px; max-height: var(--composer-max-h, 120px); overflow-y: auto; }
   .composer-textarea:focus { outline: none; }
   .composer-textarea::placeholder { font-weight: 400; }
   .composer-send { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--pra-blue); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .15s, transform .1s; }
@@ -930,6 +938,7 @@
         </div>
         <div class="reactor-list-popup" id="reactorListPopup"></div>
         <div class="composer">
+          <div class="composer-resizer" id="composerResizer" title="Drag to resize"></div>
           <div class="reply-preview" id="replyPreview" style="display:none"></div>
           <div class="paste-preview" id="pastePreview" style="display:none"></div>
           <div class="mention-dropdown" id="mentionDropdown"></div>
@@ -1037,7 +1046,10 @@
        renderBubble's m.videoNotes branch. -->
   <div class="modal-backdrop" id="videoReplyModal">
     <div class="pra-panel modal-box modal-box-wide" style="text-align:left">
-      <div class="pra-h2" style="margin-bottom:10px">Reply with Timestamped Notes</div>
+      <div class="pra-h2" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        Reply with Timestamped Notes
+        <button class="mab-action" id="videoReplyStarBtn" title="Star" style="display:none"></button>
+      </div>
       <!-- max-height (not just width:100%) matters specifically for a
            vertical/portrait clip — uncapped, a 9:16 video scaled to this
            modal's ~580px width renders 1000px+ tall, pushing the note
@@ -1733,6 +1745,47 @@ function setupSidebarResize() {
   });
 }
 
+// Drag the handle along the top edge of the composer to reserve more typing
+// room -- composerFloorHeight is a floor, not a fixed height: the textarea's
+// own auto-grow (see the 'input' listener in setupComposer) still takes
+// over and grows it further for a long message, this just controls how big
+// it starts out / shrinks back down to. Height (not width) persists across
+// visits, same convention as setupSidebarResize.
+let composerFloorHeight = 0;
+function setupComposerResize() {
+  const resizer = document.getElementById('composerResizer');
+  const textInput = document.getElementById('textInput');
+  const MIN = 36, MAX = 360;
+  const saved = Number(localStorage.getItem('pra-chat-composer-height'));
+  if (saved) {
+    composerFloorHeight = Math.min(MAX, Math.max(MIN, saved));
+    document.documentElement.style.setProperty('--composer-max-h', composerFloorHeight + 'px');
+    textInput.style.height = Math.max(textInput.scrollHeight, composerFloorHeight) + 'px';
+  }
+
+  let dragging = false, startY = 0, startHeight = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    dragging = true; resizer.classList.add('dragging');
+    startY = e.clientY; startHeight = textInput.getBoundingClientRect().height;
+    document.body.style.userSelect = 'none';
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    // Dragging UP (handle sits above the composer) should grow it, so this
+    // is startY minus the current Y, not the other way around.
+    const height = Math.min(MAX, Math.max(MIN, startHeight + (startY - e.clientY)));
+    composerFloorHeight = height;
+    document.documentElement.style.setProperty('--composer-max-h', height + 'px');
+    textInput.style.height = Math.max(textInput.scrollHeight, height) + 'px';
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; resizer.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    localStorage.setItem('pra-chat-composer-height', composerFloorHeight);
+  });
+}
+
 function initials(u) { return ((u?.first?.[0]||'') + (u?.last?.[0]||'')).toUpperCase(); }
 function avatarHtml(u) {
   return u?.profilePictureFileId ? '<img src="/api/chat/media/' + u.profilePictureFileId + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>' : initials(u);
@@ -1866,6 +1919,7 @@ async function init() {
   setupPush();
   setupSearchClearButtons();
   setupSidebarResize();
+  setupComposerResize();
   document.getElementById('chatSearchInput').addEventListener('input', () => renderConvoList());
   document.getElementById('favoritesViewToggle').addEventListener('click', () => {
     favoritesOnlyView = !favoritesOnlyView;
@@ -2947,6 +3001,7 @@ document.getElementById('mabReplyBtn').innerHTML = svgReply();
 document.getElementById('mabForwardBtn').innerHTML = svgForward();
 document.getElementById('mabLevelTestBtn').innerHTML = svgLevelTest();
 document.getElementById('mabStarBtn').innerHTML = svgStar();
+document.getElementById('videoReplyStarBtn').innerHTML = svgStar();
 document.getElementById('scheduleBtn').innerHTML = svgCalendar();
 document.getElementById('scheduleBtn').addEventListener('click', () => {
   const convo = conversations.find(c => c.id === activeConvoId);
@@ -3724,7 +3779,7 @@ function msgGridCellHtml(m, moreCount) {
   const src = `/api/chat/media/${m.driveFileId}`;
   const overlay = moreCount ? `<div class="msg-grid-more">+${moreCount}</div>` : '';
   return m.type === 'video'
-    ? `<div class="msg-grid-item" data-type="video" data-src="${src}"><video src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
+    ? `<div class="msg-grid-item" data-type="video" data-src="${src}" data-mid="${m.id}"><video src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
     : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img src="${src}"/>${overlay}</div>`;
 }
 
@@ -3940,22 +3995,22 @@ function linkifyUrls(escapedText) {
   document.getElementById('threadBody').addEventListener('click', (e) => {
     if (!e.target.closest('.bubble.media')) return;
     // Video keeps its native controls for inline play/pause/scrub — only the
-    // dedicated expand button opens the lightbox, so clicking play doesn't
-    // fight with clicking to go full-frame.
-    // Lazy-loaded (see chatMediaLazyObserver) — normally already resolved
-    // by the time either is tappable, but fall back to data-src in case
-    // the observer hasn't fired yet (e.g. rootMargin threshold not yet hit).
+    // dedicated expand button opens anything, so clicking play doesn't
+    // fight with clicking to go full-frame. A video's "full-frame" is the
+    // timestamped-notes reply panel, not the plain lightbox (see
+    // startVideoReply) -- every video click in the thread goes there now.
     if (e.target.tagName === 'IMG') openImage(e.target.src || e.target.dataset.src);
     else if (e.target.classList.contains('expand-video-btn')) {
-      const vid = e.target.previousElementSibling;
-      openVideo(vid.src || vid.dataset.src);
+      const mid = e.target.closest('.bubble-row')?.dataset.mid;
+      if (mid) startVideoReply(mid);
     }
   });
-  // A multi-file send's grid bubble (see renderGridBubble) — a plain tile
-  // opens straight into the lightbox same as any other media bubble; the
-  // "+N" overflow tile instead opens the whole batch in the Shared Media
-  // modal (repurposed with a batch-specific title) so the rest of the send
-  // is still reachable instead of being permanently hidden behind the count.
+  // A multi-file send's grid bubble (see renderGridBubble) — a plain video
+  // tile opens the timestamped-notes reply panel same as any other video in
+  // the thread; the "+N" overflow tile instead opens the whole batch in the
+  // Shared Media modal (repurposed with a batch-specific title) so the rest
+  // of the send is still reachable instead of being permanently hidden
+  // behind the count.
   document.getElementById('threadBody').addEventListener('click', (e) => {
     const cell = e.target.closest('.msg-grid-item');
     if (!cell) return;
@@ -3967,7 +4022,7 @@ function linkifyUrls(escapedText) {
       openModal('mediaModal');
       return;
     }
-    if (cell.dataset.type === 'video') openVideo(cell.dataset.src);
+    if (cell.dataset.type === 'video') startVideoReply(cell.dataset.mid);
     else openImage(cell.dataset.src);
   });
   // Tapping the read-receipt ticks shows who's actually read/delivered a
@@ -4389,7 +4444,7 @@ function setupComposer() {
   textInput.addEventListener('input', (e) => {
     if (!e.isComposing) convertEmoticonAtCaret(textInput);
     textInput.style.height = 'auto';
-    textInput.style.height = textInput.scrollHeight + 'px';
+    textInput.style.height = Math.max(textInput.scrollHeight, composerFloorHeight) + 'px';
     updateMentionDropdown(textInput);
   });
 
@@ -5704,6 +5759,13 @@ function startVideoReply(mid) {
   document.getElementById('videoReplyStatus').textContent = '';
   document.getElementById('videoReplySendBtn').disabled = true;
   document.getElementById('videoReplyCurrentTime').textContent = '0:00';
+  // Same star affordance as the message action bar's — clicking a video no
+  // longer opens that action bar first, so favoriting has to be reachable
+  // from here directly too.
+  const starBtn = document.getElementById('videoReplyStarBtn');
+  const canStar = isStaffMe();
+  starBtn.style.display = canStar ? '' : 'none';
+  if (canStar) starBtn.classList.toggle('starred', favoritedFileIds.has(m.driveFileId));
   openModal('videoReplyModal');
 }
 
@@ -5739,6 +5801,13 @@ document.getElementById('videoReplyPlayer').addEventListener('timeupdate', funct
   document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(this.currentTime);
 });
 document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
+document.getElementById('videoReplyStarBtn').onclick = () => {
+  const m = currentThreadMessages.find(x => x.id === videoReplyTargetId);
+  if (!m) return;
+  document.getElementById('videoReplyPlayer').pause();
+  closeModal('videoReplyModal');
+  openPublishModal(m.driveFileId, m.driveFileName);
+};
 document.getElementById('videoReplyNoteInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addVideoReplyNote(); }
 });
