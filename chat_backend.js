@@ -1286,6 +1286,14 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
+  // Neither this read nor the write below used to check its response status
+  // — a bad/expired token or any other Google API error just fell through
+  // silently (an empty header here sends every column index to -1, which
+  // then produces a malformed range for the write and STILL doesn't throw,
+  // since that request's status went unchecked too), reporting success to
+  // the coach for an edit that was never actually saved. Throwing here
+  // means a real failure surfaces as a real error instead.
+  if (!getRes.ok) throw new Error(`Could not read the ${tabName} levels sheet: ` + (getData.error?.message || getRes.status));
   const rows = getData.values || [];
   const header = rows[0] || [];
   const firstIdx = header.indexOf("FIRST NAME");
@@ -1293,6 +1301,7 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   const teamIdx = header.indexOf("Team");
   const catIdx = LEVELS_CATEGORIES.map(c => header.indexOf(c));
   const width = header.length;
+  if (firstIdx < 0 || lastIdx < 0) throw new Error(`The ${tabName} levels sheet's header row looks wrong (no FIRST NAME/LAST NAME column) — check it hasn't been edited.`);
 
   const newRow = new Array(width).fill("");
   newRow[firstIdx] = first;
@@ -1305,17 +1314,22 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
     i > 0 && String(r[firstIdx] || "").trim().toLowerCase() === f && String(r[lastIdx] || "").trim().toLowerCase() === l
   );
   const colLetter = (idx) => String.fromCharCode(65 + idx);
+  let writeRes, writeData;
   if (rowIndex > 0) {
     const sheetRow = rowIndex + 1;
-    await fetch(
+    writeRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(`'${tabName}'!A${sheetRow}:${colLetter(width - 1)}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
       { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ values: [newRow] }) }
     );
   } else {
-    await fetch(
+    writeRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(`'${tabName}'!A1:${colLetter(width - 1)}1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ values: [newRow] }) }
     );
+  }
+  if (!writeRes.ok) {
+    writeData = await writeRes.json().catch(() => ({}));
+    throw new Error(`Could not save to the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
   }
   levelsCache = null; // next read should reflect the write immediately
 }
