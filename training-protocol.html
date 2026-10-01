@@ -1469,6 +1469,12 @@ function wireModals() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => searchVideos(e.target.value), 300);
   });
+  // Enter/Go on mobile's on-screen keyboard fires a keydown same as a
+  // physical Enter key -- blur so the keyboard dismisses itself instead of
+  // the student having to separately tap the keyboard's own down-chevron.
+  document.getElementById('videoSearchInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  });
 
   document.getElementById('videoFileInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1574,7 +1580,12 @@ function wireVideoResultCards(box) {
 // flat 50-result cap that just silently ran out.
 async function searchVideos(q) {
   const box = document.getElementById('videoResults');
-  box.className = '';
+  // Always keep modal-scroll-body -- video-results-grid is additive, not a
+  // replacement for it. Reassigning className to just 'video-results-grid'
+  // (dropping modal-scroll-body) used to leave the results grid with no
+  // overflow-y of its own, so anything past modal-box's max-height:80vh was
+  // simply clipped off instead of being scrollable.
+  box.className = 'modal-scroll-body';
   videoCurrentQuery = q;
   videoNextPageToken = null;
   if (videoSentinelObserver) { videoSentinelObserver.disconnect(); videoSentinelObserver = null; }
@@ -1584,7 +1595,7 @@ async function searchVideos(q) {
   if (d.needsConfig) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">Ask an admin to set the Training Protocol Videos folder in Admin Settings.</div>'; return; }
   if (!d.files || !d.files.length) { box.innerHTML = '<div class="pra-muted" style="font-size:.85rem">No videos found.</div>'; return; }
   videoNextPageToken = d.nextPageToken;
-  box.className = 'video-results-grid';
+  box.className = 'modal-scroll-body video-results-grid';
   box.innerHTML = d.files.map(videoResultCardHtml).join('') + '<div class="video-results-sentinel" id="videoResultsSentinel"></div>';
   wireVideoResultCards(box);
   const sentinel = document.getElementById('videoResultsSentinel');
