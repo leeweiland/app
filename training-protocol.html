@@ -148,7 +148,15 @@
      wireLazyThumbs in the script below) instead of every result on the
      page trying to load its video at once. */
   .video-results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .video-result { cursor: pointer; border-radius: 8px; overflow: hidden; }
+  /* overflow:hidden here (not needed -- .video-result-thumb already clips
+     its own video/play-icon) made CSS Grid's "automatic minimum size"
+     rule collapse this item's row track to 0-and-grow-from-there instead
+     of the thumb's real aspect-ratio height, the moment the grid got a
+     definite, smaller-than-content container height (see video-results-grid
+     now living inside modal-scroll-body) -- every thumbnail rendered
+     squished/clipped, and the grid's own scrollHeight came out wrong too
+     (nothing to scroll to, by its own miscalculated accounting). */
+  .video-result { cursor: pointer; border-radius: 8px; }
   .video-result-thumb { position: relative; width: 100%; aspect-ratio: 16/10; background: #000; border-radius: 8px; overflow: hidden; }
   .video-result-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   .video-result-thumb .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--pra-blue); filter: drop-shadow(0 0 6px var(--pra-blue-glow)); pointer-events: none; }
