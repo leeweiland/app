@@ -141,13 +141,14 @@
   .type-choice:hover { border-color: var(--pra-blue); }
   .type-choice svg { width: 26px; height: 26px; display: block; margin: 0 auto 8px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); }
   .type-choice:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
-  /* Grid of bigger cards (matching Powerbatics Training Videos' look) —
-     ~2 per row inside the modal's 420px width lands close to 6 visible
-     before scrolling, same as moves-dictionary.html's move-thumb. Each
-     thumb only gets its real `src` once scrolled into view (see
-     wireLazyThumbs in the script below) instead of every result on the
-     page trying to load its video at once. */
-  .video-results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* Single-column feed of bigger cards (matching Powerbatics Training
+     Videos' look), one full-width thumb per row rather than 2-across --
+     every thumb shares the same aspect-ratio/width, so they're all the
+     same size regardless of the query. Each thumb only gets its real
+     `src` once scrolled into view (see wireLazyThumbs in the script
+     below) instead of every result on the page trying to load its video
+     at once. */
+  .video-results-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
   /* overflow:hidden here (not needed -- .video-result-thumb already clips
      its own video/play-icon) made CSS Grid's "automatic minimum size"
      rule collapse this item's row track to 0-and-grow-from-there instead
