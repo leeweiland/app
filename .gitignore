@@ -2,3 +2,10 @@ node_modules/
 android/
 www/
 .env
+
+# SQLite message store (chat_messages_sqlite.js) -- generated locally /
+# on the Railway Volume from chat_messages.json, same as every other
+# chat_*.json data file is never committed.
+chat_messages.db
+chat_messages.db-shm
+chat_messages.db-wal

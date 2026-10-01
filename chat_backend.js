@@ -23,13 +23,16 @@ import { JSDOM } from "jsdom";
 import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
+import * as MessagesDB from "./chat_messages_sqlite.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const USERS_FILE = "chat_users.json";
 const SESSIONS_FILE = "chat_sessions.json";
 const CONVOS_FILE = "chat_conversations.json";
-const MESSAGES_FILE = "chat_messages.json";
+// Messages moved to SQLite (see chat_messages_sqlite.js / MessagesDB) --
+// chat_messages.json is left on disk as an inert, point-in-time backup;
+// nothing in this file reads or writes it anymore.
 const PUSH_FILE = "chat_push_subscriptions.json";
 const CONFIG_FILE = "chat_admin_config.json";
 const RESETS_FILE = "chat_password_resets.json";
@@ -1780,17 +1783,15 @@ async function checkAppointmentReminders() {
           // its Calendar/Zoom links) the original booking confirmation
           // used, by looking up that link off the original message
           // (appt.id === the original message's id).
-          const messages = readJson(MESSAGES_FILE, []);
           const reminderMsg = apptCfg.messengerReminderUseDefault
             ? { id: randomUUID(), conversationId: appt.conversationId, senderId: appt.coachId, type: "appointment",
                 startISO: appt.startISO, durationMinutes: appt.durationMinutes, timezone: appt.isGym ? "America/Anchorage" : null,
                 isGym: !!appt.isGym, clientIds: appt.clientIds || [],
-                googleEventId: appt.googleEventId, googleEventLink: messages.find(m => m.id === appt.id)?.googleEventLink || null,
+                googleEventId: appt.googleEventId, googleEventLink: MessagesDB.getMessageById(appt.id)?.googleEventLink || null,
                 createdAt: new Date().toISOString() }
             : { id: randomUUID(), conversationId: appt.conversationId, senderId: appt.coachId, type: "text",
                 text: fillTemplate(apptCfg.messengerReminderTemplate, vars), createdAt: new Date().toISOString() };
-          messages.push(reminderMsg);
-          writeJson(MESSAGES_FILE, messages);
+          MessagesDB.insertMessage(reminderMsg);
           const pushBody = apptCfg.messengerReminderUseDefault ? `📅 Reminder: session ${dateStr} at ${timeStr}` : fillTemplate(apptCfg.messengerReminderTemplate, vars);
           await notifyParticipants(appt.conversationId, appt.coachId, { title: coachName, body: pushBody, conversationId: appt.conversationId }).catch(() => {});
           appt.remindersSent.push(key);
@@ -2389,7 +2390,7 @@ syncDefaultGroups();
 // ── Read receipts (WhatsApp-style: sent / delivered / read) ────────────────
 // "Delivered" is set the moment a recipient's own client actually fetches
 // this message (see the GET /messages handler below, which stamps every
-// non-mine message it returns) — not just when it lands in MESSAGES_FILE,
+// non-mine message it returns) — not just when the message is first sent,
 // since this is a poll-based app with no push-to-device signal of its own.
 // "Read" reuses the readState timestamp conversations already track for
 // unread-badge counting: a message is read by someone once their own
@@ -2466,9 +2467,7 @@ function createCallMessage(call) {
     type: "call", callId: call.id, callOutcome: outcome, durationSeconds,
     createdAt: call.endedAt,
   };
-  const messages = readJson(MESSAGES_FILE, []);
-  messages.push(msg);
-  writeJson(MESSAGES_FILE, messages);
+  MessagesDB.insertMessage(msg);
   notifyParticipants(call.conversationId, null, {
     title: "Video call", body: outcome === "missed" ? "Missed video call" : "Video call ended", conversationId: call.conversationId,
   }).catch(() => {});
@@ -2846,8 +2845,7 @@ export async function handleChatRequest(req, res, url) {
     const fileId = mediaMatch[1];
     // Only allow access if this file is attached to a message in a conversation
     // the requester participates in, or is someone's profile picture.
-    const messages = readJson(MESSAGES_FILE, []);
-    const msg = messages.find(m => m.driveFileId === fileId);
+    const msg = MessagesDB.findMessageByDriveFileId(fileId);
     const allUsers = readJson(USERS_FILE, []);
     const isProfilePic = allUsers.some(u => u.profilePictureFileId === fileId);
     if (!isProfilePic) {
@@ -3194,9 +3192,7 @@ export async function handleChatRequest(req, res, url) {
         .map(c => c.type === "group" ? { ...c, participantIds: c.participantIds.filter(id => id !== targetId) } : c);
       writeJson(CONVOS_FILE, remainingConvos);
 
-      const messages = readJson(MESSAGES_FILE, []);
-      const remainingMessages = messages.filter(m => !dmIdsToRemove.includes(m.conversationId) && m.senderId !== targetId);
-      writeJson(MESSAGES_FILE, remainingMessages);
+      MessagesDB.deleteMessagesForUserRemoval(dmIdsToRemove, targetId);
 
       return sendJson(res, 200, { ok: true });
     }
@@ -3411,9 +3407,7 @@ export async function handleChatRequest(req, res, url) {
       const cfg = getConfig();
       const gymChannelIds = new Set([cfg.gymTrainingChannelId, cfg.gymLevelTestChannelId].filter(Boolean));
       if (gymChannelIds.size) {
-        readJson(MESSAGES_FILE, []).forEach(m => {
-          if (m.type === "video" && gymChannelIds.has(m.conversationId) && inMonth(m.createdAt)) bump(m.senderId);
-        });
+        MessagesDB.getVideosInMonth([...gymChannelIds], monthStart, nextMonthStart).forEach(m => bump(m.senderId));
       }
 
       return sendJson(res, 200, { counts, goal: 20 });
@@ -3455,8 +3449,7 @@ export async function handleChatRequest(req, res, url) {
       // actually be attached to a message in a conversation this user is a
       // participant of — otherwise a client could pass an arbitrary Drive
       // file id and copy media it was never granted access to.
-      const messages = readJson(MESSAGES_FILE, []);
-      const srcMsg = messages.find(m => m.driveFileId === driveFileId && (m.type === "image" || m.type === "video"));
+      const srcMsg = MessagesDB.findMessageByDriveFileId(driveFileId, { typesIn: ["image", "video"] });
       if (!srcMsg) return sendJson(res, 404, { error: "Media not found" });
       const convos = readJson(CONVOS_FILE, []);
       const convo = convos.find(c => c.id === srcMsg.conversationId);
@@ -3585,15 +3578,13 @@ export async function handleChatRequest(req, res, url) {
         convo.participantIds.push(user.id);
         writeJson(CONVOS_FILE, convos);
       }
-      const messages = readJson(MESSAGES_FILE, []);
       const msg = {
         id: randomUUID(), conversationId: convo.id, senderId: user.id,
         type: "video", driveFileId: uploaded.driveFileId, mimeType: uploaded.mimeType, name: uploaded.name,
         driveFileName: uploaded.driveFileName,
         createdAt: new Date().toISOString(),
       };
-      messages.push(msg);
-      writeJson(MESSAGES_FILE, messages);
+      MessagesDB.insertMessage(msg);
       logActivity(user.id, "video_favorited", `Sent a gym capture video: ${label}`, { conversationId: convo.id });
       return sendJson(res, 200, { ok: true, conversationId: convo.id, message: msg });
     }
@@ -3607,9 +3598,8 @@ export async function handleChatRequest(req, res, url) {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       const { messageId, note } = await readJsonBody(req);
       if (!messageId) return sendJson(res, 400, { error: "messageId is required" });
-      const messages = readJson(MESSAGES_FILE, []);
-      const srcMsg = messages.find(m => m.id === messageId && m.type === "video");
-      if (!srcMsg) return sendJson(res, 404, { error: "Video message not found" });
+      const srcMsg = MessagesDB.getMessageById(messageId);
+      if (!srcMsg || srcMsg.type !== "video") return sendJson(res, 404, { error: "Video message not found" });
       const convos = readJson(CONVOS_FILE, []);
       const srcConvo = convos.find(c => c.id === srcMsg.conversationId);
       if (!srcConvo || !srcConvo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not a participant in that conversation" });
@@ -3630,16 +3620,16 @@ export async function handleChatRequest(req, res, url) {
         driveFileName: srcMsg.driveFileName, forwarded: true,
         createdAt: new Date(now).toISOString(),
       };
-      messages.push(videoMsg);
+      const toInsert = [videoMsg];
       const trimmedNote = String(note || "").trim();
       if (trimmedNote) {
-        messages.push({
+        toInsert.push({
           id: randomUUID(), conversationId: targetConvo.id, senderId: user.id,
           type: "text", text: trimmedNote,
           createdAt: new Date(now + 1).toISOString(),
         });
       }
-      writeJson(MESSAGES_FILE, messages);
+      MessagesDB.insertMessages(toInsert);
       return sendJson(res, 200, { ok: true, conversationId: targetConvo.id });
     }
 
@@ -4205,7 +4195,7 @@ export async function handleChatRequest(req, res, url) {
       const target = users.find(u => u.id === body.targetUserId);
       let messageSnapshot = null;
       if (type === "message" && body.messageId) {
-        const msg = readJson(MESSAGES_FILE, []).find(m => m.id === body.messageId);
+        const msg = MessagesDB.getMessageById(body.messageId);
         if (msg) messageSnapshot = { type: msg.type, text: msg.text || "", createdAt: msg.createdAt };
       }
       const report = {
@@ -4229,7 +4219,12 @@ export async function handleChatRequest(req, res, url) {
       const blockedUserIds = new Set(readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id).map(b => b.blockedId));
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id))
         .filter(c => c.type !== "dm" || !c.participantIds.some(id => blockedUserIds.has(id)));
-      const messages = readJson(MESSAGES_FILE, []);
+      // One indexed query covering every one of this user's conversations
+      // (see chat_messages_sqlite.js's getLastMessages) instead of filtering
+      // the entire message history once per conversation -- this used to be
+      // the single most expensive thing this 3s-polled endpoint did, and it
+      // only got slower as real message history grew.
+      const lastByConvo = MessagesDB.getLastMessages(convos.map(c => c.id));
       const users = readJson(USERS_FILE, []);
       const favoriteIds = new Set(user.favoriteConvoIds || []);
       const pinnedIds = new Set(user.pinnedConvoIds || []);
@@ -4238,10 +4233,9 @@ export async function handleChatRequest(req, res, url) {
       let renewalEligibility = null;
       if (isStaff(user)) { try { renewalEligibility = await fetchStudentEligibility(); } catch { renewalEligibility = null; } }
       const enriched = convos.map(c => {
-        const convoMsgs = messages.filter(m => m.conversationId === c.id);
-        const last = convoMsgs[convoMsgs.length - 1];
+        const last = lastByConvo.get(c.id) || null;
         const lastReadAt = readState[c.id];
-        const unreadCount = convoMsgs.filter(m => m.senderId !== user.id && (!lastReadAt || new Date(m.createdAt) > new Date(lastReadAt))).length;
+        const unreadCount = MessagesDB.getUnreadCount(c.id, user.id, lastReadAt);
         return {
           ...c,
           participants: c.participantIds.map(id => publicUser(users.find(u => u.id === id))).filter(Boolean)
@@ -4387,7 +4381,7 @@ export async function handleChatRequest(req, res, url) {
         if (convo.type !== "group") return sendJson(res, 400, { error: "Only groups can be deleted" });
         if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
         writeJson(CONVOS_FILE, convos.filter(c => c.id !== convoId));
-        writeJson(MESSAGES_FILE, readJson(MESSAGES_FILE, []).filter(m => m.conversationId !== convoId));
+        MessagesDB.deleteMessagesForConversation(convoId);
         return sendJson(res, 200, { ok: true });
       }
 
@@ -4540,23 +4534,21 @@ export async function handleChatRequest(req, res, url) {
       if (sub === "/messages" && req.method === "GET") {
         const limit = Number(url.searchParams.get("limit")) || 50;
         const before = url.searchParams.get("before");
-        const allMessages = readJson(MESSAGES_FILE, []);
-        let msgs = allMessages.filter(m => m.conversationId === convoId);
-        if (before) msgs = msgs.filter(m => new Date(m.createdAt) < new Date(before));
-        msgs = msgs.slice(-limit);
+        let msgs = MessagesDB.getConversationMessages(convoId, { before, limit });
 
         // Read receipts, "delivered" half: this requester's client just
         // fetched these messages, so anything not their own just reached
-        // them — stamp it. `msgs` holds the SAME object references as
-        // allMessages (filter/slice don't clone), so mutating here and
-        // writing allMessages back persists it correctly.
-        let deliveryChanged = false;
+        // them — stamp it. Only the (at most `limit`) rows actually in this
+        // page get touched, not the whole conversation's history.
         msgs.forEach(m => {
           if (m.senderId === user.id) return;
-          m.deliveredTo = m.deliveredTo || [];
-          if (!m.deliveredTo.includes(user.id)) { m.deliveredTo.push(user.id); deliveryChanged = true; }
+          const deliveredTo = m.deliveredTo || [];
+          if (!deliveredTo.includes(user.id)) {
+            deliveredTo.push(user.id);
+            m.deliveredTo = deliveredTo;
+            MessagesDB.updateMessageFields(m.id, { deliveredTo });
+          }
         });
-        if (deliveryChanged) writeJson(MESSAGES_FILE, allMessages);
 
         // "read" half + the sent/delivered/read status ticks show on your
         // OWN messages — computed here so the client just renders whatever
@@ -4693,8 +4685,8 @@ export async function handleChatRequest(req, res, url) {
           }).then(async (uploads) => {
             const results = await Promise.all(uploads);
             const feedGroupId = results.length > 1 ? randomUUID() : null;
-            const messages = readJson(MESSAGES_FILE, []);
             const now = Date.now();
+            const toInsert = [];
             results.forEach((r, i) => {
               if (r.error) return;
               const msg = {
@@ -4708,23 +4700,22 @@ export async function handleChatRequest(req, res, url) {
                 driveFileName: r.driveFileName,
                 feedGroupId, createdAt: new Date(now + i).toISOString(),
               };
-              messages.push(msg);
+              toInsert.push(msg);
               created.push(msg);
             });
-            writeJson(MESSAGES_FILE, messages);
+            MessagesDB.insertMessages(toInsert);
           });
         } else if (req.headers["content-type"]?.includes("application/json") === false) {
           return sendJson(res, 400, { error: "text or gifUrl required" });
         } else {
           const body = await readJsonBody(req);
-          const messages = readJson(MESSAGES_FILE, []);
           if (body.forwardMessageId) {
             // Forwarding just clones the source message's content fields into
             // this conversation — the sender must be a participant of
             // wherever the original lives, same access rule as any other
             // read, so this can't be used to pull a message out of a thread
             // you're not actually in.
-            const src = messages.find(m => m.id === body.forwardMessageId);
+            const src = MessagesDB.getMessageById(body.forwardMessageId);
             if (!src) return sendJson(res, 404, { error: "Original message not found" });
             const srcConvo = convos.find(c => c.id === src.conversationId);
             if (!srcConvo || !srcConvo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not allowed to forward this message" });
@@ -4736,8 +4727,7 @@ export async function handleChatRequest(req, res, url) {
               forwarded: true,
               createdAt: new Date().toISOString(),
             };
-            messages.push(msg);
-            writeJson(MESSAGES_FILE, messages);
+            MessagesDB.insertMessage(msg);
             created.push(msg);
           } else {
             if (!body.text && !body.gifUrl) return sendJson(res, 400, { error: "text or gifUrl required" });
@@ -4770,8 +4760,7 @@ export async function handleChatRequest(req, res, url) {
                 : undefined,
               createdAt: new Date().toISOString(),
             };
-            messages.push(msg);
-            writeJson(MESSAGES_FILE, messages);
+            MessagesDB.insertMessage(msg);
             created.push(msg);
           }
         }
@@ -4935,7 +4924,6 @@ export async function handleChatRequest(req, res, url) {
         status.email = summarize(emailResults);
         status.sms = summarize(smsResults);
 
-        const messages = readJson(MESSAGES_FILE, []);
         const msg = {
           id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
           startISO, durationMinutes,
@@ -4950,8 +4938,7 @@ export async function handleChatRequest(req, res, url) {
           googleEventIds, googleEventLinks,
           createdAt: new Date().toISOString(),
         };
-        messages.push(msg);
-        writeJson(MESSAGES_FILE, messages);
+        MessagesDB.insertMessage(msg);
 
         const appointments = readJson("chat_appointments.json", []);
         appointments.push({
@@ -5049,7 +5036,6 @@ export async function handleChatRequest(req, res, url) {
           } catch (e) { status.sms = { ok: false, error: e.message }; }
         } else status.sms = { ok: false, error: "disabled" };
 
-        const messages = readJson(MESSAGES_FILE, []);
         const msg = {
           id: msgId, conversationId: convoId, senderId: user.id, type: "appointment",
           startISO, durationMinutes,
@@ -5058,8 +5044,7 @@ export async function handleChatRequest(req, res, url) {
           googleEventId, googleEventLink, googleEventIds: googleEventId ? [googleEventId] : [], googleEventLinks: googleEventLink ? [googleEventLink] : [],
           createdAt: new Date().toISOString(),
         };
-        messages.push(msg);
-        writeJson(MESSAGES_FILE, messages);
+        MessagesDB.insertMessage(msg);
 
         const appointments = readJson("chat_appointments.json", []);
         appointments.push({
@@ -5078,16 +5063,12 @@ export async function handleChatRequest(req, res, url) {
 
       if (sub === "/search" && req.method === "GET") {
         const q = (url.searchParams.get("q") || "").toLowerCase();
-        const msgs = readJson(MESSAGES_FILE, []).filter(m =>
-          m.conversationId === convoId && m.type === "text" && m.text.toLowerCase().includes(q)
-        );
+        const msgs = MessagesDB.searchConversationText(convoId, q);
         return sendJson(res, 200, { messages: msgs });
       }
 
       if (sub === "/media" && req.method === "GET") {
-        const msgs = readJson(MESSAGES_FILE, []).filter(m =>
-          m.conversationId === convoId && (m.type === "image" || m.type === "video")
-        );
+        const msgs = MessagesDB.getConversationMedia(convoId);
         return sendJson(res, 200, { media: msgs });
       }
 
@@ -5101,15 +5082,14 @@ export async function handleChatRequest(req, res, url) {
         const messageId = reactMatch[1];
         const { emoji } = await readJsonBody(req);
         if (!emoji) return sendJson(res, 400, { error: "emoji required" });
-        const messages = readJson(MESSAGES_FILE, []);
-        const msg = messages.find(m => m.id === messageId && m.conversationId === convoId);
-        if (!msg) return sendJson(res, 404, { error: "Message not found" });
+        const msg = MessagesDB.getMessageById(messageId);
+        if (!msg || msg.conversationId !== convoId) return sendJson(res, 404, { error: "Message not found" });
         msg.reactions = msg.reactions || [];
         const idx = msg.reactions.findIndex(r => r.userId === user.id && r.emoji === emoji);
         const removing = idx >= 0;
         if (removing) msg.reactions.splice(idx, 1);
         else msg.reactions.push({ userId: user.id, emoji });
-        writeJson(MESSAGES_FILE, messages);
+        MessagesDB.updateMessageFields(messageId, { reactions: msg.reactions });
         if (!removing) logActivity(user.id, "reaction_added", `Reacted ${emoji} to a message`, { conversationId: convoId, messageId });
         return sendJson(res, 200, { reactions: msg.reactions });
       }
@@ -5118,19 +5098,17 @@ export async function handleChatRequest(req, res, url) {
       const msgMatch = sub.match(/^\/messages\/([^/]+)$/);
       if (msgMatch && (req.method === "DELETE" || req.method === "PATCH")) {
         const messageId = msgMatch[1];
-        const messages = readJson(MESSAGES_FILE, []);
-        const msgIdx = messages.findIndex(m => m.id === messageId && m.conversationId === convoId);
-        if (msgIdx < 0) return sendJson(res, 404, { error: "Message not found" });
+        const existing = MessagesDB.getMessageById(messageId);
+        if (!existing || existing.conversationId !== convoId) return sendJson(res, 404, { error: "Message not found" });
         if (req.method === "DELETE") {
-          const deleted = messages[msgIdx];
+          const deleted = existing;
           // Staff can cancel any appointment; a gym client can additionally
           // cancel their own Gym slot booking without needing staff — Gym
           // is the one appointment type visible/self-serviceable to clients
           // at all. Every other message type stays staff-only.
           const canCancelOwnGym = deleted.type === "appointment" && deleted.isGym && user.role === "gym" && deleted.clientIds?.includes(user.id);
           if (!isStaff(user) && !canCancelOwnGym) return sendJson(res, 403, { error: "Staff only" });
-          messages.splice(msgIdx, 1);
-          writeJson(MESSAGES_FILE, messages);
+          MessagesDB.deleteMessageById(messageId);
 
           if (deleted.type === "appointment") {
             const appointments = readJson("chat_appointments.json", []);
@@ -5199,11 +5177,10 @@ export async function handleChatRequest(req, res, url) {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Staff only" });
         const { text } = await readJsonBody(req);
         if (!text) return sendJson(res, 400, { error: "text required" });
-        if (messages[msgIdx].type !== "text") return sendJson(res, 400, { error: "Only text messages can be edited" });
-        messages[msgIdx].text = text;
-        messages[msgIdx].editedAt = new Date().toISOString();
-        writeJson(MESSAGES_FILE, messages);
-        return sendJson(res, 200, { message: messages[msgIdx] });
+        if (existing.type !== "text") return sendJson(res, 400, { error: "Only text messages can be edited" });
+        const editedAt = new Date().toISOString();
+        MessagesDB.updateMessageFields(messageId, { text, editedAt });
+        return sendJson(res, 200, { message: { ...existing, text, editedAt } });
       }
     }
 
