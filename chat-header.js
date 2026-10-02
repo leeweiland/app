@@ -29,6 +29,29 @@
   watchForNewDeploy();
   setInterval(watchForNewDeploy, 30000);
 
+  // Mobile's on-screen keyboard has no reliable "Done" affordance of its
+  // own for a plain single-line field -- without something actually
+  // blurring it, hitting Enter/Go after typing a weight, a level number,
+  // a search term, a step count, etc. just leaves the keyboard stuck open
+  // covering half the screen (reported on Body Scan's profile fields,
+  // confirmed missing the same way on several other pages' plain inputs
+  // too). This is loaded on every page, so fixing it once here covers all
+  // of them instead of hand-wiring each field. Scoped to real single-line
+  // inputs only -- a <textarea> commonly wants Enter to do something else
+  // on purpose (the chat composer sends on it, the video-reply note box
+  // adds a timestamp, a mention dropdown accepts a highlighted suggestion
+  // instead), so those are deliberately left alone. Harmless to double up
+  // with a page's own existing `if (e.key==='Enter') el.blur()` handler on
+  // a specific field (several pages already have one) -- blurring an
+  // already-blurred element is a no-op.
+  const BLUR_ON_ENTER_TYPES = new Set(["text", "number", "email", "tel", "search", "password", "url", "date"]);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || !BLUR_ON_ENTER_TYPES.has(el.type)) return;
+    el.blur();
+  });
+
   function injectStyles() {
     if (document.getElementById('chat-header-style')) return;
     const s = document.createElement('style');
