@@ -24,6 +24,7 @@ import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
+import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3720,7 +3721,7 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
-    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos"];
+    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
       const targetUserId = protocolMatch[1];
@@ -3935,6 +3936,162 @@ export async function handleChatRequest(req, res, url) {
         );
         const d = await r.json();
         return sendJson(res, 200, { files: d.files || [], nextPageToken: d.nextPageToken || null });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
+    // A video step's `name` is whatever Drive filename it happened to be
+    // uploaded/library-named with (often a long coach-authored string like
+    // "LEE NINJA STRENGTH Human Flag #10 Straddle Flag Pullup.mp4") -- this
+    // turns that into just the move itself ("Straddle Flag Pullup") so the
+    // Flow canvas can show a short, readable label above the clip. Called
+    // once per video step at creation time (training-protocol.html), not on
+    // every render -- the result is saved onto the step (`moveLabel`) so
+    // this never re-runs for a step that already has one.
+    if (p === "/api/chat/training-protocol/label-video" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { filename } = await readJsonBody(req);
+      if (!filename) return sendJson(res, 400, { error: "filename required" });
+      try {
+        const tool = {
+          type: "function",
+          function: {
+            name: "submit_move_name",
+            description: "Submit the short movement/exercise name extracted from a gym training video's filename.",
+            parameters: {
+              type: "object",
+              properties: {
+                moveName: { type: "string", description: "Just the movement name (e.g. 'Straddle Flag Pullup', 'Hip Bridge', 'Handstand Hold') -- no person's name, no gym/location, no 'KATA LEVEL' or numbering, no file extension. Title case, a few words." },
+              },
+              required: ["moveName"],
+              additionalProperties: false,
+            },
+          },
+        };
+        const { refused, args } = await analyzeTextWithOpenAI({
+          systemPrompt: "You label gym training-app video filenames with just the movement/exercise name they show, for a coach building a client's training protocol. Filenames are often formatted like 'FIRSTNAME LASTNAME LOCATION ELEMENT KATA LEVEL N APPARATUS MOVE' -- strip all of that down to only the move/exercise itself.",
+          userPrompt: `Filename: ${filename}`,
+          tool,
+        });
+        if (refused || !args?.moveName) return sendJson(res, 200, { moveLabel: null });
+        return sendJson(res, 200, { moveLabel: String(args.moveName).slice(0, 60) });
+      } catch (e) {
+        // Best-effort labeling -- a failure here should never block saving
+        // the video step itself, just leaves it on the filename fallback.
+        return sendJson(res, 200, { moveLabel: null });
+      }
+    }
+
+    // ─── AI-generated training plan ──────────────────────────────────────
+    // A coach describes the client (days/week, volume, reps, focus, etc. --
+    // free text, however they'd naturally write it) and gets back a
+    // day-by-day draft to review/edit before it's saved for real. The model
+    // only ever produces plain text content per day (never picks specific
+    // Drive videos -- it has no way to judge whether a given clip is
+    // actually right for this client), so the coach still attaches videos
+    // to whichever steps want one, same as building by hand. A few of the
+    // studio's own already-saved plans (real protocols with content, or
+    // saved templates) are sampled as style/format examples when available;
+    // with none yet saved, a small built-in example keeps the output in the
+    // same shape instead of inventing a format from scratch.
+    function sampleExistingPlansForPrompt(excludeUserId) {
+      const samples = [];
+      const protocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+      for (const [uid, rec] of Object.entries(protocols)) {
+        if (uid === excludeUserId || !rec?.steps?.length) continue;
+        samples.push(rec.steps);
+        if (samples.length >= 2) break;
+      }
+      if (samples.length < 3) {
+        const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+        for (const t of templates) {
+          if (!t.steps?.length) continue;
+          samples.push(t.steps);
+          if (samples.length >= 3) break;
+        }
+      }
+      // Walk each sample's step chain in order (following parentId, always
+      // the non-branch child first) and render it the same "Day N" / bullet
+      // shape the tool below is asked to produce -- real formatting
+      // conventions (how rounds/sets/reps/notes actually get written here),
+      // not the raw step objects.
+      function walk(steps) {
+        const byParent = new Map();
+        steps.forEach(s => {
+          const key = s.parentId || "root";
+          if (!byParent.has(key)) byParent.set(key, []);
+          byParent.get(key).push(s);
+        });
+        const lines = [];
+        let current = (byParent.get("root") || []).find(s => !s.isBranchRoot) || (byParent.get("root") || [])[0];
+        while (current) {
+          if (current.type === "day") lines.push(`Day ${current.dayNumber}`);
+          else if (current.type === "text" && current.content) lines.push(`- ${current.content}`);
+          else if (current.type === "video") lines.push(`- [video: ${current.moveLabel || current.name || "clip"}]`);
+          const children = byParent.get(current.id) || [];
+          current = children.find(s => !s.isBranchRoot) || children[0] || null;
+        }
+        return lines.join("\n");
+      }
+      const rendered = samples.map(walk).filter(Boolean);
+      if (rendered.length) return rendered.join("\n\n---\n\n");
+      return [
+        "Day 1",
+        "- Warmup: 10 min easy movement flow (joint circles, light skips, cat-cow)",
+        "- 4 rounds: 8 push-ups, 30s hollow hold, 10 air squats, rest 60s between rounds",
+        "- Coach note: focus on full range of motion, not speed",
+        "Day 2",
+        "- Warmup: 5 min jump rope",
+        "- 3 rounds: 5 pull-ups (or ring rows), 10 lunges each leg, 20s L-sit hold",
+        "- Coach note: scale pull-ups to band-assisted if needed",
+      ].join("\n");
+    }
+
+    if (p === "/api/chat/training-protocol/ai-generate" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { prompt, targetUserId } = await readJsonBody(req);
+      if (!prompt || !String(prompt).trim()) return sendJson(res, 400, { error: "A description of the client/plan is required" });
+      try {
+        const tool = {
+          type: "function",
+          function: {
+            name: "submit_training_plan",
+            description: "Submit a structured multi-day training plan broken into days and, per day, an ordered list of plain-text blocks (warmup, rounds/sets/reps, conditioning, coach notes, etc.).",
+            parameters: {
+              type: "object",
+              properties: {
+                days: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      summary: { type: "string", description: "A short line naming this day's focus, e.g. 'Push Strength + Handstand Work'." },
+                      blocks: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Ordered plain-text blocks for this day, written the way a coach writes them in this app -- rounds/sets/reps spelled out in plain language, one block per logical chunk (warmup, each work section, coach notes).",
+                      },
+                    },
+                    required: ["summary", "blocks"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["days"],
+              additionalProperties: false,
+            },
+          },
+        };
+        const sample = sampleExistingPlansForPrompt(targetUserId);
+        const { refused, args } = await analyzeTextWithOpenAI({
+          systemPrompt: "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in the text itself).\n\nEXAMPLE FORMAT:\n" + sample,
+          userPrompt: `Build a training plan for this client:\n\n${prompt}`,
+          tool,
+          reassurance: "This is a private, already-agreed-upon training plan for a real paying client of a legitimate bodyweight-strength coaching business -- please go ahead and draft it.",
+        });
+        if (refused || !args?.days?.length) return sendJson(res, 422, { error: "Could not generate a plan from that description — try adding more detail." });
+        return sendJson(res, 200, { days: args.days });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }

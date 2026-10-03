@@ -46,6 +46,9 @@
   .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; max-width: 280px; }
   .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
   .level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .level-chip .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
+  .level-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
+  .chip-val-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
 </style>
 </head>
 <body>
@@ -172,7 +175,7 @@ function render(u, editable) {
     document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/chat-app/login.html'; };
     document.getElementById('changePwBtn').onclick = changePassword;
   }
-  loadLevels(u);
+  loadLevels(u, editable);
 }
 
 const LEVELS_CATS = ["NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
@@ -188,22 +191,114 @@ function effectiveLevel(e, cat) {
   return isChecked(e.levels['FOUNDATION']) ? 1 : 0;
 }
 
-// Read-only — levels are only ever edited by a coach, from chat.
-async function loadLevels(u) {
-  const box = document.getElementById('levelsSection');
+function isStaffMe() { return !!me && (me.role === 'coach' || me.role === 'admin' || me.role === 'admin2'); }
+
+// Editable only for a coach/admin viewing their OWN profile (editable is
+// true there) -- a student's levels are still only ever set by a coach,
+// from chat. Same backend contract (/api/chat/levels/update) and the same
+// click-a-chip-to-edit interaction as chat.html's Levels popup
+// (attachLevelsChipHandlers) and levels.html, just rendered into this
+// page's plain single-column chip list instead of that modal's grid.
+let profileLevelsUser = null;
+let profileLevelsEntries = [];
+let profileLevelsCanEdit = false;
+
+async function loadLevels(u, editable) {
+  profileLevelsUser = u;
+  profileLevelsCanEdit = !!editable && isStaffMe();
   const r = await fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(u.first) + '&last=' + encodeURIComponent(u.last));
   const d = await r.json();
-  const entries = d.entries && d.entries.length ? d.entries : [{ program: null, levels: {}, team: false }];
-  box.innerHTML = entries.map(e => `
+  // A real entry always has a program ('Gym'/'Online') -- the backend
+  // requires one to save against. The no-entries-yet placeholder used for
+  // read-only display has program:null and must never be rendered as
+  // editable (clicking a chip on it 400s -- "program must be 'Gym' or
+  // 'Online'"); a coach/admin with no entry yet gets "+ Add" buttons
+  // instead (see renderLevels), same as chat.html's Levels popup.
+  profileLevelsEntries = d.entries && d.entries.length ? d.entries : (profileLevelsCanEdit ? [] : [{ program: null, levels: {}, team: false }]);
+  renderLevels();
+}
+
+function renderLevels() {
+  const box = document.getElementById('levelsSection');
+  const editCls = profileLevelsCanEdit ? ' editable' : '';
+  const chipsHtml = profileLevelsEntries.map((e, idx) => `
     <div class="levels-col">
-      <div class="level-chip"><span class="cat">Foundation</span><span class="chip-val" style="color:#fff">${isChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
+      <div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${isChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
       ${LEVELS_CATS.map(cat => {
         const n = effectiveLevel(e, cat);
-        return `<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
+        return `<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
       }).join('')}
-      ${e.program === 'Gym' ? `<div class="level-chip"><span class="cat">Team</span><span class="chip-val" style="color:#fff">${e.team ? '✓' : '0'}</span></div>` : ''}
+      ${e.program === 'Gym' ? `<div class="level-chip"><span class="cat">Team</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="TEAM" style="color:#fff">${e.team ? '✓' : '0'}</span></div>` : ''}
     </div>
   `).join('');
+  const missingPrograms = profileLevelsCanEdit ? ['Gym', 'Online'].filter(p => !profileLevelsEntries.some(e => e.program === p)) : [];
+  const addButtonsHtml = missingPrograms.map(p =>
+    `<button class="pra-btn pra-btn-ghost add-level-program-btn" data-program="${p}" style="width:100%;margin-top:8px;font-size:.8rem">+ Add ${p} Levels</button>`
+  ).join('');
+  box.innerHTML = chipsHtml + addButtonsHtml;
+  if (profileLevelsCanEdit) {
+    attachProfileLevelsHandlers();
+    box.querySelectorAll('.add-level-program-btn').forEach(btn => {
+      btn.onclick = () => {
+        profileLevelsEntries.push({ program: btn.dataset.program, team: false, levels: {} });
+        renderLevels();
+      };
+    });
+  }
+}
+
+async function saveProfileLevelsField(idx, cat, value) {
+  const e = profileLevelsEntries[idx];
+  const levels = { ...e.levels };
+  if (cat === 'TEAM') e.team = value;
+  else levels[cat] = value;
+  const r = await fetch('/api/chat/levels/update', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first: profileLevelsUser.first, last: profileLevelsUser.last, program: e.program, levels, team: e.team }),
+  });
+  if (!r.ok) return false;
+  e.levels = levels;
+  return true;
+}
+
+function attachProfileLevelsHandlers() {
+  document.querySelectorAll('#levelsSection .chip-val.editable').forEach(el => {
+    el.addEventListener('click', async () => {
+      const idx = Number(el.dataset.idx);
+      const cat = el.dataset.cat;
+      const e = profileLevelsEntries[idx];
+      if (!e) return;
+
+      if (cat === 'FOUNDATION' || cat === 'TEAM') {
+        const current = cat === 'TEAM' ? !!e.team : isChecked(e.levels['FOUNDATION']);
+        const next = cat === 'TEAM' ? !current : (current ? '' : (e.program === 'Online' ? 'Yes' : 'X'));
+        el.style.opacity = '.5';
+        const ok = await saveProfileLevelsField(idx, cat, next);
+        el.style.opacity = '';
+        if (ok) renderLevels();
+        return;
+      }
+
+      const current = effectiveLevel(e, cat);
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = '0'; input.max = '10';
+      input.value = current;
+      input.className = 'chip-val-input';
+      el.replaceWith(input);
+      input.focus(); input.select();
+
+      const commit = async () => {
+        const val = Math.max(0, Math.min(10, Number(input.value) || 0));
+        await saveProfileLevelsField(idx, cat, String(val));
+        renderLevels();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') { input.removeEventListener('blur', commit); renderLevels(); }
+      });
+    });
+  });
 }
 
 async function changePassword() {

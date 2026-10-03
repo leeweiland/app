@@ -201,6 +201,7 @@
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page">Page</button>
         </div>
         <div class="protocol-head-controls-right">
+          <button class="icon-btn" id="aiGenerateBtn" title="AI: build a workout plan from a description" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.5l1.4 3.6 3.6 1.4-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4L12 3.5Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/><path d="M18.5 13.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
           <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
           <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         </div>
@@ -324,6 +325,29 @@
     </div>
   </div>
 
+  <!-- AI: draft a day-by-day plan from a coach's free-text description of
+       the client (days/week, volume, reps, focus, etc). Generates plain
+       text content only, per day -- never picks a specific Drive video,
+       since the model has no way to judge whether a clip actually fits
+       this client; the coach attaches real videos afterward same as
+       building a step by hand. Two-phase: Generate drafts a preview,
+       Apply actually replaces the live protocol (confirmed first if there
+       was already content here, same caution the Load Template flow uses). -->
+  <div class="modal-backdrop" id="aiGenerateModal">
+    <div class="pra-panel modal-box modal-box-wide modal-box-flex">
+      <div class="pra-h2" style="margin-bottom:10px;flex-shrink:0">AI: Build a Workout Plan</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px;flex-shrink:0">Describe the client and what you want — days per week, volume, rep ranges, focus areas, anything relevant. This drafts the day-by-day structure as text; you still attach videos to it afterward.</div>
+      <textarea class="pra-input" id="aiGeneratePrompt" rows="5" style="width:100%;resize:vertical;flex-shrink:0" placeholder="e.g. Online client, 3 days/week, intermediate level, focus on handstand progressions and pulling strength, moderate volume, short mobility warmup each day."></textarea>
+      <div class="pra-muted" id="aiGenerateStatus" style="font-size:.78rem;margin-top:8px;min-height:1em;flex-shrink:0"></div>
+      <div id="aiGeneratePreview" style="display:none;margin-top:4px;overflow-y:auto;flex:1 1 auto;min-height:60px"></div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-shrink:0">
+        <button class="pra-btn" id="aiGenerateRunBtn" style="flex:1">Generate</button>
+        <button class="pra-btn" id="aiGenerateApplyBtn" style="flex:1;display:none">Apply to Protocol</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('aiGenerateModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Pick a saved protocol template to load onto THIS student — replaces
        whatever's currently here, so applying one is confirmed separately
        per-row rather than a single "load" action, same reasoning as
@@ -433,12 +457,14 @@ async function init() {
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
+  document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
 
   setupCanvasPanZoom();
   setupStepDrag();
   setupProtocolTemplates();
+  setupAiGenerate();
   setupViewModeToggle();
   await loadSteps();
   wireModals();
@@ -734,6 +760,33 @@ async function commitNewStep(fields) {
   render();
   await saveSteps();
   return step;
+}
+
+// Fire-and-forget, called right after a video step is committed (never
+// awaited at the call site) -- the clip shows up immediately on its
+// filename fallback (see renderStepContent/stripVideoExt), and this swaps
+// in the nicer AI-derived move name a moment later once OpenAI responds,
+// without making the coach wait on it to see their clip land in the flow.
+async function labelVideoStepInBackground(step) {
+  if (!step?.name) return;
+  try {
+    const r = await fetch('/api/chat/training-protocol/label-video', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: step.name }),
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.moveLabel) return;
+    // The step may have been deleted (or this whole page re-rendered with
+    // fresh step objects via undo/redo/template-load) by the time this
+    // resolves -- re-look-up by id rather than trusting the closed-over
+    // reference is still the live one.
+    const live = steps.find(s => s.id === step.id);
+    if (!live) return;
+    live.moveLabel = d.moveLabel;
+    render();
+    await saveSteps();
+  } catch { /* best-effort -- the filename fallback is still fine */ }
 }
 
 function isDescendantOf(candidateId, ancestorId) {
@@ -1344,9 +1397,24 @@ async function submitAskQuestion() {
   closeModal('askQuestionModal');
 }
 
+// Fallback label when a video step's AI-derived moveLabel hasn't been set
+// (older steps, or the one-off API call failed) -- just the filename
+// without its extension, better than nothing or the raw ".mp4" noise.
+function stripVideoExt(name) {
+  return String(name || '').replace(/\.[a-z0-9]{2,4}$/i, '');
+}
+
 function renderStepContent(s) {
   if (s.type === 'video') {
-    return `<video data-src="/api/chat/media/${s.driveFileId}#t=0.5" controls loop preload="metadata" playsinline></video>`;
+    // Autoplay+muted so it moves like a thumbnail the moment it scrolls
+    // into view (stepVideoLazyObserver below) -- controls still lets a
+    // coach pause/scrub/unmute it manually, same as before. moveLabel is
+    // the AI-derived short move name (see requestVideoMoveLabel) -- falls
+    // back to the raw Drive filename (extension stripped) until that
+    // finishes, or forever if it failed/was never run (older steps).
+    const labelText = s.moveLabel || stripVideoExt(s.name);
+    const label = labelText ? `<div class="step-type">${escapeHtml(labelText)}</div>` : '';
+    return `${label}<video data-src="/api/chat/media/${s.driveFileId}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>`;
   }
   if (s.type === 'image') {
     return `<div class="step-type">Image</div><img src="/api/chat/media/${s.driveFileId}"/>`;
@@ -1387,6 +1455,77 @@ function setupProtocolTemplates() {
   document.getElementById('loadTemplateBtn').onclick = () => {
     openModal('loadProtocolTemplateModal');
     renderProtocolTemplateList();
+  };
+}
+
+let aiGeneratedDays = null;
+function setupAiGenerate() {
+  document.getElementById('aiGenerateBtn').onclick = () => {
+    aiGeneratedDays = null;
+    document.getElementById('aiGeneratePrompt').value = '';
+    document.getElementById('aiGenerateStatus').textContent = '';
+    const preview = document.getElementById('aiGeneratePreview');
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    document.getElementById('aiGenerateRunBtn').style.display = '';
+    document.getElementById('aiGenerateApplyBtn').style.display = 'none';
+    openModal('aiGenerateModal');
+  };
+
+  document.getElementById('aiGenerateRunBtn').onclick = async () => {
+    const prompt = document.getElementById('aiGeneratePrompt').value.trim();
+    const status = document.getElementById('aiGenerateStatus');
+    if (!prompt) { status.textContent = 'Describe the client/plan first.'; return; }
+    const btn = document.getElementById('aiGenerateRunBtn');
+    btn.disabled = true;
+    status.textContent = 'Generating… (a few seconds)';
+    try {
+      const r = await fetch('/api/chat/training-protocol/ai-generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, targetUserId }),
+      });
+      const d = await r.json();
+      if (!r.ok) { status.textContent = d.error || 'Could not generate a plan.'; return; }
+      aiGeneratedDays = d.days;
+      const preview = document.getElementById('aiGeneratePreview');
+      preview.innerHTML = d.days.map((day, i) => `
+        <div class="pra-panel" style="padding:10px;margin-bottom:8px">
+          <div style="font-weight:700;margin-bottom:6px">Day ${i + 1}${day.summary ? ' — ' + escapeHtml(day.summary) : ''}</div>
+          ${(day.blocks || []).map(b => `<div style="font-size:.84rem;margin-bottom:4px;white-space:pre-wrap">${escapeHtml(b)}</div>`).join('')}
+        </div>
+      `).join('');
+      preview.style.display = 'block';
+      status.textContent = steps.length
+        ? "Review the draft below — applying replaces this client's current protocol."
+        : 'Review the draft below.';
+      document.getElementById('aiGenerateApplyBtn').style.display = '';
+    } catch (e) {
+      status.textContent = 'Could not generate a plan.';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  document.getElementById('aiGenerateApplyBtn').onclick = async () => {
+    if (!aiGeneratedDays?.length) return;
+    if (steps.length && !confirm("This replaces this client's current protocol steps with the generated draft. Continue?")) return;
+    snapshotBeforeChange();
+    const newSteps = [];
+    let prevId = null;
+    aiGeneratedDays.forEach((day, i) => {
+      const dayStep = { id: newId(), parentId: prevId, isBranchRoot: false, type: 'day', dayNumber: i + 1 };
+      newSteps.push(dayStep);
+      prevId = dayStep.id;
+      (day.blocks || []).forEach(block => {
+        const textStep = { id: newId(), parentId: prevId, isBranchRoot: false, type: 'text', content: block };
+        newSteps.push(textStep);
+        prevId = textStep.id;
+      });
+    });
+    steps = newSteps;
+    render();
+    await saveSteps();
+    closeModal('aiGenerateModal');
   };
 }
 
@@ -1496,7 +1635,8 @@ function wireModals() {
       const r = await fetch('/api/chat/training-protocol/upload-video', { method: 'POST', body: fd });
       const d = await r.json();
       if (!r.ok) { msg.textContent = d.error || 'Upload failed.'; return; }
-      await commitNewStep({ type: 'video', driveFileId: d.driveFileId, name: d.name });
+      const step = await commitNewStep({ type: 'video', driveFileId: d.driveFileId, name: d.name });
+      labelVideoStepInBackground(step);
       msg.textContent = '';
     } catch {
       msg.textContent = 'Upload failed.';
@@ -1563,7 +1703,7 @@ function videoResultCardHtml(f) {
   return `
     <div class="video-result" data-id="${f.id}" data-name="${escapeHtml(f.name)}">
       <div class="video-result-thumb">
-        <video data-src="/api/chat/media/${f.id}#t=0.5" preload="metadata" muted playsinline></video>
+        <video data-src="/api/chat/media/${f.id}#t=0.5" preload="metadata" muted autoplay loop playsinline></video>
         <div class="play-icon">▶</div>
       </div>
       <div class="video-result-name">${escapeHtml(f.name)}</div>
@@ -1575,7 +1715,8 @@ function wireVideoResultCards(box) {
     if (el.dataset.wired) return;
     el.dataset.wired = '1';
     el.onclick = async () => {
-      await commitNewStep({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
+      const step = await commitNewStep({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
+      labelVideoStepInBackground(step);
       closeModal('videoModal');
     };
   });

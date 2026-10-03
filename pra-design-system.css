@@ -220,17 +220,17 @@
   overflow: hidden;
 }
 
-/* ── Role-colored avatar glow — steady, no pulsing, for all roles ── */
-.pra-avatar.role-admin { border-color: #009bff; box-shadow: 0 0 0 2px rgba(0,155,255,.35), 0 0 10px 2px rgba(0,155,255,.6); }
-.pra-avatar.role-coach { border-color: #ff3b3b; box-shadow: 0 0 0 2px rgba(255,59,59,.35), 0 0 10px 2px rgba(255,59,59,.6); }
-.pra-avatar.role-online { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
-.pra-avatar.role-gym { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+/* ── Role-colored avatar border — a plain colored ring, no glow/blur. ── */
+.pra-avatar.role-admin { border-color: #009bff; }
+.pra-avatar.role-coach { border-color: #ff3b3b; }
+.pra-avatar.role-online { border-color: #39ff14; }
+.pra-avatar.role-gym { border-color: #39ff14; }
 /* Same green, dimmed -- a student shown as an individual (DM, thread
    header, contact row, profile card) rather than as a group-chat icon. */
-.pra-avatar.role-online-solo { border-color: #104510; box-shadow: 0 0 0 2px rgba(16,69,16,.35), 0 0 6px 1px rgba(16,69,16,.5); }
-.pra-avatar.role-gym-solo { border-color: #104510; box-shadow: 0 0 0 2px rgba(16,69,16,.35), 0 0 6px 1px rgba(16,69,16,.5); }
-.pra-avatar.role-user { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.35), 0 0 10px 2px rgba(255,255,255,.6); }
-.pra-avatar.role-group { border-color: #39ff14; box-shadow: 0 0 0 2px rgba(57,255,20,.35), 0 0 10px 2px rgba(57,255,20,.6); }
+.pra-avatar.role-online-solo { border-color: #104510; }
+.pra-avatar.role-gym-solo { border-color: #104510; }
+.pra-avatar.role-user { border-color: #fff; }
+.pra-avatar.role-group { border-color: #39ff14; }
 
 /* ── Badge / pill ── */
 .pra-badge {
@@ -255,8 +255,8 @@
 }
 .role-tag-admin { background: rgba(0,155,255,0.15); color: #009bff; }
 .role-tag-coach { background: rgba(255,59,59,0.15); color: #ff3b3b; }
-.role-tag-online { background: rgba(57,255,20,0.15); color: #39ff14; }
-.role-tag-gym { background: rgba(57,255,20,0.15); color: #39ff14; }
+.role-tag-online { background: rgba(0,155,255,0.15); color: #009bff; }
+.role-tag-gym { background: rgba(0,155,255,0.15); color: #009bff; }
 .role-tag-user { background: rgba(255,255,255,0.12); color: #fff; }
 /* The Strength Ninjas map popup uses the App Sheet's own TYPE vocabulary
    (Admin/Coach/Student/User), not the chat app's online/gym roles — same
