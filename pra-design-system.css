@@ -220,17 +220,8 @@
   overflow: hidden;
 }
 
-/* ── Role-colored avatar border — a plain colored ring, no glow/blur. ── */
-.pra-avatar.role-admin { border-color: #009bff; }
-.pra-avatar.role-coach { border-color: #ff3b3b; }
-.pra-avatar.role-online { border-color: #39ff14; }
-.pra-avatar.role-gym { border-color: #39ff14; }
-/* Same green, dimmed -- a student shown as an individual (DM, thread
-   header, contact row, profile card) rather than as a group-chat icon. */
-.pra-avatar.role-online-solo { border-color: #104510; }
-.pra-avatar.role-gym-solo { border-color: #104510; }
-.pra-avatar.role-user { border-color: #fff; }
-.pra-avatar.role-group { border-color: #39ff14; }
+/* Role-colored avatar borders removed per product decision -- all avatars
+   now use the plain neutral border from .pra-avatar above, regardless of role. */
 
 /* ── Badge / pill ── */
 .pra-badge {
