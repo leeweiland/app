@@ -221,7 +221,15 @@
 }
 
 /* Role-colored avatar borders removed per product decision -- all avatars
-   now use the plain neutral border from .pra-avatar above, regardless of role. */
+   now use the plain neutral border from .pra-avatar above, regardless of role.
+   A subtle glow is still called out for two specific cases: coaches (any
+   context -- role-coach never gets a "-solo" variant, see avatarRoleClass()
+   in chat.html/levels.html/profile.html) and student GROUPS specifically
+   -- role-online/role-gym without the "-solo" suffix only ever appear on a
+   group avatar (a 1:1 DM with that same student uses the "-solo" variant
+   instead), so this never lights up an individual student's own avatar. */
+.pra-avatar.role-coach { box-shadow: 0 0 6px 1px rgba(255,59,59,0.45); }
+.pra-avatar.role-online, .pra-avatar.role-gym { box-shadow: 0 0 6px 1px rgba(0,155,255,0.45); }
 
 /* ── Badge / pill ── */
 .pra-badge {

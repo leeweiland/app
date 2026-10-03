@@ -238,7 +238,14 @@ async function initStaffFeatures() {
 }
 
 function initials(p) { return ((p.first?.[0] || '') + (p.last?.[0] || '')).toUpperCase(); }
-function avatarRoleClass(p) { return p.role ? ' role-' + (p.role === 'admin2' ? 'admin' : p.role) : ''; }
+// This page always shows one individual per row, never a group -- same
+// "-solo" distinction chat.html uses to keep the plain role-online/role-gym
+// classes meaning "group" everywhere they're styled (see pra-design-system.css).
+function avatarRoleClass(p) {
+  if (!p.role) return '';
+  const role = p.role === 'admin2' ? 'admin' : p.role;
+  return ' role-' + role + ((role === 'online' || role === 'gym') ? '-solo' : '');
+}
 function avatarHtml(p) { return p.profilePictureFileId ? '<img src="/api/chat/media/' + p.profilePictureFileId + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>' : initials(p); }
 function roleBadgeHtml(p) {
   if (p.role === 'admin' || p.role === 'admin2') return '<span class="role-tag role-tag-admin">Admin</span>';
