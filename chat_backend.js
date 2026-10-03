@@ -2161,6 +2161,62 @@ async function getAllDescendantFolderIds(rootId, accessToken) {
   return all;
 }
 
+// Cache of the training-protocol video library's full file list (id+name),
+// keyed by folder id — same 5-minute-TTL idea as folderTreeCache above, so
+// an AI-generate call doesn't re-walk + re-list a potentially large Drive
+// folder tree on every single request.
+const videoLibraryCache = new Map(); // folderId -> { files, expiresAt }
+async function listVideoLibraryFiles(folderId, accessToken) {
+  const cached = videoLibraryCache.get(folderId);
+  if (cached && cached.expiresAt > Date.now()) return cached.files;
+  const folderIds = await getAllDescendantFolderIds(folderId, accessToken);
+  const parentsClause = folderIds.map(id => `'${id}' in parents`).join(" or ");
+  const q = `(${parentsClause}) and mimeType contains 'video/' and trashed = false`;
+  const files = [];
+  let pageToken = "";
+  // Cap at 10 pages (up to 10,000 files at pageSize 1000) -- far beyond any
+  // realistic library size, just a sane ceiling against a runaway loop.
+  for (let i = 0; i < 10; i++) {
+    const pageTokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=nextPageToken,files(id,name)&pageSize=1000${pageTokenParam}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const d = await r.json();
+    files.push(...(d.files || []));
+    pageToken = d.nextPageToken || "";
+    if (!pageToken) break;
+  }
+  videoLibraryCache.set(folderId, { files, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return files;
+}
+
+const STOPWORDS = new Set(["the", "a", "an", "of", "and", "to", "with", "on", "in", "for"]);
+function moveNameTokens(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter(w => w && !STOPWORDS.has(w));
+}
+// Best-effort match of an AI-proposed movement name (e.g. "Straddle Flag
+// Pullup") against the real video library's Drive filenames -- coaches'
+// filenames are long and messy ("LEE NINJA STRENGTH Human Flag #10 Straddle
+// Flag Pullup.mp4"), so this scores by how much of the move name's own
+// words show up in the filename rather than requiring an exact/substring
+// match either direction.
+function matchVideoForMove(moveName, files) {
+  const moveTokens = moveNameTokens(moveName);
+  if (!moveTokens.length || !files.length) return null;
+  let best = null, bestScore = 0;
+  for (const f of files) {
+    const nameTokens = new Set(moveNameTokens(f.name));
+    const hits = moveTokens.filter(t => nameTokens.has(t)).length;
+    const score = hits / moveTokens.length;
+    if (score > bestScore) { bestScore = score; best = f; }
+  }
+  // Require at least half the move name's words to actually show up --
+  // below that it's just noise, better left as a plain text note than
+  // attached to the wrong clip.
+  return bestScore >= 0.5 ? best : null;
+}
+
 // ── Push notifications ──────────────────────────────────────────────────
 // Two kinds of target share PUSH_FILE: `subscription` (browser Web Push,
 // see /push-subscribe) and `nativeToken` (FCM/APNs via Capacitor's
@@ -4011,11 +4067,15 @@ export async function handleChatRequest(req, res, url) {
           if (samples.length >= 3) break;
         }
       }
-      // Walk each sample's step chain in order (following parentId, always
-      // the non-branch child first) and render it the same "Day N" / bullet
-      // shape the tool below is asked to produce -- real formatting
-      // conventions (how rounds/sets/reps/notes actually get written here),
-      // not the raw step objects.
+      // Walk each sample's step graph the way the Flow canvas actually lays
+      // it out, NOT a plain parentId chain: a day's own content lives down
+      // its "below"/branch row (isBranchRoot:true), while "right" children
+      // (isBranchRoot:false) are same-row continuations -- for a video step
+      // that's an inline caption (a duration/rep count sitting next to it),
+      // not a whole new line. Days themselves form the top row's rightward
+      // chain. Getting this backwards (as an earlier version of this did,
+      // walking the rightward chain for content) produced nothing like the
+      // coach-authored protocols it was meant to be learning from.
       function walk(steps) {
         const byParent = new Map();
         steps.forEach(s => {
@@ -4023,14 +4083,27 @@ export async function handleChatRequest(req, res, url) {
           if (!byParent.has(key)) byParent.set(key, []);
           byParent.get(key).push(s);
         });
+        const childOf = (id, branch) => (byParent.get(id) || []).find(s => !!s.isBranchRoot === branch) || null;
         const lines = [];
-        let current = (byParent.get("root") || []).find(s => !s.isBranchRoot) || (byParent.get("root") || [])[0];
-        while (current) {
-          if (current.type === "day") lines.push(`Day ${current.dayNumber}`);
-          else if (current.type === "text" && current.content) lines.push(`- ${current.content}`);
-          else if (current.type === "video") lines.push(`- [video: ${current.moveLabel || current.name || "clip"}]`);
-          const children = byParent.get(current.id) || [];
-          current = children.find(s => !s.isBranchRoot) || children[0] || null;
+        function renderLine(node) {
+          if (node.type === "text" && node.content) return `- ${node.content}`;
+          if (node.type === "video") {
+            const caption = childOf(node.id, false);
+            const captionText = caption?.type === "text" && caption.content ? ` (${caption.content})` : "";
+            return `- [video: ${node.moveLabel || node.name || "clip"}]${captionText}`;
+          }
+          return null;
+        }
+        let day = childOf("root", false) || (byParent.get("root") || [])[0];
+        while (day) {
+          if (day.type === "day") lines.push(`Day ${day.dayNumber}`);
+          let content = childOf(day.id, true);
+          while (content) {
+            const line = renderLine(content);
+            if (line) lines.push(line);
+            content = childOf(content.id, true);
+          }
+          day = childOf(day.id, false);
         }
         return lines.join("\n");
       }
@@ -4038,13 +4111,16 @@ export async function handleChatRequest(req, res, url) {
       if (rendered.length) return rendered.join("\n\n---\n\n");
       return [
         "Day 1",
-        "- Warmup: 10 min easy movement flow (joint circles, light skips, cat-cow)",
-        "- 4 rounds: 8 push-ups, 30s hollow hold, 10 air squats, rest 60s between rounds",
+        "- 4 rounds, rest 60s between rounds",
+        "- [video: Push-Up] (8 reps)",
+        "- [video: Hollow Body Hold] (30 seconds)",
+        "- [video: Air Squat] (10 reps)",
         "- Coach note: focus on full range of motion, not speed",
         "Day 2",
-        "- Warmup: 5 min jump rope",
-        "- 3 rounds: 5 pull-ups (or ring rows), 10 lunges each leg, 20s L-sit hold",
-        "- Coach note: scale pull-ups to band-assisted if needed",
+        "- 3 rounds",
+        "- [video: Pull-Up] (5 reps, scale to band-assisted if needed)",
+        "- [video: Lunge] (10 each leg)",
+        "- [video: L-Sit Hold] (20 seconds)",
       ].join("\n");
     }
 
@@ -4057,7 +4133,7 @@ export async function handleChatRequest(req, res, url) {
           type: "function",
           function: {
             name: "submit_training_plan",
-            description: "Submit a structured multi-day training plan broken into days and, per day, an ordered list of plain-text blocks (warmup, rounds/sets/reps, conditioning, coach notes, etc.).",
+            description: "Submit a structured multi-day training plan, matching how protocols are actually built in this app: each day is an ordered sequence of items, where most items are specific named movements (attached as a real video clip) and some are short structural notes (rounds/rest scheme, warmup, coach cues) that aren't tied to any one movement.",
             parameters: {
               type: "object",
               properties: {
@@ -4067,13 +4143,22 @@ export async function handleChatRequest(req, res, url) {
                     type: "object",
                     properties: {
                       summary: { type: "string", description: "A short line naming this day's focus, e.g. 'Push Strength + Handstand Work'." },
-                      blocks: {
+                      items: {
                         type: "array",
-                        items: { type: "string" },
-                        description: "Ordered plain-text blocks for this day, written the way a coach writes them in this app -- rounds/sets/reps spelled out in plain language, one block per logical chunk (warmup, each work section, coach notes).",
+                        items: {
+                          type: "object",
+                          properties: {
+                            kind: { type: "string", enum: ["exercise", "note"], description: "'exercise' for a specific named movement -- prefer this whenever the content is a movement, since it gets attached as a real video clip. 'note' only for structural lines that aren't a movement (rounds/rest scheme, warmup instruction, coach cue)." },
+                            move: { type: "string", description: "Required for kind='exercise': just the movement name (e.g. 'Straddle Flag Pullup', 'Hip Bridge', 'Handstand Hold') -- title case, a few words, no sets/reps/duration in this field." },
+                            caption: { type: "string", description: "For kind='exercise' only, optional: a short caption shown right next to the video, e.g. '10 seconds', '3x12', 'each side', 'scale to band-assisted'." },
+                            text: { type: "string", description: "Required for kind='note': the note text itself, written the way a coach writes it in this app (e.g. '4 rounds, rest 60s between rounds')." },
+                          },
+                          required: ["kind"],
+                          additionalProperties: false,
+                        },
                       },
                     },
-                    required: ["summary", "blocks"],
+                    required: ["summary", "items"],
                     additionalProperties: false,
                   },
                 },
@@ -4085,13 +4170,37 @@ export async function handleChatRequest(req, res, url) {
         };
         const sample = sampleExistingPlansForPrompt(targetUserId);
         const { refused, args } = await analyzeTextWithOpenAI({
-          systemPrompt: "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in the text itself).\n\nEXAMPLE FORMAT:\n" + sample,
+          systemPrompt: "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point.\n\nEXAMPLE FORMAT:\n" + sample,
           userPrompt: `Build a training plan for this client:\n\n${prompt}`,
           tool,
           reassurance: "This is a private, already-agreed-upon training plan for a real paying client of a legitimate bodyweight-strength coaching business -- please go ahead and draft it.",
         });
         if (refused || !args?.days?.length) return sendJson(res, 422, { error: "Could not generate a plan from that description — try adding more detail." });
-        return sendJson(res, 200, { days: args.days });
+
+        // Resolve every named movement against the real video library once
+        // up front (one Drive listing, cached) so the canvas gets built with
+        // actual attached clips, not just text describing them. A movement
+        // with no good match falls back to a plain note client-side rather
+        // than silently dropping it.
+        const cfg = getConfig();
+        let videoFiles = [];
+        if (cfg.trainingProtocolVideoLibraryFolderId) {
+          try {
+            const accessToken = await getDriveAccessToken();
+            videoFiles = await listVideoLibraryFiles(cfg.trainingProtocolVideoLibraryFolderId, accessToken);
+          } catch (e) { /* best-effort -- fall through with no videos matched */ }
+        }
+        const days = args.days.map(day => ({
+          summary: day.summary || "",
+          items: (day.items || []).map(item => {
+            if (item.kind === "exercise" && item.move) {
+              const match = matchVideoForMove(item.move, videoFiles);
+              return { kind: "exercise", move: item.move, caption: item.caption || "", driveFileId: match?.id || null, name: match?.name || null };
+            }
+            return { kind: "note", text: item.text || item.move || "" };
+          }),
+        }));
+        return sendJson(res, 200, { days });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }

@@ -336,13 +336,11 @@
   <div class="modal-backdrop" id="aiGenerateModal">
     <div class="pra-panel modal-box modal-box-wide modal-box-flex">
       <div class="pra-h2" style="margin-bottom:10px;flex-shrink:0">AI: Build a Workout Plan</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px;flex-shrink:0">Describe the client and what you want — days per week, volume, rep ranges, focus areas, anything relevant. This drafts the day-by-day structure as text; you still attach videos to it afterward.</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px;flex-shrink:0">Describe the client and what you want — days per week, volume, rep ranges, focus areas, anything relevant. This builds the day-by-day structure directly onto the canvas, matching real videos from the library to the movements it names.</div>
       <textarea class="pra-input" id="aiGeneratePrompt" rows="5" style="width:100%;resize:vertical;flex-shrink:0" placeholder="e.g. Online client, 3 days/week, intermediate level, focus on handstand progressions and pulling strength, moderate volume, short mobility warmup each day."></textarea>
       <div class="pra-muted" id="aiGenerateStatus" style="font-size:.78rem;margin-top:8px;min-height:1em;flex-shrink:0"></div>
-      <div id="aiGeneratePreview" style="display:none;margin-top:4px;overflow-y:auto;flex:1 1 auto;min-height:60px"></div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-shrink:0">
         <button class="pra-btn" id="aiGenerateRunBtn" style="flex:1">Generate</button>
-        <button class="pra-btn" id="aiGenerateApplyBtn" style="flex:1;display:none">Apply to Protocol</button>
         <button class="pra-btn pra-btn-ghost" onclick="closeModal('aiGenerateModal')">Cancel</button>
       </div>
     </div>
@@ -1458,17 +1456,55 @@ function setupProtocolTemplates() {
   };
 }
 
-let aiGeneratedDays = null;
+// Builds the real Flow graph shape from the generator's {days:[{summary,
+// items:[{kind,move,caption,driveFileId,name,text}]}]} response: Day steps
+// form the top row's rightward chain, each day's own items run down its
+// "below" row (isBranchRoot:true, straight vertical spine), and a matched
+// exercise's caption attaches as that video step's "right" child (a same-
+// row inline annotation, same as a coach manually adding one) -- exactly
+// the layout real hand-built protocols use (see sampleExistingPlansForPrompt
+// server-side), not a flat top-to-bottom list of text blocks.
+function buildStepsFromGeneratedDays(days) {
+  const newSteps = [];
+  let prevDayId = null;
+  days.forEach((day, i) => {
+    const dayStep = { id: newId(), parentId: prevDayId, isBranchRoot: false, type: 'day', dayNumber: i + 1 };
+    newSteps.push(dayStep);
+    prevDayId = dayStep.id;
+    // Every link in a day's own content chain stacks straight down (below
+    // the previous item, isBranchRoot:true) -- a video step's caption is
+    // the ONLY "right" child anywhere in this chain. Giving later items a
+    // "right" relation here instead (as an earlier version of this did)
+    // collides with that caption slot: a node can have at most one "right"
+    // child, so the next item and the caption fight over it and one of
+    // them ends up an unreachable orphan with no computed layout position.
+    let prevContentId = null;
+    (day.items || []).forEach(item => {
+      const parentId = prevContentId ?? dayStep.id;
+      let step;
+      if (item.kind === 'exercise' && item.driveFileId) {
+        step = { id: newId(), parentId, isBranchRoot: true, type: 'video', driveFileId: item.driveFileId, name: item.name || item.move, moveLabel: item.move };
+      } else if (item.kind === 'exercise') {
+        // No confident match in the video library -- fall back to a plain
+        // text note so the movement isn't silently dropped.
+        step = { id: newId(), parentId, isBranchRoot: true, type: 'text', content: item.caption ? `${item.move} — ${item.caption}` : item.move };
+      } else {
+        step = { id: newId(), parentId, isBranchRoot: true, type: 'text', content: item.text || '' };
+      }
+      newSteps.push(step);
+      prevContentId = step.id;
+      if (item.kind === 'exercise' && item.driveFileId && item.caption) {
+        newSteps.push({ id: newId(), parentId: step.id, isBranchRoot: false, type: 'text', content: item.caption });
+      }
+    });
+  });
+  return newSteps;
+}
+
 function setupAiGenerate() {
   document.getElementById('aiGenerateBtn').onclick = () => {
-    aiGeneratedDays = null;
     document.getElementById('aiGeneratePrompt').value = '';
     document.getElementById('aiGenerateStatus').textContent = '';
-    const preview = document.getElementById('aiGeneratePreview');
-    preview.style.display = 'none';
-    preview.innerHTML = '';
-    document.getElementById('aiGenerateRunBtn').style.display = '';
-    document.getElementById('aiGenerateApplyBtn').style.display = 'none';
     openModal('aiGenerateModal');
   };
 
@@ -1476,56 +1512,29 @@ function setupAiGenerate() {
     const prompt = document.getElementById('aiGeneratePrompt').value.trim();
     const status = document.getElementById('aiGenerateStatus');
     if (!prompt) { status.textContent = 'Describe the client/plan first.'; return; }
+    if (steps.length && !confirm("This replaces this client's current protocol steps with the generated plan. Continue?")) return;
     const btn = document.getElementById('aiGenerateRunBtn');
     btn.disabled = true;
-    status.textContent = 'Generating… (a few seconds)';
+    status.textContent = 'Generating… (matching videos, can take up to ~20 seconds)';
     try {
       const r = await fetch('/api/chat/training-protocol/ai-generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, targetUserId }),
       });
       const d = await r.json();
-      if (!r.ok) { status.textContent = d.error || 'Could not generate a plan.'; return; }
-      aiGeneratedDays = d.days;
-      const preview = document.getElementById('aiGeneratePreview');
-      preview.innerHTML = d.days.map((day, i) => `
-        <div class="pra-panel" style="padding:10px;margin-bottom:8px">
-          <div style="font-weight:700;margin-bottom:6px">Day ${i + 1}${day.summary ? ' — ' + escapeHtml(day.summary) : ''}</div>
-          ${(day.blocks || []).map(b => `<div style="font-size:.84rem;margin-bottom:4px;white-space:pre-wrap">${escapeHtml(b)}</div>`).join('')}
-        </div>
-      `).join('');
-      preview.style.display = 'block';
-      status.textContent = steps.length
-        ? "Review the draft below — applying replaces this client's current protocol."
-        : 'Review the draft below.';
-      document.getElementById('aiGenerateApplyBtn').style.display = '';
+      if (!r.ok) { status.textContent = d.error || 'Could not generate a plan.'; btn.disabled = false; return; }
+      snapshotBeforeChange();
+      steps = buildStepsFromGeneratedDays(d.days);
+      render();
+      await saveSteps();
+      closeModal('aiGenerateModal');
     } catch (e) {
+      console.error('[ai-generate]', e);
       status.textContent = 'Could not generate a plan.';
+      btn.disabled = false;
     } finally {
       btn.disabled = false;
     }
-  };
-
-  document.getElementById('aiGenerateApplyBtn').onclick = async () => {
-    if (!aiGeneratedDays?.length) return;
-    if (steps.length && !confirm("This replaces this client's current protocol steps with the generated draft. Continue?")) return;
-    snapshotBeforeChange();
-    const newSteps = [];
-    let prevId = null;
-    aiGeneratedDays.forEach((day, i) => {
-      const dayStep = { id: newId(), parentId: prevId, isBranchRoot: false, type: 'day', dayNumber: i + 1 };
-      newSteps.push(dayStep);
-      prevId = dayStep.id;
-      (day.blocks || []).forEach(block => {
-        const textStep = { id: newId(), parentId: prevId, isBranchRoot: false, type: 'text', content: block };
-        newSteps.push(textStep);
-        prevId = textStep.id;
-      });
-    });
-    steps = newSteps;
-    render();
-    await saveSteps();
-    closeModal('aiGenerateModal');
   };
 }
 
