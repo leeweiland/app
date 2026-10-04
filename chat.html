@@ -1115,6 +1115,21 @@
     </div>
   </div>
 
+  <!-- Generic confirm/prompt dialog — replaces native confirm()/prompt(), which
+       are unreliable inside the Capacitor/WKWebView-wrapped iOS app (no
+       guarantee the native panel ever renders, and the call blocks the JS
+       thread while it waits). See confirmDialog()/promptDialog() below. -->
+  <div class="modal-backdrop" id="genericDialogModal">
+    <div class="pra-panel modal-box" style="max-width:360px">
+      <div class="pra-h2" id="genericDialogMessage" style="margin-bottom:14px;font-size:.95rem;font-weight:600"></div>
+      <textarea class="pra-input" id="genericDialogInput" rows="2" style="width:100%;box-sizing:border-box;margin-bottom:14px;display:none;resize:vertical"></textarea>
+      <div style="display:flex;gap:10px">
+        <button class="pra-btn pra-btn-ghost" id="genericDialogCancelBtn" style="flex:1">Cancel</button>
+        <button class="pra-btn" id="genericDialogOkBtn" style="flex:1">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- In-app camera capture — students/users on touch devices only (see
        cameraCaptureBtn's own display toggle in setupComposer). Two screens:
        shoot (live preview, front camera default) then review/trim/send.
@@ -2227,7 +2242,7 @@ document.getElementById('convoActionReportBtn').onclick = async () => {
   const item = convoActionItem; closeConvoActionMenu();
   const targetUser = convoActionTargetUser(item);
   if (!targetUser) return;
-  const reason = prompt(`Optional: what's wrong with ${targetUser.first}'s messages? (This goes straight to our team.)`);
+  const reason = await promptDialog(`Optional: what's wrong with ${targetUser.first}'s messages? (This goes straight to our team.)`);
   if (reason === null) return; // cancelled
   await fetch('/api/chat/report', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2240,7 +2255,7 @@ document.getElementById('convoActionBlockBtn').onclick = async () => {
   const targetUser = convoActionTargetUser(item);
   if (!targetUser) return;
   const isBlocked = blockedUserIds.has(targetUser.id);
-  if (!isBlocked && !confirm(`Block ${targetUser.first}? They won't be able to message you, and their messages won't show up for you anymore.`)) return;
+  if (!isBlocked && !(await confirmDialog(`Block ${targetUser.first}? They won't be able to message you, and their messages won't show up for you anymore.`, 'Block'))) return;
   await fetch(isBlocked ? '/api/chat/unblock' : '/api/chat/block', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: targetUser.id }),
   });
@@ -3078,7 +3093,7 @@ function renderLevelsAccountActions(otherUser) {
   });
   document.getElementById('levelsArchiveToggleBtn').onclick = async () => {
     const nextArchived = !otherUser.archived;
-    if (nextArchived && !confirm(`Archive ${otherUser.first} ${otherUser.last}? They'll be logged out and unable to sign back in until unarchived.`)) return;
+    if (nextArchived && !(await confirmDialog(`Archive ${otherUser.first} ${otherUser.last}? They'll be logged out and unable to sign back in until unarchived.`, 'Archive'))) return;
     const r = await fetch(`/api/chat/users/${otherUser.id}/archived`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: nextArchived })
     });
@@ -3602,10 +3617,10 @@ function updateThreadApptHeader(messages, convo) {
   el.style.display = 'flex';
 }
 
-document.getElementById('threadApptInfo').addEventListener('click', (e) => {
+document.getElementById('threadApptInfo').addEventListener('click', async (e) => {
   const cancelEl = e.target.closest('.thread-appt-cancel');
   if (!cancelEl) return;
-  if (confirm('Cancel this upcoming session?')) deleteMessage(cancelEl.dataset.mid);
+  if (await confirmDialog('Cancel this upcoming session?', 'Cancel Session')) deleteMessage(cancelEl.dataset.mid);
 });
 
 // A plain `scrollTop = scrollHeight` right after innerHTML fires too early —
@@ -4105,7 +4120,7 @@ function linkifyUrls(escapedText) {
   // long-press/right-click action bar. Delete stays delegated here too
   // since appointment bubbles keep their own always-visible corner button
   // (.appt-delete-btn, dual-classed .delete-btn) outside the action bar.
-  document.getElementById('threadBody').addEventListener('click', (e) => {
+  document.getElementById('threadBody').addEventListener('click', async (e) => {
     const chip = e.target.closest('.reaction-chip');
     if (chip) {
       // Suppressed for the trailing synthetic click a long-press's own
@@ -4120,7 +4135,7 @@ function linkifyUrls(escapedText) {
     const deleteBtn = e.target.closest('.delete-btn, .appt-delete-btn');
     if (deleteBtn) {
       const row = deleteBtn.closest('.bubble-row');
-      if (row && confirm('Delete this message?')) deleteMessage(row.dataset.mid);
+      if (row && (await confirmDialog('Delete this message?', 'Delete'))) deleteMessage(row.dataset.mid);
       return;
     }
     if (e.target.closest('.bubble-edit-save')) {
@@ -5471,7 +5486,7 @@ async function loadTemplates(q) {
     const delBtn = row.querySelector('.template-delete-btn');
     if (delBtn) delBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete the "${t.title}" template?`)) return;
+      if (!(await confirmDialog(`Delete the "${t.title}" template?`, 'Delete'))) return;
       await fetch('/api/chat/message-templates/' + t.id, { method: 'DELETE' });
       loadTemplates(document.getElementById('templateSearchInput').value || '');
     };
@@ -5565,7 +5580,7 @@ document.getElementById('msgMoreReportBtn').onclick = async () => {
   clearActionSelection();
   const m = currentThreadMessages.find(x => x.id === mid);
   if (!m) return;
-  const reason = prompt("Optional: what's wrong with this message? (Goes straight to our team.)");
+  const reason = await promptDialog("Optional: what's wrong with this message? (Goes straight to our team.)");
   if (reason === null) return; // cancelled
   await fetch('/api/chat/report', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5579,11 +5594,11 @@ document.getElementById('msgMoreEditBtn').onclick = () => {
   clearActionSelection();
   if (mid) startEditMessage(mid);
 };
-document.getElementById('msgMoreDeleteBtn').onclick = () => {
+document.getElementById('msgMoreDeleteBtn').onclick = async () => {
   const mid = moreMenuMessageId;
   document.getElementById('msgMoreMenu').classList.remove('show');
   clearActionSelection();
-  if (mid && confirm('Delete this message?')) deleteMessage(mid);
+  if (mid && (await confirmDialog('Delete this message?', 'Delete'))) deleteMessage(mid);
 };
 
 // ── Message action bar (long-press / right-click) ───────────────────────
@@ -5995,6 +6010,38 @@ async function saveEditMessage(mid, text) {
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 
+// Drop-in replacements for native confirm()/prompt() — see genericDialogModal's
+// own comment for why those can't be trusted inside the iOS WKWebView. Both
+// resolve once (Cancel never calls the resolver twice even if clicked after OK),
+// and reuse the one shared modal rather than stacking a new DOM dialog per call.
+function genericDialog({ message, showInput, inputPlaceholder, okLabel }) {
+  return new Promise((resolve) => {
+    document.getElementById('genericDialogMessage').textContent = message;
+    const input = document.getElementById('genericDialogInput');
+    input.style.display = showInput ? 'block' : 'none';
+    input.value = '';
+    input.placeholder = inputPlaceholder || '';
+    const okBtn = document.getElementById('genericDialogOkBtn');
+    const cancelBtn = document.getElementById('genericDialogCancelBtn');
+    okBtn.textContent = okLabel || 'OK';
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      closeModal('genericDialogModal');
+      resolve(value);
+    };
+    okBtn.onclick = () => finish(showInput ? input.value : true);
+    cancelBtn.onclick = () => finish(showInput ? null : false);
+    openModal('genericDialogModal');
+    if (showInput) input.focus();
+  });
+}
+function confirmDialog(message, okLabel) { return genericDialog({ message, showInput: false, okLabel }); }
+function promptDialog(message, placeholder) { return genericDialog({ message, showInput: true, inputPlaceholder: placeholder }); }
+
 // Kickoff/Notes/Favorites/Shared-Media/Publish all get click-the-backdrop-
 // to-close (clicking the dark overlay outside the panel itself, not the
 // panel's own content) — same "bounce in and out, an accidental close
@@ -6041,7 +6088,7 @@ async function renderGroupInfoModal() {
   `).join('');
   document.querySelectorAll('.remove-member-btn').forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm(`Remove ${btn.dataset.name} from this group?`)) return;
+      if (!(await confirmDialog(`Remove ${btn.dataset.name} from this group?`, 'Remove'))) return;
       const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants/${btn.dataset.id}`, { method: 'DELETE' });
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not remove member.'); return; }
       await loadConversations();
@@ -6108,7 +6155,7 @@ document.getElementById('groupInfoRenameBtn').onclick = async () => {
 document.getElementById('deleteGroupBtn').onclick = async () => {
   const convo = conversations.find(c => c.id === activeConvoId);
   if (!convo || convo.type !== 'group') return;
-  if (!confirm(`Permanently delete "${convo.name}"? This deletes the group and all its messages for everyone — this cannot be undone.`)) return;
+  if (!(await confirmDialog(`Permanently delete "${convo.name}"? This deletes the group and all its messages for everyone — this cannot be undone.`, 'Delete Group'))) return;
   const r = await fetch(`/api/chat/conversations/${activeConvoId}`, { method: 'DELETE' });
   if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not delete group.'); return; }
   closeModal('groupInfoModal');
