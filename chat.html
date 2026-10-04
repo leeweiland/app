@@ -2430,7 +2430,33 @@ function renderConvoList() {
     return;
   }
   const prevScrollTop = wrap.scrollTop;
-  wrap.innerHTML = items.map(convoItemHtml).join('');
+  // Same reuse-unchanged-rows idea as renderMessages for the thread body
+  // (see its own comment) -- this list re-renders on every 3s poll tick
+  // (loadConversations), and a plain `wrap.innerHTML = ...` rebuilt EVERY
+  // row from scratch every single time regardless of whether anything in
+  // it actually changed. That tore down and recreated every avatar <img>
+  // too, re-triggering a Drive media-proxy fetch for every conversation
+  // with a real profile photo every 3 seconds, forever -- which is what
+  // made a sidebar with many conversations feel like it never finished
+  // loading. `active`/bulk-select state isn't part of `item` itself (it's
+  // compared against external variables inside convoItemHtml), so it's
+  // folded into the diff key explicitly rather than missed.
+  const existingByKey = new Map();
+  wrap.querySelectorAll(':scope > .convo-item[data-key]').forEach(el => existingByKey.set(el.dataset.key, el));
+  const finalRows = items.map(item => {
+    const json = JSON.stringify({
+      item, active: item.convoId === activeConvoId,
+      bulkSelectMode, selected: bulkSelectMode && bulkSelected.has(item.key),
+    });
+    const existing = existingByKey.get(item.key);
+    if (existing && existing.dataset.json === json) return existing;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = convoItemHtml(item).trim();
+    const row = tmp.firstElementChild;
+    row.dataset.json = json;
+    return row;
+  });
+  wrap.replaceChildren(...finalRows);
   wrap.scrollTop = prevScrollTop;
   wireConvoItems(wrap, items);
 }
@@ -6047,7 +6073,7 @@ function genericDialog({ message, showInput, inputPlaceholder, okLabel }) {
 }
 function confirmDialog(message, okLabel) { return genericDialog({ message, showInput: false, okLabel }); }
 function promptDialog(message, placeholder) { return genericDialog({ message, showInput: true, inputPlaceholder: placeholder }); }
-// Same unreliable-in-WKWebView problem as confirm()/prompt() — await alertDialog() just
+// Same unreliable-in-WKWebView problem as confirm()/prompt() — alert() just
 // hides Cancel (there's nothing to decline) and otherwise reuses genericDialog.
 function alertDialog(message) {
   const cancelBtn = document.getElementById('genericDialogCancelBtn');
