@@ -99,7 +99,7 @@
      usually-narrower icon row actually started. */
   .convo-row { display: flex; align-items: center; gap: 6px; }
   .convo-row + .convo-row { margin-top: 2px; }
-  .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .convo-name { font-family: var(--font-secondary); font-size: .88rem; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   .convo-time-row { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
   /* Fixed width (not just white-space:nowrap) so a short date ("Aug 13")
      and a longer time ("11:07 AM") don't leave the badge next to it sitting
@@ -197,7 +197,7 @@
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .thread-head-name { font-family: var(--font-secondary); font-weight: 700; font-size: .95rem; overflow-wrap: break-word; }
+  .thread-head-name { font-family: var(--font-secondary); font-weight: 400; font-size: .95rem; overflow-wrap: break-word; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
   /* Coaches/admins in a group's member list stay gray — clickable same as
@@ -631,7 +631,7 @@
   .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
   .call-screen.show { display: flex; }
   .call-status-row { padding: max(14px, env(safe-area-inset-top)) 16px 10px; text-align: center; color: var(--pra-dim); font-size: .85rem; flex-shrink: 0; }
-  .call-status-name { color: #fff; font-size: 1.1rem; font-weight: 600; margin-bottom: 2px; }
+  .call-status-name { color: #fff; font-size: 1.1rem; font-weight: 400; margin-bottom: 2px; }
   .call-video-grid { flex: 1; display: grid; gap: 4px; padding: 4px; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
   .call-tile { position: relative; background: #16161d; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 0; }
   /* object-fit:contain, not cover -- show the whole camera frame, letterboxed
@@ -688,7 +688,7 @@
   .incoming-call-banner { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 10001; display: none; align-items: center; gap: 12px; padding: 12px 14px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
   .incoming-call-banner.show { display: flex; }
   .incoming-call-info { flex: 1; min-width: 0; }
-  .incoming-call-name { font-weight: 600; font-size: .92rem; }
+  .incoming-call-name { font-weight: 400; font-size: .92rem; }
   .incoming-call-sub { color: var(--pra-dim); font-size: .78rem; }
   .incoming-call-btn { width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .incoming-call-decline { background: #ff3b30; color: #fff; }
@@ -721,7 +721,7 @@
   .contact-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; cursor: pointer; border-radius: 8px; }
   .contact-row:hover { background: rgba(255,255,255,0.04); }
   .contact-row input[type=checkbox] { margin-left: auto; }
-  .group-name-title-input { display: block; width: 100%; background: transparent; border: none; border-bottom: 1px dashed transparent; color: inherit; padding: 2px 0; outline: none; box-sizing: border-box; }
+  .group-name-title-input { display: block; width: 100%; background: transparent; border: none; border-bottom: 1px dashed transparent; color: inherit; padding: 2px 0; outline: none; box-sizing: border-box; font-weight: 400; }
   .group-name-title-input:hover, .group-name-title-input:focus { border-bottom-color: var(--pra-border); }
   .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   /* Cells are clickable wrappers that open the full lightbox instead of
@@ -1010,7 +1010,7 @@
   <div class="modal-backdrop" id="groupInfoModal">
     <div class="pra-panel modal-box">
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <input class="pra-input" id="groupInfoNameInput" style="flex:1;font-weight:700"/>
+        <input class="pra-input" id="groupInfoNameInput" style="flex:1;font-weight:400"/>
         <button class="pra-btn" id="groupInfoRenameBtn" style="padding:8px 14px;font-size:.78rem">Save</button>
       </div>
       <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
