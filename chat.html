@@ -1916,8 +1916,17 @@ async function init() {
     loadCoachMonthlyStats(); // fire-and-forget -- badges just render blank until it resolves
   }
 
-  await loadContacts();
-  await loadBlockedUsers();
+  // Neither of these gates the conversation list itself -- contacts only
+  // adds the "virtual" no-conversation-yet directory rows on top of real
+  // conversations (re-render once it resolves so those appear), and
+  // blocked-user ids are only ever read later, when the report/block
+  // context menu opens. /api/chat/contacts can take several real seconds
+  // on a cold cache (it fetches live student-renewal data from three
+  // Sheets tabs the first time after a server restart) -- awaiting it here
+  // meant the ENTIRE sidebar, including the fast part that's actually
+  // ready in ~15ms, sat blank behind it.
+  loadContacts().then(renderConvoList);
+  loadBlockedUsers();
   await loadConversations();
   // Deep link from the Training Protocol page's Back button — reopens
   // whichever conversation sent the coach/admin there. Cache-Control:

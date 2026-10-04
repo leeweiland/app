@@ -1064,6 +1064,12 @@ async function fetchStudentEligibility() {
   studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows), endDates: { online: toEndDateMap(onlineRows), gym: toEndDateMap(gymRows) } };
   return studentEligibilityCache;
 }
+// Pre-warms the above cache at boot (every deploy restarts the process,
+// which wipes it) instead of leaving it cold for whichever staff member's
+// sidebar load happens to be first to need it -- that first /api/chat/
+// contacts call was eating the full three-Sheets-tab fetch (several real
+// seconds) on the user-facing request path.
+fetchStudentEligibility().catch(() => {});
 
 // ── Renewal alerts (2026-09-19) ──────────────────────────────────────────
 // Staff (coach/admin) see a student's chat -- and their coaching group -- flagged when
