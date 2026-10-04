@@ -2184,7 +2184,7 @@ function wireConvoItems(wrap, items) {
       const r = await fetch(`/api/chat/conversations/${btn.dataset.channelId}/channel`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isChannel })
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update channel status.'); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not update channel status.'); return; }
       await loadConversations();
     };
   });
@@ -2248,7 +2248,7 @@ document.getElementById('convoActionReportBtn').onclick = async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'user', targetUserId: targetUser.id, conversationId: item.convoId || null, reason }),
   });
-  alert('Reported. Our team will review it.');
+  await alertDialog('Reported. Our team will review it.');
 };
 document.getElementById('convoActionBlockBtn').onclick = async () => {
   const item = convoActionItem; closeConvoActionMenu();
@@ -2729,7 +2729,7 @@ document.getElementById('intakeFormSaveBtn').addEventListener('click', async () 
 document.getElementById('intakeFormUnlockBtn').addEventListener('click', async () => {
   if (!currentThreadStudent) return;
   const r = await fetch('/api/chat/intake/' + currentThreadStudent.id + '/unlock', { method: 'POST' });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not unlock.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not unlock.'); return; }
   await openIntakeFormModal();
 });
 
@@ -3083,7 +3083,7 @@ function renderLevelsAccountActions(otherUser) {
       const r = await fetch(`/api/chat/users/${otherUser.id}/role`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: btn.dataset.role })
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not change role.'); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not change role.'); return; }
       const d = await r.json();
       otherUser.role = d.user.role;
       levelsModalUser = otherUser;
@@ -3097,7 +3097,7 @@ function renderLevelsAccountActions(otherUser) {
     const r = await fetch(`/api/chat/users/${otherUser.id}/archived`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: nextArchived })
     });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update.'); return; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not update.'); return; }
     const d = await r.json();
     otherUser.archived = d.user.archived;
     renderLevelsAccountActions(otherUser);
@@ -3836,9 +3836,15 @@ function renderBubble(m, convo) {
 function msgGridCellHtml(m, moreCount) {
   const src = `/api/chat/media/${m.driveFileId}`;
   const overlay = moreCount ? `<div class="msg-grid-more">+${moreCount}</div>` : '';
+  // Lazy-loaded via data-src + chatMediaLazyObserver, same as every other
+  // bubble's media (see the observer registration right after body gets
+  // rebuilt) -- these used eager `src` instead, so a thread with several
+  // multi-file sends loaded every tile in every one of them immediately on
+  // open rather than only the ones actually scrolled into view, which is
+  // what made a media-heavy thread feel very slow to open.
   return m.type === 'video'
-    ? `<div class="msg-grid-item" data-type="video" data-src="${src}" data-mid="${m.id}"><video src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
-    : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img src="${src}"/>${overlay}</div>`;
+    ? `<div class="msg-grid-item" data-type="video" data-src="${src}" data-mid="${m.id}"><video data-src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
+    : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img data-src="${src}"/>${overlay}</div>`;
 }
 
 // One bubble for a whole multi-file send (see sendFilesImmediately /
@@ -4809,7 +4815,7 @@ async function startCameraStream() {
     } catch (e2) {
       console.error('[camera] getUserMedia(video only) also failed:', e2.name, e2.message);
       document.getElementById('cameraSendStatus').textContent = '';
-      alert(`Couldn't access the camera (${e2.name || e.name || 'unknown error'}) — check your device's Camera/Microphone permission for this app in Settings and try again.`);
+      await alertDialog(`Couldn't access the camera (${e2.name || e.name || 'unknown error'}) — check your device's Camera/Microphone permission for this app in Settings and try again.`);
       closeCameraCapture();
       return;
     }
@@ -5511,11 +5517,11 @@ function useTemplate(text) {
 async function submitNewTemplate() {
   const title = document.getElementById('templateAddTitle').value.trim();
   const text = document.getElementById('templateAddText').value.trim();
-  if (!title || !text) { alert('Title and message text are required.'); return; }
+  if (!title || !text) { await alertDialog('Title and message text are required.'); return; }
   const r = await fetch('/api/chat/message-templates', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, text })
   });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not save template.'); return; }
   document.getElementById('templateAddTitle').value = '';
   document.getElementById('templateAddText').value = '';
   loadTemplates(document.getElementById('templateSearchInput').value || '');
@@ -5586,7 +5592,7 @@ document.getElementById('msgMoreReportBtn').onclick = async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'message', targetUserId: m.senderId, conversationId: activeConvoId, messageId: mid, reason }),
   });
-  alert('Reported. Our team will review it.');
+  await alertDialog('Reported. Our team will review it.');
 };
 document.getElementById('msgMoreEditBtn').onclick = () => {
   const mid = moreMenuMessageId;
@@ -6041,6 +6047,13 @@ function genericDialog({ message, showInput, inputPlaceholder, okLabel }) {
 }
 function confirmDialog(message, okLabel) { return genericDialog({ message, showInput: false, okLabel }); }
 function promptDialog(message, placeholder) { return genericDialog({ message, showInput: true, inputPlaceholder: placeholder }); }
+// Same unreliable-in-WKWebView problem as confirm()/prompt() — await alertDialog() just
+// hides Cancel (there's nothing to decline) and otherwise reuses genericDialog.
+function alertDialog(message) {
+  const cancelBtn = document.getElementById('genericDialogCancelBtn');
+  cancelBtn.style.display = 'none';
+  return genericDialog({ message, showInput: false }).finally(() => { cancelBtn.style.display = ''; });
+}
 
 // Kickoff/Notes/Favorites/Shared-Media/Publish all get click-the-backdrop-
 // to-close (clicking the dark overlay outside the panel itself, not the
@@ -6090,7 +6103,7 @@ async function renderGroupInfoModal() {
     btn.onclick = async () => {
       if (!(await confirmDialog(`Remove ${btn.dataset.name} from this group?`, 'Remove'))) return;
       const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants/${btn.dataset.id}`, { method: 'DELETE' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not remove member.'); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not remove member.'); return; }
       await loadConversations();
       await renderGroupInfoModal();
       openConvo(activeConvoId);
@@ -6121,7 +6134,7 @@ document.getElementById('threadChannelBtn').onclick = async () => {
   const r = await fetch(`/api/chat/conversations/${activeConvoId}/channel`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isChannel }),
   });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not update channel status.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not update channel status.'); return; }
   convo.isChannel = isChannel;
   const threadChannelBtn = document.getElementById('threadChannelBtn');
   threadChannelBtn.classList.toggle('on', isChannel);
@@ -6135,7 +6148,7 @@ document.getElementById('groupInfoAddBtn').onclick = async () => {
   const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantIds: ids })
   });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not add members.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not add members.'); return; }
   await loadConversations();
   await renderGroupInfoModal();
   openConvo(activeConvoId);
@@ -6143,11 +6156,11 @@ document.getElementById('groupInfoAddBtn').onclick = async () => {
 
 document.getElementById('groupInfoRenameBtn').onclick = async () => {
   const name = document.getElementById('groupInfoNameInput').value.trim();
-  if (!name) { alert("Name can't be blank."); return; }
+  if (!name) { await alertDialog("Name can't be blank."); return; }
   const r = await fetch(`/api/chat/conversations/${activeConvoId}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
   });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not rename group.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not rename group.'); return; }
   await loadConversations();
   openConvo(activeConvoId);
 };
@@ -6157,7 +6170,7 @@ document.getElementById('deleteGroupBtn').onclick = async () => {
   if (!convo || convo.type !== 'group') return;
   if (!(await confirmDialog(`Permanently delete "${convo.name}"? This deletes the group and all its messages for everyone — this cannot be undone.`, 'Delete Group'))) return;
   const r = await fetch(`/api/chat/conversations/${activeConvoId}`, { method: 'DELETE' });
-  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not delete group.'); return; }
+  if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not delete group.'); return; }
   closeModal('groupInfoModal');
   closeConvo();
   await loadConversations();
@@ -6452,7 +6465,7 @@ async function startCall() {
   const displayName = (nameNode?.nodeType === Node.TEXT_NODE ? nameNode.textContent.trim() : '') || 'Calling…';
   const r = await fetch(`/api/chat/conversations/${activeConvoId}/call/start`, { method: 'POST' });
   const d = await r.json();
-  if (!r.ok) { alert(d.error || 'Could not start the call.'); return; }
+  if (!r.ok) { await alertDialog(d.error || 'Could not start the call.'); return; }
   await joinCall(d.call, d.token, activeConvoId, displayName);
   clearTimeout(callRingTimeout);
   // No push/native ringing yet (see header comment) -- the other side only
@@ -6483,7 +6496,7 @@ async function joinCall(call, token, convoId, displayName) {
     await dailyCallObject.join({ url: call.dailyRoomUrl, token });
   } catch (e) {
     console.error('[call] join failed', e);
-    alert('Could not join the call.');
+    await alertDialog('Could not join the call.');
     closeCallScreen();
     return;
   }
@@ -6642,7 +6655,7 @@ async function toggleCameraMenu() {
         await dailyCallObject.setInputDevicesAsync({ videoDeviceId: item.dataset.deviceId });
       } catch (e) {
         console.error('[call] switching camera failed', e);
-        alert('Could not switch to that camera.');
+        await alertDialog('Could not switch to that camera.');
       }
     };
   });
@@ -6681,7 +6694,7 @@ function setupCallUI() {
     pendingIncomingCall = null;
     const r = await fetch(`/api/chat/conversations/${convoId}/call/${call.id}/accept`, { method: 'POST' });
     const d = await r.json();
-    if (!r.ok) { alert(d.error || 'Could not join the call.'); return; }
+    if (!r.ok) { await alertDialog(d.error || 'Could not join the call.'); return; }
     await joinCall(d.call, d.token, convoId, name);
   };
   document.getElementById('incomingCallDeclineBtn').onclick = () => {
