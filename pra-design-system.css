@@ -230,6 +230,8 @@
    instead), so this never lights up an individual student's own avatar. */
 .pra-avatar.role-coach { box-shadow: 0 0 9px 2px rgba(255,59,59,0.55); color: #ff3b3b; }
 .pra-avatar.role-online, .pra-avatar.role-gym { box-shadow: 0 0 9px 2px rgba(0,155,255,0.55); }
+.pra-avatar.role-admin { color: #fff; }
+.pra-avatar.role-user { color: #9a9aa5; }
 
 /* ── Badge / pill ── */
 .pra-badge {
@@ -252,11 +254,11 @@
   font-family: var(--font-secondary); font-size: .6rem; letter-spacing: .04em;
   text-transform: uppercase; font-weight: 700; vertical-align: middle;
 }
-.role-tag-admin { background: rgba(0,155,255,0.15); color: #009bff; }
+.role-tag-admin { background: rgba(255,255,255,0.15); color: #fff; }
 .role-tag-coach { background: rgba(255,59,59,0.15); color: #ff3b3b; }
 .role-tag-online { background: rgba(0,155,255,0.15); color: #009bff; }
 .role-tag-gym { background: rgba(0,155,255,0.15); color: #009bff; }
-.role-tag-user { background: rgba(255,255,255,0.12); color: #fff; }
+.role-tag-user { background: rgba(154,154,165,0.18); color: #9a9aa5; }
 /* The Strength Ninjas map popup uses the App Sheet's own TYPE vocabulary
    (Admin/Coach/Student/User), not the chat app's online/gym roles — same
    green as role-tag-online/gym. */
