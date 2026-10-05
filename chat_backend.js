@@ -1019,6 +1019,26 @@ const STUDENT_BLACKLIST_TAB = "BLACKLIST ONLINE & GYM";
 function nameKey(first, last) {
   return `${String(first || "").trim().toLowerCase()}|${String(last || "").trim().toLowerCase()}`;
 }
+// Shared duplicate-account guard for both public signup and the admin
+// "create user" panel -- checks email, then phone, then first+last name,
+// in that priority order, so the error always points at whichever field
+// actually collided first. Phone is compared digits-only so "907-717-5182"
+// and "9077175182" are recognized as the same number; an empty phone never
+// matches another empty phone (most existing accounts have none).
+function findDuplicateUserReason(users, { email, phone, first, last }) {
+  const emailNorm = String(email || "").toLowerCase().trim();
+  if (emailNorm && users.some(u => u.email.toLowerCase() === emailNorm)) {
+    return "An account with that email already exists";
+  }
+  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  if (phoneDigits && users.some(u => String(u.phone || "").replace(/\D/g, "") === phoneDigits)) {
+    return "An account with that phone number already exists";
+  }
+  if (first && last && users.some(u => nameKey(u.first, u.last) === nameKey(first, last))) {
+    return `An account for ${first} ${last} already exists`;
+  }
+  return null;
+}
 let studentEligibilityCache = null; // { at, online: Set<nameKey>, gym: Set<nameKey> } — 10-minute cache, same idea as the levels cache
 async function fetchStudentEligibility() {
   if (studentEligibilityCache && Date.now() - studentEligibilityCache.at < 10 * 60 * 1000) return studentEligibilityCache;
@@ -1341,6 +1361,28 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
     throw new Error(`Could not save to the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
   }
   levelsCache = null; // next read should reflect the write immediately
+}
+
+// Read-only name lookup against a single Levels tab -- used by the "add new
+// student" duplicate check below. Kept separate from updateLevelsRow's own
+// read (which needs the full row width to write back) since this is just a
+// cheap existence check across both tabs before ever touching the sheet.
+async function findLevelsRowByName(tabName, first, last) {
+  const accessToken = await getGoogleAccessToken();
+  const range = `'${tabName}'!A1:J`;
+  const getRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const getData = await getRes.json();
+  if (!getRes.ok) throw new Error(`Could not read the ${tabName} levels sheet: ` + (getData.error?.message || getRes.status));
+  const rows = getData.values || [];
+  const header = rows[0] || [];
+  const firstIdx = header.indexOf("FIRST NAME");
+  const lastIdx = header.indexOf("LAST NAME");
+  if (firstIdx < 0 || lastIdx < 0) return false;
+  const f = first.trim().toLowerCase(), l = last.trim().toLowerCase();
+  return rows.some((r, i) => i > 0 && String(r[firstIdx] || "").trim().toLowerCase() === f && String(r[lastIdx] || "").trim().toLowerCase() === l);
 }
 
 // Generic Gmail send, factored out of what used to be the password-reset-only
@@ -2638,9 +2680,8 @@ export async function handleChatRequest(req, res, url) {
     }
 
     const users = readJson(USERS_FILE, []);
-    if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
-      return sendJson(res, 409, { error: "An account with that email already exists" });
-    }
+    const dupReason = findDuplicateUserReason(users, { email, phone, first, last });
+    if (dupReason) return sendJson(res, 409, { error: dupReason });
     const { salt, hash } = hashPassword(password);
     const ip = getClientIp(req);
     const geo = await geolocateIp(ip); // best-effort — null on failure/local IP, never blocks signup
@@ -3070,9 +3111,8 @@ export async function handleChatRequest(req, res, url) {
         if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
         if (["user", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
         const users = readJson(USERS_FILE, []);
-        if (users.some(u => u.email.toLowerCase() === String(email).toLowerCase())) {
-          return sendJson(res, 409, { error: "An account with that email already exists" });
-        }
+        const dupReason = findDuplicateUserReason(users, { email, phone, first, last });
+        if (dupReason) return sendJson(res, 409, { error: dupReason });
         const { salt, hash } = hashPassword(password);
         const newUser = {
           id: randomUUID(),
@@ -3767,6 +3807,32 @@ export async function handleChatRequest(req, res, url) {
       if (!first || !last) return sendJson(res, 400, { error: "first and last name required" });
       if (!["Gym", "Online"].includes(program)) return sendJson(res, 400, { error: "program must be 'Gym' or 'Online'" });
       try {
+        await updateLevelsRow({ first, last, program, levels: levels || {}, team: !!team });
+        return sendJson(res, 200, { ok: true });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
+    // Unlike /levels/update above (an edit-or-create upsert, used for an
+    // existing person's own levels), this is specifically "add a brand new
+    // student to the roster" -- it rejects outright if that name is already
+    // on EITHER tab (not just the one being added to; a gym student showing
+    // up as a second "new" online row, or vice versa, is still a duplicate
+    // person) rather than silently overwriting them.
+    if (p === "/api/chat/levels/add-student" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { first, last, program, levels, team } = await readJsonBody(req);
+      if (!first || !String(first).trim() || !last || !String(last).trim()) return sendJson(res, 400, { error: "First and last name are required" });
+      if (!["Gym", "Online"].includes(program)) return sendJson(res, 400, { error: "program must be 'Gym' or 'Online'" });
+      try {
+        const [inGym, inOnline] = await Promise.all([
+          findLevelsRowByName("GYM", first, last),
+          findLevelsRowByName("ONLINE", first, last),
+        ]);
+        if (inGym || inOnline) {
+          return sendJson(res, 409, { error: `${first} ${last} is already on the ${inGym ? "Gym" : "Online"} levels sheet.` });
+        }
         await updateLevelsRow({ first, last, program, levels: levels || {}, team: !!team });
         return sendJson(res, 200, { ok: true });
       } catch (e) {
