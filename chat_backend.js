@@ -1040,8 +1040,20 @@ function findDuplicateUserReason(users, { email, phone, first, last }) {
   return null;
 }
 let studentEligibilityCache = null; // { at, online: Set<nameKey>, gym: Set<nameKey> } — 10-minute cache, same idea as the levels cache
+// Whoever calls in first while the cache is cold (the boot-time pre-warm
+// below, plus any request that lands before it resolves -- several
+// concurrent tabs each polling contacts included) now shares the SAME
+// in-flight fetch instead of each kicking off its own independent
+// three-Sheets-tab read. Without this, a cold cache meant every one of
+// those callers separately ate the full several-second fetch.
+let studentEligibilityInFlight = null;
 async function fetchStudentEligibility() {
   if (studentEligibilityCache && Date.now() - studentEligibilityCache.at < 10 * 60 * 1000) return studentEligibilityCache;
+  if (studentEligibilityInFlight) return studentEligibilityInFlight;
+  studentEligibilityInFlight = fetchStudentEligibilityUncached().finally(() => { studentEligibilityInFlight = null; });
+  return studentEligibilityInFlight;
+}
+async function fetchStudentEligibilityUncached() {
   const accessToken = await getGoogleAccessToken();
   async function fetchTab(tabName, range) {
     const r = await fetch(

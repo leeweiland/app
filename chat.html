@@ -2474,8 +2474,25 @@ function renderConvoList() {
     row.dataset.json = json;
     return row;
   });
-  wrap.replaceChildren(...finalRows);
-  wrap.scrollTop = prevScrollTop;
+  // The per-row reuse above (existing.dataset.json === json) only decides
+  // whether to skip REBUILDING a given row's HTML -- it still handed
+  // replaceChildren the exact same node list every single time, and
+  // replaceChildren unconditionally tears down and reinserts its whole
+  // argument list regardless of whether anything in it actually differs
+  // from what's already there. That forced a full reflow/repaint of the
+  // entire sidebar (every row's avatar glow included) on every 3s poll
+  // tick, every 30s contacts refresh, and every search keystroke, FOREVER,
+  // even when not one row had changed -- continuous background layout
+  // thrashing stealing frames from whatever the user was actually doing
+  // (clicking, scrolling, typing) at that exact moment. Now only touches
+  // the DOM when the row list actually differs (not just same rows, same
+  // order already).
+  const currentRows = [...wrap.children].filter(el => el.classList.contains('convo-item'));
+  const rowsChanged = currentRows.length !== finalRows.length || currentRows.some((el, i) => el !== finalRows[i]);
+  if (rowsChanged) {
+    wrap.replaceChildren(...finalRows);
+    wrap.scrollTop = prevScrollTop;
+  }
   wireConvoItems(wrap, items);
 }
 
