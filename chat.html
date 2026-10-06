@@ -3588,9 +3588,22 @@ function renderMessages(messages, forceScrollDown) {
     row.dataset.json = json;
     return row;
   });
-  body.replaceChildren(...finalRows);
-
-  body.querySelectorAll('video[data-src], img[data-src]').forEach(v => chatMediaLazyObserver.observe(v));
+  // Same missing guard as the sidebar's renderConvoList had (see its own
+  // comment) -- the per-row reuse above only skipped rebuilding an
+  // unchanged bubble's HTML, but still hands replaceChildren the identical
+  // node list every time regardless, forcing a full reflow/repaint of the
+  // whole thread on every 3s poll tick a thread stays open. Desktop keeps
+  // the thread panel open alongside the sidebar at all times (mobile
+  // collapses to one pane, so a thread usually isn't open while just
+  // browsing the sidebar there) -- this is what made the slowdown desktop-
+  // specific. Only touch the DOM, and only re-register the lazy-media
+  // observer, when the row list actually changed.
+  const currentRows = [...body.children].filter(el => el.classList.contains('bubble-row'));
+  const rowsChanged = currentRows.length !== finalRows.length || currentRows.some((el, i) => el !== finalRows[i]);
+  if (rowsChanged) {
+    body.replaceChildren(...finalRows);
+    body.querySelectorAll('video[data-src], img[data-src]').forEach(v => chatMediaLazyObserver.observe(v));
+  }
   const newLastMessage = messages[messages.length - 1];
   if (forceScrollDown || wasAtBottom) {
     scrollThreadToBottom(body);
