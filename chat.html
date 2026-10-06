@@ -49,15 +49,7 @@
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
   .convo-list { flex: 1; overflow-y: auto; }
-  /* content-visibility:auto skips layout/paint entirely for rows scrolled
-     out of view -- with every row's avatar glow (box-shadow blur) and real
-     profile photos all sitting in the DOM at once (this list isn't
-     virtualized), a long conversation list was doing full paint work for
-     rows nobody could even see, which is what made scrolling feel slow.
-     contain-intrinsic-size is just a rough placeholder height so off-screen
-     rows still reserve roughly the right scrollbar space before they've
-     ever been measured -- being a little off is harmless, not a bug. */
-  .convo-item { display: flex; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: background .12s; content-visibility: auto; contain-intrinsic-size: 0 78px; }
+  .convo-item { display: flex; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: background .12s; }
   /* ── Bulk select (message several chats/groups at once) ── */
   .convo-item.select-mode.selected { background: var(--pra-blue-dim); }
   .convo-select-checkbox { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--pra-border); align-self: center; display: flex; align-items: center; justify-content: center; transition: background .12s, border-color .12s; }
