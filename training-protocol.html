@@ -545,13 +545,23 @@ async function saveSteps() {
 
 // A protocol full of video steps was loading every single one the moment
 // the page rendered, same issue as the picker — lazy-loads via data-src
-// instead (see renderStepContent).
+// instead (see renderStepContent). These are autoplay+loop (muted
+// thumbnails) — staying subscribed instead of unobserving once loaded, and
+// explicitly pausing once a video scrolls back out of view, matters just as
+// much as the lazy-load itself: every step is `loop`, so once started it
+// never stops on its own, and a protocol with many video steps left them
+// ALL decoding and playing simultaneously forever, which is what made the
+// whole browser (not just this page) sluggish -- even typing in an
+// unrelated text box, since it was all competing for the same CPU/GPU.
 const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
-    if (!entry.isIntersecting) return;
     const video = entry.target;
-    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
-    stepVideoLazyObserver.unobserve(video);
+    if (entry.isIntersecting) {
+      if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
   });
 }, { rootMargin: '400px' });
 
@@ -1692,14 +1702,20 @@ function wireModals() {
 // Lazy-loads each thumbnail's actual video only once it scrolls into view
 // (rootMargin gives it a 150px head start) instead of every result on the
 // page — could be dozens — all trying to fetch metadata simultaneously the
-// moment a search returns. One shared observer for the whole modal;
-// unobserve right after loading since a thumbnail only ever needs this once.
+// moment a search returns. These thumbnails autoplay+loop too, so staying
+// subscribed and pausing on scroll-out matters here the same way it does
+// for stepVideoLazyObserver above — a results page with dozens of matches
+// must never end up with all of them decoding/playing at once just because
+// each was visible once.
 const videoThumbObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
-    if (!entry.isIntersecting) return;
     const video = entry.target;
-    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
-    videoThumbObserver.unobserve(video);
+    if (entry.isIntersecting) {
+      if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
   });
 }, { rootMargin: '150px' });
 
