@@ -6,7 +6,7 @@
 
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
-import { readJson, writeJson, getSessionUser, resolveTargetUser, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
+import { readJson, writeJson, getSessionUser, resolveTargetUser, readJsonBody, getDriveAccessToken, uploadStreamToDrive, streamDriveMedia, sendJson, getConfig } from "./chat_backend.js";
 import { analyzeImageWithOpenAI, analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { parseMultipartUpload } from "./multipart_util.js";
 import { logActivity } from "./activity_log_backend.js";
@@ -158,8 +158,44 @@ export async function handleFoodLogRequest(req, res, url) {
       proteinG: t.proteinG + (e.macros?.proteinG || 0),
       fatG: t.fatG + (e.macros?.fatG || 0),
       carbG: t.carbG + (e.macros?.carbG || 0),
-    }), { calories: 0, proteinG: 0, fatG: 0, carbG: 0 });
+      // Only ever one "steps"-source entry per day (see the upsert in
+      // /api/food-log/steps below) -- summing instead of just reading it
+      // off still gives the right answer and doesn't need a special case
+      // here if that ever changes.
+      steps: t.steps + (e.source === "steps" ? (e.steps || 0) : 0),
+    }), { calories: 0, proteinG: 0, fatG: 0, carbG: 0, steps: 0 });
     return sendJson(res, 200, { entries, totals });
+  }
+
+  // Steps are a single daily number, not a list of logged items like meals
+  // -- re-entering it updates today's existing "steps"-source entry in
+  // place instead of appending a new one, so the Fuel history for a day
+  // only ever shows (at most) one steps row no matter how many times it's
+  // corrected. Still lives in the same per-day entries array as meals
+  // (same LOG_FILE, same date-keyed shape) rather than a parallel store, so
+  // it shows up in that day's Fuel history for free -- see the GET handler
+  // above folding it into `totals.steps`, and the frontend's loadFoodEntries
+  // rendering it as its own row in the list.
+  if (req.method === "POST" && url.pathname === "/api/food-log/steps") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const { date, steps } = await readJsonBody(req);
+    const stepsNum = Number(steps);
+    if (!Number.isFinite(stepsNum) || stepsNum < 0) return sendJson(res, 400, { error: "steps must be a non-negative number" });
+    const key = dateKey(date);
+    const all = readJson(LOG_FILE, {});
+    if (!all[user.id]) all[user.id] = {};
+    if (!all[user.id][key]) all[user.id][key] = [];
+    const existing = all[user.id][key].find(e => e.source === "steps");
+    if (existing) {
+      existing.steps = stepsNum;
+      existing.createdAt = new Date().toISOString();
+    } else {
+      all[user.id][key].push({ id: randomUUID(), createdAt: new Date().toISOString(), source: "steps", steps: stepsNum });
+    }
+    writeJson(LOG_FILE, all);
+    logActivity(user.id, "steps_logged", `Logged ${stepsNum.toLocaleString()} steps`, {});
+    return sendJson(res, 200, { ok: true, steps: stepsNum });
   }
 
   const delMatch = url.pathname.match(/^\/api\/food-log\/entries\/([^/]+)$/);

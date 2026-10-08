@@ -121,6 +121,12 @@ export async function handleBodyStatsRequest(req, res, url) {
       goalWeightKg: has("goalWeightKg") ? (body.goalWeightKg ? Number(body.goalWeightKg) : null) : (existing.goalWeightKg ?? null),
       activityLevel: has("activityLevel") ? (body.activityLevel || null) : (existing.activityLevel ?? null),
       goal: has("goal") ? (body.goal || null) : (existing.goal ?? null),
+      // Daily step-count goal shown next to Calories on the Fuel tab (see
+      // food_log_backend.js's /steps endpoint) -- null just means "never
+      // set", not "0 steps"; the frontend falls back to the recommended
+      // 12,000/day default for display whenever this is null, same as every
+      // other not-yet-filled-in profile field here.
+      goalSteps: has("goalSteps") ? (body.goalSteps ? Number(body.goalSteps) : null) : (existing.goalSteps ?? null),
       // Admin-only manual override (see estimateFromProfile).
       manualCalorieTarget: has("manualCalorieTarget")
         ? (body.manualCalorieTarget ? Number(body.manualCalorieTarget) : null)
