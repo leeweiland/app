@@ -26,6 +26,23 @@
   .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
   .section { padding: 24px; margin-bottom: 20px; }
+  /* position:fixed + a synced spacer, NOT position:sticky -- same pattern
+     chat-header.js's own top bar uses (see its comment on why: sticky's
+     stuck position computes against .pra-root's own top edge, which lands
+     BEHIND that fixed header, z-index 500, once scrolled, not below it;
+     sticky also silently fails to stay visible on a page shorter than the
+     viewport). `top` is synced to the real header height in JS
+     (setupAdminTabs' syncTabBarTop) since that height isn't constant --
+     phone widths stack the logo above the icon row and add a safe-area
+     inset. #adminTabBarSpacer reserves the matching space in normal flow
+     so this bar doesn't cover the content right below it. */
+  .admin-tab-bar { position: fixed; left: 0; right: 0; z-index: 30; display: flex; justify-content: center; background: rgba(10,10,13,0.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--pra-border); }
+  .admin-tab-bar-inner { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding: 9px 20px; max-width: 780px; width: 100%; box-sizing: border-box; }
+  .admin-tab-bar-inner::-webkit-scrollbar { height: 4px; }
+  .admin-tab { flex: 0 0 auto; white-space: nowrap; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .76rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); background: transparent; border: none; }
+  .admin-tab:hover { color: #fff; }
+  .admin-tab.active { background: var(--pra-blue); color: #fff; }
+  #adminTabBarSpacer { margin-bottom: 20px; }
   .table-scroll { overflow-x: auto; }
   table { width: auto; border-collapse: collapse; table-layout: auto; }
   th { text-align: left; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); padding: 6px 10px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
@@ -130,7 +147,17 @@
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:18px;font-family:var(--font-secondary)">Admin Panel</div>
 
-    <div class="pra-panel section">
+    <div class="admin-tab-bar" id="adminTabBar">
+      <div class="admin-tab-bar-inner">
+        <button class="admin-tab active" data-section="usersSection">Users &amp; Roles</button>
+        <button class="admin-tab" data-section="chatConfigSection">Chat Configuration</button>
+        <button class="admin-tab" data-section="apptConfigSection">Appointments</button>
+        <button class="admin-tab" data-section="archetypesSection">Training Personality Archetypes</button>
+      </div>
+    </div>
+    <div id="adminTabBarSpacer"></div>
+
+    <div class="pra-panel section" id="usersSection">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
       <div class="users-toolbar">
         <input class="pra-input" id="userSearchInput" placeholder="Search name or email…"/>
@@ -144,7 +171,7 @@
       </div>
     </div>
 
-    <div class="pra-panel section" id="chatConfigSection">
+    <div class="pra-panel section" id="chatConfigSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:14px">Chat Configuration</div>
       <div class="field">
         <label class="pra-label">Profile Photos Drive Folder ID</label>
@@ -253,7 +280,7 @@
       <div class="save-msg" id="saveMsg"></div>
     </div>
 
-    <div class="pra-panel section" id="apptConfigSection">
+    <div class="pra-panel section" id="apptConfigSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:14px">Appointments</div>
 
       <div class="field">
@@ -389,7 +416,7 @@
       <div class="save-msg" id="apptSaveMsg"></div>
     </div>
 
-    <div class="pra-panel section">
+    <div class="pra-panel section" id="archetypesSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
       <div class="save-msg" id="archSaveMsg"></div>
@@ -570,6 +597,62 @@ function uploadArchetypeImage(e, mbti, which, card) {
   reader.readAsDataURL(file);
 }
 
+// Each top-level section (Users & Roles, Chat Configuration, Appointments,
+// Training Personality Archetypes) is a whole separate tab, not a page
+// scroll — only one is ever visible at a time. The tab bar itself scrolls
+// horizontally (see .admin-tab-bar) rather than wrapping, so adding a 5th
+// section later doesn't need a layout rethink.
+function setupAdminTabs() {
+  const tabs = document.querySelectorAll('.admin-tab');
+  const tabBar = document.getElementById('adminTabBar');
+  const spacer = document.getElementById('adminTabBarSpacer');
+
+  // chat-header.js's own fixed bar isn't a constant height (phone widths
+  // stack the logo above the icon row and add a safe-area-inset top
+  // padding; the nav ad-strip above it can also change height) — this bar
+  // sits directly below wherever that bottom edge actually lands, and the
+  // spacer reserves exactly this bar's own real height, both read live
+  // rather than guessed, and re-synced on resize/orientation change.
+  function syncTabBarLayout() {
+    const header = document.getElementById('chat-app-header');
+    tabBar.style.top = (header ? header.getBoundingClientRect().bottom : 0) + 'px';
+    spacer.style.height = tabBar.getBoundingClientRect().height + 'px';
+  }
+  syncTabBarLayout();
+  window.addEventListener('resize', syncTabBarLayout);
+
+  // chat-header.js only builds its bar on DOMContentLoaded (then reflows it
+  // again ~300ms later once nav.js's own async bits settle) — this script's
+  // own init() can easily run before any of that, so #chat-app-header may
+  // not exist yet the first time syncTabBarLayout() above ran (silently
+  // falling back to top:0, i.e. right under the browser chrome, covering
+  // the real header once it does appear). Watch for it to show up, sync
+  // immediately when it does, and keep a ResizeObserver on it from then on
+  // for every later height change (that 300ms reflow included).
+  const existingHeader = document.getElementById('chat-app-header');
+  if (existingHeader) {
+    if (window.ResizeObserver) new ResizeObserver(syncTabBarLayout).observe(existingHeader);
+  } else if (window.MutationObserver) {
+    const mo = new MutationObserver(() => {
+      const header = document.getElementById('chat-app-header');
+      if (!header) return;
+      mo.disconnect();
+      syncTabBarLayout();
+      if (window.ResizeObserver) new ResizeObserver(syncTabBarLayout).observe(header);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  tabs.forEach(tab => {
+    tab.onclick = () => {
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      ['usersSection', 'chatConfigSection', 'apptConfigSection', 'archetypesSection'].forEach(id => {
+        document.getElementById(id).style.display = id === tab.dataset.section ? '' : 'none';
+      });
+    };
+  });
+}
+
 async function init() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
@@ -578,6 +661,7 @@ async function init() {
     document.querySelector('.wrap').innerHTML = '<div class="pra-panel section pra-glow">Admins only.</div>';
     return;
   }
+  setupAdminTabs();
   loadUsers();
   loadConfig();
   loadCalendarStatus();

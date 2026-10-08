@@ -79,6 +79,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_drivefileid ON messages(driveFileId);
 `);
 
+// First schema change since this table was created -- CREATE TABLE IF NOT
+// EXISTS above is a no-op against an already-existing DB file (the normal
+// case on every real deploy), so a brand-new column needs its own explicit,
+// idempotent ALTER TABLE. posterFileId holds the Drive file id of a
+// video message's server-generated first-frame thumbnail (see
+// chat_backend.js's video-message upload handler) -- NULL for every
+// message sent before this existed, same as any other optional column here.
+const hasPosterColumn = db.prepare("PRAGMA table_info(messages)").all().some(c => c.name === "posterFileId");
+if (!hasPosterColumn) db.exec("ALTER TABLE messages ADD COLUMN posterFileId TEXT");
+
 // ── One-time backfill from the old JSON file ────────────────────────────
 // Runs at most once per deployment: if the table is already populated
 // (any later boot, or a fresh Volume that already has the .db file), this
@@ -137,6 +147,7 @@ function toRow(m) {
     id: m.id, conversationId: m.conversationId, senderId: m.senderId, type: m.type, createdAt: m.createdAt,
     text: m.text ?? null,
     driveFileId: m.driveFileId ?? null, mimeType: m.mimeType ?? null, name: m.name ?? null, driveFileName: m.driveFileName ?? null,
+    posterFileId: m.posterFileId ?? null,
     feedGroupId: m.feedGroupId ?? null,
     forwarded: m.forwarded ? 1 : null,
     replyToId: m.replyToId ?? null,
@@ -164,6 +175,7 @@ function rowToMessage(row) {
     id: row.id, conversationId: row.conversationId, senderId: row.senderId, type: row.type, createdAt: row.createdAt,
     text: row.text ?? undefined,
     driveFileId: row.driveFileId ?? undefined, mimeType: row.mimeType ?? undefined, name: row.name ?? undefined, driveFileName: row.driveFileName ?? undefined,
+    posterFileId: row.posterFileId ?? undefined,
     feedGroupId: row.feedGroupId ?? undefined,
     forwarded: row.forwarded ? true : undefined,
     replyToId: row.replyToId ?? undefined,
@@ -187,6 +199,7 @@ const BOOL_COLUMNS = new Set(["forwarded", "isGym"]);
 
 const INSERT_COLUMNS = [
   "id", "conversationId", "senderId", "type", "createdAt", "text", "driveFileId", "mimeType", "name", "driveFileName",
+  "posterFileId",
   "feedGroupId", "forwarded", "replyToId", "videoNotes", "reactions", "deliveredTo", "editedAt",
   "googleEventId", "googleEventLink", "googleEventIds", "googleEventLinks",
   "startISO", "durationMinutes", "timezone", "isGym", "clientIds", "callId", "callOutcome", "durationSeconds",
