@@ -187,7 +187,7 @@
     <div class="pra-panel section" id="usersSection">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
       <div class="users-toolbar">
-        <input class="pra-input" id="userSearchInput" placeholder="Search name or email…"/>
+        <input class="pra-input" id="userSearchInput" placeholder="Search name or email…" autocomplete="off"/>
         <button class="pra-btn" id="addUserBtn" style="white-space:nowrap">+ Add User</button>
       </div>
       <div id="usersTableWrap">Loading…</div>
@@ -714,6 +714,13 @@ async function init() {
     return;
   }
   setupAdminTabs();
+  // Chrome restores a text input's last-typed value on refresh/back-nav on
+  // its own (separate from autofill, and not stopped by autocomplete="off")
+  // -- so a search that's still useful mid-session (don't clear it on every
+  // re-render) looked like it "saved forever" across a real nav or reload.
+  // Force it blank once here, at the one point that actually represents a
+  // fresh page load.
+  document.getElementById('userSearchInput').value = '';
   loadUsers();
   loadConfig();
   loadCalendarStatus();
