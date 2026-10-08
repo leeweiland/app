@@ -1455,6 +1455,23 @@ async function saveApptConfig() {
 }
 
 init();
+// Chrome re-applies its own remembered form value for a text input AFTER
+// page scripts run -- including after init()'s own reset above -- on a
+// plain reload or a back/forward navigation that serves the page from
+// bfcache (no init() re-run at all in that case). 'pageshow' fires in both
+// of those cases, after Chrome's restore has already happened, so this is
+// the one place that reliably gets the last word on the field's value.
+window.addEventListener('pageshow', () => {
+  const el = document.getElementById('userSearchInput');
+  if (!el || el.value === '') return;
+  el.value = '';
+  // A bfcache-served back/forward restore (event.persisted) replays the
+  // page exactly as it was frozen, filtered table and all -- init() never
+  // re-runs in that case, so clearing the input alone would leave a
+  // filtered table behind it with no visible search term to explain why.
+  usersPage = 0;
+  renderUsers();
+});
 </script>
 </body>
 </html>
