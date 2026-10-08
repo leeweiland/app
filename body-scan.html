@@ -210,6 +210,14 @@
     .cal-steps-cell-steps { min-width: clamp(100px, 42vw, 195px); }
     .totals-cal-row .lab { font-size: .56rem; }
     .totals-cal-row .lab a { font-size: .6rem; }
+    /* The "Enter Steps (edit Goal Steps in Profile)" label is longer than
+       the numbers line above it -- left unconstrained, its own full-line
+       width (not the shorter numbers line) sizes the cell, which pushes
+       the Calories+Steps row past the screen width and wraps it to two
+       rows. Capping the label's width to roughly what the numbers line
+       already needs lets the label itself wrap to 2 lines instead, without
+       growing the cell (and the row) any wider. */
+    .cal-steps-cell-steps .lab { max-width: 150px; margin: 3px auto 0; }
   }
   .totals-macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .totals-macro-row .macro-cell { text-align: center; }
