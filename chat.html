@@ -802,6 +802,10 @@
   .popup-level-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
   .popup-chip-val-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
   .popup-team-checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--pra-dim); border-radius: 4px; vertical-align: middle; }
+  .levels-name-edit-btn { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .82rem; padding: 2px 5px; border-radius: 4px; }
+  .levels-name-edit-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+  .levels-name-input { width: 90px; padding: 4px 8px; font-size: .85rem; }
+  .levels-name-save-btn, .levels-name-cancel-btn { padding: 4px 10px; font-size: .78rem; }
 </style>
 </head>
 <body>
@@ -1320,7 +1324,10 @@
         <div class="avatar-edit-badge" id="levelsAvatarEditBadge" title="Change profile photo" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
         <input type="file" id="levelsPicInput" accept="image/*" style="display:none"/>
       </div>
-      <div class="pra-h2" id="levelsName" style="margin-bottom:6px"></div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:6px">
+        <div class="pra-h2" id="levelsName" style="margin-bottom:0"></div>
+        <button type="button" class="levels-name-edit-btn" id="levelsNameEditBtn" title="Rename" style="display:none">✎</button>
+      </div>
       <div id="levelsRoleBadge" style="margin-bottom:8px"></div>
       <div class="pra-muted" id="levelsLocation" style="font-size:.85rem;margin-bottom:10px"></div>
       <div class="btn-row" id="levelsAccountActions" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
@@ -3182,6 +3189,9 @@ async function openLevelsModal(otherUser) {
   document.getElementById('levelsAvatar').className = 'pra-avatar' + avatarRoleClass(otherUser);
   document.getElementById('levelsAvatar').innerHTML = avatarHtml(otherUser);
   document.getElementById('levelsName').innerHTML = escapeHtml((isStaffMe() || isSelf) ? (otherUser.first + ' ' + otherUser.last) : otherUser.first) + coachQuotaBadgeHtml(otherUser);
+  const nameEditBtn = document.getElementById('levelsNameEditBtn');
+  nameEditBtn.style.display = isStaffMe() ? '' : 'none';
+  nameEditBtn.onclick = () => startLevelsNameEdit(otherUser);
   document.getElementById('levelsRoleBadge').innerHTML = roleBadgeHtml(otherUser);
   document.getElementById('levelsLocation').textContent = '';
   document.getElementById('levelsMsg').textContent = 'Loading…';
@@ -3216,6 +3226,58 @@ async function openLevelsModal(otherUser) {
     ? { title: profile.archetypeTitle, image: profile.archetypeImage, gender: profile.gender }
     : { title: null, image: null, gender: null };
   renderLevelsBody();
+}
+
+// Coach/admin only — fixes a name typo right from the profile popup. Swaps
+// the heading for two inline inputs (first/last) with explicit Save/Cancel,
+// same pattern the Levels page's own card-level rename uses. Renames both
+// the person's chat account (passing userId, so the server matches by id
+// rather than name) and any Levels-sheet row(s) for them, via the shared
+// /api/chat/people/rename endpoint.
+function startLevelsNameEdit(otherUser) {
+  const nameEl = document.getElementById('levelsName');
+  document.getElementById('levelsNameEditBtn').style.display = 'none';
+
+  const firstInput = document.createElement('input');
+  firstInput.type = 'text'; firstInput.className = 'pra-input levels-name-input'; firstInput.value = otherUser.first; firstInput.placeholder = 'First';
+  const lastInput = document.createElement('input');
+  lastInput.type = 'text'; lastInput.className = 'pra-input levels-name-input'; lastInput.value = otherUser.last; lastInput.placeholder = 'Last';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button'; saveBtn.className = 'pra-btn levels-name-save-btn'; saveBtn.textContent = '✓';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button'; cancelBtn.className = 'pra-btn pra-btn-ghost levels-name-cancel-btn'; cancelBtn.textContent = '✕';
+
+  nameEl.innerHTML = '';
+  nameEl.append(firstInput, lastInput, saveBtn, cancelBtn);
+  firstInput.focus();
+  firstInput.select();
+
+  const cancel = () => openLevelsModal(otherUser);
+  const save = async () => {
+    const nf = firstInput.value.trim(), nl = lastInput.value.trim();
+    if (!nf || !nl) { await alertDialog('First and last name are required.'); return; }
+    saveBtn.disabled = true;
+    const r = await fetch('/api/chat/people/rename', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ first: otherUser.first, last: otherUser.last, newFirst: nf, newLast: nl, userId: otherUser.id }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || 'Could not rename — try again.');
+      saveBtn.disabled = false;
+      return;
+    }
+    otherUser.first = nf; otherUser.last = nl;
+    if (me && me.id === otherUser.id) { me.first = nf; me.last = nl; }
+    await loadConversations();
+    openLevelsModal(otherUser);
+  };
+  saveBtn.onclick = save;
+  cancelBtn.onclick = cancel;
+  [firstInput, lastInput].forEach(inp => inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') cancel();
+  }));
 }
 
 document.getElementById('levelsAvatarEditBadge').onclick = () => document.getElementById('levelsPicInput').click();

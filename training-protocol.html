@@ -380,6 +380,13 @@ let pendingStepTarget = null;
 let editingStepId = null;
 let canvasInitialized = false;
 let viewMode = 'flow'; // 'flow' | 'page' — see setViewMode/renderPageView
+// Whatever this client's coach last typed into the AI modal — loaded
+// alongside steps in loadSteps(), persisted server-side per client (see
+// POST /api/chat/training-protocol/ai-generate), so reopening the modal
+// (even in a fresh page load, even after a failed attempt) shows it again
+// instead of a blank box. Updated locally in setupAiGenerate() too, so a
+// second open in the same session doesn't need a round trip to reflect it.
+let lastAiPrompt = '';
 
 // Undo/redo — every mutation calls snapshotBeforeChange() BEFORE touching
 // `steps`, so the stack holds pre-change states to roll back to. Capped so
@@ -459,6 +466,19 @@ async function init() {
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
 
+  // Students land on Page view by default (easier to just read day-by-day
+  // than the coach-oriented editing canvas) — coaches/admins keep Flow,
+  // since that's the view the editing tools (drag steps, branch, etc.)
+  // actually live in. Just flips the initial state here, same as the
+  // "Flow" button's hardcoded `active` class in the HTML above (which this
+  // overrides for students) — setViewMode() itself isn't used yet since
+  // steps haven't loaded.
+  if (!canEdit) {
+    viewMode = 'page';
+    document.getElementById('flowViewBtn').classList.remove('active');
+    document.getElementById('pageViewBtn').classList.add('active');
+  }
+
   setupCanvasPanZoom();
   setupStepDrag();
   setupProtocolTemplates();
@@ -533,6 +553,7 @@ async function loadSteps() {
   if (!r.ok) { document.getElementById('emptyHint').textContent = "You don't have access to this."; document.getElementById('emptyHint').style.display = 'block'; return; }
   const d = await r.json();
   steps = migrateSteps(d.steps || []);
+  lastAiPrompt = d.lastAiPrompt || '';
   render();
 }
 
@@ -1513,7 +1534,10 @@ function buildStepsFromGeneratedDays(days) {
 
 function setupAiGenerate() {
   document.getElementById('aiGenerateBtn').onclick = () => {
-    document.getElementById('aiGeneratePrompt').value = '';
+    // Pre-filled with whatever was last used for THIS client, not cleared —
+    // see lastAiPrompt's own comment. A coach starting from scratch just
+    // selects-all and types over it, same as any other pre-filled field.
+    document.getElementById('aiGeneratePrompt').value = lastAiPrompt;
     document.getElementById('aiGenerateStatus').textContent = '';
     openModal('aiGenerateModal');
   };
@@ -1531,6 +1555,11 @@ function setupAiGenerate() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, targetUserId }),
       });
+      // The server remembers this prompt for the client regardless of what
+      // comes back below (including a refusal/error) — mirror that locally
+      // right away so reopening the modal later in this same session shows
+      // the edit without needing a fresh GET.
+      lastAiPrompt = prompt;
       const d = await r.json();
       if (!r.ok) { status.textContent = d.error || 'Could not generate a plan.'; btn.disabled = false; return; }
       snapshotBeforeChange();

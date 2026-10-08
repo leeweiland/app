@@ -3,7 +3,7 @@
 // Mounted from server.js: handleChatRequest(req, res, url) returns true if it
 // handled the request, false to let server.js's existing routing continue.
 
-import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, mkdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
@@ -11,6 +11,7 @@ import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { request as httpsRequest } from "https";
 import { execFileSync } from "child_process";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import Busboy from "busboy";
 import webPush from "web-push";
 // firebase-admin v14 is fully modular now — no admin.credential.cert(...)
@@ -200,6 +201,38 @@ const DEFAULT_APPOINTMENTS_CONFIG = {
   messengerReminderTemplate: "Reminder: your session with {{coachName}} is {{date}} at {{time}} ({{duration}} min).",
 };
 
+// Posted into a brand-new student group the moment it's created (see
+// syncDefaultGroups' ensurePersonalGroup) and, as a one-time catch-up, into
+// any already-existing group that has no messages at all yet (see
+// /api/admin/backfill-welcome-message) — admin-editable text and on/off
+// toggle live in chat_admin_config.json. {{firstName}}/{{lastName}} are the
+// only tokens that make sense here (same fillTemplate() the appointment
+// reminders use), unlike coachName/date/time/duration which don't apply to
+// a group that was just created.
+const DEFAULT_WELCOME_MESSAGE = `Welcome to training!  This app is your portal to Body Mastery and gaining Strength, Skill, and Sustainability!
+
+In here, you'll have access to:
+
+1. Your Custom Training Protocol, broken down into Weekly, Daily, or Full Flow (a coach will build this for you, stay tuned)
+2. Chat with your Coaching Team and send videos of your moves
+3. Levels where you can see your current Level and all the Students
+4. A Powerbatics Physique Builder, a tool where you can easily track other aspects of your training
+5. The Strength Ninjas World Map to see where everyone is at in the world
+6. The Personality Training Profile where you can see what personality type you have and what everyone else has
+
+
+And a lot more to stay connected, having fun, and making progress!
+
+Something fun to do RIGHT NOW...take the Training Personality Test (it's the 3rd icon from the bottom left)
+
+And send me a message back right now to let me know you got this!  Reply "GOT IT!"`;
+
+// System prompt for summarizeCallRecording() below — admin-editable (the
+// "prompt setting" in the admin panel), fed the call's transcript as the
+// user message. Deliberately asks for bullet points and a word cap so the
+// result reads as a quick recap in a chat bubble, not an essay.
+const DEFAULT_CALL_SUMMARY_PROMPT = "You are a supportive movement/gymnastics coach's assistant. You'll be given the transcript of a 1-on-1 training call. Write a short, warm, encouraging recap for the client as 3-6 bullet points: what they worked on, any wins or progress worth celebrating, and one or two specific things to keep practicing before next time. Positive and motivating tone only, never critical or clinical. Don't mention that this came from a transcript or recording. Keep the whole thing under 120 words.";
+
 export function getConfig() {
   const cfg = readJson(CONFIG_FILE, {
     profilePhotosFolderId: "", chatImagesFolderId: "", chatVideosFolderId: "",
@@ -254,6 +287,10 @@ export function getConfig() {
     // favorite), worth being able to route somewhere else in Drive.
     physiqueMontageFolderId: "",
     gifApiKey: "", vapidPublicKey: "", vapidPrivateKey: "",
+    welcomeMessageEnabled: true,
+    welcomeMessageText: DEFAULT_WELCOME_MESSAGE,
+    callSummaryEnabled: true,
+    callSummaryPrompt: DEFAULT_CALL_SUMMARY_PROMPT,
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
   ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
@@ -273,6 +310,10 @@ export function getConfig() {
   if (cfg.favoritesFolderId === undefined) cfg.favoritesFolderId = "";
   if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
   if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
+  if (cfg.welcomeMessageEnabled === undefined) cfg.welcomeMessageEnabled = true;
+  if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
+  if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
+  if (!cfg.callSummaryPrompt) cfg.callSummaryPrompt = DEFAULT_CALL_SUMMARY_PROMPT;
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
@@ -1375,6 +1416,59 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   levelsCache = null; // next read should reflect the write immediately
 }
 
+// Fixes a name typo/legal-name change right from the Levels tab or a chat
+// profile popup. Unlike updateLevelsRow (which overwrites a whole row's
+// levels/team from a full payload), this only ever touches the FIRST
+// NAME/LAST NAME cells of whichever row matches the OLD name, on either or
+// both tabs a person could have a row on, leaving their recorded
+// levels/team untouched. Returns which tabs actually had a matching row.
+async function renameLevelsRows({ first, last, newFirst, newLast }) {
+  const accessToken = await getGoogleAccessToken();
+  const f = first.trim().toLowerCase(), l = last.trim().toLowerCase();
+  const colLetter = (idx) => String.fromCharCode(65 + idx);
+  const updatedTabs = [];
+  for (const tabName of ["GYM", "ONLINE"]) {
+    const range = `'${tabName}'!A1:J`;
+    const getRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const getData = await getRes.json();
+    if (!getRes.ok) throw new Error(`Could not read the ${tabName} levels sheet: ` + (getData.error?.message || getRes.status));
+    const rows = getData.values || [];
+    const header = rows[0] || [];
+    const firstIdx = header.indexOf("FIRST NAME");
+    const lastIdx = header.indexOf("LAST NAME");
+    if (firstIdx < 0 || lastIdx < 0) continue;
+    const rowIndex = rows.findIndex((r, i) =>
+      i > 0 && String(r[firstIdx] || "").trim().toLowerCase() === f && String(r[lastIdx] || "").trim().toLowerCase() === l
+    );
+    if (rowIndex <= 0) continue; // not on this tab — nothing to rename here
+    const sheetRow = rowIndex + 1;
+    const writeRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values:batchUpdate`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          valueInputOption: "USER_ENTERED",
+          data: [
+            { range: `'${tabName}'!${colLetter(firstIdx)}${sheetRow}`, values: [[newFirst]] },
+            { range: `'${tabName}'!${colLetter(lastIdx)}${sheetRow}`, values: [[newLast]] },
+          ],
+        }),
+      }
+    );
+    if (!writeRes.ok) {
+      const writeData = await writeRes.json().catch(() => ({}));
+      throw new Error(`Could not rename on the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
+    }
+    updatedTabs.push(tabName);
+  }
+  levelsCache = null; // next read should reflect the rename immediately
+  return updatedTabs;
+}
+
 // Read-only name lookup against a single Levels tab -- used by the "add new
 // student" duplicate check below. Kept separate from updateLevelsRow's own
 // read (which needs the full row width to write back) since this is just a
@@ -2459,12 +2553,19 @@ function syncDefaultGroups() {
   function titleCase(s) {
     return String(s || "").toLowerCase().replace(/(^|[\s'-])\S/g, (c) => c.toUpperCase());
   }
+  // Collects groups created THIS run (not ones that already existed) so the
+  // welcome message below only ever fires once per group, right when it's
+  // first created — not on every later sync (role changes, roster drift,
+  // etc. all re-run this same function and must never re-send it).
+  const newlyCreatedGroups = [];
   function ensurePersonalGroup(person, autoType, staffIds) {
     const desired = Array.from(new Set([person.id, ...staffIds]));
     const name = `${titleCase(person.first)} ${titleCase(person.last)} Group`;
     let convo = convos.find(c => c.autoGroupType === autoType && c.autoGroupUserId === person.id);
     if (!convo) {
-      convos.push({ id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() });
+      convo = { id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() };
+      convos.push(convo);
+      newlyCreatedGroups.push({ convo, person, staffIds });
     } else {
       convo.name = name;
       if (JSON.stringify([...convo.participantIds].sort()) !== JSON.stringify([...desired].sort())) {
@@ -2479,6 +2580,23 @@ function syncDefaultGroups() {
     if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
   });
   writeJson(CONVOS_FILE, convos);
+
+  if (newlyCreatedGroups.length) {
+    const cfg = getConfig();
+    if (cfg.welcomeMessageEnabled && cfg.welcomeMessageText) {
+      newlyCreatedGroups.forEach(({ convo, person, staffIds }) => {
+        // Sent "from" the first staff member in the group (an admin, since
+        // adminIds always comes first in the list build above) rather than
+        // the student themselves or no one — matches how every other
+        // automated message in this file (appointment reminders, etc.)
+        // always has a real staff sender.
+        const senderId = staffIds[0] || person.id;
+        const text = fillTemplate(cfg.welcomeMessageText, { firstName: person.first, lastName: person.last });
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+      });
+    }
+  }
 }
 
 // Team-chat-first policy: a plain user/online/gym account can never
@@ -2590,12 +2708,68 @@ function createCallMessage(call) {
   }).catch(() => {});
 }
 
+// Transcribes the call's audio via OpenAI Whisper, then asks a chat model
+// (system prompt is the admin-editable callSummaryPrompt) to turn that
+// transcript into a short positive/encouraging bullet-point recap. Audio-
+// only, extracted from the already-downloaded recording with ffmpeg (not
+// the full video) — both because Whisper only needs sound, and because
+// that's the only realistic way to stay under OpenAI's 25MB upload cap for
+// anything longer than a short call. Returns null (never throws) on any
+// failure — a transcription hiccup should never be the thing standing
+// between a client and seeing their own recording land in chat.
+async function summarizeCallRecording(videoPath, promptText) {
+  const audioPath = videoPath + "-audio.mp3";
+  try {
+    execFileSync(FFMPEG_EXE, ["-y", "-i", videoPath, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", audioPath],
+      { stdio: ["pipe", "pipe", "pipe"], timeout: 180000 });
+    const sizeBytes = statSync(audioPath).size;
+    if (sizeBytes > 24 * 1024 * 1024) {
+      console.error(`[call summary] audio too long to transcribe (${Math.round(sizeBytes / 1024 / 1024)}MB) -- skipping`);
+      return null;
+    }
+
+    const form = new FormData();
+    form.append("file", new Blob([readFileSync(audioPath)]), "call.mp3");
+    form.append("model", "whisper-1");
+    const transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST", headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, body: form,
+    });
+    const transcribeData = await transcribeRes.json();
+    if (!transcribeRes.ok) throw new Error(transcribeData.error?.message || "Transcription failed");
+    const transcript = (transcribeData.text || "").trim();
+    if (!transcript) return null; // silent/empty call -- nothing to summarize
+
+    const summaryRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: promptText || DEFAULT_CALL_SUMMARY_PROMPT },
+          { role: "user", content: `Here is the transcript of today's training call:\n\n${transcript}` },
+        ],
+        max_tokens: 500,
+        temperature: 0.6,
+      }),
+    });
+    const summaryData = await summaryRes.json();
+    if (!summaryRes.ok) throw new Error(summaryData.error?.message || "Summary generation failed");
+    return (summaryData.choices?.[0]?.message?.content || "").trim() || null;
+  } catch (e) {
+    console.error("[call summary]", e.message);
+    return null;
+  } finally {
+    try { unlinkSync(audioPath); } catch {}
+  }
+}
+
 // Fire-and-forget from the call's /end handler -- Daily finalizes a
 // recording a few seconds after everyone leaves, not instantly, so this
 // polls rather than blocking the HTTP response on it. Only ever called for
 // a call that actually reached "active" (startedAt set); a call nobody
 // answered has nothing to record.
 async function archiveCallRecording(call) {
+  let tempPath = null;
   try {
     let recording = null;
     for (let i = 0; i < 24; i++) {
@@ -2620,16 +2794,53 @@ async function archiveCallRecording(call) {
     const namePart = [student, coach].filter(Boolean).map(u => `${u.first} ${u.last}`).join(" ") || "Video Call";
     const dateStr = new Date(call.startedAt).toISOString().slice(0, 10);
 
+    // Written to disk once (rather than streamed straight through to Drive
+    // like every other upload in this file) because the summary step below
+    // needs a second, local pass over the same bytes with ffmpeg -- Daily's
+    // download link is a one-shot signed URL, not safely re-fetchable.
+    tempPath = join(tmpdir(), `call-${call.id}.mp4`);
+    await pipeline(Readable.fromWeb(driveDownloadRes.body), createWriteStream(tempPath));
+
     const accessToken = await getDriveAccessToken();
-    await uploadStreamToDrive(Readable.fromWeb(driveDownloadRes.body), {
+    const uploaded = await uploadStreamToDrive(createReadStream(tempPath), {
       name: `${namePart} ${dateStr}.mp4`, mimeType: "video/mp4", folderId: cfg.callRecordingsFolderId, accessToken,
     });
 
     // Now archived in Drive -- no reason to also keep paying Daily's own
     // storage rate for the same footage indefinitely.
     await deleteDailyRecording(recording.id).catch(() => {});
+
+    // Drop the recording (and, if enabled, an AI recap right under it) into
+    // the group it was called from -- same video-message-then-text-message
+    // pairing the Online Level Test forward endpoint already uses elsewhere
+    // in this file for "a video plus a caption right after it".
+    if (call.conversationId) {
+      const senderId = coach?.id || student?.id || call.initiatorId;
+      const now = Date.now();
+      MessagesDB.insertMessage({
+        id: randomUUID(), conversationId: call.conversationId, senderId,
+        type: "video", driveFileId: uploaded.id, mimeType: "video/mp4", name: uploaded.name,
+        driveFileName: `${namePart} ${dateStr}`,
+        createdAt: new Date(now).toISOString(),
+      });
+      notifyParticipants(call.conversationId, null, {
+        title: "Video call recording", body: "Your session recording is ready", conversationId: call.conversationId,
+      }).catch(() => {});
+
+      if (cfg.callSummaryEnabled) {
+        const summary = await summarizeCallRecording(tempPath, cfg.callSummaryPrompt);
+        if (summary) {
+          MessagesDB.insertMessage({
+            id: randomUUID(), conversationId: call.conversationId, senderId,
+            type: "text", text: summary, createdAt: new Date(now + 1).toISOString(),
+          });
+        }
+      }
+    }
   } catch (e) {
     console.error("[call recording] archive failed for call", call.id, e.message);
+  } finally {
+    if (tempPath) { try { unlinkSync(tempPath); } catch {} }
   }
 }
 
@@ -3320,7 +3531,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -3341,10 +3552,44 @@ export async function handleChatRequest(req, res, url) {
         if (onlineLevelTestChannelId !== undefined) cfg.onlineLevelTestChannelId = onlineLevelTestChannelId;
         if (physiqueMontageFolderId !== undefined) cfg.physiqueMontageFolderId = physiqueMontageFolderId;
         if (gifApiKey !== undefined) cfg.gifApiKey = gifApiKey;
+        if (welcomeMessageEnabled !== undefined) cfg.welcomeMessageEnabled = !!welcomeMessageEnabled;
+        if (welcomeMessageText !== undefined) cfg.welcomeMessageText = welcomeMessageText;
+        if (callSummaryEnabled !== undefined) cfg.callSummaryEnabled = !!callSummaryEnabled;
+        if (callSummaryPrompt !== undefined) cfg.callSummaryPrompt = callSummaryPrompt;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });
       }
+    }
+
+    // One-time (repeatable) catch-up for groups that existed before the
+    // welcome-message feature, or were somehow never sent one — anything
+    // with zero messages at all gets it now. Ongoing new-group sends happen
+    // automatically in syncDefaultGroups(); this is just for the backlog,
+    // triggered by hand from the admin panel so it never fires on its own.
+    if (p === "/api/admin/backfill-welcome-message" && req.method === "POST") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const cfg = getConfig();
+      if (!cfg.welcomeMessageText) return sendJson(res, 400, { error: "Set a welcome message first." });
+      const convos = readJson(CONVOS_FILE, []);
+      const groupConvos = convos.filter(c => c.type === "group" && c.autoGroupType === "student");
+      const lastMsgs = MessagesDB.getLastMessages(groupConvos.map(c => c.id));
+      const emptyGroups = groupConvos.filter(c => !lastMsgs.has(c.id));
+      const users = readJson(USERS_FILE, []);
+      let sent = 0;
+      for (const convo of emptyGroups) {
+        const student = users.find(u => u.id === convo.autoGroupUserId);
+        // Prefer an admin participant as the sender (same convention as
+        // syncDefaultGroups' own send); fall back to whoever's in the group
+        // on the rare chance an auto-group somehow has no staff in it.
+        const senderId = convo.participantIds.find(id => isAdmin(users.find(u => u.id === id) || {})) || convo.participantIds[0];
+        if (!senderId) continue;
+        const text = fillTemplate(cfg.welcomeMessageText, { firstName: student?.first || "", lastName: student?.last || "" });
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+        sent++;
+      }
+      return sendJson(res, 200, { ok: true, sent, totalEmptyGroups: emptyGroups.length });
     }
 
     // Every group/channel conversation, for the admin panel's Gym Training /
@@ -3826,6 +4071,40 @@ export async function handleChatRequest(req, res, url) {
       }
     }
 
+    // Coach/admin fixing a name typo (or a legal-name change) right from the
+    // Levels tab or a chat profile popup. `first`/`last` is the CURRENT name
+    // (used to find the row(s) to rename, and — when `userId` isn't given —
+    // to find a matching chat account); `newFirst`/`newLast` is what it
+    // becomes. Renames on both the Levels sheet (whichever tabs have a
+    // matching row) and the chat account, so the two stay in sync; does NOT
+    // touch the separate App sheet's name-matched row (location/archetype
+    // enrichment for this person will stop matching until that's fixed by
+    // hand — same known gap as the admin panel's own /profile rename below).
+    if (p === "/api/chat/people/rename" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const { first, last, newFirst, newLast, userId } = await readJsonBody(req);
+      if (!first || !last) return sendJson(res, 400, { error: "Current first and last name are required" });
+      const nf = String(newFirst || "").trim(), nl = String(newLast || "").trim();
+      if (!nf || !nl) return sendJson(res, 400, { error: "New first and last name are required" });
+      try {
+        const sheetsUpdated = await renameLevelsRows({ first, last, newFirst: nf, newLast: nl });
+        const users = readJson(USERS_FILE, []);
+        const target = userId
+          ? users.find(u => u.id === userId)
+          : users.find(u => nameKey(u.first, u.last) === nameKey(first, last));
+        let updatedUser = null;
+        if (target) {
+          target.first = nf;
+          target.last = nl;
+          writeJson(USERS_FILE, users);
+          updatedUser = publicUser(target);
+        }
+        return sendJson(res, 200, { ok: true, sheetsUpdated, user: updatedUser });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
     // Unlike /levels/update above (an edit-or-create upsert, used for an
     // existing person's own levels), this is specifically "add a brand new
     // student to the roster" -- it rejects outright if that name is already
@@ -3870,14 +4149,21 @@ export async function handleChatRequest(req, res, url) {
 
       if (req.method === "GET") {
         const all = readJson(TRAINING_PROTOCOLS_FILE, {});
-        return sendJson(res, 200, { steps: all[targetUserId]?.steps || [] });
+        // lastAiPrompt rides along with steps (same per-client record) so the
+        // AI modal can reopen pre-filled with whatever was last used for
+        // THIS client — see the ai-generate endpoint below, which is what
+        // actually sets it.
+        return sendJson(res, 200, { steps: all[targetUserId]?.steps || [], lastAiPrompt: all[targetUserId]?.lastAiPrompt || "" });
       }
       if (req.method === "POST") {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
         const { steps } = await readJsonBody(req);
         if (!Array.isArray(steps)) return sendJson(res, 400, { error: "steps must be an array" });
         const all = readJson(TRAINING_PROTOCOLS_FILE, {});
-        all[targetUserId] = { steps, updatedAt: new Date().toISOString(), updatedBy: user.id };
+        // Merge, not replace — a plain step save (e.g. dragging a step
+        // around) must never silently wipe out the saved AI prompt sitting
+        // in this same per-client record.
+        all[targetUserId] = { ...all[targetUserId], steps, updatedAt: new Date().toISOString(), updatedBy: user.id };
         writeJson(TRAINING_PROTOCOLS_FILE, all);
         return sendJson(res, 200, { ok: true });
       }
@@ -4212,6 +4498,16 @@ export async function handleChatRequest(req, res, url) {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
       const { prompt, targetUserId } = await readJsonBody(req);
       if (!prompt || !String(prompt).trim()) return sendJson(res, 400, { error: "A description of the client/plan is required" });
+      // Remembered regardless of whether generation below actually succeeds
+      // — the point is just to hold whatever the coach last typed here for
+      // this client, so reopening the modal (even after a failed/refused
+      // attempt they want to tweak and retry) shows it again instead of a
+      // blank box.
+      if (targetUserId) {
+        const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+        allProtocols[targetUserId] = { ...allProtocols[targetUserId], lastAiPrompt: String(prompt) };
+        writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
+      }
       try {
         const tool = {
           type: "function",

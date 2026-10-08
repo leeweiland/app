@@ -32,6 +32,13 @@
   .person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .person-meta { flex: 1; min-width: 0; }
   .person-name { font-weight: 400; font-size: .98rem; }
+  .person-name-edit-btn { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .76rem; padding: 2px 5px; margin-left: 2px; border-radius: 4px; vertical-align: middle; }
+  .person-name-edit-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+  .person-name-input { width: 84px; font-size: .88rem; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; padding: 3px 6px; margin-right: 4px; }
+  .person-name-save-btn, .person-name-cancel-btn { background: none; border: none; cursor: pointer; font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
+  .person-name-save-btn { color: #22c55e; }
+  .person-name-cancel-btn { color: #ff5c5c; }
+  .person-name-save-btn:hover, .person-name-cancel-btn:hover { background: rgba(255,255,255,0.08); }
   .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
   .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
   .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -374,6 +381,15 @@ function roleBadgeHtml(p) {
   return '';
 }
 
+// Shared between the main render() below and updateNameInPlace() (after a
+// rename), same split renderLevelChips()/updateCardInPlace() already use —
+// so a name edit only ever re-renders this one line, not the whole card.
+function renderPersonNameHtml(p, idx) {
+  const nameText = escapeHtml(p.first) + (p.last ? ' ' + escapeHtml(p.last) : '');
+  const editBtn = isStaffUser ? `<button type="button" class="person-name-edit-btn" data-idx="${idx}" title="Rename">✎</button>` : '';
+  return `<div class="person-name">${nameText}${editBtn}${roleBadgeHtml(p)}</div>`;
+}
+
 function render(people) {
   const list = document.getElementById('list');
   document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
@@ -384,7 +400,7 @@ function render(people) {
       <div class="person-head">
         <div class="pra-avatar${avatarRoleClass(p)}" style="width:52px;height:52px;flex-shrink:0">${avatarHtml(p)}</div>
         <div class="person-meta">
-          <div class="person-name">${escapeHtml(p.first)}${p.last ? ' ' + escapeHtml(p.last) : ''}${roleBadgeHtml(p)}</div>
+          ${renderPersonNameHtml(p, idx)}
           ${location ? `<div class="pra-muted" style="font-size:.78rem">${escapeHtml(location)}</div>` : ''}
           ${p.archetypeTitle ? `<div class="pra-muted" style="font-size:.78rem;display:flex;align-items:center;gap:5px;margin-top:2px">${escapeHtml(p.archetypeTitle)}${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:18px;height:18px;border-radius:4px;object-fit:cover"/>` : ''}</div>` : ''}
         </div>
@@ -394,7 +410,88 @@ function render(people) {
     </div>
   `;
   }).join('');
-  if (isStaffUser) attachChipHandlers();
+  if (isStaffUser) { attachChipHandlers(); attachNameEditHandlers(); }
+}
+
+// Coach/admin only — fixes a name typo right on the card. Renames both the
+// Levels sheet row(s) (so this card itself picks up the new name) and the
+// person's chat account if they have one, via the shared /api/chat/people/
+// rename endpoint (see chat_backend.js — same one the chat profile popup's
+// rename button uses).
+async function renamePerson(p, newFirst, newLast) {
+  const r = await fetch('/api/chat/people/rename', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first: p.first, last: p.last, newFirst, newLast }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    alert(d.error || 'Could not rename — try again.');
+    return false;
+  }
+  p.first = newFirst;
+  p.last = newLast;
+  return true;
+}
+
+// Swaps the name line for two inline inputs — same "replace the element,
+// commit on blur/Enter, bail on Escape" pattern the numeric level chips
+// already use in attachChipHandlers(), just with explicit Save/Cancel
+// instead of blur-to-commit since there are two fields to fill in here.
+function startNameEdit(idx) {
+  const p = currentFiltered[idx];
+  const card = document.querySelectorAll('.person-card')[idx];
+  const nameEl = card?.querySelector('.person-name');
+  if (!p || !nameEl) return;
+
+  const firstInput = document.createElement('input');
+  firstInput.type = 'text'; firstInput.className = 'person-name-input'; firstInput.value = p.first; firstInput.placeholder = 'First';
+  const lastInput = document.createElement('input');
+  lastInput.type = 'text'; lastInput.className = 'person-name-input'; lastInput.value = p.last; lastInput.placeholder = 'Last';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button'; saveBtn.className = 'person-name-save-btn'; saveBtn.textContent = '✓'; saveBtn.title = 'Save';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button'; cancelBtn.className = 'person-name-cancel-btn'; cancelBtn.textContent = '✕'; cancelBtn.title = 'Cancel';
+
+  nameEl.innerHTML = '';
+  nameEl.append(firstInput, lastInput, saveBtn, cancelBtn);
+  firstInput.focus();
+  firstInput.select();
+
+  const cancel = () => updateNameInPlace(idx);
+  const save = async () => {
+    const nf = firstInput.value.trim(), nl = lastInput.value.trim();
+    if (!nf || !nl) { alert('First and last name are required.'); return; }
+    saveBtn.disabled = true;
+    await renamePerson(p, nf, nl);
+    updateNameInPlace(idx);
+  };
+  saveBtn.onclick = save;
+  cancelBtn.onclick = cancel;
+  [firstInput, lastInput].forEach(inp => inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') cancel();
+  }));
+}
+
+// Binds just the one button that was replaced, rather than the document-wide
+// attachNameEditHandlers() below — this runs after every single-card rename,
+// and re-querying/re-binding every OTHER card's still-live edit button on
+// each of those would stack a duplicate listener onto it per rename.
+function updateNameInPlace(idx) {
+  const p = currentFiltered[idx];
+  const card = document.querySelectorAll('.person-card')[idx];
+  if (!p || !card) return;
+  const nameEl = card.querySelector('.person-name');
+  if (!nameEl) return;
+  nameEl.outerHTML = renderPersonNameHtml(p, idx);
+  const btn = card.querySelector('.person-name-edit-btn');
+  if (btn) btn.addEventListener('click', () => startNameEdit(idx));
+}
+
+function attachNameEditHandlers() {
+  document.querySelectorAll('.person-name-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => startNameEdit(Number(btn.dataset.idx)));
+  });
 }
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
