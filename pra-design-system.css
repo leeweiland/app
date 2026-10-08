@@ -181,6 +181,14 @@
   transition: border-color .15s, box-shadow .15s;
 }
 .pra-input::placeholder, .pra-textarea::placeholder { color: #55555f; }
+/* The closed <select> box picks up .pra-input's dark background/white text
+   fine, but the native OS-rendered dropdown POPUP (the open options list)
+   ignores that background on Windows -- it defaults to a plain white
+   popup, and the white text color we set still applies to each <option>,
+   so every unselected row became white-on-white (invisible) the moment you
+   opened any select on this page, not just the one someone happened to
+   report it on. */
+.pra-input option, .pra-select option { background: var(--pra-panel); color: var(--pra-white); }
 .pra-input:focus, .pra-textarea:focus, .pra-select:focus {
   border-color: var(--pra-blue);
   box-shadow: 0 0 0 3px var(--pra-blue-dim);
