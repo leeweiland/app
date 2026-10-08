@@ -1010,20 +1010,29 @@
     </div>
   </div>
 
-  <!-- Group info modal (coach/admin only) -->
+  <!-- Group info modal (coach/admin only) -- modal-box-flex (same sticky-
+       footer pattern as groupModal above) so Add Selected/Delete Group/
+       Close stay pinned at the bottom instead of requiring a scroll past
+       a long member/add-member list to reach them. -->
   <div class="modal-backdrop" id="groupInfoModal">
-    <div class="pra-panel modal-box">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <input class="pra-input" id="groupInfoNameInput" style="flex:1;font-weight:400"/>
-        <button class="pra-btn" id="groupInfoRenameBtn" style="padding:8px 14px;font-size:.78rem">Save</button>
+    <div class="pra-panel modal-box modal-box-flex" style="padding:0">
+      <div style="padding:22px 22px 14px;flex-shrink:0">
+        <div style="display:flex;gap:8px">
+          <input class="pra-input" id="groupInfoNameInput" style="flex:1;font-weight:400"/>
+          <button class="pra-btn" id="groupInfoRenameBtn" style="padding:8px 14px;font-size:.78rem">Save</button>
+        </div>
       </div>
-      <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
-      <div id="groupInfoMembers"></div>
-      <div class="pra-muted" style="font-size:.76rem;margin-top:16px;margin-bottom:8px">Add Members</div>
-      <div id="groupInfoAddList"></div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="groupInfoAddBtn">Add Selected</button>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupInfoModal')">Close</button>
+      <div style="flex:1 1 auto;overflow-y:auto;min-height:0;padding:0 22px">
+        <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
+        <div id="groupInfoMembers"></div>
+        <div class="pra-muted" style="font-size:.76rem;margin-top:16px;margin-bottom:8px">Add Members</div>
+        <div id="groupInfoAddList"></div>
+      </div>
+      <div style="padding:14px 22px 22px;flex-shrink:0">
+        <button class="pra-btn pra-btn-ghost" style="width:100%" id="groupInfoAddBtn">Add Selected</button>
+        <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%;border-color:#ff5c5c;color:#ff5c5c" id="deleteGroupBtn">Delete Group</button>
+        <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('groupInfoModal')">Close</button>
+      </div>
     </div>
   </div>
 
@@ -6278,7 +6287,14 @@ document.getElementById('threadChannelBtn').onclick = async () => {
   renderConvoList();
 };
 
-document.getElementById('groupInfoAddBtn').onclick = async () => {
+// Shared by the explicit "Add Selected" click AND by clicking outside the
+// modal to close it (see the groupInfoModal backdrop listener below) --
+// checking a few boxes then clicking out used to silently discard the
+// selection instead of applying it, which read as "the app just doesn't
+// save." No-ops (returns immediately) when nothing's checked, so closing
+// via backdrop with nothing selected stays a plain cancel, not an empty
+// no-op network request.
+async function commitGroupInfoAddSelections() {
   const ids = Array.from(document.querySelectorAll('#groupInfoAddList input:checked')).map(el => el.value);
   if (!ids.length) return;
   const r = await fetch(`/api/chat/conversations/${activeConvoId}/participants`, {
@@ -6288,7 +6304,19 @@ document.getElementById('groupInfoAddBtn').onclick = async () => {
   await loadConversations();
   await renderGroupInfoModal();
   openConvo(activeConvoId);
-};
+}
+document.getElementById('groupInfoAddBtn').onclick = commitGroupInfoAddSelections;
+// Click the dark backdrop itself (not anything inside the panel, same
+// e.target === e.currentTarget check the other modals in this app use) to
+// close -- chat.html had no such listener on any modal before this, so
+// groupInfoModal previously just... didn't close that way at all. Commits
+// any checked "Add Members" boxes first so clicking out doesn't throw away
+// a selection the same way clicking "Close" never did either.
+document.getElementById('groupInfoModal').addEventListener('click', async (e) => {
+  if (e.target !== e.currentTarget) return;
+  await commitGroupInfoAddSelections();
+  closeModal('groupInfoModal');
+});
 
 document.getElementById('groupInfoRenameBtn').onclick = async () => {
   const name = document.getElementById('groupInfoNameInput').value.trim();

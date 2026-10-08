@@ -511,7 +511,19 @@ const getGoogleAccessToken = getDriveAccessToken;
 // first (this fileId belongs to something the requester can see), then
 // hands off to this once that's settled.
 export async function streamDriveMedia(req, res, fileId, accessToken) {
-  await new Promise((resolve, reject) => {
+  await new Promise((resolve) => {
+    // Every failure path below calls this instead of reject() -- settling
+    // exactly once no matter which of several listeners fires first (a
+    // real finish, a timeout, a Google-side error, or the viewer
+    // disconnecting), and never rejecting at all. The old reject() design
+    // left the caller's own catch block to call res.writeHead(500) --
+    // which throws ERR_HTTP_HEADERS_SENT (itself uncaught, since it's not
+    // inside another try/catch) whenever the failure happened AFTER
+    // headers were already sent, which is the common case for a mid-
+    // stream error. Handling the response entirely in here, and checking
+    // headersSent first, avoids that.
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(); } };
     const headers = { Authorization: `Bearer ${accessToken}` };
     if (req.headers.range) headers.Range = req.headers.range;
     const driveReq = httpsRequest({
@@ -530,10 +542,33 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
       // cache, not a shared one.
       passHeaders["Cache-Control"] = "private, max-age=31536000, immutable";
       res.writeHead(driveRes.statusCode, passHeaders);
+      // A network hiccup partway through Google's own response -- without
+      // this listener, piping into `res` after `driveRes` errors is an
+      // unhandled 'error' event, which can crash the whole process, not
+      // just this one request.
+      driveRes.on("error", (e) => { console.error("[streamDriveMedia] drive response", e.message); try { res.destroy(); } catch {} finish(); });
       driveRes.pipe(res);
-      driveRes.on("end", resolve);
+      driveRes.on("end", finish);
     });
-    driveReq.on("error", reject);
+    // A student scrolling a video out of view (stepVideoLazyObserver pauses
+    // it) or just navigating away mid-download destroys their end of the
+    // connection -- piping into an already-closed `res` is the single most
+    // common way this hit the unhandled-'error' crash risk above, since it
+    // happens on completely ordinary scrolling, not just flaky networks.
+    res.on("error", () => { driveReq.destroy(); finish(); });
+    res.on("close", () => { driveReq.destroy(); finish(); });
+    // A hung/never-responding Drive request previously left this Promise
+    // (and the student's <video> element) waiting forever -- looked like
+    // "nothing happens" when tapping play, with no error and no timeout to
+    // ever resolve it. Bounding it means a slow/flaky connection surfaces
+    // as a real, finite playback error instead of an infinite spinner.
+    driveReq.setTimeout(25000, () => driveReq.destroy(new Error("Drive media fetch timed out")));
+    driveReq.on("error", (e) => {
+      console.error("[streamDriveMedia] drive request", e.message);
+      if (!res.headersSent) { try { res.writeHead(502); } catch {} }
+      try { res.end(); } catch {}
+      finish();
+    });
     driveReq.end();
   });
 }
