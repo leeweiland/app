@@ -156,14 +156,19 @@
   .totals-cal-row .sep { font-size: 1.7rem; font-weight: 700; color: var(--pra-dim); }
   .totals-cal-row .goal { font-size: 1.7rem; font-weight: 700; color: var(--pra-dim); }
   .totals-cal-row .lab { display: block; font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-top: 3px; }
-  /* foodStepsInput's "0" is a real typed value OR (almost always, until
-     today's steps are logged) just its placeholder -- a placeholder is
-     NOT the element's own text content, it's a separate browser-rendered
-     pseudo-element with its own default (dim/washed-out) color that the
-     real .val rule above never touches no matter how specific. Without
-     this, the Steps number reads gray while Calories' (always real text,
-     never a placeholder) reads the intended blue right next to it. */
+  /* foodStepsInput has no placeholder text -- when empty it's just blank
+     with its own .tile-val-input dashed underline (see that rule below) as
+     the "type here" cue, instead of a "0" that reads like an already-
+     logged zero. The ::placeholder color rule stays in case any other
+     .val-class field in a .totals-cal-row ever uses real placeholder text
+     (readonly goal fields don't -- they use .goal, not .val, for exactly
+     this reason: never confuse a real value with an unset one). */
   .totals-cal-row .val::placeholder { color: var(--pra-blue); opacity: 1; }
+  /* Arrow + "Enter Steps" replaces the plain "Steps" label only while the
+     field above is still blank (toggled by updateStepsEnterHint()) --
+     points straight up at the now-empty input to prompt a first-time
+     entry, then gets out of the way once a real value exists. */
+  .steps-enter-hint { color: var(--pra-blue); text-transform: none; }
   /* .profile-summary-link (every "edit on Profile"/"Go to Profile" link on
      this page, not just the new Steps one) had no color rule anywhere in
      this file or the shared stylesheet -- it was silently falling all the
@@ -341,8 +346,8 @@
             <span class="lab">Calories</span>
           </div>
           <div class="cal-steps-cell cal-steps-cell-steps">
-            <input class="val tile-val-input" id="foodStepsInput" type="number" inputmode="numeric" placeholder="0" min="0" style="width:4.2em;text-align:center"/><span class="sep"> / </span><span class="goal" id="foodGoalStepsDisplay">12,000</span>
-            <span class="lab">Steps <a class="profile-summary-link" id="stepsGoalEditLink" href="#">(edit in Profile)</a></span>
+            <input class="val tile-val-input" id="foodStepsInput" type="number" inputmode="numeric" placeholder="" min="0" style="width:4.2em;text-align:center"/><span class="sep"> / </span><span class="goal" id="foodGoalStepsDisplay">12,000</span>
+            <span class="lab"><span id="stepsEnterHint" class="steps-enter-hint">&uarr; Enter Steps</span><span id="stepsLabelNormal" style="display:none">Steps</span> <a class="profile-summary-link" id="stepsGoalEditLink" href="#">(edit Goal Steps in Profile)</a></span>
           </div>
         </div>
         <div class="totals-macro-row">
@@ -1280,6 +1285,7 @@ async function loadFoodEntries() {
     if (document.activeElement !== document.getElementById('foodStepsInput')) {
       document.getElementById('foodStepsInput').value = totals.steps || '';
     }
+    updateStepsEnterHint();
     document.getElementById('foodGoalStepsDisplay').textContent = currentGoalSteps.toLocaleString();
 
     const list = document.getElementById('foodEntriesList');
@@ -1297,6 +1303,17 @@ async function loadFoodEntries() {
       row.querySelector('.past-scan-del')?.addEventListener('click', () => deleteFoodEntry(row.dataset.id));
     });
   } catch {}
+}
+
+// Swaps the "Enter Steps" arrow prompt for the plain "Steps" label the
+// moment there's a real (nonzero) value typed -- called on every keystroke
+// (not debounced like the actual save) so the prompt reacts instantly
+// instead of lagging behind the 600ms autosave.
+function updateStepsEnterHint() {
+  const input = document.getElementById('foodStepsInput');
+  const hasValue = input.value !== '' && Number(input.value) > 0;
+  document.getElementById('stepsEnterHint').style.display = hasValue ? 'none' : 'inline';
+  document.getElementById('stepsLabelNormal').style.display = hasValue ? 'inline' : 'none';
 }
 
 // Saves on blur/Enter, same "no explicit Save button" convention as the
@@ -1319,6 +1336,7 @@ function saveSteps() {
     .catch(() => {});
 }
 document.getElementById('foodStepsInput').addEventListener('input', () => {
+  updateStepsEnterHint();
   clearTimeout(stepsSaveTimer);
   stepsSaveTimer = setTimeout(saveSteps, 600);
 });
