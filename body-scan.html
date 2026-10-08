@@ -175,12 +175,11 @@
   .profile-summary-link:hover { text-decoration: underline; }
   .totals-cal-steps-flex { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 28px; }
   .cal-steps-cell { text-align: center; }
-  /* "(edit in Profile)" on its own centered line under "STEPS", not
-     trailing inline after it -- the two-word label + a much longer link
-     reads as lopsided even though the whole line centers correctly as one
-     unit (the short word just sits to the left of the long link within
-     that centered line). Own line removes the ambiguity entirely. */
-  .totals-cal-row .lab a { display: block; margin-top: 2px; text-transform: none; letter-spacing: normal; font-family: var(--font-primary); font-size: .72rem; }
+  /* Same row as "Steps", not its own line below -- .cal-steps-cell's own
+     text-align:center centers this whole "Steps (edit in Profile)" line
+     as one unit under the numbers above it (verified: both share the
+     exact same horizontal center point). */
+  .totals-cal-row .lab a { text-transform: none; letter-spacing: normal; font-family: var(--font-primary); font-size: .72rem; margin-left: 4px; }
   .totals-macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .totals-macro-row .macro-cell { text-align: center; }
   .totals-macro-row .val { font-size: 1rem; font-weight: 700; color: var(--pra-blue); }
