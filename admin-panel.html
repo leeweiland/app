@@ -178,6 +178,7 @@
         <button class="admin-tab" data-section="chatConfigSection">Chat Configuration</button>
         <button class="admin-tab" data-section="automatedMessagesSection">Automated Messages</button>
         <button class="admin-tab" data-section="apptConfigSection">Appointments</button>
+        <button class="admin-tab" data-section="calendarBlockingSection">Calendar Blocking</button>
         <button class="admin-tab" data-section="archetypesSection">Training Personality Archetypes</button>
       </div>
     </div>
@@ -339,30 +340,6 @@
         <input class="pra-input" id="apptGymCalendarId" placeholder="e.g. c_abc123@group.calendar.google.com" style="width:100%"/>
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">The Google Calendar Gym self-serve bookings (4:15pm/6:15pm, Mon-Fri, 90 min) get created on directly — find it under that calendar's Settings → "Integrate calendar" → Calendar ID.</div>
       </div>
-      <!-- Gym Availability — global, not per-student: one shared facility. A
-           month calendar where any weekday (or a range of them) can be
-           blocked whole, or just its 4:15pm / 6:15pm slot. Applies to the
-           public booking page and to in-chat Gym scheduling alike. Saves on
-           its own button, separate from the rest of this settings form. -->
-      <div class="field">
-        <label class="pra-label">Gym Availability — block dates &amp; times</label>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:10px">Click a day to select it (Shift-click a range, Ctrl/Cmd-click to add days), then block or open the whole day or just one time. Applies to every Gym booking — online and in chat.</div>
-        <div class="ga-wrap">
-          <div class="ga-head">
-            <button type="button" class="ga-nav" id="gaPrev" aria-label="Previous month">‹</button>
-            <div class="ga-title" id="gaTitle"></div>
-            <button type="button" class="ga-nav" id="gaNext" aria-label="Next month">›</button>
-          </div>
-          <div class="ga-grid" id="gaGrid"></div>
-          <div class="ga-legend"><span><i class="ga-dot ga-open"></i>Open</span><span><i class="ga-dot ga-blocked"></i>Blocked</span><span>Left dot 4:15 PM · right dot 6:15 PM</span></div>
-
-          <div class="ga-panel" id="gaPanel"></div>
-
-          <button class="pra-btn" id="gymBlockedDatesSaveBtn" type="button" style="width:100%;margin-top:12px">Save Availability</button>
-          <div class="save-msg" id="gymBlockedDatesMsg"></div>
-        </div>
-      </div>
-
       <div class="field">
         <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="apptEmailEnabled"/> Send confirmation email
@@ -446,6 +423,35 @@
       </div>
 
       <div class="save-msg" id="apptSaveMsg"></div>
+    </div>
+
+    <!-- Gym Availability — global, not per-student: one shared facility. A
+         month calendar where any weekday (or a range of them) can be
+         blocked whole, or just its 4:15pm / 6:15pm slot. Applies to the
+         public booking page and to in-chat Gym scheduling alike. Saves on
+         its own button -- never was part of Appointments' auto-save
+         change/focusout wiring, so moving it to its own tab needed no
+         changes to how it persists, just where it lives. -->
+    <div class="pra-panel section" id="calendarBlockingSection" style="display:none">
+      <div class="pra-h2" style="margin-bottom:14px">Calendar Blocking</div>
+      <div class="field">
+        <label class="pra-label">Gym Availability — block dates &amp; times</label>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:10px">Click a day to select it (Shift-click a range, Ctrl/Cmd-click to add days), then block or open the whole day or just one time. Applies to every Gym booking — online and in chat.</div>
+        <div class="ga-wrap">
+          <div class="ga-head">
+            <button type="button" class="ga-nav" id="gaPrev" aria-label="Previous month">‹</button>
+            <div class="ga-title" id="gaTitle"></div>
+            <button type="button" class="ga-nav" id="gaNext" aria-label="Next month">›</button>
+          </div>
+          <div class="ga-grid" id="gaGrid"></div>
+          <div class="ga-legend"><span><i class="ga-dot ga-open"></i>Open</span><span><i class="ga-dot ga-blocked"></i>Blocked</span><span>Left dot 4:15 PM · right dot 6:15 PM</span></div>
+
+          <div class="ga-panel" id="gaPanel"></div>
+
+          <button class="pra-btn" id="gymBlockedDatesSaveBtn" type="button" style="width:100%;margin-top:12px">Save Availability</button>
+          <div class="save-msg" id="gymBlockedDatesMsg"></div>
+        </div>
+      </div>
     </div>
 
     <div class="pra-panel section" id="archetypesSection" style="display:none">
@@ -684,7 +690,7 @@ function setupAdminTabs() {
   tabs.forEach(tab => {
     tab.onclick = () => {
       tabs.forEach(t => t.classList.toggle('active', t === tab));
-      ['usersSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'archetypesSection'].forEach(id => {
+      ['usersSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'calendarBlockingSection', 'archetypesSection'].forEach(id => {
         document.getElementById(id).style.display = id === tab.dataset.section ? '' : 'none';
       });
       // .pra-root is the actual scroll container on every page in this app

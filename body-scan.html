@@ -175,6 +175,15 @@
   .profile-summary-link:hover { text-decoration: underline; }
   .totals-cal-steps-flex { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 28px; }
   .cal-steps-cell { text-align: center; }
+  /* A flex item with no explicit width shrink-wraps to its OWN widest
+     line -- fine when every line in the cell is the same width, but here
+     "Steps (edit in Profile)" and "1,200 / 12,000" are different widths
+     from each other, and each one individually centers within whatever
+     width the cell ends up at. Pinning a fixed min-width wide enough for
+     the longer label line means both lines always center against the
+     exact same box, every time, instead of the box's own width silently
+     tracking whichever line happens to be longer on a given render. */
+  .cal-steps-cell-steps { min-width: 195px; }
   /* Same row as "Steps", not its own line below -- .cal-steps-cell's own
      text-align:center centers this whole "Steps (edit in Profile)" line
      as one unit under the numbers above it (verified: both share the
@@ -314,8 +323,8 @@
             <span class="val" id="foodTotalCals">0</span><span class="sep"> / </span><input class="goal tile-val-input" id="foodGoalCals" type="number" readonly inputmode="numeric" placeholder="—" style="width:5ch;min-width:70px;font-size:1.7rem"/>
             <span class="lab">Calories</span>
           </div>
-          <div class="cal-steps-cell">
-            <input class="val tile-val-input" id="foodStepsInput" type="number" inputmode="numeric" placeholder="0" min="0" style="width:4ch;font-size:1.7rem;text-align:center"/><span class="sep"> / </span><span class="goal" id="foodGoalStepsDisplay">12,000</span>
+          <div class="cal-steps-cell cal-steps-cell-steps">
+            <input class="val tile-val-input" id="foodStepsInput" type="number" inputmode="numeric" placeholder="0" min="0" style="width:3.2em;font-size:1.7rem;text-align:center"/><span class="sep"> / </span><span class="goal" id="foodGoalStepsDisplay">12,000</span>
             <span class="lab">Steps <a class="profile-summary-link" id="stepsGoalEditLink" href="#">(edit in Profile)</a></span>
           </div>
         </div>
