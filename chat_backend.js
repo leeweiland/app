@@ -233,6 +233,13 @@ And send me a message back right now to let me know you got this!  Reply "GOT IT
 // result reads as a quick recap in a chat bubble, not an essay.
 const DEFAULT_CALL_SUMMARY_PROMPT = "You are a supportive movement/gymnastics coach's assistant. You'll be given the transcript of a 1-on-1 training call. Write a short, warm, encouraging recap for the client as 3-6 bullet points: what they worked on, any wins or progress worth celebrating, and one or two specific things to keep practicing before next time. Positive and motivating tone only, never critical or clinical. Don't mention that this came from a transcript or recording. Keep the whole thing under 120 words.";
 
+// System prompt for generateDailyCheckin() below — admin-editable, fed the
+// student's own last several chat messages (labeled Student:/Coach:) as the
+// user message so the check-in reacts to whatever's actually in the
+// conversation instead of being generic, and never says anything that
+// contradicts or ignores it.
+const DEFAULT_DAILY_CHECKIN_PROMPT = "You are a supportive movement/strength coach's assistant sending a brief daily check-in to a student inside their training chat. You'll be given the last several messages between the student and their coach, oldest first, for context. Write a short, warm, light check-in -- 1 to 3 sentences. Either give genuine encouragement tied to something specific they actually said or did recently, or ask a simple, relevant question about how their training is going. Never reference anything that isn't actually in the conversation, and never say anything confusing, generic-sounding, or out of context -- if there isn't much recent context, keep it simple and general rather than guessing or making something up. Don't mention that this is automated or that you're an AI. Friendly, casual, coach-to-athlete tone, not clinical.";
+
 export function getConfig() {
   const cfg = readJson(CONFIG_FILE, {
     profilePhotosFolderId: "", chatImagesFolderId: "", chatVideosFolderId: "",
@@ -291,6 +298,8 @@ export function getConfig() {
     welcomeMessageText: DEFAULT_WELCOME_MESSAGE,
     callSummaryEnabled: true,
     callSummaryPrompt: DEFAULT_CALL_SUMMARY_PROMPT,
+    dailyCheckinEnabled: true,
+    dailyCheckinPrompt: DEFAULT_DAILY_CHECKIN_PROMPT,
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
   ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
@@ -314,6 +323,8 @@ export function getConfig() {
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
   if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
   if (!cfg.callSummaryPrompt) cfg.callSummaryPrompt = DEFAULT_CALL_SUMMARY_PROMPT;
+  if (cfg.dailyCheckinEnabled === undefined) cfg.dailyCheckinEnabled = true;
+  if (!cfg.dailyCheckinPrompt) cfg.dailyCheckinPrompt = DEFAULT_DAILY_CHECKIN_PROMPT;
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
@@ -2008,6 +2019,71 @@ setInterval(() => {
   checkPhysiqueCheckinReminders().catch(e => console.error("[physique checkin reminders]", e.message));
 }, 60 * 60 * 1000); // hourly polling is plenty of resolution for a 7-day threshold
 
+// ── Daily coach check-in ──────────────────────────────────────────────────
+// Same polling pattern as checkPhysiqueCheckinReminders above (per-user
+// "already sent" timestamp, hourly poll, 1-day threshold) but posts an
+// actual AI-generated chat message into the student's group instead of a
+// push reminder -- grounded in their own last several messages (see
+// DEFAULT_DAILY_CHECKIN_PROMPT) so it reacts to the real conversation
+// instead of being a generic ping. Online/gym clients only (isClientRole) --
+// a plain "user" signup has no personal group to post into at all.
+const DAILY_CHECKIN_HOURS = 24;
+async function generateDailyCheckin(conversationId, studentId, promptText) {
+  const recent = MessagesDB.getConversationMessages(conversationId, { limit: 12 })
+    .filter(m => m.type === "text" && m.text && m.text.trim());
+  const transcript = recent.length
+    ? recent.map(m => `${m.senderId === studentId ? "Student" : "Coach"}: ${m.text.trim()}`).join("\n")
+    : "(No recent messages yet -- this student's chat is new or quiet.)";
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: promptText || DEFAULT_DAILY_CHECKIN_PROMPT },
+        { role: "user", content: `Here are the student's last several chat messages, oldest first:\n\n${transcript}` },
+      ],
+      max_tokens: 200,
+      temperature: 0.7,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Check-in generation failed");
+  return (data.choices?.[0]?.message?.content || "").trim() || null;
+}
+async function checkDailyCoachCheckins() {
+  const cfg = getConfig();
+  if (!cfg.dailyCheckinEnabled) return;
+  const users = readJson(USERS_FILE, []);
+  const convos = readJson(CONVOS_FILE, []);
+  const staffIds = users.filter(u => !u.archived && (isAdmin(u) || u.role === "coach")).map(u => u.id);
+  const now = Date.now();
+  let changed = false;
+  for (const user of users) {
+    if (user.archived || !isClientRole(user.role)) continue;
+    const hoursSinceSent = user.dailyCheckinSentAt
+      ? (now - new Date(user.dailyCheckinSentAt).getTime()) / 3600000 : Infinity;
+    if (hoursSinceSent < DAILY_CHECKIN_HOURS) continue;
+    const convo = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === user.id);
+    if (!convo) continue;
+    try {
+      const text = await generateDailyCheckin(convo.id, user.id, cfg.dailyCheckinPrompt);
+      if (!text) continue;
+      const senderId = convo.participantIds.find(id => staffIds.includes(id)) || staffIds[0] || user.id;
+      MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+      notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+      user.dailyCheckinSentAt = new Date().toISOString();
+      changed = true;
+    } catch (e) {
+      console.error(`[daily checkin] user ${user.id} failed:`, e.message);
+    }
+  }
+  if (changed) writeJson(USERS_FILE, users);
+}
+setInterval(() => {
+  checkDailyCoachCheckins().catch(e => console.error("[daily checkins]", e.message));
+}, 60 * 60 * 1000);
+
 // ── Auto-labeling uploads: "FIRST LAST BEST-GUESS-OF-CONTENT" ──────────────
 // Chat and body/move-scan uploads land in Drive named after who sent them
 // and a short AI guess at what's actually in the shot (e.g. "LEE WEILAND
@@ -3531,7 +3607,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -3556,6 +3632,8 @@ export async function handleChatRequest(req, res, url) {
         if (welcomeMessageText !== undefined) cfg.welcomeMessageText = welcomeMessageText;
         if (callSummaryEnabled !== undefined) cfg.callSummaryEnabled = !!callSummaryEnabled;
         if (callSummaryPrompt !== undefined) cfg.callSummaryPrompt = callSummaryPrompt;
+        if (dailyCheckinEnabled !== undefined) cfg.dailyCheckinEnabled = !!dailyCheckinEnabled;
+        if (dailyCheckinPrompt !== undefined) cfg.dailyCheckinPrompt = dailyCheckinPrompt;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });
