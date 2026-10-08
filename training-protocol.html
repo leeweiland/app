@@ -191,17 +191,21 @@
         <div class="client-name" id="clientName">Loading…</div>
         <span></span>
       </div>
+      <div class="pra-muted" id="protocolTitleHint" style="display:none;font-size:.82rem;margin:-6px 0 8px"></div>
       <div class="protocol-head-row">
         <div class="protocol-head-controls-left">
           <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
           <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
         </div>
         <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
-          <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow">Flow</button>
-          <button class="view-mode-btn" id="pageViewBtn" data-mode="page">Page</button>
+          <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
+          <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
+          <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
+          <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
         </div>
         <div class="protocol-head-controls-right">
           <button class="icon-btn" id="aiGenerateBtn" title="AI: build a workout plan from a description" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.5l1.4 3.6 3.6 1.4-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4L12 3.5Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/><path d="M18.5 13.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
+          <button class="icon-btn" id="applyProtocolBtn" title="Apply this protocol to a student (or everyone without one)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="7" r="3" stroke="#fff" stroke-width="1.6"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M16.5 3.5l1.3 1.3L21 1.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
           <button class="icon-btn" id="loadTemplateBtn" title="Load a saved protocol template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         </div>
@@ -357,13 +361,44 @@
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('loadProtocolTemplateModal')">Cancel</button>
     </div>
   </div>
+
+  <!-- Pushes whatever's currently on screen (a student's own Your Flow/Your
+       Page, OR the shared Flow Builder draft) out to one chosen student, or
+       to every online/gym client who doesn't already have a custom protocol
+       -- the "everyone blank" case is resolved server-side (see POST
+       /api/chat/training-protocol/apply) so this never needs to know in
+       advance who's blank. -->
+  <div class="modal-backdrop" id="applyProtocolModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:14px">Apply This Protocol</div>
+      <input class="pra-input" id="applyProtocolName" placeholder="Protocol name (shown to the student)" style="margin-bottom:12px"/>
+      <label class="pra-label" style="display:block;margin-bottom:4px">Apply To</label>
+      <select class="pra-select" id="applyProtocolTarget" style="width:100%"></select>
+      <div class="pra-muted" id="applyProtocolStatus" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="pra-btn" id="applyProtocolConfirmBtn" style="flex:1">Apply</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('applyProtocolModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
 const params = new URLSearchParams(location.search);
 const targetUserId = params.get('userId');
 const sourceConvoId = params.get('convo');
-let me = null, canEdit = false, steps = [];
+let me = null, canEdit = false, steps = [], protocolName = '';
+// Which record loadSteps()/saveSteps()/the AI-generate call actually read
+// from and write to -- targetUserId (this student's own) in Your Flow/Your
+// Page mode, or the shared BUILDER_PROTOCOL_ID sentinel in Flow Builder/
+// Page View mode. The backend's training-protocol GET/POST only ever use
+// this as an opaque dict key (see chat_backend.js) -- it never validates
+// that it's a real user id, so a made-up constant works exactly like a
+// second "student" that happens not to exist, with zero backend changes
+// needed to support it.
+const BUILDER_PROTOCOL_ID = '__builder__';
+let editingBuilder = false;
+let activeId = targetUserId;
 // The conversation "Ask a Question" (student-only) posts into — resolved
 // once by setupBackToChatLink() (same logic the "Back To Chat" button
 // already needs: ?convo= if we arrived from a thread, else this student's
@@ -465,6 +500,9 @@ async function init() {
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('applyProtocolBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('flowBuilderBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('pageBuilderBtn').style.display = canEdit ? '' : 'none';
 
   // Students land on Page view by default (easier to just read day-by-day
   // than the coach-oriented editing canvas) — coaches/admins keep Flow,
@@ -484,6 +522,7 @@ async function init() {
   setupProtocolTemplates();
   setupAiGenerate();
   setupViewModeToggle();
+  if (canEdit) setupApplyProtocol();
   await loadSteps();
   wireModals();
   await setupBackToChatLink();
@@ -548,17 +587,37 @@ function migrateSteps(raw) {
   });
 }
 
+// Shows the protocol's own title (set via the Apply panel — see
+// setupApplyProtocol) under the client-name header when one's been set, or
+// a reminder that Flow Builder/Page View isn't any particular student's
+// protocol at all. Hidden entirely in Your Flow/Your Page with no name set,
+// same as before this feature existed.
+function updateProtocolTitleHint() {
+  const hint = document.getElementById('protocolTitleHint');
+  if (editingBuilder) {
+    hint.textContent = 'Editing the shared Flow Builder draft — not tied to any student until you Apply it.';
+    hint.style.display = '';
+  } else if (protocolName) {
+    hint.textContent = `Protocol: ${protocolName}`;
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
 async function loadSteps() {
-  const r = await fetch('/api/chat/training-protocol/' + targetUserId);
+  const r = await fetch('/api/chat/training-protocol/' + activeId);
   if (!r.ok) { document.getElementById('emptyHint').textContent = "You don't have access to this."; document.getElementById('emptyHint').style.display = 'block'; return; }
   const d = await r.json();
   steps = migrateSteps(d.steps || []);
   lastAiPrompt = d.lastAiPrompt || '';
+  protocolName = d.protocolName || '';
+  updateProtocolTitleHint();
   render();
 }
 
 async function saveSteps() {
-  await fetch('/api/chat/training-protocol/' + targetUserId, {
+  await fetch('/api/chat/training-protocol/' + activeId, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ steps }),
   });
@@ -871,9 +930,29 @@ function applyViewModeDisplay() {
   document.getElementById('pageDaySelectRow').style.display =
     (hasSteps && viewMode === 'page' && document.getElementById('pageDaySelect').options.length > 1) ? 'flex' : 'none';
 }
-function setViewMode(mode) {
+// mode: 'flow' | 'page'. builder: false = this student's own Your Flow/
+// Your Page (activeId = targetUserId); true = the shared Flow Builder/Page
+// View draft (activeId = BUILDER_PROTOCOL_ID). Switching which ONE is
+// active (not just flow<->page within the same one) means the steps on
+// screen belong to a totally different record, so that case re-fetches
+// from scratch and throws away any undo/redo history from the other one —
+// undoing past the point you switched would silently cross-apply an edit
+// from one protocol onto the other.
+async function setProtocolMode(mode, builder) {
+  const builderChanged = builder !== editingBuilder;
   viewMode = mode;
-  document.querySelectorAll('.view-mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+  editingBuilder = builder;
+  activeId = builder ? BUILDER_PROTOCOL_ID : targetUserId;
+  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode && (btn.dataset.builder === 'true') === builder);
+  });
+  if (builderChanged) {
+    undoStack = []; redoStack = [];
+    updateUndoRedoButtons();
+    await loadSteps(); // re-fetches + calls render(), which calls applyViewModeDisplay()
+    if (mode === 'flow' && canvasInitialized) fitCanvasToView();
+    return;
+  }
   if (mode === 'flow') {
     // layoutRowHeights/drawConnectors measure real DOM heights, which read
     // as 0 while the canvas sits display:none — re-running render() (rather
@@ -889,7 +968,7 @@ function setViewMode(mode) {
 }
 function setupViewModeToggle() {
   document.querySelectorAll('.view-mode-btn').forEach(btn => {
-    btn.onclick = () => setViewMode(btn.dataset.mode);
+    btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'true');
   });
   document.getElementById('pageDaySelect').onchange = (e) => {
     pageSelectedDay = e.target.value;
@@ -1546,14 +1625,15 @@ function setupAiGenerate() {
     const prompt = document.getElementById('aiGeneratePrompt').value.trim();
     const status = document.getElementById('aiGenerateStatus');
     if (!prompt) { status.textContent = 'Describe the client/plan first.'; return; }
-    if (steps.length && !confirm("This replaces this client's current protocol steps with the generated plan. Continue?")) return;
+    const replaceTarget = editingBuilder ? 'the Flow Builder draft' : "this client's current protocol";
+    if (steps.length && !confirm(`This replaces ${replaceTarget} steps with the generated plan. Continue?`)) return;
     const btn = document.getElementById('aiGenerateRunBtn');
     btn.disabled = true;
     status.textContent = 'Generating… (matching videos, can take up to ~20 seconds)';
     try {
       const r = await fetch('/api/chat/training-protocol/ai-generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, targetUserId }),
+        body: JSON.stringify({ prompt, targetUserId: activeId }),
       });
       // The server remembers this prompt for the client regardless of what
       // comes back below (including a refusal/error) — mirror that locally
@@ -1597,7 +1677,8 @@ async function renderProtocolTemplateList() {
     const id = row.dataset.id;
     const t = templates.find(x => x.id === id);
     row.querySelector('.template-item-body').onclick = async () => {
-      if (!confirm(`Replace this student's current protocol with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
+      const replaceTarget = editingBuilder ? 'the Flow Builder draft' : "this student's current protocol";
+      if (!confirm(`Replace ${replaceTarget} with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
       const fr = await fetch('/api/chat/protocol-templates/' + id);
       if (!fr.ok) { alert('Could not load that template.'); return; }
       const { template } = await fr.json();
@@ -1614,6 +1695,69 @@ async function renderProtocolTemplateList() {
       renderProtocolTemplateList();
     };
   });
+}
+
+const APPLY_TO_BLANK_VALUE = '__blank__';
+// Pushes whatever's on screen right now (a student's own Your Flow/Your
+// Page, or the shared Flow Builder draft) out to one chosen student or to
+// every online/gym client with no custom protocol yet -- see POST
+// /api/chat/training-protocol/apply. /api/chat/contacts is the one
+// roster-ish endpoint a coach (not just an admin) can already call, so it's
+// reused here instead of the admin-only /api/admin/users just to build this
+// dropdown.
+async function setupApplyProtocol() {
+  document.getElementById('applyProtocolBtn').onclick = async () => {
+    if (!steps.length) { alert('Nothing to apply yet — add some steps first.'); return; }
+    document.getElementById('applyProtocolName').value = protocolName || '';
+    document.getElementById('applyProtocolStatus').textContent = '';
+    const select = document.getElementById('applyProtocolTarget');
+    select.innerHTML = '<option value="' + APPLY_TO_BLANK_VALUE + '">Everyone without a custom protocol</option>';
+    openModal('applyProtocolModal');
+    try {
+      const r = await fetch('/api/chat/contacts');
+      if (!r.ok) return;
+      const { contacts } = await r.json();
+      const students = contacts.filter(u => u.role === 'online' || u.role === 'gym')
+        .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
+      select.insertAdjacentHTML('beforeend', students.map(u =>
+        `<option value="${u.id}">${escapeHtml(u.first)} ${escapeHtml(u.last)}</option>`).join(''));
+    } catch {}
+  };
+
+  document.getElementById('applyProtocolConfirmBtn').onclick = async () => {
+    const name = document.getElementById('applyProtocolName').value.trim();
+    const target = document.getElementById('applyProtocolTarget').value;
+    const toAllBlank = target === APPLY_TO_BLANK_VALUE;
+    const status = document.getElementById('applyProtocolStatus');
+    const confirmMsg = toAllBlank
+      ? "Apply this to every online/gym client who doesn't already have a custom protocol? This can't be undone."
+      : `Apply this to ${document.getElementById('applyProtocolTarget').selectedOptions[0].textContent}? This replaces anything they already have. This can't be undone.`;
+    if (!confirm(confirmMsg)) return;
+    const btn = document.getElementById('applyProtocolConfirmBtn');
+    btn.disabled = true;
+    status.textContent = 'Applying…';
+    try {
+      const r = await fetch('/api/chat/training-protocol/apply', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps, name, ...(toAllBlank ? { toAllBlank: true } : { targetUserId: target }) }),
+      });
+      const d = await r.json();
+      if (!r.ok) { status.textContent = d.error || 'Could not apply.'; btn.disabled = false; return; }
+      if (!editingBuilder && target === targetUserId) {
+        // Applied onto the exact student this page is already showing —
+        // reflect the new name immediately instead of it only showing up
+        // after a reload.
+        protocolName = name;
+        updateProtocolTitleHint();
+      }
+      closeModal('applyProtocolModal');
+    } catch (e) {
+      console.error('[apply protocol]', e);
+      status.textContent = 'Could not apply.';
+    } finally {
+      btn.disabled = false;
+    }
+  };
 }
 
 function wireModals() {

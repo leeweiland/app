@@ -4218,7 +4218,7 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
-    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate"];
+    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
       const targetUserId = protocolMatch[1];
@@ -4230,8 +4230,14 @@ export async function handleChatRequest(req, res, url) {
         // lastAiPrompt rides along with steps (same per-client record) so the
         // AI modal can reopen pre-filled with whatever was last used for
         // THIS client — see the ai-generate endpoint below, which is what
-        // actually sets it.
-        return sendJson(res, 200, { steps: all[targetUserId]?.steps || [], lastAiPrompt: all[targetUserId]?.lastAiPrompt || "" });
+        // actually sets it. protocolName is only ever set by POST
+        // /api/chat/training-protocol/apply below (a plain steps save never
+        // touches it, see that POST handler's comment).
+        return sendJson(res, 200, {
+          steps: all[targetUserId]?.steps || [],
+          lastAiPrompt: all[targetUserId]?.lastAiPrompt || "",
+          protocolName: all[targetUserId]?.protocolName || "",
+        });
       }
       if (req.method === "POST") {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
@@ -4662,6 +4668,44 @@ export async function handleChatRequest(req, res, url) {
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
+    }
+
+    // Pushes a built step graph (either a specific student's own Your Flow/
+    // Your Page, or the shared Flow Builder draft — the client doesn't
+    // distinguish the two here, it's just "steps") out to one student, or
+    // to every online/gym client who doesn't already have a custom protocol
+    // of their own. Same per-student record (TRAINING_PROTOCOLS_FILE) and
+    // the same GET/POST above read/write — this only adds a bulk,
+    // name-carrying way to populate it, reusing fresh step/parent ids per
+    // target exactly like the client's own cloneStepsWithFreshIds (training-
+    // protocol.html) so no two students (or re-applications) ever share ids.
+    if (p === "/api/chat/training-protocol/apply" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { steps, name, targetUserId, toAllBlank } = await readJsonBody(req);
+      if (!Array.isArray(steps) || !steps.length) return sendJson(res, 400, { error: "Nothing to apply — this protocol has no steps yet" });
+      if (!targetUserId && !toAllBlank) return sendJson(res, 400, { error: "Pick a student, or everyone without a custom protocol" });
+      const protocolName = String(name || "").trim() || null;
+      const cloneWithFreshIds = () => {
+        const idMap = new Map();
+        steps.forEach(s => idMap.set(s.id, randomUUID()));
+        return steps.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
+      };
+      const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+      const applyTo = (uid) => {
+        allProtocols[uid] = { ...allProtocols[uid], steps: cloneWithFreshIds(), protocolName, updatedAt: new Date().toISOString(), updatedBy: user.id };
+      };
+      let appliedCount = 0;
+      if (toAllBlank) {
+        const users = readJson(USERS_FILE, []);
+        users.filter(u => !u.archived && isClientRole(u.role)).forEach(u => {
+          if (!allProtocols[u.id]?.steps?.length) { applyTo(u.id); appliedCount++; }
+        });
+      } else {
+        applyTo(targetUserId);
+        appliedCount = 1;
+      }
+      writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
+      return sendJson(res, 200, { ok: true, appliedCount });
     }
 
     // ─── VAPID public key ───────────────────────────────────────────────
