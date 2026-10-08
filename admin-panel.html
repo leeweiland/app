@@ -329,6 +329,24 @@
         <label class="pra-label">Daily Check-in Prompt (instructions given to the AI, along with the student's recent messages)</label>
         <textarea class="pra-input" id="dailyCheckinPrompt" rows="6" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:140px">
+          <label class="pra-label">Send Time</label>
+          <input class="pra-input" id="dailyCheckinTime" type="time" style="width:100%"/>
+        </div>
+        <div class="field" style="flex:1;min-width:140px">
+          <label class="pra-label">Timezone</label>
+          <select class="pra-input" id="dailyCheckinTimezone" style="width:100%">
+            <option value="America/Anchorage">Alaska</option>
+            <option value="Pacific/Honolulu">Hawaii</option>
+            <option value="America/Los_Angeles">Pacific</option>
+            <option value="America/Denver">Mountain</option>
+            <option value="America/Chicago">Central</option>
+            <option value="America/New_York">Eastern</option>
+          </select>
+        </div>
+      </div>
+      <div class="pra-muted" style="font-size:.74rem;margin-top:-10px;margin-bottom:14px">The poller checks hourly, so a check-in lands within about an hour after this time, not to-the-minute.</div>
 
       <div class="save-msg" id="automatedMessagesSaveMsg"></div>
     </div>
@@ -1281,6 +1299,8 @@ async function loadConfig() {
   document.getElementById('welcomeMessageText').value = d.welcomeMessageText || '';
   document.getElementById('dailyCheckinEnabled').checked = d.dailyCheckinEnabled !== false;
   document.getElementById('dailyCheckinPrompt').value = d.dailyCheckinPrompt || '';
+  document.getElementById('dailyCheckinTime').value = d.dailyCheckinTime || '09:00';
+  document.getElementById('dailyCheckinTimezone').value = d.dailyCheckinTimezone || 'America/Anchorage';
 
   const a = d.appointments || {};
   document.getElementById('apptDefaultDuration').value = String(a.defaultDurationMinutes || 15);
@@ -1415,6 +1435,8 @@ async function saveConfig() {
       welcomeMessageText: document.getElementById('welcomeMessageText').value,
       dailyCheckinEnabled: document.getElementById('dailyCheckinEnabled').checked,
       dailyCheckinPrompt: document.getElementById('dailyCheckinPrompt').value,
+      dailyCheckinTime: document.getElementById('dailyCheckinTime').value,
+      dailyCheckinTimezone: document.getElementById('dailyCheckinTimezone').value,
     }),
   });
   // This one function saves both sections' fields at once (the whole config

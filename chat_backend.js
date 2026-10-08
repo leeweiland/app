@@ -239,6 +239,11 @@ const DEFAULT_CALL_SUMMARY_PROMPT = "You are a supportive movement/gymnastics co
 // conversation instead of being generic, and never says anything that
 // contradicts or ignores it.
 const DEFAULT_DAILY_CHECKIN_PROMPT = "You are a supportive movement/strength coach's assistant sending a brief daily check-in to a student inside their training chat. You'll be given the last several messages between the student and their coach, oldest first, for context. Write a short, warm, light check-in -- 1 to 3 sentences. Either give genuine encouragement tied to something specific they actually said or did recently, or ask a simple, relevant question about how their training is going. Never reference anything that isn't actually in the conversation, and never say anything confusing, generic-sounding, or out of context -- if there isn't much recent context, keep it simple and general rather than guessing or making something up. Don't mention that this is automated or that you're an AI. Friendly, casual, coach-to-athlete tone, not clinical.";
+// "09:00" local time in dailyCheckinTimezone -- same default zone as the
+// Gym schedule's own GYM_TZ/DEFAULT_APPOINTMENTS_CONFIG.timezone, since
+// that's where this business is actually based.
+const DEFAULT_DAILY_CHECKIN_TIME = "09:00";
+const DEFAULT_DAILY_CHECKIN_TIMEZONE = "America/Anchorage";
 
 export function getConfig() {
   const cfg = readJson(CONFIG_FILE, {
@@ -300,6 +305,8 @@ export function getConfig() {
     callSummaryPrompt: DEFAULT_CALL_SUMMARY_PROMPT,
     dailyCheckinEnabled: true,
     dailyCheckinPrompt: DEFAULT_DAILY_CHECKIN_PROMPT,
+    dailyCheckinTime: DEFAULT_DAILY_CHECKIN_TIME,
+    dailyCheckinTimezone: DEFAULT_DAILY_CHECKIN_TIMEZONE,
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
   ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
@@ -325,6 +332,8 @@ export function getConfig() {
   if (!cfg.callSummaryPrompt) cfg.callSummaryPrompt = DEFAULT_CALL_SUMMARY_PROMPT;
   if (cfg.dailyCheckinEnabled === undefined) cfg.dailyCheckinEnabled = true;
   if (!cfg.dailyCheckinPrompt) cfg.dailyCheckinPrompt = DEFAULT_DAILY_CHECKIN_PROMPT;
+  if (!cfg.dailyCheckinTime) cfg.dailyCheckinTime = DEFAULT_DAILY_CHECKIN_TIME;
+  if (!cfg.dailyCheckinTimezone) cfg.dailyCheckinTimezone = DEFAULT_DAILY_CHECKIN_TIMEZONE;
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
@@ -2020,14 +2029,33 @@ setInterval(() => {
 }, 60 * 60 * 1000); // hourly polling is plenty of resolution for a 7-day threshold
 
 // ── Daily coach check-in ──────────────────────────────────────────────────
-// Same polling pattern as checkPhysiqueCheckinReminders above (per-user
-// "already sent" timestamp, hourly poll, 1-day threshold) but posts an
-// actual AI-generated chat message into the student's group instead of a
-// push reminder -- grounded in their own last several messages (see
+// Similar polling pattern to checkPhysiqueCheckinReminders above (hourly
+// poll, per-user "already sent" marker) but gated on a specific wall-clock
+// time of day in an admin-configured IANA zone (dailyCheckinTime/
+// dailyCheckinTimezone) instead of a rolling N-hours-since-last-send
+// window -- a rolling window can drift to any hour (including the middle
+// of the night for the student), which defeats the point of a "daily
+// check-in" landing at a predictable time. The per-user marker is now a
+// calendar DATE string in that same zone (dailyCheckinSentDate), not a
+// timestamp, so "already sent today" means today in the configured zone,
+// not "within the last 24 hours" (those differ right around the target
+// time on a day the poll ran a little early/late). Posts an actual
+// AI-generated chat message into the student's group instead of a push
+// reminder -- grounded in their own last several messages (see
 // DEFAULT_DAILY_CHECKIN_PROMPT) so it reacts to the real conversation
 // instead of being a generic ping. Online/gym clients only (isClientRole) --
 // a plain "user" signup has no personal group to post into at all.
-const DAILY_CHECKIN_HOURS = 24;
+//
+// currentMinutesInZone/todayInZone reuse the exact same Intl-based
+// wall-clock approach as the Gym schedule's own todayInZone/weekdayInZone
+// above (DST-correct for the given date, no extra dependency) -- todayInZone
+// itself is literally reused as-is, not reimplemented.
+function currentMinutesInZone(timeZone) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const hour = Number(parts.find(p => p.type === "hour").value) % 24; // en-GB's midnight sometimes formats as "24"
+  const minute = Number(parts.find(p => p.type === "minute").value);
+  return hour * 60 + minute;
+}
 async function generateDailyCheckin(conversationId, studentId, promptText) {
   const recent = MessagesDB.getConversationMessages(conversationId, { limit: 12 })
     .filter(m => m.type === "text" && m.text && m.text.trim());
@@ -2054,16 +2082,19 @@ async function generateDailyCheckin(conversationId, studentId, promptText) {
 async function checkDailyCoachCheckins() {
   const cfg = getConfig();
   if (!cfg.dailyCheckinEnabled) return;
+  const timeZone = cfg.dailyCheckinTimezone || DEFAULT_DAILY_CHECKIN_TIMEZONE;
+  const [targetHour, targetMinute] = (cfg.dailyCheckinTime || DEFAULT_DAILY_CHECKIN_TIME).split(":").map(Number);
+  // Too early in the day for today's send yet -- every user, already-sent
+  // or not, gets skipped this poll rather than checked one by one.
+  if (currentMinutesInZone(timeZone) < targetHour * 60 + targetMinute) return;
+  const today = todayInZone(timeZone);
   const users = readJson(USERS_FILE, []);
   const convos = readJson(CONVOS_FILE, []);
   const staffIds = users.filter(u => !u.archived && (isAdmin(u) || u.role === "coach")).map(u => u.id);
-  const now = Date.now();
   let changed = false;
   for (const user of users) {
     if (user.archived || !isClientRole(user.role)) continue;
-    const hoursSinceSent = user.dailyCheckinSentAt
-      ? (now - new Date(user.dailyCheckinSentAt).getTime()) / 3600000 : Infinity;
-    if (hoursSinceSent < DAILY_CHECKIN_HOURS) continue;
+    if (user.dailyCheckinSentDate === today) continue; // already sent today (this zone's calendar day)
     const convo = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === user.id);
     if (!convo) continue;
     try {
@@ -2072,7 +2103,7 @@ async function checkDailyCoachCheckins() {
       const senderId = convo.participantIds.find(id => staffIds.includes(id)) || staffIds[0] || user.id;
       MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
       notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
-      user.dailyCheckinSentAt = new Date().toISOString();
+      user.dailyCheckinSentDate = today;
       changed = true;
     } catch (e) {
       console.error(`[daily checkin] user ${user.id} failed:`, e.message);
@@ -3607,7 +3638,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -3634,6 +3665,8 @@ export async function handleChatRequest(req, res, url) {
         if (callSummaryPrompt !== undefined) cfg.callSummaryPrompt = callSummaryPrompt;
         if (dailyCheckinEnabled !== undefined) cfg.dailyCheckinEnabled = !!dailyCheckinEnabled;
         if (dailyCheckinPrompt !== undefined) cfg.dailyCheckinPrompt = dailyCheckinPrompt;
+        if (dailyCheckinTime !== undefined) cfg.dailyCheckinTime = dailyCheckinTime;
+        if (dailyCheckinTimezone !== undefined) cfg.dailyCheckinTimezone = dailyCheckinTimezone;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });
