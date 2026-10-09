@@ -541,6 +541,18 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
       // per-request by the caller -- this is safe to keep on THIS device's
       // cache, not a shared one.
       passHeaders["Cache-Control"] = "private, max-age=31536000, immutable";
+      // Google's alt=media responses never actually send an Accept-Ranges
+      // header, even though they correctly honor Range requests (verified:
+      // a Range: bytes=0-1023 request gets back exactly 1024 bytes with a
+      // matching Content-Range, every time) -- the forwarding loop above
+      // only ever copies a header Google itself sent, so this always came
+      // out missing. Without it, Chrome's <video> element won't commit to
+      // treating the resource as seekable/streamable, and gets stuck
+      // indefinitely instead of ever loading a frame -- this is what
+      // actually made a video "not play" / show a blocked-play icon with
+      // no error, not a Drive outage or a timeout (both checked directly
+      // against Google and came back fast and correct).
+      passHeaders["Accept-Ranges"] = "bytes";
       res.writeHead(driveRes.statusCode, passHeaders);
       // A network hiccup partway through Google's own response -- without
       // this listener, piping into `res` after `driveRes` errors is an
