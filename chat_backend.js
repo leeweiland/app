@@ -307,6 +307,9 @@ export function getConfig() {
     dailyCheckinPrompt: DEFAULT_DAILY_CHECKIN_PROMPT,
     dailyCheckinTime: DEFAULT_DAILY_CHECKIN_TIME,
     dailyCheckinTimezone: DEFAULT_DAILY_CHECKIN_TIMEZONE,
+    dailyCheckinFrequencyValue: 1,
+    dailyCheckinFrequencyUnit: "days",
+    dailyCheckinSenderId: "",
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
   ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
@@ -334,6 +337,8 @@ export function getConfig() {
   if (!cfg.dailyCheckinPrompt) cfg.dailyCheckinPrompt = DEFAULT_DAILY_CHECKIN_PROMPT;
   if (!cfg.dailyCheckinTime) cfg.dailyCheckinTime = DEFAULT_DAILY_CHECKIN_TIME;
   if (!cfg.dailyCheckinTimezone) cfg.dailyCheckinTimezone = DEFAULT_DAILY_CHECKIN_TIMEZONE;
+  if (!cfg.dailyCheckinFrequencyValue) cfg.dailyCheckinFrequencyValue = 1;
+  if (!cfg.dailyCheckinFrequencyUnit) cfg.dailyCheckinFrequencyUnit = "days";
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
@@ -2138,6 +2143,24 @@ async function generateDailyCheckin(conversationId, studentId, promptText) {
   if (!res.ok) throw new Error(data.error?.message || "Check-in generation failed");
   return (data.choices?.[0]?.message?.content || "").trim() || null;
 }
+// Whole calendar days between two YYYY-MM-DD strings (both already read in
+// the same zone via todayInZone/dailyCheckinSentDate) -- parsed as UTC
+// midnight so the subtraction is pure date arithmetic, with no timezone or
+// DST involved a second time (that's already baked into which calendar day
+// each string names).
+function daysBetweenDateStrings(earlier, later) {
+  return Math.round((new Date(later + "T00:00:00Z") - new Date(earlier + "T00:00:00Z")) / 86400000);
+}
+// "Months" has no fixed day count -- 30 is a plain, predictable
+// approximation (not calendar-month-aware), good enough for a check-in
+// cadence where landing a day or two early/late next to the exact
+// anniversary doesn't matter.
+function dailyCheckinRequiredDays(cfg) {
+  const value = Math.max(1, Number(cfg.dailyCheckinFrequencyValue) || 1);
+  const unit = cfg.dailyCheckinFrequencyUnit || "days";
+  const perUnit = unit === "months" ? 30 : unit === "weeks" ? 7 : 1;
+  return value * perUnit;
+}
 async function checkDailyCoachCheckins() {
   const cfg = getConfig();
   if (!cfg.dailyCheckinEnabled) return;
@@ -2147,19 +2170,33 @@ async function checkDailyCoachCheckins() {
   // or not, gets skipped this poll rather than checked one by one.
   if (currentMinutesInZone(timeZone) < targetHour * 60 + targetMinute) return;
   const today = todayInZone(timeZone);
+  const requiredDays = dailyCheckinRequiredDays(cfg);
   const users = readJson(USERS_FILE, []);
   const convos = readJson(CONVOS_FILE, []);
   const staffIds = users.filter(u => !u.archived && (isAdmin(u) || u.role === "coach")).map(u => u.id);
   let changed = false;
   for (const user of users) {
     if (user.archived || !isClientRole(user.role)) continue;
-    if (user.dailyCheckinSentDate === today) continue; // already sent today (this zone's calendar day)
+    // Never sent before -- always eligible (first send). Otherwise only
+    // once the configured cadence has actually elapsed since the last one,
+    // not just "not already sent today" -- a frequency of 1 day keeps the
+    // original once-a-day behavior exactly, since dailyCheckinRequiredDays
+    // returns 1 in that case and this reduces to the same check.
+    if (user.dailyCheckinSentDate && daysBetweenDateStrings(user.dailyCheckinSentDate, today) < requiredDays) continue;
     const convo = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === user.id);
     if (!convo) continue;
     try {
       const text = await generateDailyCheckin(convo.id, user.id, cfg.dailyCheckinPrompt);
       if (!text) continue;
-      const senderId = convo.participantIds.find(id => staffIds.includes(id)) || staffIds[0] || user.id;
+      // Admin-configured "Sent As" (dailyCheckinSenderId), if set and that
+      // person is actually a staff member currently in THIS student's
+      // group -- otherwise the previous behavior (whichever coach/admin
+      // happens to be first in the participant list, arbitrary and could
+      // vary group to group) as a fallback for a student whose group
+      // doesn't include the configured sender.
+      const configuredSenderId = cfg.dailyCheckinSenderId && staffIds.includes(cfg.dailyCheckinSenderId) && convo.participantIds.includes(cfg.dailyCheckinSenderId)
+        ? cfg.dailyCheckinSenderId : null;
+      const senderId = configuredSenderId || convo.participantIds.find(id => staffIds.includes(id)) || staffIds[0] || user.id;
       MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
       notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
       user.dailyCheckinSentDate = today;
@@ -3697,7 +3734,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -3726,6 +3763,9 @@ export async function handleChatRequest(req, res, url) {
         if (dailyCheckinPrompt !== undefined) cfg.dailyCheckinPrompt = dailyCheckinPrompt;
         if (dailyCheckinTime !== undefined) cfg.dailyCheckinTime = dailyCheckinTime;
         if (dailyCheckinTimezone !== undefined) cfg.dailyCheckinTimezone = dailyCheckinTimezone;
+        if (dailyCheckinFrequencyValue !== undefined) cfg.dailyCheckinFrequencyValue = Math.max(1, Number(dailyCheckinFrequencyValue) || 1);
+        if (dailyCheckinFrequencyUnit !== undefined) cfg.dailyCheckinFrequencyUnit = dailyCheckinFrequencyUnit;
+        if (dailyCheckinSenderId !== undefined) cfg.dailyCheckinSenderId = dailyCheckinSenderId;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };
         saveConfig(cfg);
         return sendJson(res, 200, { ok: true });

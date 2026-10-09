@@ -331,6 +331,17 @@
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div class="field" style="flex:1;min-width:140px">
+          <label class="pra-label">Repeat Every</label>
+          <div style="display:flex;gap:8px">
+            <input class="pra-input" id="dailyCheckinFrequencyValue" type="number" min="1" style="width:70px;flex-shrink:0"/>
+            <select class="pra-input" id="dailyCheckinFrequencyUnit" style="flex:1">
+              <option value="days">Days</option>
+              <option value="weeks">Weeks</option>
+              <option value="months">Months</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="flex:1;min-width:140px">
           <label class="pra-label">Send Time</label>
           <input class="pra-input" id="dailyCheckinTime" type="time" style="width:100%"/>
         </div>
@@ -346,7 +357,12 @@
           </select>
         </div>
       </div>
-      <div class="pra-muted" style="font-size:.74rem;margin-top:-10px;margin-bottom:14px">The poller checks hourly, so a check-in lands within about an hour after this time, not to-the-minute.</div>
+      <div class="pra-muted" style="font-size:.74rem;margin-top:-10px;margin-bottom:14px">The poller checks hourly, so a check-in lands within about an hour after the time above, not to-the-minute (a month is treated as 30 days).</div>
+      <div class="field">
+        <label class="pra-label">Sent As</label>
+        <select class="pra-input" id="dailyCheckinSenderId" style="width:100%"></select>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Which staff member these check-in messages appear to come from. "Auto" picks whichever coach/admin happens to be in that student's group first — not predictable, and can vary group to group.</div>
+      </div>
 
       <div class="save-msg" id="automatedMessagesSaveMsg"></div>
     </div>
@@ -1269,6 +1285,16 @@ async function loadGymChannelOptions() {
   document.getElementById('onlineLevelTestChannelId').innerHTML = optionsHtml;
 }
 
+async function loadDailyCheckinSenderOptions() {
+  const r = await fetch('/api/admin/users');
+  if (!r.ok) return;
+  const { users } = await r.json();
+  const staff = users.filter(u => !u.archived && ['coach', 'admin', 'admin2'].includes(u.role))
+    .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
+  document.getElementById('dailyCheckinSenderId').innerHTML = '<option value="">— Auto (first coach/admin in the group) —</option>' +
+    staff.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.first)} ${escapeHtml(u.last)}</option>`).join('');
+}
+
 async function loadConfig() {
   const r = await fetch('/api/admin/chat-config');
   if (!r.ok) return;
@@ -1301,6 +1327,10 @@ async function loadConfig() {
   document.getElementById('dailyCheckinPrompt').value = d.dailyCheckinPrompt || '';
   document.getElementById('dailyCheckinTime').value = d.dailyCheckinTime || '09:00';
   document.getElementById('dailyCheckinTimezone').value = d.dailyCheckinTimezone || 'America/Anchorage';
+  document.getElementById('dailyCheckinFrequencyValue').value = d.dailyCheckinFrequencyValue || 1;
+  document.getElementById('dailyCheckinFrequencyUnit').value = d.dailyCheckinFrequencyUnit || 'days';
+  await loadDailyCheckinSenderOptions();
+  document.getElementById('dailyCheckinSenderId').value = d.dailyCheckinSenderId || '';
 
   const a = d.appointments || {};
   document.getElementById('apptDefaultDuration').value = String(a.defaultDurationMinutes || 15);
@@ -1437,6 +1467,9 @@ async function saveConfig() {
       dailyCheckinPrompt: document.getElementById('dailyCheckinPrompt').value,
       dailyCheckinTime: document.getElementById('dailyCheckinTime').value,
       dailyCheckinTimezone: document.getElementById('dailyCheckinTimezone').value,
+      dailyCheckinFrequencyValue: Number(document.getElementById('dailyCheckinFrequencyValue').value) || 1,
+      dailyCheckinFrequencyUnit: document.getElementById('dailyCheckinFrequencyUnit').value,
+      dailyCheckinSenderId: document.getElementById('dailyCheckinSenderId').value,
     }),
   });
   // This one function saves both sections' fields at once (the whole config
