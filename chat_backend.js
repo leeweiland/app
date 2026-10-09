@@ -2275,6 +2275,25 @@ function trimVideo(inputPath, outputPath, startSec, endSec) {
   ], { stdio: ["pipe", "pipe", "pipe"], timeout: 60000 });
 }
 
+// A training-protocol video uploaded straight off an iPhone (picked from
+// Photos, not recorded in-app) commonly arrives as video/quicktime with an
+// uncompressed PCM audio track ("sowt") -- Safari plays that fine (it's
+// QuickTime's own native format), but Chrome has no decoder registered for
+// either the container's declared MIME type or that audio codec, and a
+// <video> tag whose demuxer chokes on the audio track typically fails the
+// whole element, not just the sound -- that's what was actually showing up
+// as a black frame with a crossed-out play control on students' (mostly
+// Android) phones. Picture quality is never the problem -- it's already
+// H.264 -- so this is a fast remux (stream-copy the video, only the audio
+// actually gets transcoded), not a full re-encode.
+function remuxVideoForWeb(inputPath, outputPath) {
+  execFileSync(FFMPEG_EXE, [
+    "-y", "-i", inputPath,
+    "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+    "-f", "mp4", outputPath,
+  ], { stdio: ["pipe", "pipe", "pipe"], timeout: 120000 });
+}
+
 // One frame, one second in (skips a possible black/blank opening frame),
 // small enough to send straight to the vision model without extra resizing.
 function extractVideoFrame(videoPath) {
@@ -4544,9 +4563,40 @@ export async function handleChatRequest(req, res, url) {
           let fileName = "";
           bb.on("file", (name, stream, info) => {
             fileName = info.filename || `Training Protocol Video ${Date.now()}`;
-            uploadPromise = uploadStreamToDrive(stream, {
-              name: fileName, mimeType: info.mimeType, folderId: cfg.trainingProtocolFolderId, accessToken,
-            });
+            // mp4 already means H.264+AAC in practice (every upload path in
+            // this app that already produces mp4 -- the in-app recorder's
+            // trim, the chat video uploader -- encodes it that way) and is
+            // left alone. Anything else (most commonly video/quicktime, a
+            // coach picking a clip straight from an iPhone's camera roll)
+            // gets remuxed first -- see remuxVideoForWeb for why.
+            if (info.mimeType === "video/mp4") {
+              uploadPromise = uploadStreamToDrive(stream, {
+                name: fileName, mimeType: info.mimeType, folderId: cfg.trainingProtocolFolderId, accessToken,
+              });
+            } else {
+              const ext = extFromMime(info.mimeType, fileName);
+              const tempPath = join(tmpdir(), `protocol-video-${randomUUID()}${ext}`);
+              const outPath = tempPath + "-web.mp4";
+              uploadPromise = (async () => {
+                try {
+                  await new Promise((res2, rej2) => {
+                    const ws = createWriteStream(tempPath);
+                    stream.pipe(ws);
+                    ws.on("finish", res2);
+                    ws.on("error", rej2);
+                    stream.on("error", rej2);
+                  });
+                  remuxVideoForWeb(tempPath, outPath);
+                  const outName = fileName.replace(/\.[^.]+$/, "") + ".mp4";
+                  return await uploadStreamToDrive(createReadStream(outPath), {
+                    name: outName, mimeType: "video/mp4", folderId: cfg.trainingProtocolFolderId, accessToken,
+                  });
+                } finally {
+                  try { unlinkSync(tempPath); } catch {}
+                  try { unlinkSync(outPath); } catch {}
+                }
+              })();
+            }
           });
           bb.on("finish", async () => { try { resolve(uploadPromise ? await uploadPromise : null); } catch (e) { reject(e); } });
           bb.on("error", reject);
