@@ -567,8 +567,20 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
     // connection -- piping into an already-closed `res` is the single most
     // common way this hit the unhandled-'error' crash risk above, since it
     // happens on completely ordinary scrolling, not just flaky networks.
+    //
+    // 'close' fires on EVERY response, successful or not -- per Node's own
+    // docs it means "the response is completed, OR its underlying
+    // connection was terminated prematurely", not just the premature case.
+    // The first version of this handler destroyed driveReq unconditionally
+    // here, which tore down the upstream Google request out from under
+    // its own still-finishing pipe on literally every normal request too
+    // (confirmed live: logged "drive response aborted" on every single
+    // video load after deploying that version) -- truncating the response
+    // Chrome's video element was mid-way through reading, which is what
+    // actually left it stuck at readyState 0 forever. Only destroy when
+    // the response hadn't actually finished writing yet.
     res.on("error", () => { driveReq.destroy(); finish(); });
-    res.on("close", () => { driveReq.destroy(); finish(); });
+    res.on("close", () => { if (!res.writableEnded) driveReq.destroy(); finish(); });
     // A hung/never-responding Drive request previously left this Promise
     // (and the student's <video> element) waiting forever -- looked like
     // "nothing happens" when tapping play, with no error and no timeout to
