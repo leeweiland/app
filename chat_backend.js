@@ -524,7 +524,6 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
     // headersSent first, avoids that.
     let settled = false;
     const finish = () => { if (!settled) { settled = true; resolve(); } };
-    let diag = { gotHeaders: false, driveStatus: null, driveEnded: false };
     const headers = { Authorization: `Bearer ${accessToken}` };
     if (req.headers.range) headers.Range = req.headers.range;
     const driveReq = httpsRequest({
@@ -533,7 +532,6 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
       method: "GET",
       headers,
     }, driveRes => {
-      diag.gotHeaders = true; diag.driveStatus = driveRes.statusCode;
       const passHeaders = {};
       ["content-type", "content-length", "content-range", "accept-ranges"].forEach(h => {
         if (driveRes.headers[h]) passHeaders[h.replace(/(^|-)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase())] = driveRes.headers[h];
@@ -562,7 +560,7 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
       // just this one request.
       driveRes.on("error", (e) => { console.error("[streamDriveMedia] drive response", e.message); try { res.destroy(); } catch {} finish(); });
       driveRes.pipe(res);
-      driveRes.on("end", () => { diag.driveEnded = true; finish(); });
+      driveRes.on("end", finish);
     });
     // A student scrolling a video out of view (stepVideoLazyObserver pauses
     // it) or just navigating away mid-download destroys their end of the
@@ -582,11 +580,7 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
     // actually left it stuck at readyState 0 forever. Only destroy when
     // the response hadn't actually finished writing yet.
     res.on("error", () => { driveReq.destroy(); finish(); });
-    res.on("close", () => {
-      console.error("[streamDriveMedia DIAG] close -- writableEnded=" + res.writableEnded + " gotHeaders=" + diag.gotHeaders + " driveStatus=" + diag.driveStatus + " driveEnded=" + diag.driveEnded + " range=" + req.headers.range + " fileId=" + fileId);
-      if (!res.writableEnded) driveReq.destroy();
-      finish();
-    });
+    res.on("close", () => { if (!res.writableEnded) driveReq.destroy(); finish(); });
     // A hung/never-responding Drive request previously left this Promise
     // (and the student's <video> element) waiting forever -- looked like
     // "nothing happens" when tapping play, with no error and no timeout to
