@@ -4373,13 +4373,18 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
-        const { steps } = await readJsonBody(req);
+        const { steps, name } = await readJsonBody(req);
         if (!Array.isArray(steps)) return sendJson(res, 400, { error: "steps must be an array" });
         const all = readJson(TRAINING_PROTOCOLS_FILE, {});
         // Merge, not replace — a plain step save (e.g. dragging a step
         // around) must never silently wipe out the saved AI prompt sitting
-        // in this same per-client record.
-        all[targetUserId] = { ...all[targetUserId], steps, updatedAt: new Date().toISOString(), updatedBy: user.id };
+        // in this same per-client record. `name` is optional and only
+        // touched when actually sent (the inline title editor sends it on
+        // every save; every other caller of this same endpoint -- drag-
+        // reorder, add/delete step, undo/redo -- never includes it, so the
+        // existing protocolName rides along untouched exactly like
+        // lastAiPrompt already does above).
+        all[targetUserId] = { ...all[targetUserId], steps, ...(name !== undefined ? { protocolName: name } : {}), updatedAt: new Date().toISOString(), updatedBy: user.id };
         writeJson(TRAINING_PROTOCOLS_FILE, all);
         return sendJson(res, 200, { ok: true });
       }
