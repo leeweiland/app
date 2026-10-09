@@ -1026,6 +1026,7 @@
         <div class="pra-muted" style="font-size:.76rem;margin-bottom:8px">Members</div>
         <div id="groupInfoMembers"></div>
         <div class="pra-muted" style="font-size:.76rem;margin-top:16px;margin-bottom:8px">Add Members</div>
+        <input class="pra-input" id="groupInfoAddSearchInput" placeholder="Search contacts…" style="margin-bottom:8px"/>
         <div id="groupInfoAddList"></div>
       </div>
       <div style="padding:14px 22px 22px;flex-shrink:0">
@@ -6218,7 +6219,7 @@ function renderGroupContactsList() {
   document.getElementById('groupContactsList').innerHTML = visible.map(c => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(c)}</div>
-      <div>${c.first} ${c.last} <span class="pra-badge">${c.role}</span></div>
+      <div>${c.first} ${c.last}${roleBadgeHtml(c)}</div>
       <input type="checkbox" value="${c.id}" ${checkedIds.has(c.id) ? 'checked' : ''}/>
     </div>
   `).join('');
@@ -6240,7 +6241,7 @@ async function renderGroupInfoModal() {
   document.getElementById('groupInfoMembers').innerHTML = convo.participants.map(p => `
     <div class="contact-row">
       <div class="pra-avatar">${avatarHtml(p)}</div>
-      <div>${p.first} ${p.last}${coachQuotaBadgeHtml(p)}${p.id === me.id ? ' (you)' : ''} <span class="pra-badge">${p.role}</span></div>
+      <div>${p.first} ${p.last}${coachQuotaBadgeHtml(p)}${p.id === me.id ? ' (you)' : ''}${roleBadgeHtml(p)}</div>
       ${p.id === me.id ? '' : `<button class="pra-btn pra-btn-ghost remove-member-btn" data-id="${p.id}" data-name="${p.first} ${p.last}" style="padding:4px 10px;font-size:.72rem">Remove</button>`}
     </div>
   `).join('');
@@ -6256,21 +6257,35 @@ async function renderGroupInfoModal() {
   });
 
   await loadContacts();
-  const memberIds = new Set(convo.participantIds);
-  const available = contacts.filter(c => !memberIds.has(c.id));
-  document.getElementById('groupInfoAddList').innerHTML = available.length
-    ? available.map(c => `
-        <div class="contact-row">
-          <div class="pra-avatar">${avatarHtml(c)}</div>
-          <div>${c.first} ${c.last} <span class="pra-badge">${c.role}</span></div>
-          <input type="checkbox" value="${c.id}"/>
-        </div>
-      `).join('')
-    : '<div class="pra-muted" style="font-size:.78rem">Everyone you can message is already in this group.</div>';
+  document.getElementById('groupInfoAddSearchInput').value = '';
+  renderGroupInfoAddList();
 
   openModal('groupInfoModal');
 }
 document.getElementById('groupInfoBtn').onclick = renderGroupInfoModal;
+
+// Same filter-in-place pattern as renderGroupContactsList (new-group
+// modal) -- preserves whatever's already checked across a re-filter, so
+// typing a search term after checking a few boxes doesn't silently drop
+// the selection the moment the matching rows change.
+function renderGroupInfoAddList() {
+  const convo = conversations.find(c => c.id === activeConvoId);
+  if (!convo) return;
+  const memberIds = new Set(convo.participantIds);
+  const q = document.getElementById('groupInfoAddSearchInput').value.trim().toLowerCase();
+  const checkedIds = new Set(Array.from(document.querySelectorAll('#groupInfoAddList input:checked')).map(el => el.value));
+  const available = contacts.filter(c => !memberIds.has(c.id) && (!q || `${c.first} ${c.last}`.toLowerCase().includes(q)));
+  document.getElementById('groupInfoAddList').innerHTML = available.length
+    ? available.map(c => `
+        <div class="contact-row">
+          <div class="pra-avatar">${avatarHtml(c)}</div>
+          <div>${c.first} ${c.last}${roleBadgeHtml(c)}</div>
+          <input type="checkbox" value="${c.id}" ${checkedIds.has(c.id) ? 'checked' : ''}/>
+        </div>
+      `).join('')
+    : `<div class="pra-muted" style="font-size:.78rem">${q ? 'No contacts match.' : 'Everyone you can message is already in this group.'}</div>`;
+}
+document.getElementById('groupInfoAddSearchInput').addEventListener('input', renderGroupInfoAddList);
 
 document.getElementById('threadChannelBtn').onclick = async () => {
   const convo = conversations.find(c => c.id === activeConvoId);
