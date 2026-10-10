@@ -734,12 +734,29 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     const video = entry.target;
     if (entry.isIntersecting) {
-      if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+      const freshlyAssigned = !!video.dataset.src;
+      if (freshlyAssigned) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
       // Your Flow renders its videos with data-autoplay="false" (see
       // renderStepContent) -- still loads the poster frame above, just
       // never auto-decodes/plays, since fitCanvasToView() can put every
       // step in the whole protocol "in view" simultaneously there.
-      if (video.dataset.autoplay !== 'false') video.play().catch(() => {});
+      if (video.dataset.autoplay !== 'false') {
+        // Chat's own video bubbles (chatMediaLazyObserver, chat.html) never
+        // call .play() at all -- those work fine on a real iPhone, these
+        // don't (MEDIA_ERR_SRC_NOT_SUPPORTED/NETWORK_NO_SOURCE, confirmed
+        // via reportVideoError's own log on a real device), and calling
+        // .play() in the exact same tick as assigning a brand new .src is
+        // the other concrete difference between them -- Chrome tolerates it,
+        // WebKit's stricter media element state machine can apparently mark
+        // the whole source unplayable instead of just queuing the request.
+        // Only matters right after a fresh assignment -- scrolling back
+        // into view later, readyState is already past HAVE_NOTHING.
+        if (freshlyAssigned) {
+          video.addEventListener('loadeddata', () => video.play().catch(() => {}), { once: true });
+        } else {
+          video.play().catch(() => {});
+        }
+      }
     } else {
       video.pause();
     }
@@ -2131,8 +2148,15 @@ const videoThumbObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     const video = entry.target;
     if (entry.isIntersecting) {
-      if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
-      video.play().catch(() => {});
+      const freshlyAssigned = !!video.dataset.src;
+      if (freshlyAssigned) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+      // Same play()-in-the-same-tick-as-a-fresh-src fix as
+      // stepVideoLazyObserver above, for the same reason.
+      if (freshlyAssigned) {
+        video.addEventListener('loadeddata', () => video.play().catch(() => {}), { once: true });
+      } else {
+        video.play().catch(() => {});
+      }
     } else {
       video.pause();
     }

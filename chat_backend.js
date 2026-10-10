@@ -3472,6 +3472,16 @@ export async function handleChatRequest(req, res, url) {
   const mediaMatch = p.match(/^\/api\/chat\/media\/([^/]+)$/);
   if (mediaMatch && (req.method === "GET" || req.method === "HEAD")) {
     const mediaUser = getSessionUser(req);
+    // Temporary diagnostic alongside reportVideoError (training-protocol.html)
+    // -- that one only shows what the BROWSER's <video> element saw
+    // (MEDIA_ERR_SRC_NOT_SUPPORTED / NETWORK_NO_SOURCE on a real iPhone, no
+    // readable error message), not whether this request even reached here
+    // or who it arrived as. A real possibility for that exact symptom is
+    // iOS's native video pipeline (AVFoundation, a separate process from
+    // WKWebView's own fetch/XHR stack) not sharing the session cookie --
+    // this line settles that one way or the other on the next retry. Has
+    // the Cookie header's own presence/absence logged (not its value).
+    console.log("[media request]", JSON.stringify({ method: req.method, fileId: mediaMatch[1], hasCookieHeader: !!req.headers.cookie, authenticated: !!mediaUser, userAgent: req.headers["user-agent"] || "" }));
     if (!mediaUser) { res.writeHead(401); res.end(); return true; }
     const fileId = mediaMatch[1];
     // Only allow access if this file is attached to a message in a conversation
