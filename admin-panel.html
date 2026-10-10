@@ -195,7 +195,24 @@
     <div class="pra-panel section" id="usersSection">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
       <div class="users-toolbar">
-        <input class="pra-input" id="userSearchInput" type="search" placeholder="Search name or email…" autocomplete="off"/>
+        <!-- Chrome deliberately ignores autocomplete="off" on fields it
+             heuristically decides look like a login/email field (has for
+             years, specifically to keep its own password-manager UX from
+             being blockable by sites) -- the light-highlighted box with
+             Lee's own saved email suggested into it is that heuristic
+             firing, not a real stuck .value (already handled separately,
+             see init()'s own reset + the pageshow listener below). Two
+             decoy fields Chrome can offer ITS suggestion into instead,
+             positioned off-screen but still focusable/visible-to-Chrome
+             (display:none is invisible to the autofill engine, not just
+             the user), ahead of the real field in tab/DOM order -- a
+             commonly-documented working mitigation where autocomplete="off"
+             alone isn't. Also dropped "email" from the real field's own
+             placeholder, since that wording alone is part of what Chrome's
+             heuristic keys off of. -->
+        <input type="text" name="username" autocomplete="username" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" tabindex="-1" aria-hidden="true"/>
+        <input type="password" name="password" autocomplete="current-password" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" tabindex="-1" aria-hidden="true"/>
+        <input class="pra-input" id="userSearchInput" type="search" placeholder="Search users…" autocomplete="off" data-lpignore="true" data-1p-ignore="true"/>
         <button class="pra-btn" id="addUserBtn" style="white-space:nowrap">+ Add User</button>
       </div>
       <div id="usersTableWrap">Loading…</div>
