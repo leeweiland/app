@@ -2022,24 +2022,35 @@ async function loadConversations() {
 // conversation exists with them yet — no separate "New Chat" step. Contacts
 // with an existing DM show that conversation's preview; the rest show as
 // "No messages yet" and starting one is just clicking them.
+// A coach/admin's sidebar entry for a client with no messages yet (a
+// brand-new signup, or the welcome message is turned off) is exactly the
+// one row with nothing conversational to preview — "No messages yet" told
+// staff nothing they could act on. Clicking in opens the Levels panel for
+// a DM (see maybeOpenLevelsModal) or the group's own member list/kickoff
+// info, so naming that directly gives staff an actual reason to click
+// instead of skipping past what looks like an inactive thread.
+const EMPTY_CLIENT_PREVIEW = 'Click to see Student Profile, Training Type, and Levels';
 function buildDirectory() {
-  const items = conversations.map(c => ({
-    key: 'c:' + c.id, convoId: c.id, virtual: false,
-    name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group',
-    preview: previewText(c.lastMessage),
-    timestamp: c.lastMessage?.createdAt || c.createdAt,
-    favorite: !!c.favorite,
-    pinned: !!c.pinned,
-    isChannel: !!c.isChannel,
-    hasClient: c.type === 'group' && c.participants.some(p => isClientRole(p.role)),
-    unread: !!c.unread,
-    unreadCount: c.unreadCount || 0,
-    renewal: c.renewal || null,
-    // Only ever set when the last message was mine (see the backend's
-    // lastMessage.status) — used to show a read-receipt tick in the
-    // unread-count badge's slot once there's nothing left to count.
-    lastMessageStatus: c.lastMessage?.status,
-  }));
+  const items = conversations.map(c => {
+    const involvesClient = c.participants.some(p => isClientRole(p.role));
+    return {
+      key: 'c:' + c.id, convoId: c.id, virtual: false,
+      name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group',
+      preview: (!c.lastMessage && involvesClient && isStaffMe()) ? EMPTY_CLIENT_PREVIEW : previewText(c.lastMessage),
+      timestamp: c.lastMessage?.createdAt || c.createdAt,
+      favorite: !!c.favorite,
+      pinned: !!c.pinned,
+      isChannel: !!c.isChannel,
+      hasClient: c.type === 'group' && involvesClient,
+      unread: !!c.unread,
+      unreadCount: c.unreadCount || 0,
+      renewal: c.renewal || null,
+      // Only ever set when the last message was mine (see the backend's
+      // lastMessage.status) — used to show a read-receipt tick in the
+      // unread-count badge's slot once there's nothing left to count.
+      lastMessageStatus: c.lastMessage?.status,
+    };
+  });
   const dmContactIds = new Set(
     conversations.filter(c => c.type === 'dm').map(c => otherParticipant(c)?.id)
   );
@@ -2052,7 +2063,8 @@ function buildDirectory() {
       // favoriting (or a real message) creates the conversation for real.
       key: 'u:' + c.id, contactId: c.id, virtual: true, renewal: c.renewal || null,
       name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
-      preview: 'No messages yet', timestamp: c.createdAt,
+      preview: (isClientRole(c.role) && isStaffMe()) ? EMPTY_CLIENT_PREVIEW : 'No messages yet',
+      timestamp: c.createdAt,
     });
   });
   items.sort((a, b) => {
