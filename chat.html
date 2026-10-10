@@ -2029,7 +2029,7 @@ async function loadConversations() {
 // a DM (see maybeOpenLevelsModal) or the group's own member list/kickoff
 // info, so naming that directly gives staff an actual reason to click
 // instead of skipping past what looks like an inactive thread.
-const EMPTY_CLIENT_PREVIEW = 'Click to see Student Profile, Training Type, and Levels';
+const EMPTY_CLIENT_PREVIEW = 'Click to see Profile';
 function buildDirectory() {
   const items = conversations.map(c => {
     const involvesClient = c.participants.some(p => isClientRole(p.role));
