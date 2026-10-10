@@ -40,6 +40,11 @@ const CONFIG_FILE = "chat_admin_config.json";
 const RESETS_FILE = "chat_password_resets.json";
 const UPLOAD_COUNTERS_FILE = "chat_upload_counters.json";
 const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
+// Opaque sentinel key the Flow Builder's shared draft is stored under in
+// TRAINING_PROTOCOLS_FILE (training-protocol.html's BUILDER_PROTOCOL_ID) --
+// never a real user id, never validated against USERS_FILE, just a second
+// constant string so both sides of "the builder draft" agree on it.
+const BUILDER_PROTOCOL_ID = "__builder__";
 const FAVORITES_FILE = "chat_favorites.json";
 const BLOCKS_FILE = "chat_blocks.json";
 const REPORTS_FILE = "chat_reports.json";
@@ -310,6 +315,7 @@ export function getConfig() {
     dailyCheckinFrequencyValue: 1,
     dailyCheckinFrequencyUnit: "days",
     dailyCheckinSenderId: "",
+    defaultProtocolEnabled: false,
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
   ["profilePhotosFolderId", "chatImagesFolderId", "chatVideosFolderId", "trainingProtocolFolderId", "trainingProtocolVideoLibraryFolderId", "powerbaticsVideosFolderId", "favoritesFolderId", "intakeFormsFolderId", "clientNotesFolderId", "callRecordingsFolderId", "bodyScanPhotosFolderId", "nutritionPhotosFolderId", "gymTrainingFolderId", "gymLevelTestFolderId", "physiqueMontageFolderId"].forEach(k => {
@@ -342,6 +348,7 @@ export function getConfig() {
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
+  if (cfg.defaultProtocolEnabled === undefined) cfg.defaultProtocolEnabled = false;
   if (cfg.physiqueMontageFolderId === undefined) cfg.physiqueMontageFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
@@ -2828,6 +2835,26 @@ function syncDefaultGroups() {
         notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
       });
     }
+    // Same "clone with fresh step/parent ids" shape as POST .../apply
+    // (toAllBlank) -- reads the builder draft fresh each time rather than
+    // a snapshot taken when the toggle was flipped, so editing the draft
+    // later changes what the NEXT new student gets without needing the
+    // toggle re-flipped.
+    if (cfg.defaultProtocolEnabled) {
+      const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+      const draft = allProtocols[BUILDER_PROTOCOL_ID];
+      if (draft?.steps?.length) {
+        let changed = false;
+        newlyCreatedGroups.forEach(({ person }) => {
+          const idMap = new Map();
+          draft.steps.forEach(s => idMap.set(s.id, randomUUID()));
+          const clonedSteps = draft.steps.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
+          allProtocols[person.id] = { ...allProtocols[person.id], steps: clonedSteps, protocolName: draft.protocolName || null, updatedAt: new Date().toISOString(), updatedBy: null };
+          changed = true;
+        });
+        if (changed) writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
+      }
+    }
   }
 }
 
@@ -4379,7 +4406,7 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
-    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply"];
+    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply", "default-protocol"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
       const targetUserId = protocolMatch[1];
@@ -4897,6 +4924,27 @@ export async function handleChatRequest(req, res, url) {
       }
       writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
       return sendJson(res, 200, { ok: true, appliedCount });
+    }
+
+    // Whether the shared Flow Builder draft should be auto-applied to
+    // every brand new online/gym client going forward (see syncDefaultGroups,
+    // which is what actually clones it onto a new student the moment their
+    // own personal group gets created). A plain boolean on the admin config
+    // rather than snapshotting the draft's steps anywhere -- toggling this
+    // on always means "whatever the builder draft currently holds," same
+    // live-read relationship Apply's "everyone blank" case already has with
+    // the draft, not a frozen copy from the moment the toggle was flipped.
+    if (p === "/api/chat/training-protocol/default-protocol" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      return sendJson(res, 200, { enabled: !!getConfig().defaultProtocolEnabled });
+    }
+    if (p === "/api/chat/training-protocol/default-protocol" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { enabled } = await readJsonBody(req);
+      const cfg = getConfig();
+      cfg.defaultProtocolEnabled = !!enabled;
+      saveConfig(cfg);
+      return sendJson(res, 200, { ok: true, enabled: cfg.defaultProtocolEnabled });
     }
 
     // ─── VAPID public key ───────────────────────────────────────────────

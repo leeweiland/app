@@ -68,6 +68,14 @@
   #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; }
   #protocolTitleInput.tile-val-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   #protocolTitleInput.tile-val-input[readonly] { cursor: default; }
+  /* .pra-toggle is admin-panel.html's own locally-defined iOS-style
+     checkbox (not in the shared design system -- same situation
+     .tile-val-input above was in) -- copied over rather than left to fall
+     back to a plain unstyled checkbox. */
+  .pra-toggle { appearance: none; -webkit-appearance: none; position: relative; width: 34px; height: 20px; flex-shrink: 0; background: var(--pra-border); border-radius: 10px; cursor: pointer; transition: background .15s; margin: 0; }
+  .pra-toggle::before { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .pra-toggle:checked { background: var(--pra-blue); }
+  .pra-toggle:checked::before { transform: translateX(14px); }
   .back-to-chat-btn { flex-shrink: 0; padding: 5px 14px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .8rem; cursor: pointer; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .view-mode-toggle { display: flex; gap: 6px; }
@@ -239,6 +247,10 @@
       </div>
       <input class="tile-val-input" id="protocolTitleInput" placeholder="Name this protocol…" style="display:none;width:100%;text-align:center;font-size:1.1rem;font-weight:600;color:#fff;margin:2px 0 2px"/>
       <div class="pra-muted" id="protocolBuilderNote" style="display:none;font-size:.78rem;text-align:center;margin:0 0 10px">Editing the shared Flow Builder draft — not tied to any student until you Apply it.</div>
+      <label id="defaultProtocolRow" style="display:none;align-items:center;justify-content:center;gap:8px;font-size:.78rem;color:var(--pra-dim);margin:0 0 10px;cursor:pointer">
+        <input type="checkbox" class="pra-toggle" id="defaultProtocolToggle"/>
+        Auto-apply this draft to every new student
+      </label>
       <div class="protocol-head-row">
         <div class="protocol-head-controls-left">
           <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
@@ -1016,6 +1028,8 @@ async function setProtocolMode(mode, builder) {
   document.querySelectorAll('.view-mode-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode && (btn.dataset.builder === 'true') === builder);
   });
+  document.getElementById('defaultProtocolRow').style.display = (canEdit && editingBuilder) ? 'flex' : 'none';
+  if (builderChanged && builder) loadDefaultProtocolToggle();
   if (builderChanged) {
     undoStack = []; redoStack = [];
     updateUndoRedoButtons();
@@ -1045,6 +1059,32 @@ function setupViewModeToggle() {
     renderPageView();
   };
 }
+
+// One shared setting (not per-coach) -- whoever flips it is deciding what
+// EVERY new online/gym client gets from here on, not just their own.
+async function loadDefaultProtocolToggle() {
+  const toggle = document.getElementById('defaultProtocolToggle');
+  try {
+    const r = await fetch('/api/chat/training-protocol/default-protocol');
+    if (!r.ok) return;
+    const d = await r.json();
+    toggle.checked = !!d.enabled;
+  } catch {}
+}
+document.getElementById('defaultProtocolToggle').addEventListener('change', async (e) => {
+  const enabled = e.target.checked;
+  e.target.disabled = true;
+  try {
+    const r = await fetch('/api/chat/training-protocol/default-protocol', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
+    });
+    if (!r.ok) { e.target.checked = !enabled; } // revert on failure
+  } catch {
+    e.target.checked = !enabled;
+  } finally {
+    e.target.disabled = false;
+  }
+});
 
 function render() {
   const emptyHint = document.getElementById('emptyHint');
