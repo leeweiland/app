@@ -2022,13 +2022,17 @@ async function loadConversations() {
 // conversation exists with them yet — no separate "New Chat" step. Contacts
 // with an existing DM show that conversation's preview; the rest show as
 // "No messages yet" and starting one is just clicking them.
-// A coach/admin's sidebar entry for a client with no messages yet (a
-// brand-new signup, or the welcome message is turned off) is exactly the
-// one row with nothing conversational to preview — "No messages yet" told
-// staff nothing they could act on. Clicking in opens the Levels panel for
-// a DM (see maybeOpenLevelsModal) or the group's own member list/kickoff
-// info, so naming that directly gives staff an actual reason to click
-// instead of skipping past what looks like an inactive thread.
+// A STUDENT's directory listing includes every other client too (see
+// /api/chat/contacts' own comment -- everyone's visible, canCreateDm() is
+// the actual messaging gate), and clicking one opens a read-only profile
+// popup rather than a conversation -- "No messages yet" was describing a
+// conversation that was never going to exist in the first place, when
+// what's actually true and useful is "there's a profile here to look at."
+// Staff do NOT get this: they have real reasons to message a quiet
+// thread, and "No messages yet" / the real activity already tells them
+// that correctly (previewText below, unchanged for them -- this was
+// originally flipped to only show for staff, backwards from what was
+// actually asked for).
 const EMPTY_CLIENT_PREVIEW = 'Click to see Profile';
 function buildDirectory() {
   const items = conversations.map(c => {
@@ -2036,7 +2040,7 @@ function buildDirectory() {
     return {
       key: 'c:' + c.id, convoId: c.id, virtual: false,
       name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group',
-      preview: (!c.lastMessage && involvesClient && isStaffMe()) ? EMPTY_CLIENT_PREVIEW : previewText(c.lastMessage),
+      preview: previewText(c.lastMessage),
       timestamp: c.lastMessage?.createdAt || c.createdAt,
       favorite: !!c.favorite,
       pinned: !!c.pinned,
@@ -2063,7 +2067,7 @@ function buildDirectory() {
       // favoriting (or a real message) creates the conversation for real.
       key: 'u:' + c.id, contactId: c.id, virtual: true, renewal: c.renewal || null,
       name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
-      preview: (isClientRole(c.role) && isStaffMe()) ? EMPTY_CLIENT_PREVIEW : 'No messages yet',
+      preview: (isClientRole(c.role) && !isStaffMe()) ? EMPTY_CLIENT_PREVIEW : 'No messages yet',
       timestamp: c.createdAt,
     });
   });
