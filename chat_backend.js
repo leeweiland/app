@@ -482,7 +482,17 @@ export function readJsonBody(req) {
   });
 }
 export function sendJson(res, status, obj) {
-  res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+  // Every JSON API response in this file goes through here, including
+  // /api/chat/conversations and /api/chat/contacts -- had no Cache-Control
+  // of its own at all. The static HTML/JS files already got an explicit
+  // no-store fix (see server.js) specifically because WKWebView's own
+  // networking layer applies HTTP heuristic caching (RFC 7234) by default
+  // when nothing forbids it, unlike how Chrome's fetch() typically treats
+  // an API-shaped response -- a real, previously-unexamined gap that would
+  // explain stale sidebar data surviving even a full iOS app reinstall
+  // (if it's cached somewhere outside the app's own per-install data store)
+  // while the exact same request always came back fresh on Android/desktop.
+  res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" });
   res.end(JSON.stringify(obj));
   return true; // signals "handled" to the caller's fall-through check
 }
