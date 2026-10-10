@@ -609,6 +609,51 @@ export async function streamDriveMedia(req, res, fileId, accessToken) {
   });
 }
 
+// Answers a HEAD on the same media proxy with the headers a GET would send
+// (Content-Type/Content-Length/Accept-Ranges), no body -- see the route
+// above for why this needs to exist at all (iOS's native video pipeline
+// probes with HEAD before it'll attempt real playback). Pulled from
+// files.get metadata rather than issuing a HEAD at Google's alt=media
+// endpoint -- a metadata call is both cheaper and something Drive's API
+// actually documents supporting, whereas the media download endpoint's own
+// HEAD behavior isn't.
+export async function streamDriveMediaHead(res, fileId, accessToken) {
+  await new Promise((resolve) => {
+    const driveReq = httpsRequest({
+      hostname: "www.googleapis.com",
+      path: `/drive/v3/files/${fileId}?fields=mimeType,size`,
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }, driveRes => {
+      let body = "";
+      driveRes.on("data", c => body += c);
+      driveRes.on("end", () => {
+        try {
+          const meta = JSON.parse(body);
+          if (driveRes.statusCode >= 300 || !meta.mimeType) { res.writeHead(driveRes.statusCode >= 300 ? driveRes.statusCode : 502); res.end(); resolve(); return; }
+          res.writeHead(200, {
+            "Content-Type": meta.mimeType,
+            ...(meta.size ? { "Content-Length": meta.size } : {}),
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, max-age=31536000, immutable",
+          });
+          res.end();
+        } catch (e) {
+          res.writeHead(502); res.end();
+        }
+        resolve();
+      });
+    });
+    driveReq.on("error", (e) => {
+      console.error("[streamDriveMediaHead] drive request", e.message);
+      try { res.writeHead(502); res.end(); } catch {}
+      resolve();
+    });
+    driveReq.setTimeout(10000, () => driveReq.destroy(new Error("Drive metadata fetch timed out")));
+    driveReq.end();
+  });
+}
+
 // ── Video calls (Daily.co) ──────────────────────────────────────────────
 // Thin REST wrapper — no SDK installed for this, same "hand-rolled fetch
 // against the documented REST endpoint" approach as the Drive/Sheets calls
@@ -3425,7 +3470,7 @@ export async function handleChatRequest(req, res, url) {
   // Handled before the generic /api/chat/ prefix guard below, since that
   // guard's own catch-all 404 would otherwise swallow this route first.
   const mediaMatch = p.match(/^\/api\/chat\/media\/([^/]+)$/);
-  if (mediaMatch && req.method === "GET") {
+  if (mediaMatch && (req.method === "GET" || req.method === "HEAD")) {
     const mediaUser = getSessionUser(req);
     if (!mediaUser) { res.writeHead(401); res.end(); return true; }
     const fileId = mediaMatch[1];
@@ -3459,7 +3504,20 @@ export async function handleChatRequest(req, res, url) {
     }
     try {
       const accessToken = await getDriveAccessToken();
-      await streamDriveMedia(req, res, fileId, accessToken);
+      if (req.method === "HEAD") {
+        // iOS's native video pipeline (what Safari/WKWebView actually plays
+        // a <video> through, as opposed to Chrome's own) is documented to
+        // probe a media URL with HEAD before ever issuing the real ranged
+        // GET, to learn Content-Type/Content-Length/Accept-Ranges up front
+        // -- this route never answered HEAD at all (fell through to every
+        // other route's 404), which is a very plausible reason students on
+        // iPhone kept seeing a poster frame but a permanently-disabled play
+        // control even after the codec/container issues were fixed: the
+        // probe itself was failing before playback was ever attempted.
+        await streamDriveMediaHead(res, fileId, accessToken);
+      } else {
+        await streamDriveMedia(req, res, fileId, accessToken);
+      }
     } catch (e) {
       res.writeHead(500); res.end("Media fetch failed: " + e.message);
     }
@@ -4425,22 +4483,38 @@ export async function handleChatRequest(req, res, url) {
           steps: all[targetUserId]?.steps || [],
           lastAiPrompt: all[targetUserId]?.lastAiPrompt || "",
           protocolName: all[targetUserId]?.protocolName || "",
+          // Which saved template (if any) this protocol was saved-as/
+          // loaded-from -- see training-protocol.html's loadedTemplateId,
+          // which this is what actually survives a page reload for. Without
+          // persisting it here, the link only ever lived in that one page
+          // load's own memory: renaming the title would sync the template
+          // exactly once, then silently stop the moment the coach came back
+          // to a fresh load of the same page, which is exactly what looked
+          // like the sync "not working" even though it just ran that one
+          // time already.
+          templateId: all[targetUserId]?.templateId || null,
         });
       }
       if (req.method === "POST") {
         if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
-        const { steps, name } = await readJsonBody(req);
+        const { steps, name, templateId } = await readJsonBody(req);
         if (!Array.isArray(steps)) return sendJson(res, 400, { error: "steps must be an array" });
         const all = readJson(TRAINING_PROTOCOLS_FILE, {});
         // Merge, not replace — a plain step save (e.g. dragging a step
         // around) must never silently wipe out the saved AI prompt sitting
-        // in this same per-client record. `name` is optional and only
-        // touched when actually sent (the inline title editor sends it on
-        // every save; every other caller of this same endpoint -- drag-
-        // reorder, add/delete step, undo/redo -- never includes it, so the
-        // existing protocolName rides along untouched exactly like
+        // in this same per-client record. `name`/`templateId` are optional
+        // and only touched when actually sent (the inline title editor
+        // sends `name` on every save, Save/Load Template send `templateId`
+        // once when establishing the link; every other caller of this same
+        // endpoint -- drag-reorder, add/delete step, undo/redo -- never
+        // includes either, so both ride along untouched exactly like
         // lastAiPrompt already does above).
-        all[targetUserId] = { ...all[targetUserId], steps, ...(name !== undefined ? { protocolName: name } : {}), updatedAt: new Date().toISOString(), updatedBy: user.id };
+        all[targetUserId] = {
+          ...all[targetUserId], steps,
+          ...(name !== undefined ? { protocolName: name } : {}),
+          ...(templateId !== undefined ? { templateId } : {}),
+          updatedAt: new Date().toISOString(), updatedBy: user.id,
+        };
         writeJson(TRAINING_PROTOCOLS_FILE, all);
         return sendJson(res, 200, { ok: true });
       }

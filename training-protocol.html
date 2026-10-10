@@ -455,10 +455,11 @@ const sourceConvoId = params.get('convo');
 let me = null, canEdit = false, steps = [], protocolName = '';
 // Which saved template (if any) this protocol was saved-as/loaded-from --
 // null means "none," in which case renaming the title here has nothing to
-// propagate to. Reset on every loadSteps() (switching to a different
-// protocol/activeId entirely -- Your Flow <-> Flow Builder, or a different
-// student -- means whatever template you'd linked to a moment ago no
-// longer has anything to do with what's on screen now).
+// propagate to. Persisted server-side per protocol record (see loadSteps,
+// which reads it fresh on every load) rather than just kept in memory here
+// -- an earlier version of this only lived in this one page load's own
+// state, so the sync worked exactly once and then silently stopped the
+// moment the coach came back to a fresh load of the same page.
 let loadedTemplateId = null;
 // Which record loadSteps()/saveSteps()/the AI-generate call actually read
 // from and write to -- targetUserId (this student's own) in Your Flow/Your
@@ -707,7 +708,7 @@ async function loadSteps() {
   steps = migrateSteps(d.steps || []);
   lastAiPrompt = d.lastAiPrompt || '';
   protocolName = d.protocolName || '';
-  loadedTemplateId = null;
+  loadedTemplateId = d.templateId || null;
   updateProtocolTitleHint();
   render();
 }
@@ -1713,11 +1714,21 @@ function setupProtocolTemplates() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, steps }),
     });
     if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
-    // Links this session to the template just saved -- see loadedTemplateId
-    // and saveProtocolName -- so renaming the title afterward keeps this
-    // same entry's name in sync instead of drifting the moment you save.
+    // Links this protocol to the template just saved -- see
+    // loadedTemplateId and saveProtocolName -- so renaming the title
+    // afterward (including after a page reload, since this persists it)
+    // keeps this same entry's name in sync instead of drifting. A second,
+    // small save rather than threading templateId through saveSteps()
+    // itself -- every other caller of that (drag-reorder, add/delete step,
+    // undo/redo) has no business ever touching this field.
     const { template } = await r.json().catch(() => ({}));
-    if (template?.id) loadedTemplateId = template.id;
+    if (template?.id) {
+      loadedTemplateId = template.id;
+      fetch('/api/chat/training-protocol/' + activeId, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps, templateId: template.id }),
+      }).catch(() => {});
+    }
     closeModal('saveProtocolTemplateModal');
   };
 
@@ -1845,13 +1856,20 @@ async function renderProtocolTemplateList() {
       const { template } = await fr.json();
       snapshotBeforeChange();
       steps = cloneStepsWithFreshIds(template.steps);
-      // Links this session to the template just loaded -- see
+      // Links this protocol to the template just loaded -- see
       // loadedTemplateId and saveProtocolName -- so renaming the title
-      // afterward (the whole point of loading it in the first place, often)
-      // keeps this same entry's saved name in sync instead of drifting.
+      // afterward (the whole point of loading it in the first place, often,
+      // and surviving a page reload since this persists it) keeps this
+      // same entry's saved name in sync instead of drifting. A direct save
+      // (not saveSteps(), which never sends templateId) is what actually
+      // persists the link -- every other caller of saveSteps() has no
+      // business ever touching this field.
       loadedTemplateId = template.id;
       render();
-      await saveSteps();
+      await fetch('/api/chat/training-protocol/' + activeId, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steps, templateId: template.id }),
+      });
       closeModal('loadProtocolTemplateModal');
     };
     row.querySelector('.template-delete-btn').onclick = async (e) => {
