@@ -453,6 +453,13 @@ const params = new URLSearchParams(location.search);
 const targetUserId = params.get('userId');
 const sourceConvoId = params.get('convo');
 let me = null, canEdit = false, steps = [], protocolName = '';
+// Which saved template (if any) this protocol was saved-as/loaded-from --
+// null means "none," in which case renaming the title here has nothing to
+// propagate to. Reset on every loadSteps() (switching to a different
+// protocol/activeId entirely -- Your Flow <-> Flow Builder, or a different
+// student -- means whatever template you'd linked to a moment ago no
+// longer has anything to do with what's on screen now).
+let loadedTemplateId = null;
 // Which record loadSteps()/saveSteps()/the AI-generate call actually read
 // from and write to -- targetUserId (this student's own) in Your Flow/Your
 // Page mode, or the shared BUILDER_PROTOCOL_ID sentinel in Flow Builder/
@@ -681,6 +688,16 @@ async function saveProtocolName() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ steps, name }),
   });
+  // Keeps whichever template this protocol was saved-as/loaded-from (see
+  // loadedTemplateId) showing the same name as the title itself -- best-
+  // effort, a failure here is never worth surfacing over the rename that
+  // already succeeded above.
+  if (loadedTemplateId && name) {
+    fetch('/api/chat/protocol-templates/' + loadedTemplateId, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+  }
 }
 
 async function loadSteps() {
@@ -690,6 +707,7 @@ async function loadSteps() {
   steps = migrateSteps(d.steps || []);
   lastAiPrompt = d.lastAiPrompt || '';
   protocolName = d.protocolName || '';
+  loadedTemplateId = null;
   updateProtocolTitleHint();
   render();
 }
@@ -1695,6 +1713,11 @@ function setupProtocolTemplates() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, steps }),
     });
     if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not save template.'); return; }
+    // Links this session to the template just saved -- see loadedTemplateId
+    // and saveProtocolName -- so renaming the title afterward keeps this
+    // same entry's name in sync instead of drifting the moment you save.
+    const { template } = await r.json().catch(() => ({}));
+    if (template?.id) loadedTemplateId = template.id;
     closeModal('saveProtocolTemplateModal');
   };
 
@@ -1822,6 +1845,11 @@ async function renderProtocolTemplateList() {
       const { template } = await fr.json();
       snapshotBeforeChange();
       steps = cloneStepsWithFreshIds(template.steps);
+      // Links this session to the template just loaded -- see
+      // loadedTemplateId and saveProtocolName -- so renaming the title
+      // afterward (the whole point of loading it in the first place, often)
+      // keeps this same entry's saved name in sync instead of drifting.
+      loadedTemplateId = template.id;
       render();
       await saveSteps();
       closeModal('loadProtocolTemplateModal');

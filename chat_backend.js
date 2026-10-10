@@ -5071,6 +5071,23 @@ export async function handleChatRequest(req, res, url) {
       writeJson(PROTOCOL_TEMPLATES_FILE, next);
       return sendJson(res, 200, { ok: true });
     }
+    // Keeps a template's own saved name in sync with the title of whatever
+    // protocol it was saved-as/loaded-from -- see saveProtocolName in
+    // training-protocol.html, which calls this right after renaming the
+    // protocol itself, whenever the page has a loadedTemplateId linking it
+    // to one. Best-effort on the client side (never blocks the actual
+    // title save), so this only ever needs to handle the rename itself.
+    if (protocolTemplateMatch && req.method === "PATCH") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const { name } = await readJsonBody(req);
+      if (!String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const template = templates.find(t => t.id === protocolTemplateMatch[1]);
+      if (!template) return sendJson(res, 404, { error: "Template not found" });
+      template.name = name.trim();
+      writeJson(PROTOCOL_TEMPLATES_FILE, templates);
+      return sendJson(res, 200, { ok: true });
+    }
 
     // ─── Push subscribe ────────────────────────────────────────────────
     if (p === "/api/chat/push-subscribe" && req.method === "POST") {
