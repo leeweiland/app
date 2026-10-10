@@ -3508,16 +3508,29 @@ export async function handleChatRequest(req, res, url) {
         // step's video/image (these are never posted as chat messages, so the
         // check above always missed them and every step video/image 404'd).
         const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
-        const ownerId = Object.keys(allProtocols).find(uid => (allProtocols[uid].steps || []).some(s => s.driveFileId === fileId));
-        if (ownerId) {
-          if (mediaUser.id !== ownerId && !isStaff(mediaUser)) { res.writeHead(403); res.end(); return true; }
-        } else if (isStaff(mediaUser)) {
-          // Not attached to any step yet — this is the "Choose a Video" search
-          // picker generating a thumbnail preview before a step is saved.
-          // search-videos is already staff-only, so staff previewing any file
-          // it surfaced is consistent with access already granted there.
-        } else {
-          res.writeHead(404); res.end(); return true;
+        // THE actual bug behind "videos won't play" reports that never
+        // reproduced in any of my own testing: coaches constantly reuse the
+        // same handful of library clips across many students' protocols
+        // (confirmed directly -- the "Simple Powerbatics Basics Workout"
+        // template alone is applied to ~20 different students, all sharing
+        // the same 5 video fileIds). The OLD check here picked a single
+        // global "owner" for a fileId (whichever student's record
+        // Object.keys() happened to list first) and 403'd every OTHER
+        // student who also legitimately has that exact fileId in their OWN
+        // steps -- my own test accounts never hit this because I was
+        // always either staff (bypasses it) or the lucky first owner.
+        // Checking against the REQUESTING user's own protocol fixes it:
+        // every student who actually has this fileId in their own steps is
+        // allowed, not just one.
+        const ownsIt = (allProtocols[mediaUser.id]?.steps || []).some(s => s.driveFileId === fileId);
+        if (!ownsIt && !isStaff(mediaUser)) {
+          // Doesn't own it and isn't staff -- still distinguish "this
+          // belongs to someone else's protocol" (403) from "not attached
+          // anywhere yet" (404, the staff-only "Choose a Video" picker's
+          // own preview case, which only ever reaches here for staff
+          // anyway, but keeps the status code meaningful either way).
+          const attachedAnywhere = Object.values(allProtocols).some(rec => (rec.steps || []).some(s => s.driveFileId === fileId));
+          res.writeHead(attachedAnywhere ? 403 : 404); res.end(); return true;
         }
       }
     }
