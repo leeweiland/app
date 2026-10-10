@@ -4464,7 +4464,7 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
-    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply", "default-protocol"];
+    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply", "default-protocol", "video-error"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
       const targetUserId = protocolMatch[1];
@@ -5019,6 +5019,19 @@ export async function handleChatRequest(req, res, url) {
       cfg.defaultProtocolEnabled = !!enabled;
       saveConfig(cfg);
       return sendJson(res, 200, { ok: true, enabled: cfg.defaultProtocolEnabled });
+    }
+
+    // Temporary diagnostic -- see reportVideoError in training-protocol.html.
+    // No device access to actually see what a real iPhone's <video> element
+    // reports when a step video fails there, so this has the device log it
+    // here instead: `railway logs` after a student retries a broken one is
+    // what this is actually for. Open to any logged-in user (not staff-
+    // only like the rest of this file's training-protocol routes), since
+    // it's students' own phones hitting the failure, not a coach's.
+    if (p === "/api/chat/training-protocol/video-error" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      console.error("[video-error]", JSON.stringify({ userId: user.id, role: user.role, ...body }));
+      return sendJson(res, 200, { ok: true });
     }
 
     // ─── VAPID public key ───────────────────────────────────────────────

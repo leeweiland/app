@@ -746,6 +746,32 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   });
 }, { rootMargin: '400px' });
 
+// Real devices reporting "it just won't play" give no way to see WHY from
+// here -- no server-side request ever fails for that (the proxy serves a
+// normal 200/206 either way), so nothing shows up in server logs on its
+// own. This has the device tell us directly: the browser's own <video>
+// error event (readyState/networkState/MediaError.code -- 1 aborted, 2
+// network, 3 decode, 4 source-not-supported -- are the ones that actually
+// distinguish "server never got a clean request" from "the file arrived
+// fine but this player can't decode it") posted back to a log-only
+// endpoint, best-effort, so the NEXT time this happens on a real phone it
+// leaves an actual trace instead of only ever being reported as "doesn't
+// work." Temporary diagnostic, not permanent telemetry -- worth removing
+// once the underlying iOS playback issue is actually found and fixed.
+function reportVideoError(video) {
+  video.addEventListener('error', () => {
+    const e = video.error;
+    fetch('/api/chat/training-protocol/video-error', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        src: video.currentSrc || video.src, errorCode: e?.code ?? null, errorMessage: e?.message || '',
+        networkState: video.networkState, readyState: video.readyState,
+        userAgent: navigator.userAgent, activeId, editingBuilder, viewMode,
+      }),
+    }).catch(() => {});
+  });
+}
+
 // Every step has at most one "right" (continue this row) and one "below"
 // (start a new row, x-aligned directly under it — never offset sideways,
 // so the connector down to it is always a straight vertical line) child.
@@ -885,7 +911,7 @@ function renderPageView() {
     if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}</div>`;
     return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
   }).join('');
-  container.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+  container.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
 }
 
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
@@ -1239,7 +1265,7 @@ function render() {
       await saveSteps();
     };
   });
-  world.querySelectorAll('video[data-src]').forEach(v => stepVideoLazyObserver.observe(v));
+  world.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
   // A video's real height isn't known until its metadata actually loads
   // (async, and lazy — see stepVideoLazyObserver above) — layoutRowHeights
   // ran once already off whatever placeholder size the browser gave an
