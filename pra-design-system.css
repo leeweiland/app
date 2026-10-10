@@ -29,6 +29,18 @@
   --font-secondary: 'Aldrich', 'Century Gothic', 'Poppins', sans-serif;
 }
 
+/* Every navigation in the native app is a real full-page load (separate
+   .html files, not a client-rendered SPA) -- between the old page
+   unloading and the new one's own CSS actually painting, the document's
+   bare canvas shows through for a moment. Neither html nor body had a
+   background of their own anywhere (only .pra-root, a CHILD div inside
+   body, ever set one) -- the browser's own default white is what was
+   actually flashing on every single navigation, on top of (not caused
+   by) however long the real page took to paint. Setting it here, on the
+   outermost elements, means there's nothing left for that default white
+   to ever show through. */
+html, body { background: var(--pra-black); }
+
 .pra-root, .pra-root * { box-sizing: border-box; }
 
 .pra-root {

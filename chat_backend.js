@@ -3481,7 +3481,16 @@ export async function handleChatRequest(req, res, url) {
     // WKWebView's own fetch/XHR stack) not sharing the session cookie --
     // this line settles that one way or the other on the next retry. Has
     // the Cookie header's own presence/absence logged (not its value).
-    console.log("[media request]", JSON.stringify({ method: req.method, fileId: mediaMatch[1], hasCookieHeader: !!req.headers.cookie, authenticated: !!mediaUser, userAgent: req.headers["user-agent"] || "" }));
+    console.log("[media request]", JSON.stringify({ method: req.method, fileId: mediaMatch[1], range: req.headers.range || null, hasCookieHeader: !!req.headers.cookie, authenticated: !!mediaUser, userAgent: req.headers["user-agent"] || "" }));
+    // The request clearly reaches here fine (previous round of this same
+    // diagnostic confirmed hasCookieHeader/authenticated both true every
+    // time) and MEDIA_ERR_SRC_NOT_SUPPORTED/NETWORK_NO_SOURCE still happens
+    // on the real device regardless -- so the open question now is what
+    // this route actually SENT BACK for that exact request. Logs it once
+    // the response is actually done, not just assumed from the code path.
+    res.on("finish", () => {
+      console.log("[media response]", JSON.stringify({ fileId: mediaMatch[1], statusCode: res.statusCode, contentType: res.getHeader("Content-Type"), contentLength: res.getHeader("Content-Length"), contentRange: res.getHeader("Content-Range"), acceptRanges: res.getHeader("Accept-Ranges") }));
+    });
     if (!mediaUser) { res.writeHead(401); res.end(); return true; }
     const fileId = mediaMatch[1];
     // Only allow access if this file is attached to a message in a conversation
