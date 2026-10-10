@@ -3,6 +3,17 @@ android/
 www/
 .env
 
+# Lee's book/script/email writing cache (Desktop\claude\chunks_cache.json,
+# Desktop\claude\all_writings_content.json) -- belongs at the Desktop\claude\
+# level, used by unrelated conversations, not part of this app at all. A
+# 22MB copy of chunks_cache.json got committed into this repo by accident
+# back in August (likely a stray `git add .` run from the wrong directory)
+# and has been dead weight in every commit since -- Codemagic has to clone
+# the full repo on every build, and this alone was more than half its
+# total .git size.
+chunks_cache.json
+all_writings_content.json
+
 # SQLite message store (chat_messages_sqlite.js) -- generated locally /
 # on the Railway Volume from chat_messages.json, same as every other
 # chat_*.json data file is never committed.
