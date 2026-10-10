@@ -19,12 +19,24 @@
      scrollable region inside .pra-root. */
   html { height: 100%; overflow: hidden; }
   body { position: fixed; inset: 0; height: 100%; overflow: hidden; }
-  .pra-root { min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+  /* The scroll container has to be .pra-root itself, not .wrap -- CSS
+     requires overflow-x and overflow-y to agree on "clips or not" (set
+     only one axis to auto/hidden and the UA silently forces the other to
+     auto too, clipping it), and .protocol-canvas's full-bleed trick below
+     (negative margins sized in vw) depends on bleeding OUT of .wrap's own
+     narrower, centered box to reach the true viewport edges. Putting the
+     forced auto-on-both-axes on .wrap instead of here (an earlier version
+     of this fix did) clipped that bleed at .wrap's own edges -- squeezing
+     Your Flow into a narrow column instead of full width. .pra-root has
+     no max-width of its own, so it already spans the full viewport either
+     way -- the same forced overflow-x:auto here never actually clips
+     anything, since nothing ever exceeds ITS edges to begin with. */
+  .pra-root { min-height: 0; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   /* Bottom padding stays small on purpose -- fitCanvasToView() reserves
      room for whatever's really below the canvas (including this), so a
      generous 60px here just became 60px of dead reserved space the canvas
      itself couldn't use, on every load. */
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 20px 12px; flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 20px 12px; }
   .icon-btn { width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .icon-btn:disabled { opacity: .3; cursor: default; }
@@ -159,6 +171,17 @@
      could push arbitrarily far below the viewport. */
   .modal-box { width: 100%; max-width: 420px; max-height: 80vh; overflow: hidden; padding: 22px; display: flex; flex-direction: column; }
   .modal-scroll-body { overflow-y: auto; flex: 1; min-height: 0; }
+  /* ~10 rows visible (each ~38px) before it scrolls, same idea as
+     .modal-scroll-body above -- a bounded, in-modal list with its own
+     scrollbar (pra-root's own ::-webkit-scrollbar styling already covers
+     it) instead of a plain <select> handing the whole roster to the
+     browser's own OS-level popup, which simply ran off the screen. */
+  .apply-target-list { max-height: 380px; overflow-y: auto; border: 1px solid var(--pra-border); border-radius: 8px; }
+  .apply-target-row { padding: 9px 12px; font-size: .88rem; cursor: pointer; border-bottom: 1px solid var(--pra-border); }
+  .apply-target-row:last-child { border-bottom: none; }
+  @media (hover: hover) { .apply-target-row:hover { background: rgba(255,255,255,0.04); } }
+  .apply-target-row.selected { background: var(--pra-blue-dim); color: var(--pra-blue); }
+  .apply-target-row.apply-target-blank { font-weight: 700; border-bottom-color: var(--pra-dim); }
   .type-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
   .type-choice { padding: 16px 8px; text-align: center; border-radius: 10px; border: 1px solid var(--pra-border); cursor: pointer; background: rgba(255,255,255,0.02); font-size: .85rem; }
   .type-choice:hover { border-color: var(--pra-blue); }
@@ -397,7 +420,13 @@
       <div class="pra-h2" style="margin-bottom:14px">Apply This Protocol</div>
       <input class="pra-input" id="applyProtocolName" placeholder="Protocol name (shown to the student)" style="margin-bottom:12px"/>
       <label class="pra-label" style="display:block;margin-bottom:4px">Apply To</label>
-      <select class="pra-select" id="applyProtocolTarget" style="width:100%"></select>
+      <input class="pra-input" id="applyProtocolSearchInput" placeholder="Search students…" style="margin-bottom:8px"/>
+      <!-- A plain native <select> here used to dump every online/gym
+           client into the browser's own OS-level popup -- unusable past
+           a dozen or so names (ran off the bottom of the screen with no
+           way to search) and only growing with the roster. A bounded,
+           in-modal list with its own search/scroll fixes both at once. -->
+      <div id="applyProtocolTargetList" class="apply-target-list"></div>
       <div class="pra-muted" id="applyProtocolStatus" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="pra-btn" id="applyProtocolConfirmBtn" style="flex:1">Apply</button>
@@ -1610,7 +1639,13 @@ function cloneStepsWithFreshIds(templateSteps) {
 function setupProtocolTemplates() {
   document.getElementById('saveTemplateBtn').onclick = () => {
     if (!steps.length) { alert('Nothing to save yet — add some steps first.'); return; }
-    document.getElementById('saveProtocolTemplateName').value = '';
+    // Defaults to the protocol's own current title instead of a blank
+    // field -- leaving this blank every time was exactly what let a
+    // template's saved name drift away from the title shown on the page
+    // itself (type a from-scratch name once, then keep editing the title
+    // later with nothing left to re-sync it). Still just a starting
+    // value -- typing over it saves under a different name same as before.
+    document.getElementById('saveProtocolTemplateName').value = protocolName || '';
     openModal('saveProtocolTemplateModal');
   };
   document.getElementById('saveProtocolTemplateConfirmBtn').onclick = async () => {
@@ -1768,33 +1803,70 @@ const APPLY_TO_BLANK_VALUE = '__blank__';
 // roster-ish endpoint a coach (not just an admin) can already call, so it's
 // reused here instead of the admin-only /api/admin/users just to build this
 // dropdown.
+let applyProtocolStudents = [];
+let applyProtocolTarget = APPLY_TO_BLANK_VALUE;
+let applyProtocolTargetLabel = 'Everyone without a custom protocol';
+
+function renderApplyProtocolTargetList() {
+  const q = document.getElementById('applyProtocolSearchInput').value.trim().toLowerCase();
+  const list = document.getElementById('applyProtocolTargetList');
+  const blankRow = `<div class="apply-target-row apply-target-blank${applyProtocolTarget === APPLY_TO_BLANK_VALUE ? ' selected' : ''}" data-id="${APPLY_TO_BLANK_VALUE}" data-label="Everyone without a custom protocol">Everyone without a custom protocol</div>`;
+  const visible = q ? applyProtocolStudents.filter(u => `${u.first} ${u.last}`.toLowerCase().includes(q)) : applyProtocolStudents;
+  const studentRows = visible.map(u => {
+    const label = `${u.first} ${u.last}`;
+    return `<div class="apply-target-row${applyProtocolTarget === u.id ? ' selected' : ''}" data-id="${u.id}" data-label="${escapeHtml(label)}">${escapeHtml(label)}</div>`;
+  }).join('');
+  // The special "everyone blank" row stays pinned at the top regardless of
+  // the search text -- it's an action, not a name to search for, and losing
+  // it the moment you start typing would be a surprising way to lose your
+  // place.
+  list.innerHTML = blankRow + studentRows + (q && !visible.length ? '<div class="apply-target-row" style="cursor:default;color:var(--pra-dim)">No students match.</div>' : '');
+  list.querySelectorAll('.apply-target-row[data-id]').forEach(row => {
+    row.onclick = () => {
+      applyProtocolTarget = row.dataset.id;
+      applyProtocolTargetLabel = row.dataset.label;
+      renderApplyProtocolTargetList();
+    };
+  });
+}
+
+// Pushes whatever's on screen right now (a student's own Your Flow/Your
+// Page, or the shared Flow Builder draft) out to one chosen student or to
+// every online/gym client with no custom protocol yet -- see POST
+// /api/chat/training-protocol/apply. /api/chat/contacts is the one
+// roster-ish endpoint a coach (not just an admin) can already call, so it's
+// reused here instead of the admin-only /api/admin/users just to build this
+// list.
 async function setupApplyProtocol() {
   document.getElementById('applyProtocolBtn').onclick = async () => {
     if (!steps.length) { alert('Nothing to apply yet — add some steps first.'); return; }
     document.getElementById('applyProtocolName').value = protocolName || '';
     document.getElementById('applyProtocolStatus').textContent = '';
-    const select = document.getElementById('applyProtocolTarget');
-    select.innerHTML = '<option value="' + APPLY_TO_BLANK_VALUE + '">Everyone without a custom protocol</option>';
+    document.getElementById('applyProtocolSearchInput').value = '';
+    applyProtocolStudents = [];
+    applyProtocolTarget = APPLY_TO_BLANK_VALUE;
+    applyProtocolTargetLabel = 'Everyone without a custom protocol';
+    renderApplyProtocolTargetList();
     openModal('applyProtocolModal');
     try {
       const r = await fetch('/api/chat/contacts');
       if (!r.ok) return;
       const { contacts } = await r.json();
-      const students = contacts.filter(u => u.role === 'online' || u.role === 'gym')
+      applyProtocolStudents = contacts.filter(u => u.role === 'online' || u.role === 'gym')
         .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
-      select.insertAdjacentHTML('beforeend', students.map(u =>
-        `<option value="${u.id}">${escapeHtml(u.first)} ${escapeHtml(u.last)}</option>`).join(''));
+      renderApplyProtocolTargetList();
     } catch {}
   };
+  document.getElementById('applyProtocolSearchInput').addEventListener('input', renderApplyProtocolTargetList);
 
   document.getElementById('applyProtocolConfirmBtn').onclick = async () => {
     const name = document.getElementById('applyProtocolName').value.trim();
-    const target = document.getElementById('applyProtocolTarget').value;
+    const target = applyProtocolTarget;
     const toAllBlank = target === APPLY_TO_BLANK_VALUE;
     const status = document.getElementById('applyProtocolStatus');
     const confirmMsg = toAllBlank
       ? "Apply this to every online/gym client who doesn't already have a custom protocol? This can't be undone."
-      : `Apply this to ${document.getElementById('applyProtocolTarget').selectedOptions[0].textContent}? This replaces anything they already have. This can't be undone.`;
+      : `Apply this to ${applyProtocolTargetLabel}? This replaces anything they already have. This can't be undone.`;
     if (!confirm(confirmMsg)) return;
     const btn = document.getElementById('applyProtocolConfirmBtn');
     btn.disabled = true;
