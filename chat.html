@@ -327,6 +327,13 @@
      a subtle highlight behind the bubble while #msgActionBar is open for
      it (see openMsgActionBar/closeMsgActionBar). */
   .bubble-row.action-selected .bubble, .bubble-row.action-selected .bubble.appt { box-shadow: 0 0 0 2px var(--pra-blue); }
+  /* On touch screens a long-press already opens our own action bar/menu —
+     without this, iOS ALSO starts its native text selection and shows its
+     Copy/Look Up/Translate callout on top of it, and the next tap just
+     dismisses that selection instead of reaching Report/Block. */
+  @media (hover: none) {
+    .bubble-row, .convo-item, .msg-more-menu { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  }
   .msg-more-menu { display: none; position: fixed; z-index: 30; min-width: 120px; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
   .msg-more-menu.show { display: block; }
   .msg-more-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 7px 10px; font-size: .8rem; color: var(--pra-text); border-radius: 5px; }
