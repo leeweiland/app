@@ -36,6 +36,10 @@
   .terms-agree-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; cursor: pointer; }
   .terms-agree-row input { margin-top: 3px; flex-shrink: 0; }
   .terms-agree-row span { font-size: .76rem; line-height: 1.4; color: var(--pra-dim); }
+  .student-type { display: flex; gap: 8px; margin-top: 6px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
+  .student-type label { flex: 1; text-align: center; padding: 10px 0; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .76rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border: 1px solid var(--pra-border); transition: background .15s, color .15s, border-color .15s; }
+  .student-type input { display: none; }
+  .student-type label:has(input:checked) { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
 </style>
 </head>
 <body>
@@ -89,6 +93,12 @@
             <input class="pra-input" id="suFirst" required style="margin-top:6px"/></div>
           <div class="field"><label class="pra-label">Last Name</label><br/>
             <input class="pra-input" id="suLast" required style="margin-top:6px"/></div>
+        </div>
+        <div class="field"><span class="pra-label">I'm a</span>
+          <div class="student-type">
+            <label><input type="radio" name="suStudentType" value="gym"/>Gym Student</label>
+            <label><input type="radio" name="suStudentType" value="online"/>Online Student</label>
+          </div>
         </div>
         <div class="field"><label class="pra-label">Email</label><br/>
           <input class="pra-input" type="email" id="suEmail" required style="margin-top:6px"/></div>
@@ -166,7 +176,10 @@ loginForm.addEventListener('submit', async (e) => {
 signupForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   errMsg.textContent = '';
+  const studentType = document.querySelector('input[name="suStudentType"]:checked')?.value;
+  if (!studentType) { errMsg.textContent = 'Choose Gym Student or Online Student'; return; }
   const fd = new FormData();
+  fd.append('studentType', studentType);
   fd.append('first', document.getElementById('suFirst').value);
   fd.append('last', document.getElementById('suLast').value);
   fd.append('email', document.getElementById('suEmail').value);

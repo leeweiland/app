@@ -3207,7 +3207,7 @@ export async function handleChatRequest(req, res, url) {
       fields = await readJsonBody(req);
     }
 
-    const { first, last, email, phone, password, agreedToTerms } = fields;
+    const { first, last, email, phone, password, agreedToTerms, studentType } = fields;
     if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
     // Guideline 1.2 requires agreement to no-tolerance terms BEFORE an
     // account is created — enforced server-side too since the checkbox
@@ -3226,7 +3226,12 @@ export async function handleChatRequest(req, res, url) {
       id: newUserId,
       first, last, email: String(email).toLowerCase(), phone: phone || "",
       passwordSalt: salt, passwordHash: hash,
-      role: users.length === 0 ? "admin" : "user", // first-ever signup bootstraps the admin
+      // first-ever signup bootstraps the admin. Otherwise the signup form's
+      // Gym/Online choice sets the role straight away (Lee's call, 2026-10-13:
+      // no buyers-sheet check), so syncDefaultGroups below creates their group,
+      // welcome message and default protocol immediately. Anything else (an
+      // older app build that doesn't send it) still lands as a plain "user".
+      role: users.length === 0 ? "admin" : (studentType === "gym" || studentType === "online" ? studentType : "user"),
       profilePictureFileId: profilePictureFileId || null,
       ip, geo, // geo: { city, region, country, lat, lng } | null — used by the users map
       createdAt: new Date().toISOString(),
