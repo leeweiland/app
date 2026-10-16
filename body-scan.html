@@ -6,7 +6,12 @@
 <title>Powerbatics Body Mastery Builder — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
-  body { margin: 0; }
+  /* Same iOS fix as profile.html: the native app runs with
+     ios.scrollEnabled:false, so plain body scrolling never moved on iPhone.
+     html/body are pinned and .pra-root is the one scroll container. */
+  html { height: 100%; overflow: hidden; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; height: var(--app-vh, 100dvh); overflow: hidden; }
+  .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; }
   /* ── Hub tabs -- the outermost level of this page. Order is rebuilt by JS
      (renderHubTabs): Profile leads until the profile is complete, then it
@@ -683,9 +688,11 @@ async function runUserSearch(q, append) {
 // Scrolling near the bottom of the page while the Search tab is open loads
 // the next page -- only 20 shown at a time rather than the whole roster up
 // front.
-window.addEventListener('scroll', () => {
+// .pra-root is the scroll container now (see the iOS note in <style>), not the window.
+document.querySelector('.pra-root').addEventListener('scroll', (e) => {
   if (activeHub !== 'search' || !userSearchHasMore || userSearchLoading) return;
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) {
+  const el = e.currentTarget;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) {
     runUserSearch(userSearchQuery, true);
   }
 });
