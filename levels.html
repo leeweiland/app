@@ -41,10 +41,24 @@
   .person-name-save-btn:hover, .person-name-cancel-btn:hover { background: rgba(255,255,255,0.08); }
   .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
   .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
-  .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-  .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; max-width: 280px; }
+  .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+  .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; }
   .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
   .level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  /* Same as chat.html's profile Levels popup: label column sized to the widest
+     label ("Ninja Strength") so every row's stripes start at the same x. */
+  .level-chip .cat.sized { flex: 0 0 auto; display: inline-grid; }
+  .level-chip .cat.sized > span, .level-chip .cat.sized::after { grid-area: 1 / 1; }
+  .level-chip .cat.sized::after { content: "Ninja Strength"; visibility: hidden; }
+  /* min-width:0 + shrinkable segments so the "n/10" never gets pushed past the
+     chip's edge on a narrow phone (full 10px segments on wider screens). */
+  .level-stripes { display: flex; gap: 3px; align-items: center; margin-left: 12px; margin-right: auto; min-width: 0; flex: 0 1 auto; }
+  .level-stripes i { flex: 0 1 10px; min-width: 6px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+  @media (max-width: 420px) {
+    .level-chip { gap: 8px; padding: 6px 10px; }
+    .level-stripes { gap: 2px; margin-left: 4px; }
+  }
+  .level-stripes i.on { background: #009bff; }
   .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
   .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
   .chip-val-input { width: 40px; font-size: .8rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
@@ -153,13 +167,17 @@ function superLevel(p) { return LEVELS_NUMERIC_CATS.reduce((sum, cat) => sum + e
 
 let isStaffUser = false;
 
+function levelStripesHtml(n) {
+  return `<span class="level-stripes">${Array.from({ length: 10 }, (_, i) => `<i${i < n ? ' class="on"' : ''}></i>`).join('')}</span>`;
+}
+
 function renderLevelChips(p, idx) {
   const foundationSet = levelIsChecked(p.levels['FOUNDATION']);
   const editCls = isStaffUser ? ' editable' : '';
-  const rows = [`<div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>`];
+  const rows = [`<div class="level-chip"><span class="cat sized"><span>Foundation</span></span>${levelStripesHtml(foundationSet ? 10 : 0)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>`];
   LEVELS_NUMERIC_CATS.forEach(cat => {
     const n = effectiveLevel(p, cat);
-    rows.push(`<div class="level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
+    rows.push(`<div class="level-chip"><span class="cat sized"><span>${catLabel(cat)}</span></span>${levelStripesHtml(n)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
   });
   if (p.program === 'Gym') {
     // Checked looks exactly like Foundation's checkmark (plain glyph, no
