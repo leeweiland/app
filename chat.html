@@ -169,6 +169,13 @@
   .convo-pinned-mark { display: inline-flex; color: var(--pra-blue); margin-right: 5px; vertical-align: middle; }
   .convo-pinned-mark svg { width: 12px; height: 12px; }
   .convo-item.pinned-row { background: rgba(0,155,255,0.04); }
+  /* Equal specificity to .convo-item.active above, so whichever rule came
+     later in the file silently won for a row that's both pinned and
+     active -- pinned-row's much fainter tint was overriding active's
+     highlight (declared earlier), so clicking into a pinned conversation
+     never looked selected. Three classes here beats both at two, so active
+     wins regardless of source order from now on. */
+  .convo-item.pinned-row.active { background: var(--pra-blue-dim); }
   .convo-channel-btn { flex-shrink: 0; align-self: center; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: .5; transition: opacity .15s, color .15s; font-weight: 700; font-size: .95rem; font-family: var(--font-secondary); }
   .convo-channel-btn.on { opacity: 1; color: #a855f7; }
   @media (hover: hover) {

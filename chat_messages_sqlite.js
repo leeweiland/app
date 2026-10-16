@@ -111,12 +111,12 @@ function migrateFromJsonIfNeeded() {
   const insert = db.prepare(`
     INSERT INTO messages
       (id, conversationId, senderId, type, createdAt, text, driveFileId, mimeType, name, driveFileName,
-       feedGroupId, forwarded, replyToId, videoNotes, reactions, deliveredTo, editedAt,
+       posterFileId, feedGroupId, forwarded, replyToId, videoNotes, reactions, deliveredTo, editedAt,
        googleEventId, googleEventLink, googleEventIds, googleEventLinks,
        startISO, durationMinutes, timezone, isGym, clientIds, callId, callOutcome, durationSeconds)
     VALUES
       (:id, :conversationId, :senderId, :type, :createdAt, :text, :driveFileId, :mimeType, :name, :driveFileName,
-       :feedGroupId, :forwarded, :replyToId, :videoNotes, :reactions, :deliveredTo, :editedAt,
+       :posterFileId, :feedGroupId, :forwarded, :replyToId, :videoNotes, :reactions, :deliveredTo, :editedAt,
        :googleEventId, :googleEventLink, :googleEventIds, :googleEventLinks,
        :startISO, :durationMinutes, :timezone, :isGym, :clientIds, :callId, :callOutcome, :durationSeconds)
   `);
