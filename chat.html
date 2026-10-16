@@ -308,7 +308,7 @@
   .msg-grid-play svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
   .msg-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
-  .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; }
+  .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; white-space: nowrap; }
   /* Inline-block (not inline) so vertical-align actually applies — a plain
      inline element ignores it, which left the tick SVG sitting a couple
      pixels lower than the timestamp text's baseline. text-align:right on
@@ -3832,6 +3832,14 @@ function svgTick(double, color) {
   }
   return `<svg viewBox="0 0 20 10" width="17" height="9" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="${check}" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="${check}" transform="translate(5,0)" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
+// Bubble timestamp: weekday + full date + time, e.g. "Thursday 10/16/2026 01:46 PM".
+function bubbleTimeStr(iso) {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const date = d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${day} ${date} ${time}`;
+}
 function readReceiptTicksHtml(m, mine) {
   if (!mine) return '';
   // Sidebar last-message preview passes a synthetic {status} with no
@@ -3969,7 +3977,7 @@ function renderBubble(m, convo) {
       <div>
         <div class="bubble-wrap">${content}</div>
         ${renderReactionChips(m)}
-        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
+        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${bubbleTimeStr(m.createdAt)}${readReceiptTicksHtml(m, mine)}</div>
       </div>
     </div>`;
   }
@@ -3982,7 +3990,7 @@ function renderBubble(m, convo) {
       <div>
         <div class="bubble-wrap">${content}</div>
         ${renderReactionChips(m)}
-        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${readReceiptTicksHtml(m, mine)}</div>
+        <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${bubbleTimeStr(m.createdAt)}${readReceiptTicksHtml(m, mine)}</div>
       </div>
     </div>`;
   }
@@ -3992,7 +4000,7 @@ function renderBubble(m, convo) {
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
-  const time = new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = bubbleTimeStr(m.createdAt);
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
     <div>
       <div class="bubble-wrap">${content}</div>
@@ -4030,7 +4038,7 @@ function renderGridBubble(group, convo) {
   const visible = group.slice(0, 4);
   const extra = group.length - visible.length;
   const cellsHtml = visible.map((m, i) => msgGridCellHtml(m, (i === visible.length - 1 && extra > 0) ? extra : 0)).join('');
-  const time = new Date(last.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = bubbleTimeStr(last.createdAt);
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${first.feedGroupId}">
     <div>
       <div class="bubble-wrap"><div class="bubble media">${senderLabel}<div class="msg-grid" data-group-ids="${group.map(m => m.id).join(',')}">${cellsHtml}</div></div></div>
