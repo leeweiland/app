@@ -3224,7 +3224,7 @@ export async function handleChatRequest(req, res, url) {
     const geo = await geolocateIp(ip); // best-effort — null on failure/local IP, never blocks signup
     const user = {
       id: newUserId,
-      first, last, email: String(email).toLowerCase(), phone: phone || "",
+      first, last, email: String(email).trim().toLowerCase(), phone: phone || "",
       passwordSalt: salt, passwordHash: hash,
       // first-ever signup bootstraps the admin. Otherwise the signup form's
       // Gym/Online choice sets the role straight away (Lee's call, 2026-10-13:
@@ -3254,7 +3254,11 @@ export async function handleChatRequest(req, res, url) {
   if (req.method === "POST" && p === "/api/auth/forgot-password") {
     const { email } = await readJsonBody(req);
     const users = readJson(USERS_FILE, []);
-    const user = users.find(u => u.email.toLowerCase() === String(email || "").toLowerCase());
+    // Trimmed: phone keyboards/autofill often append a trailing space, which
+    // silently matched no account (and the generic response below hides that).
+    const emailNorm = String(email || "").trim().toLowerCase();
+    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
+    if (!user) console.log("[password reset] no account for", emailNorm.replace(/^(.).*(@.*)$/, "$1***$2"));
     // Always return the same generic response whether or not the email exists,
     // so this endpoint can't be used to enumerate registered accounts.
     if (user) {
@@ -3298,7 +3302,8 @@ export async function handleChatRequest(req, res, url) {
   if (req.method === "POST" && p === "/api/auth/login") {
     const { email, password } = await readJsonBody(req);
     const users = readJson(USERS_FILE, []);
-    const user = users.find(u => u.email.toLowerCase() === String(email || "").toLowerCase());
+    const emailNorm = String(email || "").trim().toLowerCase(); // same trailing-space trim as forgot-password
+    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
     if (!user || !verifyPassword(password || "", user.passwordSalt, user.passwordHash)) {
       return sendJson(res, 401, { error: "Invalid email or password" });
     }
@@ -3703,7 +3708,7 @@ export async function handleChatRequest(req, res, url) {
         const { salt, hash } = hashPassword(password);
         const newUser = {
           id: randomUUID(),
-          first, last, email: String(email).toLowerCase(), phone: phone || "",
+          first, last, email: String(email).trim().toLowerCase(), phone: phone || "",
           passwordSalt: salt, passwordHash: hash,
           role,
           profilePictureFileId: null,
