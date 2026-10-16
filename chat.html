@@ -812,6 +812,14 @@
   .popup-level-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 7px; padding: 5px 10px; font-size: .72rem; width: 100%; }
   .popup-level-chip .cat { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
   .popup-level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  /* Label column sized to the widest label ("Ninja Strength") via a hidden
+     ghost in the same grid cell, so every row's stripes start at the same x. */
+  .popup-level-chip .cat.sized { flex: 0 0 auto; display: inline-grid; }
+  .popup-level-chip .cat.sized > span, .popup-level-chip .cat.sized::after { grid-area: 1 / 1; }
+  .popup-level-chip .cat.sized::after { content: "Ninja Strength"; visibility: hidden; }
+  .level-stripes { display: flex; gap: 3px; align-items: center; margin-left: 12px; margin-right: auto; }
+  .level-stripes i { width: 10px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+  .level-stripes i.on { background: #009bff; }
   .popup-level-chip .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
   .popup-level-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
   .popup-chip-val-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
@@ -3344,6 +3352,10 @@ function effectiveLevel(entry, cat) {
 
 let levelsModalArchetype = { title: null, image: null };
 
+function levelStripesHtml(n) {
+  return `<span class="level-stripes">${Array.from({ length: 10 }, (_, i) => `<i${i < n ? ' class="on"' : ''}></i>`).join('')}</span>`;
+}
+
 function renderLevelsBody() {
   const personalityRow = levelsModalArchetype.title ? `
     <a class="archetype-link" href="${archetypeUrl(levelsModalArchetype.title, levelsModalArchetype.gender)}">
@@ -3370,10 +3382,10 @@ function renderLevelsBody() {
     <div class="popup-levels-program">
       <div class="popup-super-level">${e.program} — Super Level <span class="num">${LEVELS_NUMERIC_CATS.reduce((s, c) => s + effectiveLevel(e, c), 0)}</span></div>
       <div class="popup-levels-col">
-        <div class="popup-level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>
+        <div class="popup-level-chip"><span class="cat sized"><span>Foundation</span></span>${levelStripesHtml(foundationSet ? 10 : 0)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>
         ${LEVELS_NUMERIC_CATS.map(cat => {
           const n = effectiveLevel(e, cat);
-          return `<div class="popup-level-chip"><span class="cat">${catLabel(cat)}</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
+          return `<div class="popup-level-chip"><span class="cat sized"><span>${catLabel(cat)}</span></span>${levelStripesHtml(n)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="${cat}"><span style="color:${levelNumColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`;
         }).join('')}
         ${e.program === 'Gym' ? `<div class="popup-level-chip"><span class="cat">Team</span><span class="chip-val${editCls}${teamChecked ? '' : ' popup-team-checkbox'}" data-idx="${idx}" data-cat="TEAM"${teamChecked ? ' style="color:#fff"' : ''}>${teamChecked ? '✓' : ''}</span></div>` : ''}
       </div>
