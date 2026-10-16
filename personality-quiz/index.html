@@ -15,6 +15,10 @@
     background: #000;
     color: #fff;
   }
+  /* iOS app runs with ios.scrollEnabled:false, so normal page scrolling never
+     moves on iPhone. html is pinned and body is its own scroll container. */
+  html { height: 100%; overflow: hidden; }
+  body { position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .container {
     width: 90%;
     max-width: 800px;
