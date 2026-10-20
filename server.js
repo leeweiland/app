@@ -85,5 +85,19 @@ createServer(async (req, res) => {
   const noCacheExts = [".html", ".js", ".css"];
   if (noCacheExts.includes(ext)) res.setHeader("Cache-Control", "no-store");
   res.writeHead(200, { "Content-Type": mime });
-  res.end(readFileSync(filePath));
+  res.end(ext === ".html" ? withIconLinks(readFileSync(filePath)) : readFileSync(filePath));
 }).listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Every HTML page names the tab icon explicitly, with a version. Pages that
+// relied on Chrome finding /favicon.ico by itself kept showing the blank
+// globe after the icon was added: Chrome had cached "no icon" and a plain
+// refresh doesn't make it look again. Bump ?v= when the icon changes.
+const ICON_LINKS = '<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2"><link rel="icon" href="/favicon.ico?v=2" sizes="any">';
+function withIconLinks(buf) {
+  const s = buf.toString("utf8");
+  if (/rel=["']?(shortcut )?icon/i.test(s)) return buf;
+  const m = /<head[^>]*>/i.exec(s);
+  if (!m) return buf;
+  const at = m.index + m[0].length;
+  return Buffer.from(s.slice(0, at) + ICON_LINKS + s.slice(at));
+}
