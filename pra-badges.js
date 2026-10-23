@@ -100,12 +100,12 @@
   }
 
   async function mount(el, userId) {
-    if (!el || !userId) return;
+    if (!el) return;
     el.classList.add('prab-row');
-    el.dataset.badgesFor = userId;
-    const data = await loadBadges();
-    const b = (data.users || {})[userId];
-    if (!b) { el.innerHTML = ''; return; }
+    el.dataset.badgesFor = userId || '';
+    // No app account (e.g. a Levels-sheet-only gym kid) -> all zeros.
+    const data = userId ? await loadBadges() : { users: {} };
+    const b = (data.users || {})[userId] || {};
     el.innerHTML = CATS.map(cat => {
       const c = b[cat] || { n: 0, rank: null };
       const color = cat === 'hearts' ? BLUE : (RANK_COLORS[c.rank] || BLUE);
@@ -276,8 +276,8 @@
     modal.classList.remove('show');
     modal.querySelectorAll('video').forEach(v => v.pause());
   }
-  async function openProfile(userId) {
-    if (!userId) return;
+  async function openProfile(userId, fallbackName) {
+    if (!userId && !fallbackName) return;
     if (!modal) {
       modal = document.createElement('div');
       modal.className = 'prab-modal';
@@ -299,6 +299,12 @@
     modal.classList.add('show');
     if (window.PRABack) PRABack.push('prabProfile', () => closeProfile(true));
     mount(modal.querySelector('.prab-modal-badges'), userId);
+    if (!userId) {
+      modal.querySelector('.prab-modal-name').textContent = fallbackName;
+      modal.querySelector('.prab-modal-avatar').textContent = (fallbackName || '?')[0].toUpperCase();
+      modal.querySelector('.prab-modal-moves').innerHTML = '<div class="pra-moves-empty" style="text-align:center;margin-top:14px">Not on the app yet.</div>';
+      return;
+    }
     const owner = await mountMoves(modal.querySelector('.prab-modal-moves'), userId);
     if (owner) {
       modal.querySelector('.prab-modal-name').textContent = [owner.first, owner.last].filter(Boolean).join(' ');

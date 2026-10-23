@@ -409,8 +409,8 @@ function renderPersonNameHtml(p, idx) {
   const nameText = escapeHtml(p.first) + (p.last ? ' ' + escapeHtml(p.last) : '');
   const editBtn = isStaffUser ? `<button type="button" class="person-name-edit-btn" data-idx="${idx}" title="Rename">✎</button>` : '';
   // Name opens their profile panel (badges + moves) when they have an app account.
-  const name = p.userId ? `<span class="prab-profile-link" data-profile-user="${p.userId}">${nameText}</span>` : nameText;
-  const badges = p.userId ? `<span class="prab-inline" data-badges-user="${p.userId}"></span>` : '';
+  const name = `<span class="prab-profile-link" data-profile-user="${p.userId || ''}" data-profile-name="${nameText}">${nameText}</span>`;
+  const badges = `<span class="prab-inline" data-badges-user="${p.userId || ''}"></span>`;
   return `<div class="person-name prab-name-row">${name}${editBtn}${roleBadgeHtml(p)}${badges}</div>`;
 }
 
@@ -567,11 +567,11 @@ initStaffFeatures().then(load);
 // in-place re-render after a rename).
 (() => {
   const list = document.getElementById('list');
-  const mountAll = () => list.querySelectorAll('[data-badges-user]:not([data-badges-for])').forEach(el => PRABadges.mount(el, el.dataset.badgesUser));
+  const mountAll = () => list.querySelectorAll('[data-badges-user]:not([data-badges-for])').forEach(el => PRABadges.mount(el, el.dataset.badgesUser || null));
   new MutationObserver(mountAll).observe(list, { childList: true, subtree: true });
   list.addEventListener('click', (e) => {
     const link = e.target.closest('[data-profile-user]');
-    if (link) PRABadges.openProfile(link.dataset.profileUser);
+    if (link) PRABadges.openProfile(link.dataset.profileUser, link.dataset.profileName);
   });
 })();
 </script>
