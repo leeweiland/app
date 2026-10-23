@@ -6,6 +6,7 @@
 <title>Chat — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/pra-badges.js"></script>
+<script src="/chat-app/call-bg-effects.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
   /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` —
@@ -6856,6 +6857,7 @@ function toggleCallMinimized() { setCallMinimized(!callMinimized); }
 // there's nothing left worth telling the backend anyway.
 function closeCallScreen() {
   clearTimeout(callRingTimeout);
+  if (window.CallBgEffects && CallBgEffects.active) CallBgEffects.stop(null);
   setCallMinimized(false);
   document.getElementById('callScreen').classList.remove('show');
   document.getElementById('callVideoGrid').innerHTML = '';
@@ -6988,7 +6990,13 @@ async function toggleCameraMenu() {
     item.onclick = async () => {
       menu.classList.remove('show');
       try {
-        await dailyCallObject.setInputDevicesAsync({ videoDeviceId: item.dataset.deviceId });
+        if (window.CallBgEffects && CallBgEffects.active) {
+          // Phone effect running: rebuild it on the newly picked camera.
+          callBgCameraId = item.dataset.deviceId;
+          await applyCallBackground(getCallBgMode());
+        } else {
+          await dailyCallObject.setInputDevicesAsync({ videoDeviceId: item.dataset.deviceId });
+        }
       } catch (e) {
         console.error('[call] switching camera failed', e);
         await alertDialog('Could not switch to that camera.');
@@ -7004,9 +7012,15 @@ async function toggleCameraMenu() {
 // supportsVideoProcessing is false, so the menu says so instead.
 const CALL_BG_MODE_KEY = 'pra_call_bg_mode';
 const CALL_BG_IMAGE_KEY = 'pra_call_bg_image';
-function callBgSupported() {
+// Desktop browsers: Daily's built-in processors. Phones / the native app:
+// our own MediaPipe pipeline (call-bg-effects.js) when the device can run it.
+function dailyBgSupported() {
   try { return !!(window.Daily && Daily.supportedBrowser().supportsVideoProcessing); } catch { return false; }
 }
+function callBgSupported() {
+  return dailyBgSupported() || !!(window.CallBgEffects && CallBgEffects.supported());
+}
+let callBgCameraId = null; // the real camera to go back to when a phone effect is turned off
 function getCallBgMode() { try { return localStorage.getItem(CALL_BG_MODE_KEY) || 'off'; } catch { return 'off'; } }
 // Daily's background-image processor takes a data URL (it rejects blob: URLs).
 function solidGreenDataUrl() {
@@ -7033,6 +7047,27 @@ async function applyCallBackground(mode) {
   try { localStorage.setItem(CALL_BG_MODE_KEY, mode); } catch {}
   document.getElementById('callBgBtn')?.classList.toggle('active', mode !== 'off');
   if (!dailyCallObject || !callBgSupported()) return;
+  if (!dailyBgSupported()) {
+    // Phone path: swap the call's camera for our processed canvas stream.
+    try {
+      if (mode === 'off') {
+        if (CallBgEffects.active) await CallBgEffects.stop(dailyCallObject, callBgCameraId);
+        return;
+      }
+      if (!CallBgEffects.active) {
+        try { callBgCameraId = (await dailyCallObject.getInputDevices()).camera?.deviceId || null; } catch {}
+      }
+      let imageUrl = null;
+      if (mode === 'image') { try { imageUrl = localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {} }
+      await CallBgEffects.start(dailyCallObject, mode, imageUrl, callBgCameraId);
+    } catch (e) {
+      console.error('[call] phone background effect failed', e);
+      try { localStorage.setItem(CALL_BG_MODE_KEY, 'off'); } catch {}
+      document.getElementById('callBgBtn')?.classList.remove('active');
+      await alertDialog('Could not start that background effect on this device.');
+    }
+    return;
+  }
   let processor = { type: 'none' };
   if (mode === 'blur') processor = { type: 'background-blur', config: { strength: 0.6 } };
   else if (mode === 'green' || mode === 'image') {
@@ -7052,7 +7087,7 @@ function toggleBgMenu() {
   if (menu.classList.contains('show')) { menu.classList.remove('show'); return; }
   document.getElementById('callCameraMenu').classList.remove('show');
   if (!callBgSupported()) {
-    menu.innerHTML = `<div class="call-device-menu-empty">Background effects need a computer browser (Chrome, Edge or Firefox). They aren't supported on this device.</div>`;
+    menu.innerHTML = `<div class="call-device-menu-empty">Background effects aren't supported on this device.</div>`;
     menu.classList.add('show');
     return;
   }
