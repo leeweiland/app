@@ -6021,7 +6021,9 @@ export async function handleChatRequest(req, res, url) {
               id: randomUUID(), conversationId: convoId, senderId: user.id,
               type: src.type, text: src.text,
               driveFileId: src.driveFileId, mimeType: src.mimeType, name: src.name, driveFileName: src.driveFileName,
-              forwarded: true,
+              // asOriginal: the bulk composer copying one upload into many
+              // chats -- it's the sender's own message, not a forward.
+              forwarded: body.asOriginal ? false : true,
               createdAt: new Date().toISOString(),
             };
             MessagesDB.insertMessage(msg);

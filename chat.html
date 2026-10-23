@@ -66,6 +66,16 @@
   .bulk-select-count { font-size: .8rem; color: var(--pra-dim); white-space: nowrap; }
   .bulk-select-actions { display: flex; gap: 8px; }
   .compose-textarea { width: 100%; min-height: 110px; resize: vertical; background: rgba(255,255,255,0.04); border: 1px solid var(--pra-border); border-radius: 8px; color: #fff; padding: 10px 12px; font-family: inherit; font-size: .88rem; }
+  .bulk-composer-wrap { position: relative; }
+  .bulk-composer-wrap .composer-pill { align-items: flex-end; }
+  .bulk-composer-wrap .composer-textarea { min-height: 70px; max-height: 200px; }
+  .bulk-picker { display: none; margin-top: 8px; padding: 10px; max-height: 300px; overflow-y: auto; }
+  .bulk-picker.show { display: block; }
+  .bulk-attach-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .bulk-attach-preview:empty { display: none; }
+  .bulk-attach-item { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid var(--pra-border); }
+  .bulk-attach-item img, .bulk-attach-item video { width: 100%; height: 100%; object-fit: cover; }
+  .bulk-attach-remove { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(0,0,0,0.7); color: #fff; font-size: 11px; cursor: pointer; line-height: 20px; padding: 0; }
   .compose-recipients { text-align: left; font-size: .78rem; color: var(--pra-dim); margin: 10px 0 4px; max-height: 90px; overflow-y: auto; }
   /* ── Video-reply timestamped notes — shared between the compose modal's
      own list and the sent bubble's list (same row/time/text shape, just
@@ -1076,7 +1086,26 @@
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:10px">Message Selected</div>
       <div class="compose-recipients" id="bulkComposeRecipients"></div>
-      <textarea class="compose-textarea" id="bulkComposeText" placeholder="Type a message — each chat/group gets it separately…"></textarea>
+      <!-- Same composer as the chat panel: emoji, GIF, attach photos/videos,
+           Enter to send on a computer (Shift+Enter = new line). -->
+      <div class="bulk-attach-preview" id="bulkAttachPreview"></div>
+      <div class="bulk-composer-wrap">
+        <div class="composer-pill">
+          <button class="icon-btn composer-icon" id="bulkEmojiBtn" type="button">😊</button>
+          <button class="icon-btn composer-icon" id="bulkGifBtn" type="button">GIF</button>
+          <textarea class="composer-textarea" id="bulkComposeText" rows="3" placeholder="Type a message — each chat/group gets it separately…"></textarea>
+          <button class="icon-btn composer-icon" id="bulkAttachBtn" type="button" title="Attach photos or videos"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <input type="file" id="bulkFileInput" accept="image/*,video/*" multiple style="display:none"/>
+        </div>
+        <div class="pra-panel bulk-picker" id="bulkEmojiPanel">
+          <div class="emoji-tabs" id="bulkEmojiTabs"></div>
+          <div class="emoji-grid" id="bulkEmojiGrid"></div>
+        </div>
+        <div class="pra-panel bulk-picker" id="bulkGifPanel">
+          <input class="pra-input" id="bulkGifSearch" placeholder="Search GIFs…" style="margin-bottom:8px"/>
+          <div class="gif-grid" id="bulkGifGrid"></div>
+        </div>
+      </div>
       <div class="pra-muted" id="bulkComposeStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
       <button class="pra-btn" style="margin-top:14px;width:100%" id="bulkComposeSendBtn">Send</button>
       <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" id="bulkComposeCancelBtn">Cancel</button>
@@ -2458,27 +2487,68 @@ function updateBulkSelectBar() {
   document.getElementById('bulkSelectMessageBtn').disabled = bulkSelected.size === 0;
 }
 
+let bulkFiles = [];   // File[] attached to the bulk message
+let bulkGifUrl = null; // one GIF, optional
+function renderBulkAttachments() {
+  const el = document.getElementById('bulkAttachPreview');
+  const items = bulkFiles.map((f, i) => {
+    const url = URL.createObjectURL(f);
+    const media = f.type.startsWith('video/') ? `<video src="${url}#t=0.1" muted playsinline></video>` : `<img src="${url}"/>`;
+    return `<div class="bulk-attach-item">${media}<button class="bulk-attach-remove" data-file="${i}" type="button">✕</button></div>`;
+  });
+  if (bulkGifUrl) items.push(`<div class="bulk-attach-item"><img src="${escapeHtml(bulkGifUrl)}"/><button class="bulk-attach-remove" data-gif="1" type="button">✕</button></div>`);
+  el.innerHTML = items.join('');
+  el.querySelectorAll('.bulk-attach-remove').forEach(b => b.onclick = () => {
+    if (b.dataset.gif) bulkGifUrl = null; else bulkFiles.splice(+b.dataset.file, 1);
+    renderBulkAttachments();
+  });
+}
 function openBulkComposeModal() {
   if (!bulkSelected.size) return;
   document.getElementById('bulkComposeRecipients').textContent =
     'To: ' + Array.from(bulkSelected.values()).map(t => t.name).join(', ');
   document.getElementById('bulkComposeText').value = '';
   document.getElementById('bulkComposeStatus').textContent = '';
+  bulkFiles = []; bulkGifUrl = null; renderBulkAttachments();
+  document.getElementById('bulkEmojiPanel').classList.remove('show');
+  document.getElementById('bulkGifPanel').classList.remove('show');
   openModal('bulkComposeModal');
   document.getElementById('bulkComposeText').focus();
 }
 
+// Upload with XHR (same reason as sendFilesImmediately: WKWebView fetch is
+// unreliable streaming big multipart bodies, and XHR gives progress).
+function bulkUploadFiles(convoId, files, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f));
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/chat/conversations/${convoId}/messages`);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { try { resolve(JSON.parse(xhr.responseText).messages || []); } catch { resolve([]); } }
+      else reject(new Error('Upload failed'));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.send(fd);
+  });
+}
+
 // Sequential, not Promise.all — the backend does plain read-modify-write on
 // the JSON data files with no locking, so firing these concurrently risks
-// two requests clobbering each other's write.
+// two requests clobbering each other's write. Photos/videos upload ONCE (to
+// the first chat) and are then copied into every other chat.
 async function sendBulkMessages() {
   const text = document.getElementById('bulkComposeText').value.trim();
-  if (!text) return;
+  if (!text && !bulkFiles.length && !bulkGifUrl) return;
   const status = document.getElementById('bulkComposeStatus');
   const sendBtn = document.getElementById('bulkComposeSendBtn');
   sendBtn.disabled = true;
   const targets = Array.from(bulkSelected.values());
-  let sent = 0;
+  const post = (convoId, body) => fetch(`/api/chat/conversations/${convoId}/messages`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  let sent = 0, uploadedIds = null;
   for (const t of targets) {
     status.textContent = `Sending… (${sent}/${targets.length})`;
     let convoId = t.convoId;
@@ -2491,16 +2561,60 @@ async function sendBulkMessages() {
         if (r.ok) convoId = (await r.json()).conversation?.id;
       }
       if (!convoId) continue;
-      const mr = await fetch(`/api/chat/conversations/${convoId}/messages`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
-      });
-      if (mr.ok) sent++;
+      let ok = true;
+      if (text) ok = (await post(convoId, { text })).ok && ok;
+      if (bulkGifUrl) ok = (await post(convoId, { gifUrl: bulkGifUrl })).ok && ok;
+      if (bulkFiles.length) {
+        if (!uploadedIds) {
+          const created = await bulkUploadFiles(convoId, bulkFiles, (pct) => { status.textContent = `Uploading… ${pct}%`; });
+          uploadedIds = created.map(m => m.id);
+        } else {
+          for (const id of uploadedIds) ok = (await post(convoId, { forwardMessageId: id, asOriginal: true })).ok && ok;
+        }
+      }
+      if (ok) sent++;
     } catch {}
   }
   status.textContent = sent === targets.length ? `Sent to ${sent}.` : `Sent to ${sent}/${targets.length} — some couldn't be reached.`;
   sendBtn.disabled = false;
   setTimeout(() => { closeModal('bulkComposeModal'); setBulkSelectMode(false); loadConversations(); }, sent === targets.length ? 700 : 1600);
 }
+
+(function setupBulkComposer() {
+  const ta = document.getElementById('bulkComposeText');
+  const emojiPanel = document.getElementById('bulkEmojiPanel');
+  const gifPanel = document.getElementById('bulkGifPanel');
+  setupEmojiPicker('bulkEmojiTabs', 'bulkEmojiGrid', (emoji) => {
+    const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, s) + emoji + ta.value.slice(e);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = s + emoji.length;
+  });
+  document.getElementById('bulkEmojiBtn').onclick = () => { emojiPanel.classList.toggle('show'); gifPanel.classList.remove('show'); };
+  async function loadBulkGifs(q) {
+    const grid = document.getElementById('bulkGifGrid');
+    grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Loading…</div>';
+    const d = await fetch('/api/chat/gifs?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => ({ gifs: [] }));
+    if (d.needsConfig) { grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Ask an admin to add a Giphy API key in Admin Settings.</div>'; return; }
+    grid.innerHTML = (d.gifs || []).map(g => `<img src="${g.preview}" data-full="${g.full}"/>`).join('') || '<div class="pra-muted" style="grid-column:1/3">No results</div>';
+    grid.querySelectorAll('img').forEach(img => img.onclick = () => { bulkGifUrl = img.dataset.full; gifPanel.classList.remove('show'); renderBulkAttachments(); });
+  }
+  document.getElementById('bulkGifBtn').onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadBulkGifs(''); };
+  let gifTimer;
+  document.getElementById('bulkGifSearch').addEventListener('input', (e) => { clearTimeout(gifTimer); gifTimer = setTimeout(() => loadBulkGifs(e.target.value || ''), 350); });
+  document.getElementById('bulkAttachBtn').onclick = () => document.getElementById('bulkFileInput').click();
+  document.getElementById('bulkFileInput').onchange = (e) => { bulkFiles.push(...Array.from(e.target.files || [])); e.target.value = ''; renderBulkAttachments(); };
+  // Same keyboard behavior as the chat composer: Enter sends on a computer,
+  // Shift+Enter (and Enter on phones) makes a new line.
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isTouch && !e.isComposing) { e.preventDefault(); sendBulkMessages(); }
+  });
+  // Paste images straight into the bulk message too.
+  ta.addEventListener('paste', (e) => {
+    const files = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    if (files.length) { e.preventDefault(); bulkFiles.push(...files); renderBulkAttachments(); }
+  });
+})();
 
 document.getElementById('bulkSelectBtn').onclick = () => setBulkSelectMode(!bulkSelectMode);
 document.getElementById('bulkSelectCancelBtn').onclick = () => setBulkSelectMode(false);
