@@ -48,6 +48,11 @@
 
   /* ── Upcoming Retreats — tactical HUD-style map callouts ── */
   .retreat-hud { cursor: pointer; }
+  .dot-label { cursor: pointer; }
+  .dot-label-leader { stroke: #009bff; opacity: .9; }
+  .dot-label-panel { fill: rgba(0,155,255,0.14); stroke: #009bff; }
+  .dot-label:hover .dot-label-panel { fill: rgba(0,155,255,0.26); }
+  .dot-label-text { fill: #fff; font-family: var(--font-secondary); font-weight: 700; letter-spacing: .04em; }
   .retreat-hud-leader { stroke: #009bff; stroke-dasharray: 2 2; opacity: .85; }
   .retreat-hud-panel { fill: rgba(0,155,255,0.14); stroke: #009bff; }
   .retreat-hud-bracket { fill: none; stroke: #009bff; }
@@ -525,6 +530,67 @@ function applyDotSize(d, r, scale, hover) {
     else d.els.dot.setAttribute("fill", "var(--pra-blue)");
   }
 }
+// ── Name labels: once you're zoomed in far enough that a person's dot (and
+// its glow) no longer overlaps anyone else's, a small HUD panel with their
+// name appears on a #009bff leader line -- same look as the retreat callouts.
+const DOT_LABEL_MIN_GAP_PX = 64;   // on-screen distance to the nearest other dot
+const DOT_LABEL_LEADER_PX = 26;
+function buildDotLabels(svg, NS) {
+  const layer = document.createElementNS(NS, "g");
+  layer.setAttribute("id", "dotLabels");
+  dotDescriptors.forEach(d => {
+    const u = d.user || {};
+    const name = [u.first, u.last].filter(Boolean).join(" ").trim();
+    if (!name) return;
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("class", "dot-label");
+    g.style.display = "none";
+    const line = document.createElementNS(NS, "line"); line.setAttribute("class", "dot-label-leader");
+    const rect = document.createElementNS(NS, "rect"); rect.setAttribute("class", "dot-label-panel");
+    const text = document.createElementNS(NS, "text"); text.setAttribute("class", "dot-label-text");
+    text.textContent = name.toUpperCase();
+    g.append(line, rect, text);
+    g.addEventListener("click", () => openPopup(u));
+    layer.appendChild(g);
+    d.label = { g, line, rect, text };
+  });
+  svg.appendChild(layer);
+}
+function updateDotLabels(scale) {
+  const ppu = pxPerSvgUnit(scale);
+  const centers = dotDescriptors.map(d => dotCurrentCenter(d, scale));
+  dotDescriptors.forEach((d, i) => {
+    if (!d.label) return;
+    let nearest = Infinity;
+    for (let j = 0; j < centers.length; j++) {
+      if (j === i) continue;
+      const dist = Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y) * ppu;
+      if (dist < nearest) nearest = dist;
+    }
+    const show = nearest >= DOT_LABEL_MIN_GAP_PX;
+    d.label.g.style.display = show ? "" : "none";
+    if (!show) return;
+    const px = (v) => v / ppu; // screen px -> svg units
+    const r = currentDotRadius(scale);
+    const c = centers[i];
+    // Leader runs up-right from the dot's edge; panel sits at its end.
+    const ang = -Math.PI / 4;
+    const x1 = c.x + Math.cos(ang) * r, y1 = c.y + Math.sin(ang) * r;
+    const x2 = x1 + Math.cos(ang) * px(DOT_LABEL_LEADER_PX), y2 = y1 + Math.sin(ang) * px(DOT_LABEL_LEADER_PX);
+    const { line, rect, text } = d.label;
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1); line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.style.strokeWidth = px(1.2);
+    text.style.fontSize = px(10.5) + "px";
+    const padX = px(7), h = px(19);
+    text.setAttribute("x", x2 + padX); text.setAttribute("y", y2 - h / 2 + px(13.5));
+    let tw = 0; try { tw = text.getComputedTextLength(); } catch {}
+    if (!tw) tw = px(7 * text.textContent.length);
+    rect.setAttribute("x", x2); rect.setAttribute("y", y2 - h / 2);
+    rect.setAttribute("width", tw + padX * 2); rect.setAttribute("height", h);
+    rect.style.strokeWidth = px(1);
+  });
+}
+
 function updateDotVisuals(scale) {
   const r = currentDotRadius(scale);
   // Skip the currently-hovered dot — re-normalizing it here (a resize/zoom
@@ -533,6 +599,7 @@ function updateDotVisuals(scale) {
   // until the next hover change.
   dotDescriptors.forEach(d => { if (d !== hoveredDesc) applyDotSize(d, r, scale, false); });
   if (hoveredDesc) hoveredDesc.enlarge();
+  updateDotLabels(scale);
 }
 
 // ── Upcoming Retreats — tactical HUD-style map callouts ─────────────────
@@ -856,6 +923,7 @@ async function drawUsers() {
   });
   dotDescriptors.forEach(d => { d.originalNextSibling = d.clickTarget.nextSibling; });
   svg.appendChild(dotGroup);
+  buildDotLabels(svg, NS);
   updateDotVisuals(mapScale);
   setupDotHover();
 }
