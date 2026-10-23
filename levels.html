@@ -32,6 +32,7 @@
   .person-card { padding: 16px 18px; }
   .person-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .person-meta { flex: 1; min-width: 0; }
+  .super-level-badge { flex-shrink: 0; white-space: nowrap; }
   .person-name { font-weight: 400; font-size: .98rem; }
   .person-name-edit-btn { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .76rem; padding: 2px 5px; margin-left: 2px; border-radius: 4px; vertical-align: middle; }
   .person-name-edit-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
@@ -409,12 +410,14 @@ function renderPersonNameHtml(p, idx) {
   const nameText = escapeHtml(p.first) + (p.last ? ' ' + escapeHtml(p.last) : '');
   const editBtn = isStaffUser ? `<button type="button" class="person-name-edit-btn" data-idx="${idx}" title="Rename">✎</button>` : '';
   // Name opens their profile panel (badges + moves) when they have an app account.
-  const name = `<span class="prab-profile-link" data-profile-user="${p.userId || ''}" data-profile-name="${nameText}">${nameText}</span>`;
+  const name = `<span class="prab-profile-link" data-profile-idx="${idx}">${nameText}</span>`;
   const badges = `<span class="prab-inline" data-badges-user="${p.userId || ''}"></span>`;
   return `<div class="person-name prab-name-row">${name}${editBtn}${roleBadgeHtml(p)}${badges}</div>`;
 }
 
+let renderedPeople = [];
 function render(people) {
+  renderedPeople = people;
   const list = document.getElementById('list');
   document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
   list.innerHTML = people.map((p, idx) => {
@@ -422,7 +425,7 @@ function render(people) {
     return `
     <div class="pra-panel person-card">
       <div class="person-head">
-        <div class="pra-avatar${avatarRoleClass(p)}" style="width:52px;height:52px;flex-shrink:0">${avatarHtml(p)}</div>
+        <div class="pra-avatar${avatarRoleClass(p)} prab-profile-link" data-profile-idx="${idx}" style="width:52px;height:52px;flex-shrink:0">${avatarHtml(p)}</div>
         <div class="person-meta">
           ${renderPersonNameHtml(p, idx)}
           ${location ? `<div class="pra-muted" style="font-size:.78rem">${escapeHtml(location)}</div>` : ''}
@@ -570,8 +573,19 @@ initStaffFeatures().then(load);
   const mountAll = () => list.querySelectorAll('[data-badges-user]:not([data-badges-for])').forEach(el => PRABadges.mount(el, el.dataset.badgesUser || null));
   new MutationObserver(mountAll).observe(list, { childList: true, subtree: true });
   list.addEventListener('click', (e) => {
-    const link = e.target.closest('[data-profile-user]');
-    if (link) PRABadges.openProfile(link.dataset.profileUser, link.dataset.profileName);
+    const link = e.target.closest('[data-profile-idx]');
+    if (!link) return;
+    const idx = +link.dataset.profileIdx, p = renderedPeople[idx];
+    if (!p) return;
+    // Full profile: everything on the card (location, personality, Super
+    // Level, level bars -- read-only here) plus badges and their moves feed.
+    const name = p.first + (p.last ? ' ' + p.last : '');
+    const location = p.location ? [p.location.city, p.location.region, p.location.country].filter(Boolean).join(', ') : '';
+    const metaHtml = (location ? `<div class="pra-muted" style="font-size:.82rem;margin-top:6px">${escapeHtml(location)}</div>` : '')
+      + (p.archetypeTitle ? `<div class="pra-muted" style="font-size:.82rem;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px">${escapeHtml(p.archetypeTitle)}${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:20px;height:20px;border-radius:4px;object-fit:cover"/>` : ''}</div>` : '');
+    const extraHtml = `<div class="super-level-badge" style="text-align:center;margin:6px 0 10px">${escapeHtml(p.program || '')} Super Level <span class="num">${superLevel(p)}</span></div>`
+      + renderLevelChips(p, idx).replace(/ editable/g, '');
+    PRABadges.openProfile(p.userId || null, name, { metaHtml, extraHtml, avatarHtml: p.userId ? '' : avatarHtml(p) });
   });
 })();
 </script>

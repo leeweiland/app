@@ -67,7 +67,7 @@
   .pra-moves-empty { font-size: .78rem; color: var(--pra-dim, #8a8a96); padding: 6px 0; }
   .pra-feed-sentinel { height: 1px; }
   .prab-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .prab-row.prab-inline { margin: 0; gap: 10px; justify-content: flex-start; flex-wrap: nowrap; }
+  .prab-row.prab-inline { margin: 0; gap: 4px 10px; justify-content: flex-start; flex-wrap: wrap; max-width: 100%; }
   .prab-row.prab-inline .prab { flex-direction: row; gap: 3px; min-width: 0; }
   .prab-row.prab-inline .prab-icon { width: 16px; height: 16px; }
   .prab-row.prab-inline .prab-num { font-size: .7rem; }
@@ -75,7 +75,9 @@
   .prab-profile-link:hover { color: var(--pra-blue, #009bff); }
   .prab-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 700; padding: 16px; box-sizing: border-box; }
   .prab-modal.show { display: flex; }
-  .prab-modal-box { width: 100%; max-width: 560px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; text-align: center; }
+  .prab-modal-box { width: 100%; max-width: 560px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; text-align: center; color: var(--pra-white, #fff); font-family: var(--font-primary, inherit); }
+  .prab-modal-name { color: #fff; }
+  .prab-modal-extra { text-align: left; margin-top: 12px; }
   .prab-modal-avatar { width: 80px; height: 80px; margin: 0 auto 12px; font-size: 1.7rem; }
   .prab-modal-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   `;
@@ -278,7 +280,10 @@
     modal.classList.remove('show');
     modal.querySelectorAll('video').forEach(v => v.pause());
   }
-  async function openProfile(userId, fallbackName) {
+  // opts.metaHtml (under the name: location, personality...) and
+  // opts.extraHtml (between badges and moves: Super Level + level chips) let
+  // a page show everything it already knows about the person.
+  async function openProfile(userId, fallbackName, opts = {}) {
     if (!userId && !fallbackName) return;
     if (!modal) {
       modal = document.createElement('div');
@@ -289,6 +294,7 @@
         <div class="pra-h2 prab-modal-name" style="margin-bottom:4px"></div>
         <div class="prab-modal-role" style="margin-bottom:6px"></div>
         <div class="prab-modal-badges"></div>
+        <div class="prab-modal-extra"></div>
         <div class="prab-modal-moves"></div>
       </div>`;
       document.body.appendChild(modal);
@@ -296,22 +302,25 @@
       modal.querySelector('.pra-close-x').onclick = () => closeProfile();
     }
     modal.querySelector('.prab-modal-name').textContent = '';
-    modal.querySelector('.prab-modal-role').innerHTML = '';
-    modal.querySelector('.prab-modal-avatar').innerHTML = '';
+    modal.querySelector('.prab-modal-avatar').innerHTML = opts.avatarHtml || '';
+    modal.querySelector('.prab-modal-role').innerHTML = opts.metaHtml || '';
+    modal.querySelector('.prab-modal-extra').innerHTML = opts.extraHtml || '';
+    if (fallbackName) modal.querySelector('.prab-modal-name').textContent = fallbackName;
+    modal.querySelector('.prab-modal-box').scrollTop = 0;
     modal.classList.add('show');
     if (window.PRABack) PRABack.push('prabProfile', () => closeProfile(true));
     mount(modal.querySelector('.prab-modal-badges'), userId);
     if (!userId) {
       modal.querySelector('.prab-modal-name').textContent = fallbackName;
-      modal.querySelector('.prab-modal-avatar').textContent = (fallbackName || '?')[0].toUpperCase();
+      if (!opts.avatarHtml) modal.querySelector('.prab-modal-avatar').textContent = (fallbackName || '?')[0].toUpperCase();
       modal.querySelector('.prab-modal-moves').innerHTML = '<div class="pra-moves-empty" style="text-align:center;margin-top:14px">Not on the app yet.</div>';
       return;
     }
     const owner = await mountMoves(modal.querySelector('.prab-modal-moves'), userId);
     if (owner) {
       modal.querySelector('.prab-modal-name').textContent = [owner.first, owner.last].filter(Boolean).join(' ');
-      modal.querySelector('.prab-modal-role').innerHTML = `<span class="role-tag role-tag-${esc(owner.role)}">${esc(owner.role)}</span>`;
-      modal.querySelector('.prab-modal-avatar').innerHTML = owner.profilePictureFileId
+      modal.querySelector('.prab-modal-role').innerHTML = `<span class="role-tag role-tag-${esc(owner.role)}">${esc(owner.role)}</span>` + (opts.metaHtml || '');
+      if (!opts.avatarHtml) modal.querySelector('.prab-modal-avatar').innerHTML = owner.profilePictureFileId
         ? `<img src="/api/chat/media/${encodeURIComponent(owner.profilePictureFileId)}"/>`
         : esc((owner.first || '?')[0].toUpperCase());
     }
