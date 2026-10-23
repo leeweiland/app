@@ -2834,6 +2834,7 @@ function movesForUser(u, convos = readJson(CONVOS_FILE, [])) {
   return vids.filter(m => own.has(m.conversationId));
 }
 const MOVE_LIKES_FILE = "chat_move_likes.json"; // { [videoMessageId]: [userId, ...] }
+const KATAS_FILE = "chat_katas.json"; // { [videoMessageId]: { senderId, createdAt } } -- videos flagged as a kata on upload
 function computeBadges() {
   const users = readJson(USERS_FILE, []).filter(u => !u.archived);
   const food = readJson("chat_food_log.json", {});
@@ -2841,6 +2842,8 @@ function computeBadges() {
   const photos = readJson("chat_progress_photos.json", {});
   const videoCounts = new Map(MessagesDB.countVideosBySender().map(r => [r.senderId, r.n]));
   const convosForMoves = readJson(CONVOS_FILE, []);
+  const katasBySender = new Map();
+  for (const k of Object.values(readJson(KATAS_FILE, {}))) katasBySender.set(k.senderId, (katasBySender.get(k.senderId) || 0) + 1);
   // Hearts received = likes on every move the person posted.
   const heartsBySender = new Map();
   for (const [messageId, likers] of Object.entries(readJson(MOVE_LIKES_FILE, {}))) {
@@ -2857,12 +2860,13 @@ function computeBadges() {
       moves: isStaff(u) ? movesForUser(u, convosForMoves).length : (videoCounts.get(u.id) || 0),
       steps: days.reduce((sum, entries) => sum + (entries || []).filter(e => e.source === "steps").reduce((a, e) => a + (Number(e.steps) || 0), 0), 0),
       hearts: heartsBySender.get(u.id) || 0,
+      katas: katasBySender.get(u.id) || 0,
     };
   }
   // Competition ranking (ties share a rank); zero never ranks.
   const out = {};
   for (const id of Object.keys(counts)) out[id] = {};
-  for (const cat of ["fuel", "photos", "moves", "steps", "hearts"]) {
+  for (const cat of ["fuel", "photos", "moves", "katas", "steps", "hearts"]) {
     const sorted = Object.entries(counts).filter(([, c]) => c[cat] > 0).sort((a, b) => b[1][cat] - a[1][cat]);
     let rank = 0, prev = null;
     sorted.forEach(([id, c], i) => { if (c[cat] !== prev) { rank = i + 1; prev = c[cat]; } out[id][cat] = { n: c[cat], rank }; });
@@ -5852,6 +5856,7 @@ export async function handleChatRequest(req, res, url) {
           if (blockedByOther) return sendJson(res, 403, { error: "You can't message this person." });
         }
         const created = [];
+        let isKata = false; // camera upload's "Is this a kata?" toggle
         const ct = req.headers["content-type"] || "";
         if (ct.startsWith("multipart/form-data")) {
           const cfg = getConfig();
@@ -5869,6 +5874,7 @@ export async function handleChatRequest(req, res, url) {
             bb.on("field", (name, val) => {
               if (name === "trimStart") trimStart = Number(val);
               if (name === "trimEnd") trimEnd = Number(val);
+              if (name === "kata") isKata = val === "true";
             });
             bb.on("file", (name, stream, info) => {
               const type = info.mimeType.startsWith("video/") ? "video" : "image";
@@ -5979,6 +5985,12 @@ export async function handleChatRequest(req, res, url) {
               created.push(msg);
             });
             MessagesDB.insertMessages(toInsert);
+            if (isKata) {
+              const katas = readJson(KATAS_FILE, {});
+              toInsert.filter(m => m.type === "video").forEach(m => { katas[m.id] = { senderId: m.senderId, createdAt: m.createdAt }; });
+              writeJson(KATAS_FILE, katas);
+              badgesCache = null;
+            }
           });
         } else if (req.headers["content-type"]?.includes("application/json") === false) {
           return sendJson(res, 400, { error: "text or gifUrl required" });

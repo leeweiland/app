@@ -20,15 +20,17 @@
     // apple (fuel / nutrition)
     fuel: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.6 2.4c.2 1.4-.4 2.8-1.3 3.7-.9.9-2.2 1.5-3.4 1.4-.2-1.3.5-2.7 1.3-3.6.9-.9 2.3-1.5 3.4-1.5ZM12 8.6c1.1 0 2.4-.9 3.9-.9 1.1 0 3 .4 4.1 2.3-3.4 2-2.9 6.9.6 8.2-.7 1.8-2.4 4.6-4.3 4.6-1.5 0-2-.9-3.9-.9-2 0-2.6.9-4 .9C6.3 22.8 3 18.4 3 14.1c0-3.6 2.4-6.2 5.1-6.2 1.6 0 2.9.7 3.9.7Z"/></svg>',
     // push-up silhouette (physique photos)
-    photos: '<svg viewBox="0 0 24 24"><circle cx="19.6" cy="7.4" r="2.4" fill="currentColor"/><path d="M16.6 10.2 3.2 16.2" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M15.9 10.8 16.3 17.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/><path d="M1.5 18.4h21" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".55" fill="none"/></svg>',
+    photos: '<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="19.4" cy="7.2" r="2" fill="currentColor"/><path d="M17.2 9.4 3.4 15.6" stroke="currentColor" stroke-width="2.2"/><path d="M16.2 9.9 16.5 13.4M16.5 13.4 16.9 16.8" stroke="currentColor" stroke-width="1.7"/><path d="M3.4 15.6 2.6 16.9" stroke="currentColor" stroke-width="1.7"/><path d="M1.6 17.6h20.8" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg>',
+    // horse stance, front view (katas)
+    katas: '<svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="3.9" r="2" fill="currentColor"/><path d="M12 6.3v6" stroke="currentColor" stroke-width="2.2"/><path d="M5.4 8.6h13.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 12.3 6.6 13.6 5.9 19.3M12 12.3l5.4 1.3.7 5.7" stroke="currentColor" stroke-width="1.9"/><path d="M4.3 19.6h3.2M16.5 19.6h3.2" stroke="currentColor" stroke-width="1.7"/><path d="M2.5 21.4h19" stroke="currentColor" stroke-width="1.2" opacity=".5"/></svg>',
     // video camera (moves)
     moves: '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="13.5" height="12" rx="2.6" fill="currentColor"/><path fill="currentColor" d="M16.8 10.4 22 7.3v9.4l-5.2-3.1Z"/></svg>',
     // footprints (steps)
     steps: '<svg viewBox="0 0 24 24"><ellipse cx="8" cy="8.2" rx="3" ry="4.6" fill="currentColor"/><ellipse cx="8.2" cy="15.6" rx="2.1" ry="1.6" fill="currentColor"/><ellipse cx="16" cy="11.2" rx="3" ry="4.6" fill="currentColor"/><ellipse cx="16.2" cy="18.6" rx="2.1" ry="1.6" fill="currentColor"/></svg>',
     hearts: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.8 8.3 3 4.5 6.7 4.5c2.2 0 3.7 1.3 4.6 2.6.9-1.3 2.4-2.6 4.6-2.6 3.7 0 5.9 3.8 4.3 7.3C19.5 16.4 12 21 12 21Z"/></svg>',
   };
-  const CATS = ['fuel', 'photos', 'moves', 'steps', 'hearts'];
-  const ARIA = { fuel: 'Fuel days', photos: 'Physique photos', moves: 'Moves', steps: 'Steps', hearts: 'Hearts' };
+  const CATS = ['fuel', 'photos', 'moves', 'katas', 'steps', 'hearts'];
+  const ARIA = { fuel: 'Fuel days', photos: 'Physique photos', moves: 'Moves', katas: 'Katas', steps: 'Steps', hearts: 'Hearts' };
 
   const css = `
   .prab-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 10px 0 4px; }

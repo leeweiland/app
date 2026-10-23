@@ -603,6 +603,11 @@
   .camera-glow-btn:hover { box-shadow: 0 0 20px rgba(0,155,255,.85); }
   .camera-callout-step3 { position: static; flex: 1; text-align: center; }
   .camera-trim-wrap { position: relative; padding: 0 20px 14px; }
+  .camera-kata-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; font-size: .85rem; color: #fff; cursor: pointer; }
+  .camera-kata-toggle { appearance: none; -webkit-appearance: none; position: relative; width: 40px; height: 24px; flex-shrink: 0; background: rgba(255,255,255,0.25); border-radius: 12px; cursor: pointer; transition: background .15s; margin: 0; }
+  .camera-kata-toggle::before { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .camera-kata-toggle:checked { background: var(--pra-blue); }
+  .camera-kata-toggle:checked::before { transform: translateX(16px); }
   .camera-callout-step2 { position: static; margin-bottom: 4px; }
   /* Pinch-to-zoom widens the track's own content (via --trim-zoom, a plain
      scale multiplier on width) inside a horizontally-scrolling clip region
@@ -1207,6 +1212,10 @@
             <div class="camera-trim-handle camera-trim-handle-end" id="cameraTrimEndHandle"></div>
           </div>
         </div>
+        <label class="camera-kata-row" id="cameraKataRow">
+          <span>Is this a kata?</span>
+          <input type="checkbox" class="camera-kata-toggle" id="cameraKataToggle"/>
+        </label>
       </div>
       <div class="pra-muted" id="cameraGymThumbnailNote" style="display:none;text-align:center;font-size:.72rem;padding:0 20px 6px">Set the frame you want for the video thumbnail.</div>
       <div class="camera-review-actions" id="cameraReviewActions">
@@ -5140,6 +5149,8 @@ function showCameraReviewVideo(blob) {
   document.getElementById('cameraScreenShoot').style.display = 'none';
   document.getElementById('cameraScreenReview').style.display = 'flex';
   document.getElementById('cameraTrimWrap').style.display = '';
+  document.getElementById('cameraKataToggle').checked = false;
+  document.getElementById('cameraKataRow').style.display = cameraGymMode ? 'none' : '';
   const video = document.getElementById('cameraReviewVideo');
   const img = document.getElementById('cameraReviewImage');
   img.style.display = 'none';
@@ -5251,6 +5262,7 @@ async function sendCameraCapture() {
     fd.append('trimStart', String(cameraTrimStart));
     fd.append('trimEnd', String(cameraTrimEnd));
   }
+  if (isVideo && document.getElementById('cameraKataToggle').checked) fd.append('kata', 'true');
   const convoId = activeConvoId;
 
   // Close right away and show the clip in the thread immediately (with a
