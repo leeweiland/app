@@ -1567,6 +1567,9 @@ let editingMessageId = null;
 // Discord/iMessage's paste-then-send convention rather than firing the
 // upload the instant something's pasted).
 let pendingPasteFiles = [];
+// A picked GIF waits here as an attachment (with a preview + remove) until
+// Send, so a mis-tap in the GIF picker never sends anything by itself.
+let pendingGifUrl = null;
 let contacts = [];
 let lastPollTime = new Date(0).toISOString();
 let pollTimer = null;
@@ -4823,7 +4826,8 @@ function setupComposer() {
   document.getElementById('pastePreview').addEventListener('click', (e) => {
     const removeBtn = e.target.closest('.paste-preview-remove');
     if (!removeBtn) return;
-    pendingPasteFiles.splice(Number(removeBtn.dataset.index), 1);
+    if (removeBtn.dataset.gif) pendingGifUrl = null;
+    else pendingPasteFiles.splice(Number(removeBtn.dataset.index), 1);
     renderPastePreview();
   });
 
@@ -5706,14 +5710,14 @@ async function loadGifs(q) {
 
 function renderPastePreview() {
   const el = document.getElementById('pastePreview');
-  if (!pendingPasteFiles.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!pendingPasteFiles.length && !pendingGifUrl) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
   el.innerHTML = pendingPasteFiles.map((f, i) => {
     const url = URL.createObjectURL(f);
     const isVideo = f.type.startsWith('video/');
     const media = isVideo ? `<video src="${url}" muted></video>` : `<img src="${url}"/>`;
     return `<div class="paste-preview-item">${media}<button class="paste-preview-remove" data-index="${i}" title="Remove">✕</button></div>`;
-  }).join('');
+  }).join('') + (pendingGifUrl ? `<div class="paste-preview-item"><img src="${escapeHtml(pendingGifUrl)}"/><button class="paste-preview-remove" data-gif="1" title="Remove">✕</button></div>` : '');
 }
 
 // ── @mention autocomplete ─────────────────────────────────────────────────
@@ -5794,7 +5798,7 @@ async function sendText() {
   closeMentionDropdown();
   const input = document.getElementById('textInput');
   const text = input.value.trim();
-  if (!activeConvoId || (!text && !pendingPasteFiles.length)) return;
+  if (!activeConvoId || (!text && !pendingPasteFiles.length && !pendingGifUrl)) return;
   input.value = '';
   input.style.height = 'auto';
   // Files first, then the caption as its own message — the multipart
@@ -5807,6 +5811,15 @@ async function sendText() {
     renderPastePreview();
     await sendFiles(files);
   }
+  if (pendingGifUrl) {
+    const gifUrl = pendingGifUrl;
+    pendingGifUrl = null;
+    renderPastePreview();
+    await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gifUrl })
+    });
+    refreshThread(true);
+  }
   if (text) {
     const replyToId = replyingToId;
     cancelReply();
@@ -5817,13 +5830,13 @@ async function sendText() {
   }
 }
 
-async function sendGif(url) {
+// Picking a GIF only attaches it (preview above the composer); Send sends it.
+function sendGif(url) {
   document.getElementById('gifPanel').classList.remove('show');
   if (!activeConvoId) return;
-  await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gifUrl: url })
-  });
-  refreshThread(true);
+  pendingGifUrl = url;
+  renderPastePreview();
+  document.getElementById('textInput').focus();
 }
 
 async function loadTemplates(q) {
