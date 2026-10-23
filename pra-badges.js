@@ -33,11 +33,11 @@
   const ARIA = { fuel: 'Fuel days', photos: 'Physique photos', moves: 'Moves', katas: 'Katas', steps: 'Steps', hearts: 'Hearts' };
 
   const css = `
-  .prab-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 10px 0 4px; }
-  .prab { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 34px; }
-  .prab-icon { width: 30px; height: 30px; filter: drop-shadow(0 0 6px rgba(0,155,255,0.35)); }
+  .prab-row { display: flex; gap: 4px 12px; flex-wrap: wrap; justify-content: center; margin: 8px 0 4px; }
+  .prab { display: flex; flex-direction: row; align-items: center; gap: 3px; }
+  .prab-icon { width: 16px; height: 16px; filter: drop-shadow(0 0 4px rgba(0,155,255,0.3)); }
   .prab-icon svg { width: 100%; height: 100%; display: block; }
-  .prab-num { font-family: var(--font-secondary, inherit); font-weight: 700; font-size: .78rem; line-height: 1; }
+  .prab-num { font-family: var(--font-secondary, inherit); font-weight: 700; font-size: .7rem; line-height: 1; }
   .pra-moves { margin-top: 14px; text-align: left; }
   .pra-moves-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .pra-moves-title { font-family: var(--font-secondary, inherit); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim, #8a8a96); }
