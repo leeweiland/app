@@ -6,6 +6,7 @@
 <title>Training Protocol — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/pra-badges.js"></script>
+<script src="/chat-app/profile-panel.js"></script>
 <style>
   body { margin: 0; }
   /* Capacitor's iOS build runs with ios.scrollEnabled:false (see
@@ -570,6 +571,13 @@ async function init() {
   const client = uRes.ok ? (await uRes.json()).user : null;
   document.getElementById('clientName').textContent = client ? `${client.first} ${client.last}` : 'Unknown client';
   if (client) PRABadges.mount(document.getElementById('clientBadges'), client.id || targetUserId);
+  // Name opens their profile panel (the same one used everywhere).
+  if (client) {
+    const nameEl = document.getElementById('clientName');
+    nameEl.style.cursor = 'pointer';
+    nameEl.title = 'Open profile';
+    nameEl.onclick = () => PRAProfile.open(client);
+  }
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';

@@ -6,6 +6,7 @@
 <title>Chat — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/pra-badges.js"></script>
+<script src="/chat-app/profile-panel.js"></script>
 <script src="/chat-app/call-bg-effects.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
@@ -1995,6 +1996,9 @@ async function init() {
   // deploy) also defeats the browser's bfcache, so a plain history.back()
   // would reload chat.html from scratch with nothing open — this URL param
   // is what actually gets them back to the right thread.
+  // ?dm=<userId> -- the shared profile panel's Message button on other pages.
+  const deepLinkDm = new URLSearchParams(location.search).get('dm');
+  if (deepLinkDm) startConvo(deepLinkDm);
   const deepLinkConvoId = new URLSearchParams(location.search).get('convo');
   if (deepLinkConvoId && conversations.some(c => c.id === deepLinkConvoId)) {
     openConvo(deepLinkConvoId);
@@ -2744,10 +2748,13 @@ function isAdminMe() { return !!me && (me.role === 'admin' || me.role === 'admin
 function isStaffMe() { return !!me && (me.role === 'coach' || isAdminMe()); }
 function maybeOpenLevelsModal() {
   const convo = conversations.find(c => c.id === activeConvoId);
-  if (!convo || convo.type !== 'dm') return;
-  const other = otherParticipant(convo);
-  if (!other) return;
-  openLevelsModal(other);
+  if (!convo) return;
+  // DM -> the other person; a student's own group (or your self thread) ->
+  // the person it belongs to.
+  const person = convo.type === 'dm' ? otherParticipant(convo)
+    : (convo.autoGroupUserId ? convo.participants.find(p => p.id === convo.autoGroupUserId) : null);
+  if (!person) return;
+  openLevelsModal(person);
 }
 document.getElementById('threadAvatar').addEventListener('click', maybeOpenLevelsModal);
 document.getElementById('threadName').addEventListener('click', maybeOpenLevelsModal);
@@ -3254,7 +3261,11 @@ function archetypeUrl(title, gender) {
   return `/personality-quiz/results.html?title=${encodeURIComponent(slugify(title))}&gender=${encodeURIComponent(gender || 'male')}`;
 }
 
-async function openLevelsModal(otherUser) {
+// Every profile in the app now opens the ONE shared panel (profile-panel.js).
+function openLevelsModal(otherUser) {
+  return PRAProfile.open(otherUser, { onMessage: (u) => startConvo(u.id) });
+}
+async function openLevelsModalLegacy(otherUser) {
   levelsModalUser = otherUser;
   // Photo editing only ever targets the session's own account server-side
   // (/api/auth/update-profile), so the badge only makes sense — and only

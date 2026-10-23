@@ -6,6 +6,7 @@
 <title>Strength Ninjas — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/pra-badges.js"></script>
+<script src="/chat-app/profile-panel.js"></script>
 <style>
   body { margin: 0; }
   .wrap { max-width: 1400px; margin: 0 auto; padding: 12px 12px 30px; }
@@ -879,6 +880,8 @@ let popupUser = null;
 let popupEntries = [];
 
 function openPopup(u) {
+  // People with an app account get the one shared profile panel.
+  if (u.userId) { PRAProfile.open(u.userId); return; }
   popupUser = u;
   popupEntries = u.levels || [];
   document.getElementById("popupAvatar").innerHTML = u.profilePictureFileId

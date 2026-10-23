@@ -6,6 +6,7 @@
 <title>Levels — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/pra-badges.js"></script>
+<script src="/chat-app/profile-panel.js"></script>
 <style>
   /* iOS's native WKWebView page scroll is disabled app-wide
      (capacitor.config.json ios.scrollEnabled:false — needed to stop the
@@ -577,15 +578,9 @@ initStaffFeatures().then(load);
     if (!link) return;
     const idx = +link.dataset.profileIdx, p = renderedPeople[idx];
     if (!p) return;
-    // Full profile: everything on the card (location, personality, Super
-    // Level, level bars -- read-only here) plus badges and their moves feed.
-    const name = p.first + (p.last ? ' ' + p.last : '');
-    const location = p.location ? [p.location.city, p.location.region, p.location.country].filter(Boolean).join(', ') : '';
-    const metaHtml = (location ? `<div class="pra-muted" style="font-size:.82rem;margin-top:6px">${escapeHtml(location)}</div>` : '')
-      + (p.archetypeTitle ? `<div class="pra-muted" style="font-size:.82rem;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px">${escapeHtml(p.archetypeTitle)}${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:20px;height:20px;border-radius:4px;object-fit:cover"/>` : ''}</div>` : '');
-    const extraHtml = `<div class="super-level-badge" style="text-align:center;margin:6px 0 10px">${escapeHtml(p.program || '')} Super Level <span class="num">${superLevel(p)}</span></div>`
-      + renderLevelChips(p, idx).replace(/ editable/g, '');
-    PRABadges.openProfile(p.userId || null, name, { metaHtml, extraHtml, avatarHtml: p.userId ? '' : avatarHtml(p) });
+    // The same profile panel used everywhere (profile-panel.js), with their
+    // moves feed. People without an app account still get it (levels, no feed).
+    PRAProfile.open(p.userId || { first: p.first, last: p.last || '', role: '', location: p.location, archetypeTitle: p.archetypeTitle, archetypeImage: p.archetypeImage });
   });
 })();
 </script>
