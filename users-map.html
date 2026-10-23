@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Strength Ninjas — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <style>
   body { margin: 0; }
   .wrap { max-width: 1400px; margin: 0 auto; padding: 12px 12px 30px; }
@@ -115,7 +116,9 @@
       <div id="popupRoleBadge" style="margin-top:4px"></div>
       <div class="pra-muted" id="popupLocation" style="margin-top:6px;font-size:.85rem"></div>
       <div id="popupEditLink" style="margin-top:6px"></div>
+      <div id="popupBadges"></div>
       <div id="popupLevels" style="margin-top:14px;text-align:left"></div>
+      <div id="popupMoves"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closePopup()">Close</button>
     </div>
   </div>
@@ -847,6 +850,12 @@ function openPopup(u) {
   document.getElementById("popupName").textContent = u.last ? (u.first + ' ' + u.last) : u.first;
   document.getElementById("popupRoleBadge").innerHTML = roleBadgeHtml(u);
   document.getElementById("popupLocation").textContent = [u.city, u.region, u.country].filter(Boolean).join(", ");
+  document.getElementById("popupBadges").innerHTML = "";
+  document.getElementById("popupMoves").innerHTML = "";
+  if (u.userId) {
+    PRABadges.mount(document.getElementById("popupBadges"), u.userId);
+    PRABadges.mountMoves(document.getElementById("popupMoves"), u.userId);
+  }
   // Matched by name, same convention findLevelsEntries/nameKey use
   // server-side — this popup's `u` is a sheet row, not a chat account, so
   // there's no id to compare against directly.

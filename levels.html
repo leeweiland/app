@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Levels — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <style>
   /* iOS's native WKWebView page scroll is disabled app-wide
      (capacitor.config.json ios.scrollEnabled:false — needed to stop the
@@ -41,6 +42,7 @@
   .person-name-save-btn:hover, .person-name-cancel-btn:hover { background: rgba(255,255,255,0.08); }
   .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
   .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
+  .person-badges { justify-content: flex-start; margin: 0 0 12px; }
   .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
   .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; }
   .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
@@ -426,10 +428,12 @@ function render(people) {
         </div>
         <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
       </div>
+      ${p.userId ? `<div class="person-badges" data-badges-user="${p.userId}"></div>` : ''}
       ${renderLevelChips(p, idx)}
     </div>
   `;
   }).join('');
+  list.querySelectorAll('[data-badges-user]').forEach(el => PRABadges.mount(el, el.dataset.badgesUser));
   if (isStaffUser) { attachChipHandlers(); attachNameEditHandlers(); }
 }
 

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Powerbatics Body Mastery Builder — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <style>
   /* Same iOS fix as profile.html: the native app runs with
      ios.scrollEnabled:false, so plain body scrolling never moved on iPhone.
@@ -255,6 +256,7 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:22px;font-family:var(--font-secondary);font-size:clamp(.68rem, 4.05vw, 1.7rem);white-space:nowrap">Powerbatics Body Mastery Builder</div>
+    <div id="builderBadges" style="margin:-10px 0 18px"></div>
 
     <div class="hub-tabs-bar"><div class="hub-tabs" id="hubTabsBar"></div></div>
 
@@ -456,7 +458,7 @@
       <div class="pra-h2" style="margin-bottom:14px">Master Every Move</div>
       <div class="pra-muted profile-summary-line" id="movesProfileSummary"></div>
 
-      <div class="pra-h2" style="margin:20px 0 10px">Progress Videos</div>
+      <div class="pra-h2" style="margin:20px 0 10px">All Moves</div>
       <div id="movesEmpty" class="pra-muted" style="font-size:.85rem;display:none"></div>
       <div id="movesVideoList"></div>
     </div>
@@ -601,6 +603,7 @@ function applyViewingMode() {
   const profileBtn = document.getElementById('profileSaveBtn');
   if (profileBtn) profileBtn.disabled = viewing && !adminCanEdit;
   document.getElementById('viewingBanner').style.display = viewing ? 'flex' : 'none';
+  PRABadges.mount(document.getElementById('builderBadges'), viewingUserId || me?.id);
   if (viewing) {
     document.getElementById('viewingBannerName').textContent = viewingUserName;
     document.getElementById('viewingBannerMode').textContent = adminCanEdit
@@ -1662,23 +1665,12 @@ function renderProgressList() {
 // new tab rather than embedding playback here (favorites already carry a
 // webViewLink from when they were saved, so no extra streaming proxy is
 // needed for this).
+// Every video the person has uploaded (not just coach-starred ones), newest
+// first, with the owner's show/keep-private toggle -- shared with the
+// profile pages via pra-badges.js.
 async function loadFavoritedVideos() {
-  try {
-    const r = await fetch('/api/chat/my-favorited-videos');
-    if (!r.ok) return;
-    const { favorites } = await r.json();
-    document.getElementById('movesEmpty').style.display = favorites.length ? 'none' : 'block';
-    document.getElementById('movesVideoList').innerHTML = favorites.map(f => {
-      const date = new Date(f.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `<a class="pra-panel progress-entry-row" href="${escapeHtml(f.webViewLink || '#')}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">
-        <div class="moves-video-icon">🎬</div>
-        <div class="progress-entry-info">
-          <div class="progress-entry-date">${date}</div>
-          <div class="progress-entry-stats">${escapeHtml(f.name || 'Untitled')}</div>
-        </div>
-      </a>`;
-    }).join('');
-  } catch {}
+  document.getElementById('movesEmpty').style.display = 'none';
+  await PRABadges.mountMoves(document.getElementById('movesVideoList'), viewingUserId || me?.id);
 }
 
 // ── Reports: daily/weekly/monthly rollups ───────────────────────────────

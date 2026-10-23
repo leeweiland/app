@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Chat — PRA</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
   /* Full-viewport flex column instead of a hardcoded `calc(100vh - 62px)` —
@@ -1365,8 +1366,10 @@
       </div>
       <div id="levelsRoleBadge" style="margin-bottom:8px"></div>
       <div class="pra-muted" id="levelsLocation" style="font-size:.85rem;margin-bottom:10px"></div>
+      <div id="levelsBadges"></div>
       <div class="btn-row" id="levelsAccountActions" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
       <div style="text-align:left" id="levelsBody"></div>
+      <div id="levelsMoves"></div>
       <div class="btn-row" style="display:flex;gap:10px;margin-top:16px">
         <button class="pra-btn pra-btn-ghost" id="levelsMessageBtn" style="flex:1">Message</button>
         <button class="pra-btn pra-btn-ghost" onclick="closeModal('levelsModal')">Close</button>
@@ -3267,6 +3270,10 @@ async function openLevelsModal(otherUser) {
   msgBtn.onclick = () => { closeModal('levelsModal'); startConvo(otherUser.id); };
   document.getElementById('levelsAvatarEditBadge').style.display = isSelf ? '' : 'none';
   openModal('levelsModal');
+  document.getElementById('levelsBadges').innerHTML = '';
+  document.getElementById('levelsMoves').innerHTML = '';
+  PRABadges.mount(document.getElementById('levelsBadges'), otherUser.id);
+  PRABadges.mountMoves(document.getElementById('levelsMoves'), otherUser.id);
 
   const [profileRes, levelsRes] = await Promise.all([
     fetch('/api/chat/profile/' + otherUser.id),

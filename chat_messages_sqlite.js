@@ -359,4 +359,13 @@ export function getVideosInMonth(conversationIds, monthStartISO, nextMonthStartI
   `).all(...conversationIds, monthStartISO, nextMonthStartISO);
 }
 
+// Profile badges + moves history: every video a person has uploaded.
+db.exec("CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON messages(senderId, type)");
+export function countVideosBySender() {
+  return db.prepare("SELECT senderId, COUNT(*) AS n FROM messages WHERE type = 'video' GROUP BY senderId").all();
+}
+export function getVideosBySender(senderId) {
+  return db.prepare("SELECT * FROM messages WHERE type = 'video' AND senderId = ? ORDER BY createdAt DESC").all(senderId).map(rowToMessage);
+}
+
 migrateFromJsonIfNeeded();

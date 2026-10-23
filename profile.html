@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Profile — PRA Chat</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <style>
   /* iOS's native WKWebView page scroll is disabled app-wide
      (capacitor.config.json ios.scrollEnabled:false — needed to stop the
@@ -119,6 +120,7 @@ function render(u, editable) {
     </div>
     <div class="pra-h1">${u.first} ${u.last}</div>
     <div class="pra-badge role-badge">${u.role}</div>
+    <div id="profileBadges"></div>
 
     ${u.archetypeTitle ? `
     <div class="section-title" style="border-top:none;padding-top:0;margin-top:20px">Training Personality</div>
@@ -167,6 +169,11 @@ function render(u, editable) {
       <div class="save-msg" id="pwMsg"></div>
     ` : `<div class="btn-row"><a class="pra-btn" style="flex:1;text-decoration:none;text-align:center" href="/chat-app/chat.html">MESSAGE</a></div>`}
   `;
+  PRABadges.mount(document.getElementById('profileBadges'), u.id);
+  const movesEl = document.createElement('div');
+  movesEl.style.marginTop = '20px';
+  document.getElementById('levelsSection').after(movesEl);
+  PRABadges.mountMoves(movesEl, u.id);
 
   if (editable) {
     document.getElementById('avatarEditBadge').onclick = () => document.getElementById('picInput').click();

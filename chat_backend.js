@@ -2823,6 +2823,35 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // actually enrolled in.
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
+let badgesCache = null;
+function computeBadges() {
+  const users = readJson(USERS_FILE, []).filter(u => !u.archived);
+  const food = readJson("chat_food_log.json", {});
+  const scans = readJson("chat_body_scans.json", {});
+  const photos = readJson("chat_progress_photos.json", {});
+  const videoCounts = new Map(MessagesDB.countVideosBySender().map(r => [r.senderId, r.n]));
+  const counts = {};
+  for (const u of users) {
+    const days = Object.values(food[u.id] || {});
+    counts[u.id] = {
+      fuel: days.filter(entries => (entries || []).some(e => e.source !== "steps")).length,
+      photos: (scans[u.id] || []).filter(x => x.driveFileId && x.type !== "move").length + (photos[u.id] || []).filter(x => x.driveFileId).length,
+      moves: videoCounts.get(u.id) || 0,
+      steps: days.reduce((sum, entries) => sum + (entries || []).filter(e => e.source === "steps").reduce((a, e) => a + (Number(e.steps) || 0), 0), 0),
+    };
+  }
+  // Competition ranking (ties share a rank); zero never ranks.
+  const out = {};
+  for (const id of Object.keys(counts)) out[id] = {};
+  for (const cat of ["fuel", "photos", "moves", "steps"]) {
+    const sorted = Object.entries(counts).filter(([, c]) => c[cat] > 0).sort((a, b) => b[1][cat] - a[1][cat]);
+    let rank = 0, prev = null;
+    sorted.forEach(([id, c], i) => { if (c[cat] !== prev) { rank = i + 1; prev = c[cat]; } out[id][cat] = { n: c[cat], rank }; });
+    for (const id of Object.keys(counts)) if (!out[id][cat]) out[id][cat] = { n: 0, rank: null };
+  }
+  return { users: out };
+}
+
 // Every plain "user" and every online/gym client gets their OWN dedicated
 // group (not one shared group for everyone), named "First Last Group" --
 // a user's has them + every admin/admin2, an online/gym client's has them +
@@ -3522,7 +3551,10 @@ export async function handleChatRequest(req, res, url) {
       if (msg) {
         const convos = readJson(CONVOS_FILE, []);
         const convo = convos.find(c => c.id === msg.conversationId);
-        if (!convo || !convo.participantIds.includes(mediaUser.id)) { res.writeHead(403); res.end(); return true; }
+        // A move (video) whose sender shows their moves publicly on their
+        // profile is viewable by any signed-in user (profile moves history).
+        const publicMove = msg.type === "video" && allUsers.find(u => u.id === msg.senderId)?.showMoves !== false;
+        if (!publicMove && (!convo || !convo.participantIds.includes(mediaUser.id))) { res.writeHead(403); res.end(); return true; }
       } else {
         // Not a chat-message attachment — check whether it's a training-protocol
         // step's video/image (these are never posted as chat messages, so the
@@ -4060,6 +4092,8 @@ export async function handleChatRequest(req, res, url) {
       res.setHeader("Cache-Control", "no-store");
       try {
         const points = await fetchUsersMapPoints();
+        const idByName = new Map(readJson(USERS_FILE, []).filter(u => !u.archived).map(u => [nameKey(u.first, u.last), u.id]));
+        points.forEach(pt => { pt.userId = idByName.get(nameKey(pt.first, pt.last)) || null; });
         // Levels (including Super Level) are visible to everyone now — the
         // map is meant to double as a shared leaderboard. `last` name stays
         // staff-only — it only ever mattered for the staff-only levels-edit
@@ -4377,6 +4411,8 @@ export async function handleChatRequest(req, res, url) {
       try {
         const people = await fetchAllLevels();
         const enriched = await enrichLevelsPeople(people);
+        const idByName = new Map(readJson(USERS_FILE, []).filter(u => !u.archived).map(u => [nameKey(u.first, u.last), u.id]));
+        enriched.forEach(pp => { pp.userId = idByName.get(nameKey(pp.first, pp.last)) || null; });
         const visible = isStaff(user) ? enriched : enriched.map(p => {
           if (nameKey(p.first, p.last) === nameKey(user.first, user.last)) return p;
           const { last, ...rest } = p;
@@ -5378,6 +5414,34 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // ─── Conversations ─────────────────────────────────────────────────
+    // ── Profile badges ─────────────────────────────────────────────────────
+    // Four counts per person, ranked across everyone: distinct days Fuel was
+    // tracked, physique photos, moves (videos uploaded), total steps logged.
+    // Rank 1/2/3 = gold/silver/bronze on the client. Cached 5 minutes.
+    if (p === "/api/chat/badges" && req.method === "GET") {
+      if (!badgesCache || Date.now() - badgesCache.at > 5 * 60 * 1000) badgesCache = { at: Date.now(), data: computeBadges() };
+      return sendJson(res, 200, badgesCache.data);
+    }
+    const userMovesMatch = p.match(/^\/api\/chat\/user-moves\/([^/]+)$/);
+    if (userMovesMatch && req.method === "GET") {
+      const target = readJson(USERS_FILE, []).find(u => u.id === userMovesMatch[1] && !u.archived);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      const isSelf = target.id === user.id;
+      const showMoves = target.showMoves !== false;
+      if (!showMoves && !isSelf && !isStaff(user)) return sendJson(res, 200, { showMoves, isSelf, hidden: true, videos: [] });
+      const videos = MessagesDB.getVideosBySender(target.id).map(m => ({ id: m.id, driveFileId: m.driveFileId, name: m.name || "", createdAt: m.createdAt }));
+      return sendJson(res, 200, { showMoves, isSelf, hidden: false, videos });
+    }
+    if (p === "/api/chat/me/show-moves" && req.method === "POST") {
+      const { show } = await readJsonBody(req);
+      const users = readJson(USERS_FILE, []);
+      const me = users.find(u => u.id === user.id);
+      if (!me) return sendJson(res, 404, { error: "User not found" });
+      me.showMoves = !!show;
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true, showMoves: me.showMoves });
+    }
+
     if (p === "/api/chat/conversations" && req.method === "GET") {
       const blockedUserIds = new Set(readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id).map(b => b.blockedId));
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id))
