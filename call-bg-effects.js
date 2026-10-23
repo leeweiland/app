@@ -64,6 +64,11 @@
     // shrink the frame way down, then stretch it back up smoothed.
     const tiny = document.createElement('canvas'); tiny.width = Math.max(8, Math.round(vw / 16)); tiny.height = Math.max(6, Math.round(vh / 16));
     const tctx = tiny.getContext('2d');
+    // Upscaling in two smoothed steps (tiny -> 1/4 -> full) turns the blocky
+    // look of a single big stretch into a soft blur.
+    const mid = document.createElement('canvas'); mid.width = Math.max(16, Math.round(vw / 4)); mid.height = Math.max(12, Math.round(vh / 4));
+    const midctx = mid.getContext('2d');
+    midctx.imageSmoothingEnabled = true; midctx.imageSmoothingQuality = 'high';
 
     let bgImage = null;
     if (mode === 'image' && imageUrl) {
@@ -78,8 +83,9 @@
     function drawBackground() {
       if (mode === 'blur') {
         tctx.drawImage(video, 0, 0, tiny.width, tiny.height);
+        midctx.drawImage(tiny, 0, 0, mid.width, mid.height);
         ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(tiny, 0, 0, vw, vh);
+        ctx.drawImage(mid, 0, 0, vw, vh);
       } else if (mode === 'image' && bgImage) {
         const s = Math.max(vw / bgImage.width, vh / bgImage.height);
         const w = bgImage.width * s, h = bgImage.height * s;
