@@ -417,28 +417,39 @@ function renderPersonNameHtml(p, idx) {
 }
 
 let renderedPeople = [];
+// Each card IS the shared profile panel (profile-panel.js) -- minus the moves
+// feed -- built from this page's own data (no per-card requests), and only
+// once it scrolls near the screen. Photo/name opens the full panel + feed.
+const cardObserver = new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    cardObserver.unobserve(en.target);
+    renderPanelCard(en.target, renderedPeople[+en.target.dataset.idx]);
+  });
+}, { rootMargin: '800px 0px' });
+function panelUserFor(p) {
+  return p.userId
+    ? { id: p.userId, first: p.first, last: p.last || '', role: p.role, profilePictureFileId: p.profilePictureFileId || null }
+    : { first: p.first, last: p.last || '', role: '', profilePictureFileId: null };
+}
+function renderPanelCard(el, p) {
+  if (!p) return;
+  const user = panelUserFor(p);
+  PRAProfile.renderInline(el, user, {
+    showMoves: false,
+    preload: {
+      entries: [{ program: p.program, levels: p.levels || {}, team: !!p.team }],
+      profile: { location: p.location || null, archetypeTitle: p.archetypeTitle || null, archetypeImage: p.archetypeImage || null, gender: p.gender || null },
+    },
+    onHeaderClick: () => PRAProfile.open(p.userId || user, {}),
+  });
+}
 function render(people) {
   renderedPeople = people;
   const list = document.getElementById('list');
   document.getElementById('emptyHint').style.display = people.length ? 'none' : 'block';
-  list.innerHTML = people.map((p, idx) => {
-    const location = p.location ? [p.location.city, p.location.region, p.location.country].filter(Boolean).join(', ') : '';
-    return `
-    <div class="pra-panel person-card">
-      <div class="person-head">
-        <div class="pra-avatar${avatarRoleClass(p)} prab-profile-link" data-profile-idx="${idx}" style="width:52px;height:52px;flex-shrink:0">${avatarHtml(p)}</div>
-        <div class="person-meta">
-          ${renderPersonNameHtml(p, idx)}
-          ${location ? `<div class="pra-muted" style="font-size:.78rem">${escapeHtml(location)}</div>` : ''}
-          ${p.archetypeTitle ? `<div class="pra-muted" style="font-size:.78rem;display:flex;align-items:center;gap:5px;margin-top:2px">${escapeHtml(p.archetypeTitle)}${p.archetypeImage ? `<img src="${p.archetypeImage}" style="width:18px;height:18px;border-radius:4px;object-fit:cover"/>` : ''}</div>` : ''}
-        </div>
-        <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
-      </div>
-      ${renderLevelChips(p, idx)}
-    </div>
-  `;
-  }).join('');
-  if (isStaffUser) { attachChipHandlers(); attachNameEditHandlers(); }
+  list.innerHTML = people.map((p, idx) => `<div class="pra-panel person-card" data-idx="${idx}" style="min-height:220px"></div>`).join('');
+  list.querySelectorAll('.person-card').forEach(el => cardObserver.observe(el));
 }
 
 // Coach/admin only — fixes a name typo right on the card. Renames both the

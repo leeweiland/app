@@ -154,6 +154,12 @@
     editBtn.style.display = staff && hasAccount ? '' : 'none';
     editBtn.onclick = () => startNameEdit(root, state, opts);
     q('.pp-role').innerHTML = roleBadgeHtml(user);
+    // opts.onHeaderClick: photo + name open something (the Levels page opens
+    // the full panel with the moves feed).
+    [q('.pp-avatar'), q('.pp-name')].forEach(el => {
+      el.style.cursor = opts.onHeaderClick ? 'pointer' : '';
+      el.onclick = opts.onHeaderClick ? () => opts.onHeaderClick(user) : null;
+    });
     q('.pp-location').textContent = '';
     q('.pp-msg').textContent = 'Loading…';
     q('.pp-body').innerHTML = '';
@@ -189,12 +195,20 @@
     if (opts.showMoves !== false && hasAccount && window.PRABadges) PRABadges.mountMoves(movesEl, user.id);
 
     // profile card (location, personality) + levels
-    const [profileRes, levelsRes] = await Promise.all([
-      hasAccount ? fetch('/api/chat/profile/' + encodeURIComponent(user.id)) : Promise.resolve(null),
-      fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(user.first || '') + '&last=' + encodeURIComponent(user.last || '')),
-    ]);
-    const profile = profileRes && profileRes.ok ? (await profileRes.json()).profile : null;
-    state.entries = levelsRes.ok ? (await levelsRes.json()).entries || [] : [];
+    // opts.preload = { entries, profile } skips both requests -- the Levels
+    // page renders hundreds of these from data it already has.
+    let profile = null;
+    if (opts.preload) {
+      profile = opts.preload.profile || null;
+      state.entries = opts.preload.entries || [];
+    } else {
+      const [profileRes, levelsRes] = await Promise.all([
+        hasAccount ? fetch('/api/chat/profile/' + encodeURIComponent(user.id)) : Promise.resolve(null),
+        fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(user.first || '') + '&last=' + encodeURIComponent(user.last || '')),
+      ]);
+      profile = profileRes && profileRes.ok ? (await profileRes.json()).profile : null;
+      state.entries = levelsRes.ok ? (await levelsRes.json()).entries || [] : [];
+    }
     q('.pp-msg').textContent = '';
     const loc = profile?.location ? [profile.location.city, profile.location.region, profile.location.country].filter(Boolean).join(', ')
       : (user.location ? [user.location.city, user.location.region, user.location.country].filter(Boolean).join(', ') : '');
