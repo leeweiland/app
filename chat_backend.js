@@ -2824,6 +2824,15 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
 let badgesCache = null;
+// A person's "moves" = videos they uploaded. Coaches/admins only count videos
+// posted in their OWN coaching group (autoGroupUserId === them) -- staff
+// don't have one today, so their moves are empty.
+function movesForUser(u, convos = readJson(CONVOS_FILE, [])) {
+  const vids = MessagesDB.getVideosBySender(u.id);
+  if (!isStaff(u)) return vids;
+  const own = new Set(convos.filter(c => c.autoGroupUserId === u.id).map(c => c.id));
+  return vids.filter(m => own.has(m.conversationId));
+}
 const MOVE_LIKES_FILE = "chat_move_likes.json"; // { [videoMessageId]: [userId, ...] }
 function computeBadges() {
   const users = readJson(USERS_FILE, []).filter(u => !u.archived);
@@ -2831,6 +2840,7 @@ function computeBadges() {
   const scans = readJson("chat_body_scans.json", {});
   const photos = readJson("chat_progress_photos.json", {});
   const videoCounts = new Map(MessagesDB.countVideosBySender().map(r => [r.senderId, r.n]));
+  const convosForMoves = readJson(CONVOS_FILE, []);
   // Hearts received = likes on every move the person posted.
   const heartsBySender = new Map();
   for (const [messageId, likers] of Object.entries(readJson(MOVE_LIKES_FILE, {}))) {
@@ -2844,7 +2854,7 @@ function computeBadges() {
     counts[u.id] = {
       fuel: days.filter(entries => (entries || []).some(e => e.source !== "steps")).length,
       photos: (scans[u.id] || []).filter(x => x.driveFileId && x.type !== "move").length + (photos[u.id] || []).filter(x => x.driveFileId).length,
-      moves: videoCounts.get(u.id) || 0,
+      moves: isStaff(u) ? movesForUser(u, convosForMoves).length : (videoCounts.get(u.id) || 0),
       steps: days.reduce((sum, entries) => sum + (entries || []).filter(e => e.source === "steps").reduce((a, e) => a + (Number(e.steps) || 0), 0), 0),
       hearts: heartsBySender.get(u.id) || 0,
     };
@@ -3562,7 +3572,9 @@ export async function handleChatRequest(req, res, url) {
         const convo = convos.find(c => c.id === msg.conversationId);
         // A move (video) whose sender shows their moves publicly on their
         // profile is viewable by any signed-in user (profile moves history).
-        const publicMove = msg.type === "video" && allUsers.find(u => u.id === msg.senderId)?.showMoves !== false;
+        const sender = allUsers.find(u => u.id === msg.senderId);
+        const publicMove = msg.type === "video" && sender && sender.showMoves !== false
+          && (!isStaff(sender) || convo?.autoGroupUserId === sender.id); // same rule as movesForUser
         if (!publicMove && (!convo || !convo.participantIds.includes(mediaUser.id))) { res.writeHead(403); res.end(); return true; }
       } else {
         // Not a chat-message attachment — check whether it's a training-protocol
@@ -5443,7 +5455,7 @@ export async function handleChatRequest(req, res, url) {
       if (!showMoves && !isSelf && !isStaff(user)) return sendJson(res, 200, { owner, showMoves, isSelf, hidden: true, total: 0, videos: [] });
       const offset = Math.max(0, parseInt(url.searchParams.get("offset"), 10) || 0);
       const limit = Math.min(30, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 6));
-      const all = MessagesDB.getVideosBySender(target.id);
+      const all = movesForUser(target);
       const likes = readJson(MOVE_LIKES_FILE, {});
       const videos = all.slice(offset, offset + limit).map(m => ({
         id: m.id, driveFileId: m.driveFileId, name: m.name || "", createdAt: m.createdAt,

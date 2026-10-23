@@ -60,7 +60,7 @@
   .pra-feed-heart svg { width: 20px; height: 20px; }
   .pra-feed-heart.liked { color: ${BLUE}; }
   .pra-feed-name { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .pra-feed-date { color: var(--pra-blue, #009bff); font-family: var(--font-secondary, inherit); font-size: .66rem; white-space: nowrap; }
+  .pra-feed-date { margin-left: auto; color: var(--pra-blue, #009bff); font-family: var(--font-secondary, inherit); font-size: .66rem; white-space: nowrap; }
   .pra-moves-empty { font-size: .78rem; color: var(--pra-dim, #8a8a96); padding: 6px 0; }
   .pra-feed-sentinel { height: 1px; }
   .prab-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -143,7 +143,6 @@
       </div>
       <div class="pra-feed-meta">
         <button class="pra-feed-heart${v.likedByMe ? ' liked' : ''}" aria-label="Heart">${v.likedByMe ? ICONS.hearts : HEART_OUTLINE}<span>${v.likes}</span></button>
-        <span class="pra-feed-name">${esc(v.name || 'Move')}</span>
         <span class="pra-feed-date">${date}</span>
       </div>
     </div>`;
@@ -169,13 +168,15 @@
     video.addEventListener('play', () => media.classList.add('playing'));
     video.addEventListener('pause', () => media.classList.remove('playing'));
     // Single tap = play/pause (after a short wait so a double tap doesn't
-    // also toggle playback); double tap = heart.
+    // also toggle playback); double tap = heart / un-heart.
     let tapTimer = null;
     media.addEventListener('click', () => {
       if (tapTimer) {
         clearTimeout(tapTimer); tapTimer = null;
-        burst.classList.remove('show'); void burst.offsetWidth; burst.classList.add('show');
-        if (!item.querySelector('.pra-feed-heart').classList.contains('liked')) setLike(item, true, ownerId);
+        // Double tap toggles: hearts it (with the burst), or un-hearts it.
+        const liked = item.querySelector('.pra-feed-heart').classList.contains('liked');
+        if (!liked) { burst.classList.remove('show'); void burst.offsetWidth; burst.classList.add('show'); }
+        setLike(item, !liked, ownerId);
         return;
       }
       tapTimer = setTimeout(() => {
