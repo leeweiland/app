@@ -57,6 +57,8 @@
   .retreat-hud-year { fill: #009bff; font-family: var(--font-secondary); letter-spacing: .03em; }
   .retreat-hud:hover .retreat-hud-panel { fill: rgba(0,155,255,0.24); }
 
+  .map-rotate-hint { display: none; }
+  @media (hover: hover) and (pointer: fine) { .map-rotate-hint { display: inline; } }
   .map-search { position: relative; max-width: 420px; margin: 0 auto 14px; }
   .map-search-results { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--pra-panel-2, #16161c); border: 1px solid var(--pra-border); border-radius: 10px; padding: 4px; max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
   .map-search-results.show { display: block; }
@@ -99,7 +101,7 @@
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:6px;font-family:var(--font-secondary);font-size:clamp(.9rem, 6vw, 2.2rem);white-space:nowrap">Strength Ninjas World Map</div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap">
-      <div class="pra-muted" style="font-size:.85rem">Every dot is a Strength Ninja of the Pacific Rim Athletics Universe somewhere in the world. Tap one to see who...</div>
+      <div class="pra-muted" style="font-size:.85rem">Every dot is a Strength Ninja of the Pacific Rim Athletics Universe somewhere in the world. Tap one to see who...<span class="map-rotate-hint"> Shift + drag to rotate.</span></div>
       <button class="pra-btn pra-btn-ghost" id="refreshLevelsBtn" style="display:none;white-space:nowrap;font-size:.8rem;padding:8px 14px" title="Re-fetch levels straight from the sheet, skipping the 10-minute cache — use after editing the spreadsheet directly">↻ Refresh Levels</button>
     </div>
     <div class="map-loading" id="mapLoading">
@@ -1121,18 +1123,39 @@ function setupMapZoomPan(initial) {
     apply();
   }, { passive: false });
 
+  // Desktop rotate: Shift + drag (or right-click + drag) turns the map around
+  // the middle of the current view -- the mouse stand-in for a two-finger twist.
+  let rotDrag = null;
+  function screenAngle(e) {
+    const r = svg.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+  }
+  svg.addEventListener("contextmenu", (e) => e.preventDefault());
   svg.addEventListener("mousedown", (e) => {
+    if (e.shiftKey || e.button === 2) {
+      e.preventDefault();
+      rotDrag = { startAng: screenAngle(e), startRot: mapRotation, anchor: rotPt(cx, cy, -mapRotation) };
+      svg.classList.add("panning");
+      return;
+    }
     if (mapScale <= 1) return;
     panning = true; svg.classList.add("panning");
     lastX = e.clientX; lastY = e.clientY;
   });
   window.addEventListener("mousemove", (e) => {
+    if (rotDrag) {
+      setMapRotation(rotDrag.startRot + (screenAngle(e) - rotDrag.startAng));
+      const p = rotPt(rotDrag.anchor.x, rotDrag.anchor.y);
+      cx = p.x; cy = p.y;
+      apply();
+      return;
+    }
     if (!panning) return;
     cx -= pxToSvg(e.clientX - lastX); cy -= pxToSvg(e.clientY - lastY);
     lastX = e.clientX; lastY = e.clientY;
     apply();
   });
-  window.addEventListener("mouseup", () => { panning = false; svg.classList.remove("panning"); });
+  window.addEventListener("mouseup", () => { panning = false; rotDrag = null; svg.classList.remove("panning"); });
 
   function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
   function touchMid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
