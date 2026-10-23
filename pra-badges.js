@@ -75,6 +75,8 @@
   .prab-profile-link:hover { color: var(--pra-blue, #009bff); }
   .prab-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 700; padding: 16px; box-sizing: border-box; }
   .prab-modal.show { display: flex; }
+  .prab-modal, .prab-modal * { box-sizing: border-box; }
+  .prab-modal-box { overflow-x: hidden; }
   .prab-modal-box { width: 100%; max-width: 560px; max-height: 88vh; max-height: 88dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; text-align: center; color: var(--pra-white, #fff); font-family: var(--font-primary, inherit); }
   .prab-modal-name { color: #fff; }
   .prab-modal-extra { text-align: left; margin-top: 12px; }
