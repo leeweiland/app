@@ -3577,7 +3577,7 @@ export async function handleChatRequest(req, res, url) {
         // A move (video) whose sender shows their moves publicly on their
         // profile is viewable by any signed-in user (profile moves history).
         const sender = allUsers.find(u => u.id === msg.senderId);
-        const publicMove = msg.type === "video" && sender && sender.showMoves !== false
+        const publicMove = msg.type === "video" && sender && sender.showMoves === true
           && (!isStaff(sender) || convo?.autoGroupUserId === sender.id); // same rule as movesForUser
         if (!publicMove && (!convo || !convo.participantIds.includes(mediaUser.id))) { res.writeHead(403); res.end(); return true; }
       } else {
@@ -5452,7 +5452,7 @@ export async function handleChatRequest(req, res, url) {
       const target = readJson(USERS_FILE, []).find(u => u.id === userMovesMatch[1] && !u.archived);
       if (!target) return sendJson(res, 404, { error: "User not found" });
       const isSelf = target.id === user.id;
-      const showMoves = target.showMoves !== false;
+      const showMoves = target.showMoves === true; // private unless the person turned it on
       // Enough to draw a profile header (last name only for staff/self, same
       // rule as the rest of the app).
       const owner = { id: target.id, first: target.first, last: (isStaff(user) || isSelf) ? target.last : "", role: target.role, profilePictureFileId: target.profilePictureFileId || null };
@@ -5473,7 +5473,7 @@ export async function handleChatRequest(req, res, url) {
       const msg = MessagesDB.getMessageById(moveLikeMatch[1]);
       if (!msg || msg.type !== "video") return sendJson(res, 404, { error: "Move not found" });
       const owner = readJson(USERS_FILE, []).find(u => u.id === msg.senderId);
-      const canSee = owner && (owner.showMoves !== false || owner.id === user.id || isStaff(user));
+      const canSee = owner && (owner.showMoves === true || owner.id === user.id || isStaff(user));
       if (!canSee) return sendJson(res, 403, { error: "This move is private" });
       const { like } = await readJsonBody(req);
       const likes = readJson(MOVE_LIKES_FILE, {});
