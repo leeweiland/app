@@ -34,7 +34,7 @@
 
   const css = `
   .prab-row { display: flex; gap: 4px 12px; flex-wrap: wrap; justify-content: center; margin: 8px 0 4px; }
-  .prab { display: flex; flex-direction: row; align-items: center; gap: 3px; }
+  .prab { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 18px; }
   .prab-icon { width: 16px; height: 16px; filter: drop-shadow(0 0 4px rgba(0,155,255,0.3)); }
   .prab-icon svg { width: 100%; height: 100%; display: block; }
   .prab-num { font-family: var(--font-secondary, inherit); font-weight: 700; font-size: .7rem; line-height: 1; }
@@ -68,7 +68,7 @@
   .pra-feed-sentinel { height: 1px; }
   .prab-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .prab-row.prab-inline { margin: 0; gap: 4px 10px; justify-content: flex-start; flex-wrap: wrap; max-width: 100%; }
-  .prab-row.prab-inline .prab { flex-direction: row; gap: 3px; min-width: 0; }
+  .prab-row.prab-inline .prab { flex-direction: column; gap: 2px; min-width: 18px; }
   .prab-row.prab-inline .prab-icon { width: 16px; height: 16px; }
   .prab-row.prab-inline .prab-num { font-size: .7rem; }
   .prab-profile-link { cursor: pointer; }
