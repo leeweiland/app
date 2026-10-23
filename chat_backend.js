@@ -2357,6 +2357,22 @@ function trimVideo(inputPath, outputPath, startSec, endSec) {
 // another's. Re-encoding the video (not just stream-copying it) to a
 // definite yuv420p, not just carrying over whatever the source happened to
 // use, is what actually makes a given clip play everywhere at once.
+// Chat video uploads: web-safe H.264 like remuxVideoForWeb, plus a 30fps cap
+// (-fpsmax never raises a lower frame rate) and an optional trim in the same
+// encode.
+function convertChatVideoForWeb(inputPath, outputPath, trim) {
+  const args = ["-y"];
+  if (trim) args.push("-ss", String(Math.max(0, trim.start)));
+  args.push("-i", inputPath);
+  if (trim) args.push("-t", String(Math.max(0.1, trim.end - trim.start)));
+  args.push(
+    "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-fpsmax", "30",
+    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-avoid_negative_ts", "make_zero",
+    "-f", "mp4", outputPath,
+  );
+  execFileSync(FFMPEG_EXE, args, { stdio: ["pipe", "pipe", "pipe"], timeout: 240000 });
+}
+
 function remuxVideoForWeb(inputPath, outputPath) {
   execFileSync(FFMPEG_EXE, [
     "-y", "-i", inputPath,
@@ -5934,7 +5950,22 @@ export async function handleChatRequest(req, res, url) {
                     // requested, just swaps that path once up front instead
                     // of threading a condition through every step below.
                     let sourcePath = tempPath;
-                    if (Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart) {
+                    const wantsTrim = Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart;
+                    // Every chat video is converted to the same web-safe
+                    // format protocol uploads get (H.264, <=30fps, moov at
+                    // the front) -- an Android 120fps screen recording with
+                    // its index at the end wouldn't play on iPhone. The trim
+                    // (if any) happens in the same pass. On failure, fall
+                    // back to the old trim-only/raw path below.
+                    trimmedPath = tempPath + "-web.mp4";
+                    try {
+                      convertChatVideoForWeb(tempPath, trimmedPath, wantsTrim ? { start: trimStart, end: trimEnd } : null);
+                      sourcePath = trimmedPath;
+                    } catch (e) {
+                      console.error("[convertChatVideoForWeb]", e.message);
+                      trimmedPath = null;
+                    }
+                    if (!trimmedPath && wantsTrim) {
                       trimmedPath = tempPath + "-trimmed.mp4";
                       try {
                         trimVideo(tempPath, trimmedPath, trimStart, trimEnd);
