@@ -1354,7 +1354,8 @@
        .chip-val.editable pattern in levels.html — same endpoint, same
        interaction, reused here). -->
   <div class="modal-backdrop" id="levelsModal">
-    <div class="pra-panel modal-box" style="max-width:360px;text-align:center">
+    <div class="pra-panel modal-box" style="max-width:560px;text-align:center">
+      <div class="pra-close-x-wrap"><button class="pra-close-x" aria-label="Close" onclick="closeModal('levelsModal')"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
       <div class="avatar-wrap" style="width:80px;margin:0 auto 12px">
         <div class="pra-avatar" id="levelsAvatar" style="width:80px;height:80px;font-size:1.7rem;margin:0"></div>
         <div class="avatar-edit-badge" id="levelsAvatarEditBadge" title="Change profile photo" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
@@ -1372,7 +1373,6 @@
       <div id="levelsMoves"></div>
       <div class="btn-row" style="display:flex;gap:10px;margin-top:16px">
         <button class="pra-btn pra-btn-ghost" id="levelsMessageBtn" style="flex:1">Message</button>
-        <button class="pra-btn pra-btn-ghost" onclick="closeModal('levelsModal')">Close</button>
       </div>
       <div class="pra-muted" id="levelsMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
     </div>
@@ -2643,6 +2643,7 @@ async function openConvo(id, { restoreScrollTop } = {}) {
   document.getElementById('threadHeadSearchRow').style.display = 'none';
   document.getElementById('threadHeadIconsRow').style.display = 'flex';
   document.querySelector('.chat-shell').classList.add('thread-open'); // mobile: swap to the thread panel
+  PRABack.push('thread', () => closeConvo(true));
   updateHeaderForThreadView();
   const convo = conversations.find(c => c.id === id);
   const threadAvatarEl = document.getElementById('threadAvatar');
@@ -3490,7 +3491,8 @@ function clearThreadView() {
   lastRenderedMessagesJson = null;
 }
 
-function closeConvo() {
+function closeConvo(fromBack) {
+  if (!fromBack) PRABack.closed('thread');
   activeConvoId = null;
   sessionStorage.removeItem('pra-chat-active-convo');
   clearThreadView();
@@ -6224,8 +6226,19 @@ async function saveEditMessage(mid, text) {
 }
 
 // ── Modals ───────────────────────────────────────────────────────────────
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
-function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id, fromBack) {
+  const el = document.getElementById(id);
+  if (!fromBack && el.classList.contains('show')) PRABack.closed('modal:' + id);
+  el.classList.remove('show');
+  el.querySelectorAll('video').forEach(v => v.pause());
+}
+document.getElementById('levelsModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal('levelsModal');
+});
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+  PRABack.push('modal:' + id, () => closeModal(id, true));
+}
 
 // Drop-in replacements for native confirm()/prompt() — see genericDialogModal's
 // own comment for why those can't be trusted inside the iOS WKWebView. Both

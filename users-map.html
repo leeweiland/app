@@ -57,9 +57,16 @@
   .retreat-hud-year { fill: #009bff; font-family: var(--font-secondary); letter-spacing: .03em; }
   .retreat-hud:hover .retreat-hud-panel { fill: rgba(0,155,255,0.24); }
 
+  .map-search { position: relative; max-width: 420px; margin: 0 auto 14px; }
+  .map-search-results { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--pra-panel-2, #16161c); border: 1px solid var(--pra-border); border-radius: 10px; padding: 4px; max-height: 280px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .map-search-results.show { display: block; }
+  .map-search-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: .85rem; }
+  .map-search-item:hover, .map-search-item.active { background: rgba(0,155,255,0.12); }
+  .map-search-item .loc { color: var(--pra-dim); font-size: .74rem; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; }
   .popup-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
   .popup-backdrop.show { display: flex; }
   .popup-box { padding: 26px; text-align: center; width: 300px; }
+  #popup .popup-box { width: min(560px, calc(100vw - 24px)); max-height: 90vh; max-height: 90dvh; overflow-y: auto; box-sizing: border-box; }
   .popup-avatar { width: 84px; height: 84px; margin: 0; font-size: 1.8rem; }
   .avatar-wrap { position: relative; }
   .avatar-edit-badge { position: absolute; top: -2px; right: -2px; width: 28px; height: 28px; border-radius: 50%; background: #12121f; border: 1.5px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color .15s; }
@@ -99,6 +106,10 @@
       <span class="map-loading-label">Loading</span>
       <span class="map-loading-dots"><span></span><span></span><span></span></span>
     </div>
+    <div class="map-search">
+      <input class="pra-input" id="mapSearchInput" placeholder="Search a student…" autocomplete="off" data-lpignore="true" data-1p-ignore/>
+      <div class="map-search-results" id="mapSearchResults"></div>
+    </div>
     <div class="map-box pra-panel" id="mapBox" style="padding:6px">
       <svg id="mapSvg" viewBox="0 0 800 800"></svg>
     </div>
@@ -107,6 +118,7 @@
 
   <div class="popup-backdrop" id="popup">
     <div class="pra-panel popup-box">
+      <div class="pra-close-x-wrap"><button class="pra-close-x" aria-label="Close" onclick="closePopup()"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
       <div class="avatar-wrap" style="width:84px;margin:0 auto">
         <div class="pra-avatar popup-avatar" id="popupAvatar"></div>
         <div class="avatar-edit-badge" id="popupAvatarEditBadge" title="Change profile photo" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1-4.5L15.5 5 19 8.5 8.5 19 4 20Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 7l4 4" stroke="#009bff" stroke-width="1.6"/></svg></div>
@@ -119,7 +131,6 @@
       <div id="popupBadges"></div>
       <div id="popupLevels" style="margin-top:14px;text-align:left"></div>
       <div id="popupMoves"></div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:16px;width:100%" onclick="closePopup()">Close</button>
     </div>
   </div>
 
@@ -438,8 +449,11 @@ function pxPerSvgUnit(scale) {
   const renderedSize = Math.min(rect.width, rect.height);
   return (renderedSize * scale) / SIZE;
 }
+// Constant 30px out to city-level zoom, then grows (up to 72px) so faces
+// are easy to see when zoomed right in on someone.
+function dotPx(scale) { return Math.min(72, DOT_PX * Math.max(1, Math.pow(scale / 12, 0.4))); }
 function currentDotRadius(scale) {
-  return (DOT_PX / 2) / pxPerSvgUnit(scale);
+  return (dotPx(scale) / 2) / pxPerSvgUnit(scale);
 }
 
 // Same-city dots (identical/near-identical lat+lng) fan out around their
@@ -786,7 +800,7 @@ async function drawUsers() {
       ring.setAttribute("stroke", stroke);
       clickTarget.appendChild(ring);
 
-      const desc = { baseX: x, baseY: y, angle, n: members.length, kind: "img", role: u.role, clickTarget, els: { clipCircle, img, ring, bg } };
+      const desc = { baseX: x, baseY: y, angle, n: members.length, kind: "img", role: u.role, user: u, clickTarget, els: { clipCircle, img, ring, bg } };
       dotDescriptors.push(desc);
 
       // Hover is managed centrally (see setupDotHover) via cursor distance
@@ -867,6 +881,7 @@ function openPopup(u) {
   document.getElementById("popupAvatarEditBadge").style.display = isSelf ? "" : "none";
   renderPopupLevels();
   document.getElementById("popup").classList.add("show");
+  PRABack.push("mapProfile", () => closePopup(true));
 }
 
 // Same slug rule the quiz itself uses to build its own results.html link
@@ -990,7 +1005,13 @@ function attachPopupChipHandlers() {
     });
   });
 }
-function closePopup() { document.getElementById("popup").classList.remove("show"); }
+function closePopup(fromBack) {
+  const el = document.getElementById("popup");
+  if (!fromBack && el.classList.contains("show")) PRABack.closed("mapProfile");
+  el.classList.remove("show");
+  el.querySelectorAll("video").forEach(v => v.pause());
+}
+document.getElementById("popup").addEventListener("click", (e) => { if (e.target === e.currentTarget) closePopup(); });
 
 function openRetreatPopup(ret) {
   document.getElementById("retreatPopupPhoto").innerHTML = ret.photo
@@ -1025,7 +1046,7 @@ function setupMapZoomPan(initial) {
   let panning = false, lastX = 0, lastY = 0;
   let pinchStartDist = 0, pinchStartScale = 1;
 
-  function clampScale(s) { return Math.min(60, Math.max(1, s)); }
+  function clampScale(s) { return Math.min(300, Math.max(1, s)); }
   function clampCenter() {
     const half = (SIZE / mapScale) / 2;
     cx = Math.min(SIZE - half, Math.max(half, cx));
@@ -1096,6 +1117,18 @@ function setupMapZoomPan(initial) {
   box.addEventListener("touchend", () => { panning = false; });
 
   svg.addEventListener("dblclick", () => { mapScale = 1; cx = CENTER; cy = CENTER; apply(); });
+  // Student search: fly to a point and zoom right in on it.
+  window.mapFocusOn = (x, y, scale) => {
+    const fromCx = cx, fromCy = cy, fromS = mapScale, t0 = performance.now(), dur = 700;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      mapScale = clampScale(fromS * Math.pow(scale / fromS, e));
+      cx = fromCx + (x - fromCx) * e; cy = fromCy + (y - fromCy) * e;
+      apply();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
 
   apply(); // render the initial framing (world view, or the cluster view passed in via `initial`)
 }
@@ -1236,6 +1269,46 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
     updateDotVisuals(mapScale);
     updateRetreatVisuals(mapScale);
   }).observe(document.getElementById("mapBox"));
+})();
+
+// ── Student search: type a name, pick them, the map flies to their dot ──
+(() => {
+  const input = document.getElementById("mapSearchInput");
+  const results = document.getElementById("mapSearchResults");
+  let matches = [], active = 0;
+  function nameOf(u) { return [u.first, u.last].filter(Boolean).join(" "); }
+  function render() {
+    results.innerHTML = matches.map((d, i) => `<div class="map-search-item${i === active ? " active" : ""}" data-i="${i}"><span>${escapeHtmlMap(nameOf(d.user))}</span><span class="loc">${escapeHtmlMap([d.user.city, d.user.country].filter(Boolean).join(", "))}</span></div>`).join("")
+      || '<div class="map-search-item" style="cursor:default;color:var(--pra-dim)">No one found</div>';
+    results.classList.add("show");
+    results.querySelectorAll("[data-i]").forEach(el => el.onclick = () => pick(matches[+el.dataset.i]));
+  }
+  function pick(d) {
+    if (!d) return;
+    results.classList.remove("show");
+    input.value = nameOf(d.user);
+    input.blur();
+    const r = currentDotRadius(120);
+    const { dx, dy } = spreadOffset(d.n, d.angle, r, 120);
+    if (window.mapFocusOn) window.mapFocusOn(d.baseX + dx, d.baseY + dy, 120);
+    // Flash their dot so it's obvious who you landed on.
+    d.enlarge && setTimeout(() => { d.enlarge(); setTimeout(() => d.revert && d.revert(), 1400); }, 750);
+  }
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { results.classList.remove("show"); return; }
+    matches = dotDescriptors.filter(d => d.user && nameOf(d.user).toLowerCase().includes(q)).slice(0, 12);
+    active = 0; render();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (!results.classList.contains("show")) return;
+    if (e.key === "ArrowDown") { active = Math.min(matches.length - 1, active + 1); render(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { active = Math.max(0, active - 1); render(); e.preventDefault(); }
+    else if (e.key === "Enter") { pick(matches[active]); e.preventDefault(); }
+    else if (e.key === "Escape") results.classList.remove("show");
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".map-search")) results.classList.remove("show"); });
+  function escapeHtmlMap(s) { return String(s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 })();
 </script>
 </body>

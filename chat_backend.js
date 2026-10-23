@@ -2824,12 +2824,20 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
 let badgesCache = null;
+const MOVE_LIKES_FILE = "chat_move_likes.json"; // { [videoMessageId]: [userId, ...] }
 function computeBadges() {
   const users = readJson(USERS_FILE, []).filter(u => !u.archived);
   const food = readJson("chat_food_log.json", {});
   const scans = readJson("chat_body_scans.json", {});
   const photos = readJson("chat_progress_photos.json", {});
   const videoCounts = new Map(MessagesDB.countVideosBySender().map(r => [r.senderId, r.n]));
+  // Hearts received = likes on every move the person posted.
+  const heartsBySender = new Map();
+  for (const [messageId, likers] of Object.entries(readJson(MOVE_LIKES_FILE, {}))) {
+    if (!likers?.length) continue;
+    const m = MessagesDB.getMessageById(messageId);
+    if (m) heartsBySender.set(m.senderId, (heartsBySender.get(m.senderId) || 0) + likers.length);
+  }
   const counts = {};
   for (const u of users) {
     const days = Object.values(food[u.id] || {});
@@ -2838,12 +2846,13 @@ function computeBadges() {
       photos: (scans[u.id] || []).filter(x => x.driveFileId && x.type !== "move").length + (photos[u.id] || []).filter(x => x.driveFileId).length,
       moves: videoCounts.get(u.id) || 0,
       steps: days.reduce((sum, entries) => sum + (entries || []).filter(e => e.source === "steps").reduce((a, e) => a + (Number(e.steps) || 0), 0), 0),
+      hearts: heartsBySender.get(u.id) || 0,
     };
   }
   // Competition ranking (ties share a rank); zero never ranks.
   const out = {};
   for (const id of Object.keys(counts)) out[id] = {};
-  for (const cat of ["fuel", "photos", "moves", "steps"]) {
+  for (const cat of ["fuel", "photos", "moves", "steps", "hearts"]) {
     const sorted = Object.entries(counts).filter(([, c]) => c[cat] > 0).sort((a, b) => b[1][cat] - a[1][cat]);
     let rank = 0, prev = null;
     sorted.forEach(([id, c], i) => { if (c[cat] !== prev) { rank = i + 1; prev = c[cat]; } out[id][cat] = { n: c[cat], rank }; });
@@ -5428,9 +5437,36 @@ export async function handleChatRequest(req, res, url) {
       if (!target) return sendJson(res, 404, { error: "User not found" });
       const isSelf = target.id === user.id;
       const showMoves = target.showMoves !== false;
-      if (!showMoves && !isSelf && !isStaff(user)) return sendJson(res, 200, { showMoves, isSelf, hidden: true, videos: [] });
-      const videos = MessagesDB.getVideosBySender(target.id).map(m => ({ id: m.id, driveFileId: m.driveFileId, name: m.name || "", createdAt: m.createdAt }));
-      return sendJson(res, 200, { showMoves, isSelf, hidden: false, videos });
+      // Enough to draw a profile header (last name only for staff/self, same
+      // rule as the rest of the app).
+      const owner = { id: target.id, first: target.first, last: (isStaff(user) || isSelf) ? target.last : "", role: target.role, profilePictureFileId: target.profilePictureFileId || null };
+      if (!showMoves && !isSelf && !isStaff(user)) return sendJson(res, 200, { owner, showMoves, isSelf, hidden: true, total: 0, videos: [] });
+      const offset = Math.max(0, parseInt(url.searchParams.get("offset"), 10) || 0);
+      const limit = Math.min(30, Math.max(1, parseInt(url.searchParams.get("limit"), 10) || 6));
+      const all = MessagesDB.getVideosBySender(target.id);
+      const likes = readJson(MOVE_LIKES_FILE, {});
+      const videos = all.slice(offset, offset + limit).map(m => ({
+        id: m.id, driveFileId: m.driveFileId, name: m.name || "", createdAt: m.createdAt,
+        likes: (likes[m.id] || []).length, likedByMe: (likes[m.id] || []).includes(user.id),
+      }));
+      return sendJson(res, 200, { owner, showMoves, isSelf, hidden: false, total: all.length, videos });
+    }
+    // Heart a move (double-tap). Body { like: true|false }.
+    const moveLikeMatch = p.match(/^\/api\/chat\/moves\/([^/]+)\/like$/);
+    if (moveLikeMatch && req.method === "POST") {
+      const msg = MessagesDB.getMessageById(moveLikeMatch[1]);
+      if (!msg || msg.type !== "video") return sendJson(res, 404, { error: "Move not found" });
+      const owner = readJson(USERS_FILE, []).find(u => u.id === msg.senderId);
+      const canSee = owner && (owner.showMoves !== false || owner.id === user.id || isStaff(user));
+      if (!canSee) return sendJson(res, 403, { error: "This move is private" });
+      const { like } = await readJsonBody(req);
+      const likes = readJson(MOVE_LIKES_FILE, {});
+      const set = new Set(likes[msg.id] || []);
+      if (like === false) set.delete(user.id); else set.add(user.id);
+      likes[msg.id] = [...set];
+      writeJson(MOVE_LIKES_FILE, likes);
+      badgesCache = null;
+      return sendJson(res, 200, { likes: set.size, likedByMe: set.has(user.id) });
     }
     if (p === "/api/chat/me/show-moves" && req.method === "POST") {
       const { show } = await readJsonBody(req);

@@ -296,3 +296,10 @@ html, body { background: var(--pra-black); }
 .pra-muted { color: var(--pra-dim); }
 .pra-link { color: var(--pra-blue); text-decoration: none; cursor: pointer; }
 .pra-link:hover { text-decoration: underline; }
+
+/* Profile close button -- top right of every profile popup/page, stays
+   pinned while the profile (and its moves feed) scrolls underneath. */
+.pra-close-x-wrap { position: sticky; top: 0; height: 0; z-index: 5; display: flex; justify-content: flex-end; }
+.pra-close-x { margin: -8px -8px 0 0; width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.88); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.pra-close-x:hover { border-color: var(--pra-blue); }
+.pra-close-x svg { width: 14px; height: 14px; }

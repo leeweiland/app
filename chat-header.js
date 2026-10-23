@@ -6,6 +6,38 @@
 // — including on mobile when a conversation thread is open and the sidebar
 // itself gets hidden.
 
+
+// ── Back button (Android hardware/gesture back) ──────────────────────────
+// The native app's back button walks the WebView's history and exits the app
+// when there's none -- so popups/threads that only toggled a class never gave
+// it anything to go back to. Opening one now pushes a history entry, and back
+// closes it instead of leaving the app.
+//   PRABack.push(key, closeFn) -- an overlay opened
+//   PRABack.closed(key)        -- that overlay was closed by the UI itself
+window.PRABack = (function () {
+  const stack = [];
+  let skip = 0;
+  window.addEventListener('popstate', () => {
+    if (skip > 0) { skip--; return; }
+    const top = stack.pop();
+    if (top) top.close();
+  });
+  return {
+    push(key, close) {
+      if (stack.length && stack[stack.length - 1].key === key) return;
+      stack.push({ key, close });
+      history.pushState({ praOverlay: key }, '');
+    },
+    closed(key) {
+      const i = stack.length - 1;
+      if (i < 0 || stack[i].key !== key) return;
+      stack.pop();
+      skip++;
+      history.back();
+    },
+  };
+})();
+
 (function () {
   // A tab/app instance left open across a deploy otherwise keeps running
   // whatever JS it loaded with -- possibly days old -- no matter how many

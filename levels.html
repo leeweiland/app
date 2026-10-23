@@ -42,7 +42,6 @@
   .person-name-save-btn:hover, .person-name-cancel-btn:hover { background: rgba(255,255,255,0.08); }
   .super-level-badge { font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
   .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .9rem; }
-  .person-badges { justify-content: flex-start; margin: 0 0 12px; }
   .levels-col { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
   .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; width: 100%; }
   .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 1; }
@@ -409,7 +408,10 @@ function roleBadgeHtml(p) {
 function renderPersonNameHtml(p, idx) {
   const nameText = escapeHtml(p.first) + (p.last ? ' ' + escapeHtml(p.last) : '');
   const editBtn = isStaffUser ? `<button type="button" class="person-name-edit-btn" data-idx="${idx}" title="Rename">✎</button>` : '';
-  return `<div class="person-name">${nameText}${editBtn}${roleBadgeHtml(p)}</div>`;
+  // Name opens their profile panel (badges + moves) when they have an app account.
+  const name = p.userId ? `<span class="prab-profile-link" data-profile-user="${p.userId}">${nameText}</span>` : nameText;
+  const badges = p.userId ? `<span class="prab-inline" data-badges-user="${p.userId}"></span>` : '';
+  return `<div class="person-name prab-name-row">${name}${editBtn}${roleBadgeHtml(p)}${badges}</div>`;
 }
 
 function render(people) {
@@ -428,12 +430,10 @@ function render(people) {
         </div>
         <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
       </div>
-      ${p.userId ? `<div class="person-badges" data-badges-user="${p.userId}"></div>` : ''}
       ${renderLevelChips(p, idx)}
     </div>
   `;
   }).join('');
-  list.querySelectorAll('[data-badges-user]').forEach(el => PRABadges.mount(el, el.dataset.badgesUser));
   if (isStaffUser) { attachChipHandlers(); attachNameEditHandlers(); }
 }
 
@@ -561,6 +561,19 @@ document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
 });
 
 initStaffFeatures().then(load);
+
+// Badges next to each name + tap a name to open their profile panel. A
+// MutationObserver mounts badges for every card render (including the
+// in-place re-render after a rename).
+(() => {
+  const list = document.getElementById('list');
+  const mountAll = () => list.querySelectorAll('[data-badges-user]:not([data-badges-for])').forEach(el => PRABadges.mount(el, el.dataset.badgesUser));
+  new MutationObserver(mountAll).observe(list, { childList: true, subtree: true });
+  list.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-profile-user]');
+    if (link) PRABadges.openProfile(link.dataset.profileUser);
+  });
+})();
 </script>
 </body>
 </html>

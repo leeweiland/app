@@ -111,6 +111,7 @@ function locationText(u) {
 function render(u, editable) {
   const card = document.getElementById('profileCard');
   card.innerHTML = `
+    <div class="pra-close-x-wrap"><button class="pra-close-x" aria-label="Close" id="profileCloseBtn"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
     <div class="avatar-wrap">
       <div class="pra-avatar avatar-lg role-${u.role}${(u.role === 'online' || u.role === 'gym') ? '-solo' : ''}">${avatarHtml(u)}</div>
       ${editable ? `
@@ -170,6 +171,7 @@ function render(u, editable) {
     ` : `<div class="btn-row"><a class="pra-btn" style="flex:1;text-decoration:none;text-align:center" href="/chat-app/chat.html">MESSAGE</a></div>`}
   `;
   PRABadges.mount(document.getElementById('profileBadges'), u.id);
+  document.getElementById('profileCloseBtn').onclick = () => { if (history.length > 1) history.back(); else location.href = '/chat-app/chat.html'; };
   const movesEl = document.createElement('div');
   movesEl.style.marginTop = '20px';
   document.getElementById('levelsSection').after(movesEl);
