@@ -315,14 +315,14 @@ async function drawContinents() {
   const svg = document.getElementById("mapSvg");
   // Everything geographic lives in one group so the map can rotate as a
   // whole (see setMapRotation) while dots/retreat panels stay upright.
-  const geo = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  geo.setAttribute("id", "mapGeo");
-  svg.appendChild(geo);
+  const geoLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  geoLayer.setAttribute("id", "mapGeo");
+  svg.appendChild(geoLayer);
 
   const water = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   water.setAttribute("cx", CENTER); water.setAttribute("cy", CENTER); water.setAttribute("r", MAX_RADIUS);
   water.setAttribute("class", "water");
-  geo.appendChild(water);
+  geoLayer.appendChild(water);
 
   // Grid drawn once now (under the land) purely so it's in the DOM in the
   // right relative order for anything depending on paint order; the copy
@@ -373,7 +373,7 @@ async function drawContinents() {
         landGroup.appendChild(path);
       });
     });
-    geo.appendChild(landGroup);
+    geoLayer.appendChild(landGroup);
   } catch (e) { console.warn("world boundaries failed to load", e); }
 
   // US state borders — a second, subtler line weight drawn stroke-only (no
@@ -391,12 +391,12 @@ async function drawContinents() {
         stateGroup.appendChild(path);
       });
     });
-    geo.appendChild(stateGroup);
+    geoLayer.appendChild(stateGroup);
   } catch (e) { console.warn("us state boundaries failed to load", e); }
 
   // Redrawn on top of the land fill so the lat/long lines stay visible
   // instead of being painted over by the continents.
-  geo.appendChild(buildGrid());
+  geoLayer.appendChild(buildGrid());
 }
 
 let users = [];
