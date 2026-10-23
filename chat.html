@@ -2080,8 +2080,8 @@ function buildDirectory() {
   const items = conversations.map(c => {
     const involvesClient = c.participants.some(p => isClientRole(p.role));
     return {
-      key: 'c:' + c.id, convoId: c.id, virtual: false,
-      name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group',
+      key: 'c:' + c.id, convoId: c.id, virtual: false, isSelfRow: c.autoGroupType === 'self',
+      name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group' && c.autoGroupType !== 'self',
       preview: previewText(c.lastMessage),
       timestamp: c.lastMessage?.createdAt || c.createdAt,
       favorite: !!c.favorite,
@@ -2114,6 +2114,7 @@ function buildDirectory() {
     });
   });
   items.sort((a, b) => {
+    if (!!a.isSelfRow !== !!b.isSelfRow) return a.isSelfRow ? -1 : 1; // your own row always on top
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
@@ -2249,7 +2250,7 @@ function wireConvoItems(wrap, items) {
       // Coaches/admins: tapping the avatar opens the person's profile; the
       // name/preview still opens the chat. (Students already only ever get
       // the profile for other people's rows.)
-      if (isStaffMe() && item.avatarUser?.id && e.target.closest('.pra-avatar')) { openLevelsModal(item.avatarUser); return; }
+      if ((isStaffMe() || item.isSelfRow) && item.avatarUser?.id && e.target.closest('.pra-avatar')) { openLevelsModal(item.avatarUser); return; }
       // Same click behavior for every contact regardless of role (student,
       // coach, or admin) and regardless of viewer: anyone not already a
       // real conversation opens the Levels panel instead of jumping

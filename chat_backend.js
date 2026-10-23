@@ -2823,6 +2823,15 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // actually enrolled in.
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
+// Everyone gets their own row in the chat sidebar: a one-person "notes to
+// self" thread (autoGroupType "self"). Created lazily the first time their
+// conversation list loads; a no-op read after that.
+function ensureSelfConvo(user) {
+  const convos = readJson(CONVOS_FILE, []);
+  if (convos.some(c => c.autoGroupType === "self" && c.autoGroupUserId === user.id)) return;
+  convos.push({ id: randomUUID(), type: "group", name: `${user.first} ${user.last}`.trim() + " (You)", participantIds: [user.id], autoGroupType: "self", autoGroupUserId: user.id, createdBy: user.id, createdAt: new Date().toISOString() });
+  writeJson(CONVOS_FILE, convos);
+}
 let badgesCache = null;
 // A person's "moves" = videos they uploaded. Coaches/admins only count videos
 // posted in their OWN coaching group (autoGroupUserId === them) -- staff
@@ -2830,7 +2839,7 @@ let badgesCache = null;
 function movesForUser(u, convos = readJson(CONVOS_FILE, [])) {
   const vids = MessagesDB.getVideosBySender(u.id);
   if (!isStaff(u)) return vids;
-  const own = new Set(convos.filter(c => c.autoGroupUserId === u.id).map(c => c.id));
+  const own = new Set(convos.filter(c => c.autoGroupType === "student" && c.autoGroupUserId === u.id).map(c => c.id));
   return vids.filter(m => own.has(m.conversationId));
 }
 const MOVE_LIKES_FILE = "chat_move_likes.json"; // { [videoMessageId]: [userId, ...] }
@@ -3578,7 +3587,7 @@ export async function handleChatRequest(req, res, url) {
         // profile is viewable by any signed-in user (profile moves history).
         const sender = allUsers.find(u => u.id === msg.senderId);
         const publicMove = msg.type === "video" && sender && sender.showMoves === true
-          && (!isStaff(sender) || convo?.autoGroupUserId === sender.id); // same rule as movesForUser
+          && (!isStaff(sender) || (convo?.autoGroupType === "student" && convo.autoGroupUserId === sender.id)); // same rule as movesForUser
         if (!publicMove && (!convo || !convo.participantIds.includes(mediaUser.id))) { res.writeHead(403); res.end(); return true; }
       } else {
         // Not a chat-message attachment — check whether it's a training-protocol
@@ -5495,6 +5504,7 @@ export async function handleChatRequest(req, res, url) {
     }
 
     if (p === "/api/chat/conversations" && req.method === "GET") {
+      ensureSelfConvo(user);
       const blockedUserIds = new Set(readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id).map(b => b.blockedId));
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id))
         .filter(c => c.type !== "dm" || !c.participantIds.some(id => blockedUserIds.has(id)));

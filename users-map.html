@@ -449,11 +449,8 @@ function pxPerSvgUnit(scale) {
   const renderedSize = Math.min(rect.width, rect.height);
   return (renderedSize * scale) / SIZE;
 }
-// Constant 30px out to city-level zoom, then grows (up to 72px) so faces
-// are easy to see when zoomed right in on someone.
-function dotPx(scale) { return Math.min(72, DOT_PX * Math.max(1, Math.pow(scale / 12, 0.4))); }
 function currentDotRadius(scale) {
-  return (dotPx(scale) / 2) / pxPerSvgUnit(scale);
+  return (DOT_PX / 2) / pxPerSvgUnit(scale);
 }
 
 // Same-city dots (identical/near-identical lat+lng) fan out around their
@@ -1046,7 +1043,7 @@ function setupMapZoomPan(initial) {
   let panning = false, lastX = 0, lastY = 0;
   let pinchStartDist = 0, pinchStartScale = 1;
 
-  function clampScale(s) { return Math.min(300, Math.max(1, s)); }
+  function clampScale(s) { return Math.min(2000, Math.max(1, s)); }
   function clampCenter() {
     const half = (SIZE / mapScale) / 2;
     cx = Math.min(SIZE - half, Math.max(half, cx));
