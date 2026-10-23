@@ -5958,15 +5958,22 @@ function msgCopyText(m) {
   if (m.type === 'text' || m.type === 'gif') return m.text || '';
   return '';
 }
-async function copyToClipboard(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch {}
-  // Fallback for WebViews without the async clipboard API.
+// Synchronous copy first (works inside the tap in Chrome and iOS WebViews),
+// then the async Clipboard API with a timeout -- on its own it can hang
+// waiting on a permission prompt.
+function copySync(text) {
   const ta = document.createElement('textarea');
-  ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-  document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;font-size:16px';
+  document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
   let ok = false; try { ok = document.execCommand('copy'); } catch {}
   ta.remove();
   return ok;
+}
+async function copyToClipboard(text) {
+  if (copySync(text)) return true;
+  try {
+    return await Promise.race([navigator.clipboard.writeText(text).then(() => true), new Promise(r => setTimeout(() => r(false), 1500))]);
+  } catch { return false; }
 }
 function flashCopied(ok) {
   const t = document.createElement('div');
