@@ -1073,13 +1073,29 @@ function setupMapZoomPan(initial) {
     // both axes, regardless of which one is actually being dragged.
     return (px * (SIZE / mapScale)) / Math.min(rect.width, rect.height);
   }
+  // Screen point <-> map (viewBox) point, for zooming around a focal point
+  // (pinch midpoint / mouse cursor) instead of the view's center. The square
+  // viewBox is "meet"-fitted (centered) inside the svg's own box.
+  function screenToWorld(px, py) {
+    const r = svg.getBoundingClientRect(), R = Math.min(r.width, r.height), v = SIZE / mapScale;
+    const offX = r.left + (r.width - R) / 2, offY = r.top + (r.height - R) / 2;
+    return { x: cx - v / 2 + (px - offX) * v / R, y: cy - v / 2 + (py - offY) * v / R };
+  }
+  function centerOn(world, px, py) {
+    // Pick the view center that puts `world` under screen point (px, py).
+    const r = svg.getBoundingClientRect(), R = Math.min(r.width, r.height), v = SIZE / mapScale;
+    const offX = r.left + (r.width - R) / 2, offY = r.top + (r.height - R) / 2;
+    cx = world.x + v / 2 - (px - offX) * v / R;
+    cy = world.y + v / 2 - (py - offY) * v / R;
+  }
 
   box.addEventListener("wheel", (e) => {
     e.preventDefault();
     const clampedDeltaY = Math.max(-100, Math.min(100, e.deltaY));
     const factor = Math.exp(-clampedDeltaY * 0.0015);
+    const anchor = screenToWorld(e.clientX, e.clientY);
     mapScale = clampScale(mapScale * factor);
-    if (mapScale === 1) { cx = CENTER; cy = CENTER; }
+    if (mapScale === 1) { cx = CENTER; cy = CENTER; } else centerOn(anchor, e.clientX, e.clientY);
     apply();
   }, { passive: false });
 
@@ -1097,9 +1113,14 @@ function setupMapZoomPan(initial) {
   window.addEventListener("mouseup", () => { panning = false; svg.classList.remove("panning"); });
 
   function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  function touchMid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
+  let pinchAnchor = null;
   box.addEventListener("touchstart", (e) => {
     if (e.touches.length === 2) {
       pinchStartDist = touchDist(e.touches); pinchStartScale = mapScale;
+      const m = touchMid(e.touches);
+      pinchAnchor = screenToWorld(m.x, m.y);
+      panning = false;
     } else if (e.touches.length === 1 && mapScale > 1) {
       panning = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
     }
@@ -1109,7 +1130,10 @@ function setupMapZoomPan(initial) {
     if (e.touches.length === 2) {
       const dist = touchDist(e.touches);
       mapScale = clampScale(pinchStartScale * (dist / pinchStartDist));
-      if (mapScale === 1) { cx = CENTER; cy = CENTER; }
+      // Keep the point that started between the fingers under the fingers'
+      // current midpoint -- zooms toward the pinch AND pans as the fingers move.
+      const m = touchMid(e.touches);
+      if (mapScale === 1) { cx = CENTER; cy = CENTER; } else if (pinchAnchor) centerOn(pinchAnchor, m.x, m.y);
       apply();
     } else if (e.touches.length === 1 && panning) {
       cx -= pxToSvg(e.touches[0].clientX - lastX); cy -= pxToSvg(e.touches[0].clientY - lastY);
@@ -1117,7 +1141,13 @@ function setupMapZoomPan(initial) {
       apply();
     }
   }, { passive: false });
-  box.addEventListener("touchend", () => { panning = false; });
+  box.addEventListener("touchend", (e) => {
+    // Lifting one finger out of a pinch hands straight over to one-finger panning.
+    if (e.touches.length === 1 && mapScale > 1) {
+      panning = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    } else panning = false;
+    pinchAnchor = null;
+  });
 
   svg.addEventListener("dblclick", () => { mapScale = 1; cx = CENTER; cy = CENTER; apply(); });
   // Student search: fly to a point and zoom right in on it.
