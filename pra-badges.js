@@ -51,14 +51,15 @@
   .pra-feed-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; transition: opacity .15s; }
   .pra-feed-play svg { width: 54px; height: 54px; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6)); }
   .pra-feed-media.playing .pra-feed-play { opacity: 0; }
-  .pra-feed-burst { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; margin: -45px 0 0 -45px; color: #fff; pointer-events: none; opacity: 0; transform: scale(.4); }
-  .pra-feed-burst svg { width: 100%; height: 100%; filter: drop-shadow(0 0 12px rgba(0,155,255,0.8)); }
+  .pra-feed-burst { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; margin: -45px 0 0 -45px; color: #ff3b47; pointer-events: none; opacity: 0; transform: scale(.4); }
+  .pra-feed-burst svg { width: 100%; height: 100%; filter: drop-shadow(0 0 12px rgba(255,59,71,0.7)); }
   .pra-feed-burst.show { animation: praBurst .7s ease-out; }
   @keyframes praBurst { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: 1; transform: scale(1.1); } 60% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.15); } }
   .pra-feed-meta { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: .78rem; }
-  .pra-feed-heart { display: flex; align-items: center; gap: 5px; background: none; border: none; padding: 0; cursor: pointer; color: var(--pra-dim, #8a8a96); font-weight: 700; font-size: .8rem; }
+  .pra-feed-heart { display: flex; align-items: center; gap: 5px; background: none; border: none; padding: 0; cursor: pointer; color: #ff3b47; font-weight: 700; font-size: .85rem; }
+  .pra-feed-heart span { color: #fff; }
   .pra-feed-heart svg { width: 20px; height: 20px; }
-  .pra-feed-heart.liked { color: ${BLUE}; }
+  .pra-feed-heart.liked { color: #ff3b47; }
   .pra-feed-name { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .pra-feed-date { margin-left: auto; color: var(--pra-blue, #009bff); font-family: var(--font-secondary, inherit); font-size: .66rem; white-space: nowrap; }
   .pra-moves-empty { font-size: .78rem; color: var(--pra-dim, #8a8a96); padding: 6px 0; }
@@ -132,12 +133,29 @@
       }
     });
   }, { rootMargin: '400px 0px' });
+  // Autoplay on scroll: a video that's at least 60% on screen plays (muted --
+  // browsers only allow muted autoplay), and pauses once it scrolls away. A
+  // video the person paused by tapping stays paused until they tap again.
+  const autoplayObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const v = e.target.querySelector('video');
+      if (e.isIntersecting && e.intersectionRatio >= 0.6) {
+        if (v.dataset.userPaused === '1') return;
+        if (!v.src && v.dataset.src) v.src = v.dataset.src;
+        v.muted = true;
+        document.querySelectorAll('.pra-feed video').forEach(o => { if (o !== v && !o.paused) o.pause(); });
+        v.play().catch(() => {});
+      } else if (!v.paused) {
+        v.pause();
+      }
+    });
+  }, { threshold: [0, 0.6] });
 
   function feedItemHtml(v) {
     const date = new Date(v.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     return `<div class="pra-feed-item" data-id="${esc(v.id)}">
       <div class="pra-feed-media">
-        <video playsinline loop data-src="/api/chat/media/${encodeURIComponent(v.driveFileId)}#t=0.1"></video>
+        <video playsinline loop muted data-src="/api/chat/media/${encodeURIComponent(v.driveFileId)}#t=0.1"></video>
         <div class="pra-feed-play">${PLAY_SVG}</div>
         <div class="pra-feed-burst">${ICONS.hearts}</div>
       </div>
@@ -162,6 +180,7 @@
 
   function wireItem(item, ownerId) {
     mediaObserver.observe(item);
+    autoplayObserver.observe(item);
     const media = item.querySelector('.pra-feed-media');
     const video = item.querySelector('video');
     const burst = item.querySelector('.pra-feed-burst');
@@ -183,9 +202,11 @@
         tapTimer = null;
         if (!video.src && video.dataset.src) video.src = video.dataset.src;
         if (video.paused) {
+          video.dataset.userPaused = '';
+          video.muted = false; // a tap is a user gesture, so sound is allowed
           document.querySelectorAll('.pra-feed video').forEach(o => { if (o !== video && !o.paused) o.pause(); });
           video.play().catch(() => {});
-        } else video.pause();
+        } else { video.dataset.userPaused = '1'; video.pause(); }
       }, 260);
     });
     item.querySelector('.pra-feed-heart').onclick = () => {

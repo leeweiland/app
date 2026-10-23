@@ -2237,6 +2237,10 @@ function wireConvoItems(wrap, items) {
     el.onclick = (e) => {
       if (e.target.closest('.convo-fav-btn, .convo-pin-btn, .convo-channel-btn')) return; // handled separately below
       if (bulkSelectMode) { toggleBulkSelection(item); return; }
+      // Coaches/admins: tapping the avatar opens the person's profile; the
+      // name/preview still opens the chat. (Students already only ever get
+      // the profile for other people's rows.)
+      if (isStaffMe() && item.avatarUser?.id && e.target.closest('.pra-avatar')) { openLevelsModal(item.avatarUser); return; }
       // Same click behavior for every contact regardless of role (student,
       // coach, or admin) and regardless of viewer: anyone not already a
       // real conversation opens the Levels panel instead of jumping
