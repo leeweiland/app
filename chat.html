@@ -2119,6 +2119,7 @@ function buildDirectory() {
     const involvesClient = c.participants.some(p => isClientRole(p.role));
     return {
       key: 'c:' + c.id, convoId: c.id, virtual: false, isSelfRow: c.autoGroupType === 'self',
+      isOwnGroup: c.autoGroupType === 'student' && !!me && c.autoGroupUserId === me.id,
       name: convoDisplayName(c), avatarUser: convoAvatarUser(c), isGroup: c.type === 'group' && c.autoGroupType !== 'self',
       preview: previewText(c.lastMessage),
       timestamp: c.lastMessage?.createdAt || c.createdAt,
@@ -2152,7 +2153,10 @@ function buildDirectory() {
     });
   });
   items.sort((a, b) => {
-    if (!!a.isSelfRow !== !!b.isSelfRow) return a.isSelfRow ? -1 : 1; // your own row always on top
+    // Fixed top of the list: your own coaching group, then your own "You"
+    // row; then pinned; then everything else as usual.
+    if (!!a.isOwnGroup !== !!b.isOwnGroup) return a.isOwnGroup ? -1 : 1;
+    if (!!a.isSelfRow !== !!b.isSelfRow) return a.isSelfRow ? -1 : 1;
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
