@@ -672,6 +672,8 @@
      toggleCallMinimized(). Non-essential controls (mic/cam/switch) hide to
      leave room -- still reachable by expanding back first. */
   .call-screen.minimized { inset: auto; right: 14px; bottom: 14px; width: 200px; height: 150px; border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.6); overflow: hidden; z-index: 10002; cursor: pointer; }
+  .call-screen.minimized { touch-action: none; }
+  .call-screen.minimized.dragging { cursor: grabbing; transition: none; }
   .call-screen.minimized .call-status-row { display: none; }
   .call-screen.minimized .call-video-grid { padding: 0; gap: 2px; }
   .call-screen.minimized .call-tile { border-radius: 0; }
@@ -686,6 +688,7 @@
   .minimize-btn svg { transition: transform .15s; }
   .call-screen.minimized .minimize-btn svg { transform: rotate(180deg); }
   .call-control-btn.off { background: rgba(255,255,255,0.35); color: #0a0a0f; }
+  .call-control-btn.active { background: var(--pra-blue); }
   .call-control-btn.end-call { background: #ff3b30; }
 
   /* Camera picker -- for when the selected input isn't actually producing
@@ -1459,6 +1462,11 @@
       <div style="position:relative">
         <button class="call-control-btn" id="callSwitchCamBtn" title="Switch camera"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M4 8a8 8 0 0 1 13.5-4.5L20 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M20 3v4h-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16a8 8 0 0 1-13.5 4.5L4 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 21v-4h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div class="call-device-menu" id="callCameraMenu"></div>
+      </div>
+      <div style="position:relative">
+        <button class="call-control-btn" id="callBgBtn" title="Background"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="2.5" y="3.5" width="19" height="17" rx="2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M6.5 20.5c.8-3 3-4.6 5.5-4.6s4.7 1.6 5.5 4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+        <div class="call-device-menu" id="callBgMenu"></div>
+        <input type="file" id="callBgFileInput" accept="image/*" style="display:none"/>
       </div>
       <button class="call-control-btn minimize-btn" id="callMinimizeBtn" title="Minimize (back to chat)"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button class="call-control-btn end-call" id="callEndBtn" title="End call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M4 14c5.5-4.7 10.5-4.7 16 0" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M9 14.3l-1.4 3.4a1 1 0 0 0 .5 1.3c1 .4 2.6.8 3.9.8s2.9-.4 3.9-.8a1 1 0 0 0 .5-1.3L15 14.3" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
@@ -6712,6 +6720,7 @@ async function joinCall(call, token, convoId, displayName) {
   localAudioOn = true; localVideoOn = true;
   document.getElementById('callMicBtn').classList.remove('off');
   document.getElementById('callCamBtn').classList.remove('off');
+  document.getElementById('callBgBtn').classList.toggle('active', getCallBgMode() !== 'off');
   document.getElementById('callStatusName').textContent = displayName || '';
   document.getElementById('callStatusSub').textContent = call.status === 'active' ? '' : 'Calling…';
 
@@ -6723,6 +6732,7 @@ async function joinCall(call, token, convoId, displayName) {
   dailyCallObject.on('error', (e) => console.error('[call] error', e));
   try {
     await dailyCallObject.join({ url: call.dailyRoomUrl, token });
+    if (getCallBgMode() !== 'off') applyCallBackground(getCallBgMode());
   } catch (e) {
     console.error('[call] join failed', e);
     await alertDialog('Could not join the call.');
@@ -6738,9 +6748,69 @@ async function joinCall(call, token, convoId, displayName) {
 // untouched either way, this is purely how much screen it's taking up.
 function setCallMinimized(minimized) {
   callMinimized = minimized;
-  document.getElementById('callScreen').classList.toggle('minimized', minimized);
+  const el = document.getElementById('callScreen');
+  el.classList.toggle('minimized', minimized);
   document.getElementById('callMinimizeBtn').title = minimized ? 'Expand' : 'Minimize (back to chat)';
+  if (minimized) {
+    let pos = null; try { pos = JSON.parse(localStorage.getItem(CALL_MINI_POS_KEY) || 'null'); } catch {}
+    if (pos) placeMiniCall(pos.left, pos.top);
+  } else {
+    // Full screen relies on the stylesheet's inset:0 -- clear the drag's inline position.
+    el.style.left = el.style.top = el.style.right = el.style.bottom = '';
+  }
 }
+
+// ── Draggable minimized call tile ─────────────────────────────────────────
+// So it can be moved off the composer/buttons it would otherwise cover. A
+// press that moves more than a few px is a drag (and swallows the click that
+// would expand it); a plain tap still expands. Position is clamped on-screen
+// and remembered per device.
+const CALL_MINI_POS_KEY = 'pra_call_mini_pos';
+function placeMiniCall(left, top) {
+  const el = document.getElementById('callScreen');
+  const maxL = Math.max(0, window.innerWidth - el.offsetWidth);
+  const maxT = Math.max(0, window.innerHeight - el.offsetHeight);
+  left = Math.min(Math.max(0, left), maxL);
+  top = Math.min(Math.max(0, top), maxT);
+  el.style.right = 'auto'; el.style.bottom = 'auto';
+  el.style.left = left + 'px'; el.style.top = top + 'px';
+  return { left, top };
+}
+let callDragSuppressClick = false;
+(() => {
+  const el = document.getElementById('callScreen');
+  let start = null, dragging = false;
+  el.addEventListener('pointerdown', (e) => {
+    if (!callMinimized || e.target.closest('button')) return;
+    const r = el.getBoundingClientRect();
+    start = { x: e.clientX, y: e.clientY, left: r.left, top: r.top, id: e.pointerId };
+    dragging = false;
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (!dragging && Math.hypot(dx, dy) < 6) return;
+    if (!dragging) { dragging = true; el.classList.add('dragging'); try { el.setPointerCapture(e.pointerId); } catch {} }
+    placeMiniCall(start.left + dx, start.top + dy);
+  });
+  const finish = () => {
+    if (!start) return;
+    if (dragging) {
+      const r = el.getBoundingClientRect();
+      try { localStorage.setItem(CALL_MINI_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch {}
+      callDragSuppressClick = true;
+      setTimeout(() => { callDragSuppressClick = false; }, 0);
+    }
+    el.classList.remove('dragging');
+    start = null; dragging = false;
+  };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+  window.addEventListener('resize', () => {
+    if (!callMinimized || !el.style.left) return;
+    placeMiniCall(parseFloat(el.style.left), parseFloat(el.style.top));
+  });
+})();
 function toggleCallMinimized() { setCallMinimized(!callMinimized); }
 
 // Tears down the local call UI/connection only -- does NOT tell the
@@ -6890,9 +6960,100 @@ async function toggleCameraMenu() {
   });
 }
 
+// ── Call background effects (Daily's built-in video processors) ──────────
+// Off / Blur / Green screen (solid green replacement) / your own image.
+// Remembered per device and re-applied on every join. Daily only supports
+// processors on desktop-class browsers -- on iPhone/most phones
+// supportsVideoProcessing is false, so the menu says so instead.
+const CALL_BG_MODE_KEY = 'pra_call_bg_mode';
+const CALL_BG_IMAGE_KEY = 'pra_call_bg_image';
+function callBgSupported() {
+  try { return !!(window.Daily && Daily.supportedBrowser().supportsVideoProcessing); } catch { return false; }
+}
+function getCallBgMode() { try { return localStorage.getItem(CALL_BG_MODE_KEY) || 'off'; } catch { return 'off'; } }
+// Daily's background-image processor takes a data URL (it rejects blob: URLs).
+function solidGreenDataUrl() {
+  const c = document.createElement('canvas'); c.width = 1280; c.height = 720;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#00b140'; ctx.fillRect(0, 0, c.width, c.height);
+  return c.toDataURL('image/png');
+}
+// Shrinks an uploaded photo to <=1280px JPEG so it fits in localStorage.
+function shrinkImageToDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+async function applyCallBackground(mode) {
+  try { localStorage.setItem(CALL_BG_MODE_KEY, mode); } catch {}
+  document.getElementById('callBgBtn')?.classList.toggle('active', mode !== 'off');
+  if (!dailyCallObject || !callBgSupported()) return;
+  let processor = { type: 'none' };
+  if (mode === 'blur') processor = { type: 'background-blur', config: { strength: 0.6 } };
+  else if (mode === 'green' || mode === 'image') {
+    let dataUrl = null;
+    if (mode === 'image') { try { dataUrl = localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {} }
+    processor = { type: 'background-image', config: { source: dataUrl || solidGreenDataUrl() } };
+  }
+  try {
+    await dailyCallObject.updateInputSettings({ video: { processor } });
+  } catch (e) {
+    console.error('[call] background effect failed', e);
+    await alertDialog('Could not apply that background on this device.');
+  }
+}
+function toggleBgMenu() {
+  const menu = document.getElementById('callBgMenu');
+  if (menu.classList.contains('show')) { menu.classList.remove('show'); return; }
+  document.getElementById('callCameraMenu').classList.remove('show');
+  if (!callBgSupported()) {
+    menu.innerHTML = `<div class="call-device-menu-empty">Background effects need a computer browser (Chrome, Edge or Firefox). They aren't supported on this device.</div>`;
+    menu.classList.add('show');
+    return;
+  }
+  const mode = getCallBgMode();
+  let hasImage = false; try { hasImage = !!localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {}
+  const items = [['off', 'No effect'], ['blur', 'Blur background'], ['green', 'Green screen'], ['image', hasImage ? 'My image' : 'Choose image…']];
+  menu.innerHTML = items.map(([m, label]) => `<div class="call-device-item${m === mode ? ' active' : ''}" data-mode="${m}">${label}</div>`).join('')
+    + (hasImage ? '<div class="call-device-item" data-mode="pick">Choose a different image…</div>' : '');
+  menu.classList.add('show');
+  menu.querySelectorAll('.call-device-item').forEach(item => {
+    item.onclick = () => {
+      menu.classList.remove('show');
+      const m = item.dataset.mode;
+      if (m === 'pick' || (m === 'image' && !hasImage)) { document.getElementById('callBgFileInput').click(); return; }
+      applyCallBackground(m);
+    };
+  });
+}
+
 function setupCallUI() {
   document.getElementById('startCallBtn').onclick = startCall;
   document.getElementById('callSwitchCamBtn').onclick = toggleCameraMenu;
+  document.getElementById('callBgBtn').onclick = toggleBgMenu;
+  document.getElementById('callBgFileInput').onchange = (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try { localStorage.setItem(CALL_BG_IMAGE_KEY, await shrinkImageToDataUrl(reader.result)); }
+      catch { await alertDialog('Could not use that image.'); return; }
+      applyCallBackground('image');
+    };
+    reader.readAsDataURL(f);
+  };
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('callBgMenu');
+    if (menu.classList.contains('show') && !menu.contains(e.target) && !e.target.closest('#callBgBtn')) menu.classList.remove('show');
+  });
   document.addEventListener('click', (e) => {
     const menu = document.getElementById('callCameraMenu');
     if (menu.classList.contains('show') && !menu.contains(e.target) && !e.target.closest('#callSwitchCamBtn')) menu.classList.remove('show');
@@ -6904,7 +7065,7 @@ function setupCallUI() {
   // reaching here) restores full-screen, same as tapping any other
   // "you're in a call" indicator to jump back into it.
   document.getElementById('callScreen').addEventListener('click', (e) => {
-    if (callMinimized) setCallMinimized(false);
+    if (callMinimized && !callDragSuppressClick) setCallMinimized(false);
   });
   document.getElementById('callMicBtn').onclick = () => {
     localAudioOn = !localAudioOn;
