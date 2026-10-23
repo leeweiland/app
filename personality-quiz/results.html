@@ -36,7 +36,9 @@
   .explore-card.current { border-color: var(--accent, #4da3ff); background: rgba(77,163,255,0.1); }
   .explore-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; margin-bottom: 0.5em; }
   .explore-card .name { font-size: 0.85em; }
-  .take-quiz-btn { display: table; margin: 4px auto 12px; padding: 12px 34px; border-radius: 8px; background: #009bff; color: #fff; text-decoration: none; font-family: 'Aldrich', sans-serif; font-size: 1rem; letter-spacing: .04em; box-shadow: 0 0 12px #009bff; transition: background .2s, box-shadow .2s; }
+  /* Pinned at the bottom of the screen, just above the app's bottom icon
+     bar (--quiz-btn-bottom is measured from that bar; see placeQuizBtn). */
+  .take-quiz-btn { position: fixed; left: 50%; transform: translateX(-50%); bottom: var(--quiz-btn-bottom, 20px); z-index: 450; white-space: nowrap; margin: 0; padding: 12px 34px; border-radius: 8px; background: #009bff; color: #fff; text-decoration: none; font-family: 'Aldrich', sans-serif; font-size: 1rem; letter-spacing: .04em; box-shadow: 0 0 12px #009bff; transition: background .2s, box-shadow .2s; }
   .take-quiz-btn:hover { background: #0077b6; box-shadow: 0 0 20px #009bff; }
 </style>
 </head>
@@ -147,6 +149,17 @@ async function main() {
   `;
 }
 main();
+function placeQuizBtn() {
+  const bar = document.getElementById('chat-app-bottom-bar');
+  const h = bar && bar.offsetHeight ? bar.getBoundingClientRect().height : 0;
+  document.documentElement.style.setProperty('--quiz-btn-bottom', (h + 14) + 'px');
+  // Room at the end of the page so the pinned button never covers content.
+  const c = document.querySelector('.container');
+  if (c) c.style.paddingBottom = '90px';
+}
+window.addEventListener('resize', placeQuizBtn);
+window.addEventListener('load', placeQuizBtn);
+setTimeout(placeQuizBtn, 300); setTimeout(placeQuizBtn, 1500);
 </script>
 </body>
 </html>
