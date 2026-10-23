@@ -147,6 +147,20 @@
 
 <script>
 const SIZE = 800, CENTER = 400, MAX_RADIUS = 370;
+// Two-finger twist rotates the map around its center. Only the geography
+// group gets the transform; dots and retreat callouts are re-placed at their
+// rotated positions but drawn upright.
+let mapRotation = 0; // radians
+function rotPt(x, y, rot = mapRotation) {
+  const c = Math.cos(rot), s = Math.sin(rot), dx = x - CENTER, dy = y - CENTER;
+  return { x: CENTER + dx * c - dy * s, y: CENTER + dx * s + dy * c };
+}
+function setMapRotation(rot) {
+  mapRotation = rot;
+  document.getElementById("mapGeo")?.setAttribute("transform", `rotate(${rot * 180 / Math.PI} ${CENTER} ${CENTER})`);
+  updateDotVisuals(mapScale);
+  updateRetreatVisuals(mapScale);
+}
 let mapScale = 1;
 
 // The blur radii here are SVG user-units, not screen pixels — inside a
@@ -299,11 +313,16 @@ function isOverLand(x, y) {
 
 async function drawContinents() {
   const svg = document.getElementById("mapSvg");
+  // Everything geographic lives in one group so the map can rotate as a
+  // whole (see setMapRotation) while dots/retreat panels stay upright.
+  const geo = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  geo.setAttribute("id", "mapGeo");
+  svg.appendChild(geo);
 
   const water = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   water.setAttribute("cx", CENTER); water.setAttribute("cy", CENTER); water.setAttribute("r", MAX_RADIUS);
   water.setAttribute("class", "water");
-  svg.appendChild(water);
+  geo.appendChild(water);
 
   // Grid drawn once now (under the land) purely so it's in the DOM in the
   // right relative order for anything depending on paint order; the copy
@@ -354,7 +373,7 @@ async function drawContinents() {
         landGroup.appendChild(path);
       });
     });
-    svg.appendChild(landGroup);
+    geo.appendChild(landGroup);
   } catch (e) { console.warn("world boundaries failed to load", e); }
 
   // US state borders — a second, subtler line weight drawn stroke-only (no
@@ -372,12 +391,12 @@ async function drawContinents() {
         stateGroup.appendChild(path);
       });
     });
-    svg.appendChild(stateGroup);
+    geo.appendChild(stateGroup);
   } catch (e) { console.warn("us state boundaries failed to load", e); }
 
   // Redrawn on top of the land fill so the lat/long lines stay visible
   // instead of being painted over by the continents.
-  svg.appendChild(buildGrid());
+  geo.appendChild(buildGrid());
 }
 
 let users = [];
@@ -395,7 +414,8 @@ function clientToSvgPoint(clientX, clientY) {
 function dotCurrentCenter(d, scale) {
   const baseR = currentDotRadius(scale);
   const { dx, dy } = spreadOffset(d.n, d.angle, baseR, scale);
-  return { x: d.baseX + dx, y: d.baseY + dy };
+  const b = rotPt(d.baseX, d.baseY);
+  return { x: b.x + dx, y: b.y + dy };
 }
 
 // Hover is driven by cursor distance to each dot's actual center rather
@@ -485,7 +505,8 @@ function applyDotSize(d, r, scale, hover) {
   const strokeW = r * 0.16;
   const baseR = currentDotRadius(scale);
   const { dx, dy } = spreadOffset(d.n, d.angle, baseR, scale);
-  const x = d.baseX + dx, y = d.baseY + dy;
+  const b = rotPt(d.baseX, d.baseY);
+  const x = b.x + dx, y = b.y + dy;
   d.clickTarget.style.filter = roleGlowFilter(d.role, r);
   if (d.kind === "img") {
     d.els.clipCircle.setAttribute("cx", x); d.els.clipCircle.setAttribute("cy", y); d.els.clipCircle.setAttribute("r", r);
@@ -558,8 +579,9 @@ function applyRetreatVisuals(d, scale) {
   // the overlap closer in.
   const leaderLen = retreatPx(RETREAT_LEADER_LEN_PX, scale);
 
-  const px = d.baseX, py = d.baseY;
-  const lx = px + Math.cos(d.angle) * leaderLen, ly = py + Math.sin(d.angle) * leaderLen;
+  const { x: px, y: py } = rotPt(d.baseX, d.baseY);
+  // Leader turns with the map so the panel keeps its place relative to the land.
+  const lx = px + Math.cos(d.angle + mapRotation) * leaderLen, ly = py + Math.sin(d.angle + mapRotation) * leaderLen;
   // Panel is centered on the leader's far end, not anchored by a corner —
   // keeps the math direction-agnostic since d.angle can point anywhere,
   // not just up-right like the old fixed diagonal did. Clamped to stay
@@ -1115,11 +1137,16 @@ function setupMapZoomPan(initial) {
   function touchDist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
   function touchMid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
   let pinchAnchor = null;
+  function touchAngle(t) { return Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX); }
+  let pinchStartAngle = 0, pinchStartRot = 0, rotating = false;
   box.addEventListener("touchstart", (e) => {
     if (e.touches.length === 2) {
       pinchStartDist = touchDist(e.touches); pinchStartScale = mapScale;
       const m = touchMid(e.touches);
-      pinchAnchor = screenToWorld(m.x, m.y);
+      // Anchor in un-rotated map coordinates so it survives rotation changes.
+      const v = screenToWorld(m.x, m.y);
+      pinchAnchor = rotPt(v.x, v.y, -mapRotation);
+      pinchStartAngle = touchAngle(e.touches); pinchStartRot = mapRotation; rotating = false;
       panning = false;
     } else if (e.touches.length === 1 && mapScale > 1) {
       panning = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
@@ -1133,7 +1160,13 @@ function setupMapZoomPan(initial) {
       // Keep the point that started between the fingers under the fingers'
       // current midpoint -- zooms toward the pinch AND pans as the fingers move.
       const m = touchMid(e.touches);
-      if (mapScale === 1) { cx = CENTER; cy = CENTER; } else if (pinchAnchor) centerOn(pinchAnchor, m.x, m.y);
+      // Twist to rotate -- only once the fingers have turned ~10 degrees, so
+      // an ordinary pinch doesn't wobble the map.
+      let dAng = touchAngle(e.touches) - pinchStartAngle;
+      dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
+      if (!rotating && Math.abs(dAng) > 0.17) { rotating = true; pinchStartAngle = touchAngle(e.touches); dAng = 0; }
+      if (rotating) setMapRotation(pinchStartRot + dAng);
+      if (mapScale === 1) { cx = CENTER; cy = CENTER; } else if (pinchAnchor) centerOn(rotPt(pinchAnchor.x, pinchAnchor.y), m.x, m.y);
       apply();
     } else if (e.touches.length === 1 && panning) {
       cx -= pxToSvg(e.touches[0].clientX - lastX); cy -= pxToSvg(e.touches[0].clientY - lastY);
@@ -1149,7 +1182,7 @@ function setupMapZoomPan(initial) {
     pinchAnchor = null;
   });
 
-  svg.addEventListener("dblclick", () => { mapScale = 1; cx = CENTER; cy = CENTER; apply(); });
+  svg.addEventListener("dblclick", () => { mapScale = 1; cx = CENTER; cy = CENTER; setMapRotation(0); apply(); });
   // Student search: fly to a point and zoom right in on it.
   window.mapFocusOn = (x, y, scale) => {
     const fromCx = cx, fromCy = cy, fromS = mapScale, t0 = performance.now(), dur = 700;
@@ -1323,7 +1356,8 @@ if (praRootEl) new ResizeObserver(fitMapBox).observe(praRootEl);
     input.blur();
     const r = currentDotRadius(120);
     const { dx, dy } = spreadOffset(d.n, d.angle, r, 120);
-    if (window.mapFocusOn) window.mapFocusOn(d.baseX + dx, d.baseY + dy, 120);
+    const b = rotPt(d.baseX, d.baseY);
+    if (window.mapFocusOn) window.mapFocusOn(b.x + dx, b.y + dy, 120);
     // Flash their dot so it's obvious who you landed on.
     d.enlarge && setTimeout(() => { d.enlarge(); setTimeout(() => d.revert && d.revert(), 1400); }, 750);
   }
