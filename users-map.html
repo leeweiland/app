@@ -449,8 +449,14 @@ function pxPerSvgUnit(scale) {
   const renderedSize = Math.min(rect.width, rect.height);
   return (renderedSize * scale) / SIZE;
 }
+// Grows gradually from world view to full zoom-in, ending 25% bigger
+// (30px -> 37.5px) at the maximum zoom (2000x).
+function dotPx(scale) {
+  const t = Math.min(1, Math.max(0, Math.log(scale) / Math.log(2000)));
+  return DOT_PX * (1 + 0.25 * t);
+}
 function currentDotRadius(scale) {
-  return (DOT_PX / 2) / pxPerSvgUnit(scale);
+  return (dotPx(scale) / 2) / pxPerSvgUnit(scale);
 }
 
 // Same-city dots (identical/near-identical lat+lng) fan out around their
