@@ -397,6 +397,31 @@ window.PRABack = (function () {
     vv.addEventListener('scroll', apply);
   }
 
+  // Automatic step counter: in the phone app (builds that include the
+  // pra-steps native plugin), read the phone's own per-day step totals and
+  // save them into the daily steps log -- on every open and every return to
+  // the app, at most once a minute. Older app builds and the website have
+  // no PraSteps plugin, so this does nothing there.
+  let stepsSyncAt = 0;
+  async function syncPhoneSteps() {
+    const PraSteps = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.PraSteps;
+    if (!PraSteps || Date.now() - stepsSyncAt < 60000) return;
+    stepsSyncAt = Date.now();
+    try {
+      let { status } = await PraSteps.checkPermission();
+      if (status === 'prompt') ({ status } = await PraSteps.requestPermission());
+      if (status !== 'granted') return;
+      const { days } = await PraSteps.getDailySteps({ days: 7 });
+      if (!days?.length) return;
+      const r = await fetch('/api/food-log/steps-sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+      });
+      const d = r.ok ? await r.json() : null;
+      if (d?.changed) window.dispatchEvent(new CustomEvent('pra-steps-synced'));
+    } catch {}
+  }
+
   async function build() {
     injectStyles();
     setupKeyboardInsetTracking();
@@ -436,6 +461,10 @@ window.PRABack = (function () {
       const r = await fetch('/api/auth/me');
       if (r.ok) { const d = await r.json(); myRole = d.user?.role || null; isAdmin = myRole === 'admin'; myId = d.user?.id || null; }
     } catch {}
+    if (myId) {
+      syncPhoneSteps();
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPhoneSteps(); });
+    }
 
     ICONS.forEach(item => {
       if (item.adminOnly && !isAdmin) return;

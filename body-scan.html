@@ -1239,6 +1239,8 @@ let foodPhotoFile = null;
 
 document.getElementById('foodDate').valueAsDate = new Date();
 document.getElementById('foodDate').addEventListener('change', loadFoodEntries);
+// chat-header.js's automatic phone step sync just saved new numbers.
+window.addEventListener('pra-steps-synced', () => { if (activeHub === 'nutrition' && !viewingUserId) loadFoodEntries(); });
 
 document.getElementById('scanDate').valueAsDate = new Date();
 

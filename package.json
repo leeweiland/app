@@ -25,6 +25,7 @@
     "firebase-admin": "^14.2.0",
     "googleapis": "^174.0.1",
     "jsdom": "^29.1.1",
+    "pra-steps": "file:native-plugins/pra-steps",
     "web-push": "^3.6.7"
   }
 }

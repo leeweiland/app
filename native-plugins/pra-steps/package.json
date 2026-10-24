@@ -1,0 +1,15 @@
+{
+  "name": "pra-steps",
+  "version": "1.0.0",
+  "description": "Reads the phone's own step count (iOS CoreMotion pedometer, Android step-counter sensor) for the PRA app's daily steps log.",
+  "private": true,
+  "files": ["android/src/main/", "android/build.gradle", "ios/Sources", "Package.swift"],
+  "keywords": ["capacitor", "plugin", "native"],
+  "capacitor": {
+    "ios": { "src": "ios" },
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.0.0"
+  }
+}

@@ -52,6 +52,10 @@ workflows:
           # encryption-exemption line above so they survive every build.
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Used to record your training clips directly in the app.'" ios/App/App/Info.plist
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Used to record audio with your training clips.'" ios/App/App/Info.plist
+          # The pra-steps plugin reads the iPhone's own step count (CoreMotion
+          # pedometer) for the daily steps log -- iOS crashes on that query
+          # without this description, same as camera/mic above.
+          /usr/libexec/PlistBuddy -c "Add :NSMotionUsageDescription string 'Counts your daily steps automatically for your training log.'" ios/App/App/Info.plist
           gem install xcodeproj --no-document
           # A real Unix timestamp instead of $CM_BUILD_NUMBER — that
           # variable came out empty when this ran (confirmed by the
