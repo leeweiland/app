@@ -341,6 +341,11 @@ export function getConversationMedia(conversationId) {
 // actually attached to a message I can see?" typesIn narrows to
 // image/video for the favorites check; the media-proxy check has no type
 // filter at all (any attachment type counts).
+// Every message using this Drive file -- a bulk send or forward makes many
+// copies (one per chat) all pointing at the same file.
+export function findMessagesByDriveFileId(driveFileId) {
+  return db.prepare("SELECT * FROM messages WHERE driveFileId = ?").all(driveFileId).map(rowToMessage);
+}
 export function findMessageByDriveFileId(driveFileId, { typesIn } = {}) {
   const row = typesIn && typesIn.length
     ? db.prepare(`SELECT * FROM messages WHERE driveFileId = ? AND type IN (${typesIn.map(() => "?").join(", ")}) LIMIT 1`).get(driveFileId, ...typesIn)

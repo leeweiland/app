@@ -3604,7 +3604,12 @@ export async function handleChatRequest(req, res, url) {
         const sender = allUsers.find(u => u.id === msg.senderId);
         const publicMove = msg.type === "video" && sender && sender.showMoves === true
           && (!isStaff(sender) || (convo?.autoGroupType === "student" && convo.autoGroupUserId === sender.id)); // same rule as movesForUser
-        if (!publicMove && (!convo || !convo.participantIds.includes(mediaUser.id))) { res.writeHead(403); res.end(); return true; }
+        // Allowed if ANY message using this file is in a chat the viewer is
+        // in -- checking only the first copy blocked everyone else in a bulk
+        // send (the first copy can land in a chat they're not part of).
+        const inAnyChat = () => MessagesDB.findMessagesByDriveFileId(fileId)
+          .some(mm => convos.find(c => c.id === mm.conversationId)?.participantIds.includes(mediaUser.id));
+        if (!publicMove && !(convo && convo.participantIds.includes(mediaUser.id)) && !inAnyChat()) { res.writeHead(403); res.end(); return true; }
       } else {
         // Not a chat-message attachment — check whether it's a training-protocol
         // step's video/image (these are never posted as chat messages, so the
