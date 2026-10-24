@@ -3203,7 +3203,10 @@ async function archiveCallRecording(call) {
     const users = readJson(USERS_FILE, []);
     const participants = call.participantIds.map(id => users.find(u => u.id === id)).filter(Boolean);
     const student = participants.find(u => isClientRole(u.role));
-    const coach = participants.find(u => isStaff(u));
+    // The coach who placed the call (not just the first staff member in the
+    // group, which is usually an admin) names and "sends" the recording.
+    const initiator = users.find(u => u.id === call.initiatorId);
+    const coach = (initiator && isStaff(initiator)) ? initiator : participants.find(u => isStaff(u));
     const namePart = [student, coach].filter(Boolean).map(u => `${u.first} ${u.last}`).join(" ") || "Video Call";
     const dateStr = new Date(call.startedAt).toISOString().slice(0, 10);
 
