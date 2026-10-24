@@ -1,5 +1,5 @@
 node_modules/
-android/
+/android/
 www/
 .env
 
@@ -21,3 +21,4 @@ chat_messages.db
 chat_messages.db-shm
 chat_messages.db-wal
 documents/pra-release-bundle
+native-plugins/*/android/build/

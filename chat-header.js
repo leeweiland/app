@@ -408,9 +408,12 @@ window.PRABack = (function () {
     if (!PraSteps || Date.now() - stepsSyncAt < 60000) return;
     stepsSyncAt = Date.now();
     try {
-      let { status } = await PraSteps.checkPermission();
-      if (status === 'prompt') ({ status } = await PraSteps.requestPermission());
-      if (status !== 'granted') return;
+      // healthStatus (Apple Health / Health Connect -- watch and ring steps)
+      // only exists on builds that read the health store; it's asked once,
+      // even for people who already allowed the phone's own step counter.
+      let perm = await PraSteps.checkPermission();
+      if (perm.status === 'prompt' || perm.healthStatus === 'prompt') perm = await PraSteps.requestPermission();
+      if (perm.status !== 'granted') return;
       const { days } = await PraSteps.getDailySteps({ days: 7 });
       if (!days?.length) return;
       const r = await fetch('/api/food-log/steps-sync', {

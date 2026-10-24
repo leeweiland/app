@@ -56,6 +56,13 @@ workflows:
           # pedometer) for the daily steps log -- iOS crashes on that query
           # without this description, same as camera/mic above.
           /usr/libexec/PlistBuddy -c "Add :NSMotionUsageDescription string 'Counts your daily steps automatically for your training log.'" ios/App/App/Info.plist
+          # Apple Health (HealthKit) read access for the same steps log, so
+          # steps from an Apple Watch / Oura / other synced devices count.
+          # The App ID needs the HealthKit capability (enabled in the Apple
+          # Developer portal) and ios-config/App.entitlements carries the
+          # matching com.apple.developer.healthkit entitlement.
+          /usr/libexec/PlistBuddy -c "Add :NSHealthShareUsageDescription string 'Reads your daily step count from Apple Health (including your Apple Watch and other connected devices) for your training log.'" ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSHealthUpdateUsageDescription string 'The app does not write to Apple Health; it only reads your step count.'" ios/App/App/Info.plist
           gem install xcodeproj --no-document
           # A real Unix timestamp instead of $CM_BUILD_NUMBER — that
           # variable came out empty when this ran (confirmed by the
@@ -107,10 +114,14 @@ workflows:
             # key" showed up despite the variable clearly being set.
             # Base64 has no newlines to lose in the first place.
             echo "$CERTIFICATE_PRIVATE_KEY_B64" | openssl base64 -d -A -out /tmp/cert_key.pem
-            CREATE_FLAG=""
+            # --create is safe with the saved key: the certificate for it
+            # already exists, so only a missing/invalid provisioning profile
+            # gets (re)created -- which is what happens whenever a capability
+            # is added to the App ID (HealthKit invalidated every profile).
+            CREATE_FLAG="--create"
           elif [ -n "$CERTIFICATE_PRIVATE_KEY" ]; then
             echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key.pem
-            CREATE_FLAG=""
+            CREATE_FLAG="--create"
           else
             echo "No certificate key set — generating one now (first-time setup only)."
             openssl genrsa -out /tmp/cert_key.pem 2048
