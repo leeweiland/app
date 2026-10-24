@@ -403,9 +403,9 @@ window.PRABack = (function () {
   // the app, at most once a minute. Older app builds and the website have
   // no PraSteps plugin, so this does nothing there.
   let stepsSyncAt = 0;
-  async function syncPhoneSteps() {
+  async function syncPhoneSteps(force) {
     const PraSteps = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.PraSteps;
-    if (!PraSteps || Date.now() - stepsSyncAt < 60000) return;
+    if (!PraSteps || (!force && Date.now() - stepsSyncAt < 60000)) return;
     stepsSyncAt = Date.now();
     try {
       // healthStatus (Apple Health / Health Connect -- watch and ring data)
@@ -428,8 +428,29 @@ window.PRABack = (function () {
       });
       const d = r.ok ? await r.json() : null;
       if (d?.changed) window.dispatchEvent(new CustomEvent('pra-steps-synced'));
+      if (d?.saved) window.dispatchEvent(new CustomEvent('pra-health-synced'));
     } catch {}
   }
+  // body-scan.html's Health tab: what this app build can read, and a
+  // "connect" that asks for access (again, if needed) and syncs right away.
+  window.PRAHealth = {
+    async capability() {
+      const PraSteps = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.PraSteps;
+      if (!PraSteps) return { native: false, health: false };
+      try {
+        const perm = await PraSteps.checkPermission();
+        return { native: true, health: perm.healthStatus !== undefined, platform: window.Capacitor.getPlatform(), ...perm };
+      } catch { return { native: true, health: false, platform: window.Capacitor.getPlatform() }; }
+    },
+    async connect() {
+      const PraSteps = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.PraSteps;
+      if (!PraSteps) return null;
+      let perm = null;
+      try { perm = await PraSteps.requestPermission(); } catch {}
+      await syncPhoneSteps(true);
+      return perm;
+    },
+  };
 
   async function build() {
     injectStyles();

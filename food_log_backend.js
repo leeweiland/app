@@ -288,6 +288,17 @@ export async function handleFoodLogRequest(req, res, url) {
     return sendJson(res, 200, { ok: true, saved, changed });
   }
 
+  // The Physique Builder's Health tab: the stored daily summaries above,
+  // newest first. resolveTargetUser lets staff read a student's (asUserId).
+  if (req.method === "GET" && url.pathname === "/api/health/daily") {
+    const user = resolveTargetUser(req, url);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const limit = Math.min(Math.max(Number(url.searchParams.get("days")) || 14, 1), 31);
+    const mine = readJson(HEALTH_FILE, {})[user.id] || {};
+    const days = Object.keys(mine).sort().reverse().slice(0, limit).map(date => ({ date, ...mine[date] }));
+    return sendJson(res, 200, { days });
+  }
+
   const delMatch = url.pathname.match(/^\/api\/food-log\/entries\/([^/]+)$/);
   if (delMatch && req.method === "DELETE") {
     const user = getSessionUser(req);

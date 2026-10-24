@@ -247,6 +247,30 @@
   .report-nav-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
   .report-range-label { flex: 1; text-align: center; font-family: var(--font-secondary); font-size: .82rem; color: var(--pra-text); }
   .report-section-title { font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin: 20px 0 8px; }
+/* ── Health tab (Apple Health / Health Connect data) ── */
+.health-add-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.health-add-btn .plus { font-size: 1.3rem; line-height: 1; }
+.health-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.health-chip { font-size: .75rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--pra-blue); color: #fff; background: var(--pra-blue-dim); }
+.health-synced { font-size: .72rem; margin-top: 6px; }
+.health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0 22px; }
+@media (max-width: 560px) { .health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.health-tile { border: 1px solid var(--pra-border); border-radius: 12px; padding: 12px; background: rgba(255,255,255,0.03); min-width: 0; }
+.health-tile .v { font-size: 1.35rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.health-tile .v small { font-size: .72rem; font-weight: 400; color: var(--pra-muted, #9aa0a6); margin-left: 2px; }
+.health-tile .l { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-muted, #9aa0a6); margin-top: 2px; }
+.health-bars { display: flex; align-items: flex-end; gap: 8px; height: 140px; padding: 0 2px; }
+.health-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.health-bar .fill { width: 100%; max-width: 36px; background: var(--pra-blue); border-radius: 6px 6px 2px 2px; min-height: 2px; }
+.health-bar .n { font-size: .66rem; color: #fff; margin-bottom: 4px; white-space: nowrap; }
+.health-bar .d { font-size: .68rem; color: var(--pra-muted, #9aa0a6); margin-top: 6px; }
+.health-workout { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--pra-border); font-size: .88rem; }
+.health-workout .t { color: #fff; font-weight: 600; }
+.health-modal-back { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.health-modal { font-family: var(--font-secondary, var(--font-primary)); width: 100%; max-width: 460px; max-height: 85vh; overflow-y: auto; background: #101014; border: 1px solid var(--pra-border); border-radius: 16px; padding: 20px; color: #fff; box-sizing: border-box; }
+.health-device { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 13px 14px; margin-bottom: 8px; border: 1px solid var(--pra-border); border-radius: 10px; background: rgba(255,255,255,0.03); color: #fff; font: inherit; text-align: left; cursor: pointer; }
+.health-device:hover { border-color: var(--pra-blue); }
+.health-steps-list { margin: 12px 0 18px; padding-left: 20px; line-height: 1.55; font-size: .9rem; }
 </style>
 </head>
 <body>
@@ -408,6 +432,19 @@
       <div id="foodEntriesList"></div>
     </div>
 
+    <div id="hubPanelHealth" class="hub-panel">
+      <div class="pra-h2" style="margin-bottom:14px">Health</div>
+      <button class="pra-btn health-add-btn" id="healthAddBtn"><span class="plus">+</span> ADD DEVICE</button>
+      <div class="pra-muted" id="healthNote" style="font-size:.82rem;margin-top:10px;display:none"></div>
+      <div class="health-sources" id="healthSources"></div>
+      <div class="pra-muted health-synced" id="healthSynced"></div>
+      <div class="health-grid" id="healthToday"></div>
+      <div class="pra-h2" style="margin:8px 0 12px">Steps, Last 7 Days</div>
+      <div class="pra-panel" style="padding:16px;margin-bottom:22px"><div class="health-bars" id="healthStepBars"></div></div>
+      <div class="pra-h2" style="margin:8px 0 6px">Workouts</div>
+      <div id="healthWorkouts"></div>
+    </div>
+
     <div id="hubPanelPhysique" class="hub-panel">
       <div class="pra-h2" style="margin-bottom:14px">Build A Powerful Physique</div>
       <div class="pra-muted profile-summary-line" id="physiqueProfileSummary"></div>
@@ -550,7 +587,7 @@ function kgToLbsVal(kg) { return kg != null ? Math.round(kg / 0.453592 * 10) / 1
 
 // ── Hub tabs: order + active tab are computed, not fixed in HTML -- Profile
 // leads until it's complete, then drops to the end and Nutrition Log leads. ──
-const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', physique: 'Physique', moves: 'Moves', reports: 'Reports', search: 'Search', activity: 'Activity' };
+const HUB_LABELS = { profile: 'Profile', nutrition: 'Fuel', health: 'Health', physique: 'Physique', moves: 'Moves', reports: 'Reports', search: 'Search', activity: 'Activity' };
 let profileComplete = false;
 let activeHub = 'profile';
 let physiqueHistoryLoaded = false;
@@ -731,7 +768,7 @@ function syncHubTabsLayout() {
 window.addEventListener('resize', syncHubTabsLayout);
 
 function renderHubTabs(preserveActive) {
-  const base = profileComplete ? ['nutrition', 'physique', 'moves', 'reports', 'profile'] : ['profile', 'nutrition', 'physique', 'moves', 'reports'];
+  const base = profileComplete ? ['nutrition', 'health', 'physique', 'moves', 'reports', 'profile'] : ['profile', 'nutrition', 'health', 'physique', 'moves', 'reports'];
   let order = isStaffMe() ? [...base, 'search'] : base;
   // Admin-only -- sits directly ahead of Search, which puts it right next
   // to Profile in the normal (profile-complete) steady state.
@@ -758,6 +795,7 @@ function renderHubTabs(preserveActive) {
   }
   if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
   if (activeHub === 'nutrition') loadFoodEntries();
+  if (activeHub === 'health') loadHealth();
   if (activeHub === 'moves' && !movesLoaded) { movesLoaded = true; loadFavoritedVideos(); }
   if (activeHub === 'search') runUserSearch(document.getElementById('searchInput').value);
   if (activeHub === 'activity' && !activityLoaded) { activityLoaded = true; loadActivityPage(true); }
@@ -770,6 +808,152 @@ function renderHubTabs(preserveActive) {
     if (!reportsMontageLoaded) { reportsMontageLoaded = true; loadReportsMontage(); }
   }
 }
+
+// ── Health tab: daily summaries the phone app syncs from Apple Health /
+// Health Connect (chat-header.js's syncPhoneSteps -> /api/health/sync).
+// Watches and rings can't be paired with this app directly -- they sync
+// into the phone's health store, and the app reads that -- so "Add Device"
+// is a how-to for turning that sync on in the device's own app, plus the
+// button that asks for (or re-asks) health access and syncs right away.
+// Menu names move around between app versions, so the how-to points at
+// where the switch usually lives instead of an exact menu path.
+const healthSyncSteps = (app, store) => [
+  `Open the ${app} app.`,
+  `In its settings, find ${store} (usually under Connected apps, Integrations or Partner apps) and turn it on.`,
+  'Allow it to share everything it asks about.',
+];
+const HEALTH_DEVICES = {
+  ios: [
+    { name: 'Apple Watch', steps: ['Nothing to set up. An Apple Watch paired with this iPhone already saves to Apple Health.'] },
+    { name: 'Oura Ring', steps: healthSyncSteps('Oura', 'Apple Health') },
+    { name: 'Garmin', steps: healthSyncSteps('Garmin Connect', 'Apple Health') },
+    { name: 'Whoop', steps: healthSyncSteps('Whoop', 'Apple Health') },
+    { name: 'Withings', steps: healthSyncSteps('Withings', 'Apple Health') },
+    { name: 'Polar', steps: healthSyncSteps('Polar Flow', 'Apple Health') },
+    { name: 'Amazfit / Zepp', steps: healthSyncSteps('Zepp', 'Apple Health') },
+    { name: 'Xiaomi / Mi Band', steps: healthSyncSteps('Mi Fitness', 'Apple Health') },
+    { name: 'Fitbit', steps: ['Fitbit does not send data to Apple Health on iPhone. A third-party bridge app from the App Store is needed to copy Fitbit data into Apple Health.'] },
+    { name: 'Other device', steps: healthSyncSteps("your device's", 'Apple Health') },
+  ],
+  android: [
+    { name: 'Samsung Galaxy Watch', steps: healthSyncSteps('Samsung Health', 'Health Connect') },
+    { name: 'Pixel Watch / Fitbit', steps: healthSyncSteps('Fitbit', 'Health Connect') },
+    { name: 'Oura Ring', steps: healthSyncSteps('Oura', 'Health Connect') },
+    { name: 'Whoop', steps: healthSyncSteps('Whoop', 'Health Connect') },
+    { name: 'Withings', steps: healthSyncSteps('Withings', 'Health Connect') },
+    { name: 'Polar', steps: healthSyncSteps('Polar Flow', 'Health Connect') },
+    { name: 'Amazfit / Zepp', steps: healthSyncSteps('Zepp', 'Health Connect') },
+    { name: 'Xiaomi / Mi Band', steps: healthSyncSteps('Mi Fitness', 'Health Connect') },
+    { name: 'Garmin', steps: [...healthSyncSteps('Garmin Connect', 'Health Connect'), 'Garmin may not share every data type with Health Connect yet.'] },
+    { name: 'Other device', steps: healthSyncSteps("your device's", 'Health Connect') },
+  ],
+};
+
+var healthCapability = null;
+async function loadHealth() {
+  const addBtn = document.getElementById('healthAddBtn');
+  const note = document.getElementById('healthNote');
+  addBtn.style.display = viewingUserId ? 'none' : '';
+  note.style.display = 'none';
+  if (!viewingUserId && window.PRAHealth) {
+    healthCapability = await window.PRAHealth.capability();
+    if (!healthCapability.native) { note.textContent = 'Open the Pacific Rim Athletics phone app to connect your devices.'; note.style.display = ''; }
+    else if (!healthCapability.health) { note.textContent = 'Update the app (TestFlight on iPhone, Play Store on Android) to connect watches and rings.'; note.style.display = ''; }
+  }
+  let days = [];
+  try { days = (await (await apiFetch('/api/health/daily?days=14')).json()).days || []; } catch {}
+  renderHealth(days);
+}
+
+function healthFmt(v, digits = 0) { return v == null ? null : Number(v).toLocaleString(undefined, { maximumFractionDigits: digits }); }
+function renderHealth(days) {
+  const byDate = Object.fromEntries(days.map(d => [d.date, d]));
+  const localKey = (dt) => dt.toLocaleDateString('en-CA');
+  const today = byDate[localKey(new Date())] || {};
+  // Weight/body fat aren't measured daily -- show the latest reading.
+  const latest = (k) => (days.find(d => d[k] != null) || {})[k];
+  const sleep = today.sleepMin != null ? `${Math.floor(today.sleepMin / 60)}<small>h</small> ${today.sleepMin % 60}<small>m</small>` : null;
+  const weight = latest('weightKg'), fat = latest('bodyFatPct');
+  const tiles = [
+    ['Steps', healthFmt(today.steps)],
+    ['Sleep', sleep],
+    ['Resting HR', today.restingHr != null ? `${healthFmt(today.restingHr)}<small>bpm</small>` : null],
+    ['HRV', today.hrvMs != null ? `${healthFmt(today.hrvMs)}<small>ms</small>` : null],
+    ['Active Cal', healthFmt(today.activeKcal)],
+    ['Distance', today.distanceM != null ? `${healthFmt(today.distanceM / 1609.344, 1)}<small>mi</small>` : null],
+    ['Weight', weight != null ? `${healthFmt(weight * 2.20462, 1)}<small>lb</small>` : null],
+    ['Body Fat', fat != null ? `${healthFmt(fat, 1)}<small>%</small>` : null],
+  ];
+  document.getElementById('healthToday').innerHTML = tiles.map(([l, v]) =>
+    `<div class="health-tile"><div class="v">${v ?? '<span class="pra-muted">--</span>'}</div><div class="l">${l}</div></div>`).join('');
+
+  const sources = [...new Set(days.slice(0, 7).flatMap(d => d.sources || []))];
+  document.getElementById('healthSources').innerHTML = sources.map(s => `<span class="health-chip">${escapeHtml(s)}</span>`).join('');
+  const lastSync = days.map(d => d.syncedAt).filter(Boolean).sort().pop();
+  document.getElementById('healthSynced').textContent = lastSync
+    ? `Last synced ${new Date(lastSync).toLocaleString([], { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+    : (viewingUserId ? 'No health data synced yet.' : 'No health data yet. Tap Add Device to connect.');
+
+  const week = [];
+  for (let i = 6; i >= 0; i--) { const dt = new Date(); dt.setDate(dt.getDate() - i); week.push(dt); }
+  const max = Math.max(1, ...week.map(dt => byDate[localKey(dt)]?.steps || 0));
+  document.getElementById('healthStepBars').innerHTML = week.map(dt => {
+    const s = byDate[localKey(dt)]?.steps || 0;
+    return `<div class="health-bar"><div class="n">${s ? (s >= 1000 ? (s / 1000).toFixed(1) + 'k' : s) : ''}</div><div class="fill" style="height:${Math.round((s / max) * 100)}%"></div><div class="d">${dt.toLocaleDateString([], { weekday: 'short' })}</div></div>`;
+  }).join('');
+
+  const workouts = days.slice(0, 7).flatMap(d => d.workouts || []).filter(w => w.start).sort((a, b) => (b.start > a.start ? 1 : -1));
+  document.getElementById('healthWorkouts').innerHTML = workouts.length ? workouts.map(w => {
+    const st = new Date(w.start), mins = w.end ? Math.round((new Date(w.end) - st) / 60000) : null;
+    const type = (w.type || 'Workout').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    return `<div class="health-workout"><div><div class="t">${escapeHtml(type)}</div><div class="pra-muted" style="font-size:.78rem">${st.toLocaleString([], { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div></div><div style="text-align:right">${mins != null ? mins + ' min' : ''}${w.kcal ? `<div class="pra-muted" style="font-size:.78rem">${healthFmt(w.kcal)} cal</div>` : ''}</div></div>`;
+  }).join('') : '<div class="pra-muted" style="font-size:.85rem;padding:8px 0">No workouts in the last 7 days.</div>';
+}
+
+function closeHealthModal() { document.getElementById('healthModalBack')?.remove(); }
+function openHealthModal(device) {
+  closeHealthModal();
+  const platform = healthCapability?.platform === 'android' ? 'android' : 'ios';
+  const store = platform === 'android' ? 'Health Connect' : 'Apple Health';
+  const back = document.createElement('div');
+  back.id = 'healthModalBack';
+  back.className = 'health-modal-back';
+  const closeX = '<div class="pra-close-x-wrap"><button class="pra-close-x" id="healthModalClose" aria-label="Close"><svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>';
+  const body = device
+    ? `<div class="pra-h2" style="margin-bottom:4px">${escapeHtml(device.name)}</div>
+       <div class="pra-muted" style="font-size:.82rem">Step 1: send its data to ${store}</div>
+       <ol class="health-steps-list">${device.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+       <div class="pra-muted" style="font-size:.82rem;margin-bottom:10px">Step 2: let this app read ${store}</div>
+       <button class="pra-btn" id="healthAllowBtn" style="width:100%">ALLOW ${store.toUpperCase()} ACCESS</button>
+       <div class="pra-muted" id="healthAllowMsg" style="font-size:.8rem;margin-top:10px"></div>
+       <button class="pra-btn-ghost" id="healthBackBtn" style="width:100%;margin-top:12px">BACK TO DEVICES</button>`
+    : `<div class="pra-h2" style="margin-bottom:4px">Add Device</div>
+       <div class="pra-muted" style="font-size:.82rem;margin-bottom:14px">Pick your watch, ring or scale.</div>
+       ${HEALTH_DEVICES[platform].map((d, i) => `<button class="health-device" data-i="${i}"><span>${escapeHtml(d.name)}</span><span style="color:var(--pra-blue)">&rsaquo;</span></button>`).join('')}`;
+  back.innerHTML = `<div class="health-modal">${closeX}${body}</div>`;
+  document.body.appendChild(back);
+  back.addEventListener('click', (e) => { if (e.target === back) closeHealthModal(); });
+  document.getElementById('healthModalClose').onclick = closeHealthModal;
+  back.querySelectorAll('.health-device').forEach(b => { b.onclick = () => openHealthModal(HEALTH_DEVICES[platform][Number(b.dataset.i)]); });
+  const backBtn = document.getElementById('healthBackBtn');
+  if (backBtn) backBtn.onclick = () => openHealthModal(null);
+  const allow = document.getElementById('healthAllowBtn');
+  if (allow) allow.onclick = async () => {
+    const msg = document.getElementById('healthAllowMsg');
+    if (!healthCapability?.native) { msg.textContent = 'Open the Pacific Rim Athletics phone app to do this step.'; return; }
+    if (!healthCapability?.health) { msg.textContent = 'Update the app first (TestFlight on iPhone, Play Store on Android).'; return; }
+    allow.disabled = true; msg.textContent = 'Syncing...';
+    await window.PRAHealth.connect();
+    healthCapability = await window.PRAHealth.capability();
+    allow.disabled = false;
+    msg.textContent = platform === 'ios'
+      ? 'Done. If nothing shows up, open the iPhone Settings app, then Health, then Data Access & Devices, then Pacific Rim Athletics, and turn everything on.'
+      : 'Done. If nothing shows up, open the Health Connect app, then App permissions, then Pacific Rim Athletics, and allow everything.';
+    loadHealth();
+  };
+}
+document.getElementById('healthAddBtn').onclick = () => openHealthModal(null);
+window.addEventListener('pra-health-synced', () => { if (activeHub === 'health') loadHealth(); });
 
 // ── Admin-only Activity tab: a paginated, newest-first timeline of the
 // currently viewed member's (or, with nobody being viewed, the admin's own)
