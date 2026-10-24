@@ -408,17 +408,23 @@ window.PRABack = (function () {
     if (!PraSteps || Date.now() - stepsSyncAt < 60000) return;
     stepsSyncAt = Date.now();
     try {
-      // healthStatus (Apple Health / Health Connect -- watch and ring steps)
+      // healthStatus (Apple Health / Health Connect -- watch and ring data)
       // only exists on builds that read the health store; it's asked once,
       // even for people who already allowed the phone's own step counter.
       let perm = await PraSteps.checkPermission();
       if (perm.status === 'prompt' || perm.healthStatus === 'prompt') perm = await PraSteps.requestPermission();
       if (perm.status !== 'granted') return;
-      const { days } = await PraSteps.getDailySteps({ days: 7 });
+      // Builds with the full health read send the whole daily summary
+      // (steps, heart rate, sleep, workouts... for the Health tab; the server
+      // also feeds its steps into the steps log). Older builds have no
+      // getDailyHealth -- the call rejects -- and send steps only.
+      let health = null;
+      try { health = await PraSteps.getDailyHealth({ days: 7 }); } catch {}
+      const days = health ? health.days : (await PraSteps.getDailySteps({ days: 7 })).days;
       if (!days?.length) return;
-      const r = await fetch('/api/food-log/steps-sync', {
+      const r = await fetch(health ? '/api/health/sync' : '/api/food-log/steps-sync', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days }),
+        body: JSON.stringify({ days, platform: window.Capacitor.getPlatform() }),
       });
       const d = r.ok ? await r.json() : null;
       if (d?.changed) window.dispatchEvent(new CustomEvent('pra-steps-synced'));

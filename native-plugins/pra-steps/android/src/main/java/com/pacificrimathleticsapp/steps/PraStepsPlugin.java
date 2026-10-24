@@ -74,13 +74,17 @@ public class PraStepsPlugin extends Plugin {
         return "prompt";
     }
 
-    // Health Connect (watch/ring/other-app steps): "unavailable" when the
+    // Health Connect (watch/ring/other-app data): "unavailable" when the
     // phone doesn't have it, "prompt" until its permission screen has been
-    // shown once, then "granted" or "denied" -- it's only ever asked once.
+    // shown once for the current set of data types (HEALTH_ASKED_KEY -- bump
+    // it when HealthConnectSteps asks for more, so people who only allowed
+    // steps get asked about the rest), then "granted" or "denied".
+    private static final String HEALTH_ASKED_KEY = "healthAskedV2";
+
     private String healthStatus() {
         if (!HealthConnectSteps.isAvailable(getContext())) return "unavailable";
-        if (HealthConnectSteps.hasPermission(getContext())) return "granted";
-        return prefs().getBoolean("healthAsked", false) ? "denied" : "prompt";
+        if (!prefs().getBoolean(HEALTH_ASKED_KEY, false)) return "prompt";
+        return HealthConnectSteps.hasPermission(getContext()) ? "granted" : "denied";
     }
 
     private SharedPreferences prefs() {
@@ -122,7 +126,7 @@ public class PraStepsPlugin extends Plugin {
 
     private void requestHealthPermission(PluginCall call) {
         if (!"prompt".equals(healthStatus())) { checkPermission(call); return; }
-        prefs().edit().putBoolean("healthAsked", true).apply();
+        prefs().edit().putBoolean(HEALTH_ASKED_KEY, true).apply();
         try {
             startActivityForResult(call, HealthConnectSteps.permissionIntent(getContext()), "healthPermissionCallback");
         } catch (Exception e) {
@@ -143,9 +147,57 @@ public class PraStepsPlugin extends Plugin {
         // the two, so steps from a watch-only walk and steps the phone saw
         // before Health Connect was allowed both count.
         Map<String, Long> health = HealthConnectSteps.dailySteps(getContext(), days);
+        withSensorReading(call, health, () -> call.resolve(result(days, health)));
+    }
+
+    // Full daily health summary for the Health tab (see
+    // HealthConnectSteps.dailyHealth for the fields); each day's steps are
+    // the higher of Health Connect's and the phone sensor's.
+    @PluginMethod
+    public void getDailyHealth(PluginCall call) {
+        int days = Math.min(Math.max(call.getInt("days", 7), 1), KEEP_DAYS);
+        org.json.JSONArray health = HealthConnectSteps.dailyHealth(getContext(), days);
+        Map<String, Long> healthSteps = new java.util.HashMap<>();
+        for (int i = 0; i < health.length(); i++) {
+            JSONObject d = health.optJSONObject(i);
+            if (d != null && d.has("steps")) healthSteps.put(d.optString("date"), d.optLong("steps"));
+        }
+        withSensorReading(call, healthSteps, () -> {
+            JSONObject sensorDays = loadDays(prefs());
+            JSArray out = new JSArray();
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (int i = 0; i < health.length(); i++) {
+                JSONObject d = health.optJSONObject(i);
+                if (d == null) continue;
+                String key = d.optString("date");
+                seen.add(key);
+                long steps = Math.max(d.optLong("steps", 0), sensorDays.optLong(key, 0));
+                try {
+                    if (steps > 0 || d.has("steps") || sensorDays.has(key)) d.put("steps", steps);
+                } catch (Exception ignored) {}
+                out.put(d);
+            }
+            // No Health Connect (or nothing in it): the sensor's days alone.
+            org.json.JSONArray sensorOnly = result(days, java.util.Collections.emptyMap()).optJSONArray("days");
+            if (sensorOnly != null) {
+                for (int i = 0; i < sensorOnly.length(); i++) {
+                    JSONObject d = sensorOnly.optJSONObject(i);
+                    if (d != null && !seen.contains(d.optString("date"))) out.put(d);
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("days", out);
+            call.resolve(ret);
+        });
+    }
+
+    // Takes a fresh step-sensor reading (when allowed) before `then` runs,
+    // so the sensor's saved per-day totals are current. Rejects when neither
+    // the sensor nor Health Connect is allowed.
+    private void withSensorReading(PluginCall call, Map<String, Long> health, Runnable then) {
         if (!"granted".equals(status())) {
-            if (health.isEmpty() && !"granted".equals(healthStatus())) { call.reject("Step permission not granted", "denied"); return; }
-            call.resolve(result(days, health));
+            if (health.isEmpty() && !HealthConnectSteps.hasPermission(getContext())) { call.reject("Step permission not granted", "denied"); return; }
+            then.run();
             return;
         }
         SensorManager sm = sensorManager();
@@ -158,7 +210,7 @@ public class PraStepsPlugin extends Plugin {
                 done[0] = true;
                 sm.unregisterListener(this);
                 recordReading((long) event.values[0]);
-                call.resolve(result(days, health));
+                then.run();
             }
 
             @Override
@@ -171,7 +223,7 @@ public class PraStepsPlugin extends Plugin {
             if (done[0]) return;
             done[0] = true;
             sm.unregisterListener(listener);
-            call.resolve(result(days, health));
+            then.run();
         }, 4000);
     }
 

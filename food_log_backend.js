@@ -12,6 +12,7 @@ import { parseMultipartUpload } from "./multipart_util.js";
 import { logActivity } from "./activity_log_backend.js";
 
 const LOG_FILE = "chat_food_log.json";
+const HEALTH_FILE = "chat_health_daily.json";
 
 const FOOD_ESTIMATE_TOOL = {
   type: "function",
@@ -46,6 +47,39 @@ user can always edit the numbers afterward.`;
 
 function dateKey(iso) {
   return (iso || new Date().toISOString()).slice(0, 10);
+}
+
+// Phone/health-store step totals -> the same single "steps" entry per day
+// that hand-entered steps use, marked auto. A number the student typed by
+// hand is only replaced when the synced count is higher, so a manual entry
+// from a day the phone missed never gets knocked down. Returns how many days
+// changed.
+function applySyncedSteps(userId, days) {
+  const all = readJson(LOG_FILE, {});
+  if (!all[userId]) all[userId] = {};
+  const oldest = new Date(Date.now() - 32 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  let changed = 0;
+  for (const d of days.slice(0, 31)) {
+    const key = String(d?.date || "");
+    const stepsNum = Math.round(Number(d?.steps));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < oldest) continue;
+    if (!Number.isFinite(stepsNum) || stepsNum < 0 || stepsNum > 200000) continue;
+    const list = all[userId][key] || (all[userId][key] = []);
+    const existing = list.find(e => e.source === "steps");
+    if (!existing) {
+      if (stepsNum === 0) continue;
+      list.push({ id: randomUUID(), createdAt: new Date().toISOString(), source: "steps", steps: stepsNum, auto: true });
+      changed++;
+    } else if (existing.auto ? existing.steps !== stepsNum : stepsNum > (existing.steps || 0)) {
+      existing.steps = stepsNum;
+      existing.auto = true;
+      existing.createdAt = new Date().toISOString();
+      changed++;
+    }
+  }
+  for (const key of Object.keys(all[userId])) if (!all[userId][key].length) delete all[userId][key];
+  if (changed) writeJson(LOG_FILE, all);
+  return changed;
 }
 
 export async function handleFoodLogRequest(req, res, url) {
@@ -189,7 +223,7 @@ export async function handleFoodLogRequest(req, res, url) {
     const existing = all[user.id][key].find(e => e.source === "steps");
     if (existing) {
       existing.steps = stepsNum;
-      existing.auto = false; // typed by hand now -- see /steps-sync below
+      existing.auto = false; // typed by hand now -- see applySyncedSteps
       existing.createdAt = new Date().toISOString();
     } else {
       all[user.id][key].push({ id: randomUUID(), createdAt: new Date().toISOString(), source: "steps", steps: stepsNum });
@@ -201,40 +235,57 @@ export async function handleFoodLogRequest(req, res, url) {
 
   // The phone app's automatic step counter (pra-steps native plugin, driven
   // from chat-header.js) posts the phone's own per-day totals here on every
-  // open. Same single "steps" entry per day as above, marked auto -- a
-  // number the student typed by hand is only replaced when the phone's
-  // count is higher, so a manual entry from a day the phone missed (left at
-  // home, watch-only walk) never gets knocked down.
+  // open -- see applySyncedSteps above. App builds from before the full
+  // health sync use this; newer ones post /api/health/sync instead.
   if (req.method === "POST" && url.pathname === "/api/food-log/steps-sync") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
     const { days } = await readJsonBody(req);
     if (!Array.isArray(days)) return sendJson(res, 400, { error: "days must be an array" });
-    const all = readJson(LOG_FILE, {});
-    if (!all[user.id]) all[user.id] = {};
+    return sendJson(res, 200, { ok: true, changed: applySyncedSteps(user.id, days) });
+  }
+
+  // Full daily health summary from the phone's health store (Apple Health /
+  // Health Connect: steps, distance, active calories, heart rate, resting HR,
+  // HRV, sleep, weight, body fat, workouts, and which apps/devices supplied
+  // them). Stored per user per day (each sync overwrites that day) for the
+  // Health tab; the steps also feed the daily steps log like steps-sync.
+  if (req.method === "POST" && url.pathname === "/api/health/sync") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const { days, platform } = await readJsonBody(req);
+    if (!Array.isArray(days)) return sendJson(res, 400, { error: "days must be an array" });
     const oldest = new Date(Date.now() - 32 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    let changed = 0;
+    const num = (v, max) => { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n * 10) / 10 : null; };
+    const str = (v, max = 80) => (typeof v === "string" ? v.slice(0, max) : null);
+    const all = readJson(HEALTH_FILE, {});
+    if (!all[user.id]) all[user.id] = {};
+    let saved = 0;
     for (const d of days.slice(0, 31)) {
       const key = String(d?.date || "");
-      const stepsNum = Math.round(Number(d?.steps));
       if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < oldest) continue;
-      if (!Number.isFinite(stepsNum) || stepsNum < 0 || stepsNum > 200000) continue;
-      const list = all[user.id][key] || (all[user.id][key] = []);
-      const existing = list.find(e => e.source === "steps");
-      if (!existing) {
-        if (stepsNum === 0) continue;
-        list.push({ id: randomUUID(), createdAt: new Date().toISOString(), source: "steps", steps: stepsNum, auto: true });
-        changed++;
-      } else if (existing.auto ? existing.steps !== stepsNum : stepsNum > (existing.steps || 0)) {
-        existing.steps = stepsNum;
-        existing.auto = true;
-        existing.createdAt = new Date().toISOString();
-        changed++;
-      }
+      all[user.id][key] = {
+        steps: num(d.steps, 200000),
+        distanceM: num(d.distanceM, 500000),
+        activeKcal: num(d.activeKcal, 20000),
+        avgHr: num(d.avgHr, 300),
+        restingHr: num(d.restingHr, 300),
+        hrvMs: num(d.hrvMs, 1000),
+        sleepMin: num(d.sleepMin, 1440),
+        weightKg: num(d.weightKg, 500),
+        bodyFatPct: num(d.bodyFatPct, 100),
+        workouts: (Array.isArray(d.workouts) ? d.workouts : []).slice(0, 30).map(w => ({
+          type: str(w?.type, 60), start: str(w?.start, 40), end: str(w?.end, 40), kcal: num(w?.kcal, 20000),
+        })),
+        sources: (Array.isArray(d.sources) ? d.sources : []).slice(0, 20).map(x => str(x)).filter(Boolean),
+        platform: str(platform, 20),
+        syncedAt: new Date().toISOString(),
+      };
+      saved++;
     }
-    for (const key of Object.keys(all[user.id])) if (!all[user.id][key].length) delete all[user.id][key];
-    if (changed) writeJson(LOG_FILE, all);
-    return sendJson(res, 200, { ok: true, changed });
+    if (saved) writeJson(HEALTH_FILE, all);
+    const changed = applySyncedSteps(user.id, days.filter(d => d && d.steps != null));
+    return sendJson(res, 200, { ok: true, saved, changed });
   }
 
   const delMatch = url.pathname.match(/^\/api\/food-log\/entries\/([^/]+)$/);
