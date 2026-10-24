@@ -3159,17 +3159,39 @@ async function summarizeCallRecording(videoPath, promptText) {
 // polls rather than blocking the HTTP response on it. Only ever called for
 // a call that actually reached "active" (startedAt set); a call nobody
 // answered has nothing to record.
+// Marks a call's recording as handled in CALLS_FILE so the boot-time sweep
+// (resumeCallRecordings) never processes it twice.
+function markCallRecording(callId, fields) {
+  const calls = readJson(CALLS_FILE, []);
+  const c = calls.find(x => x.id === callId);
+  if (!c) return;
+  Object.assign(c, fields);
+  writeJson(CALLS_FILE, calls);
+}
+const archivingCallIds = new Set();
 async function archiveCallRecording(call) {
+  if (archivingCallIds.has(call.id)) return;
+  archivingCallIds.add(call.id);
   let tempPath = null;
   try {
+    // Daily needs a while to process a long call (a 16-minute call wasn't
+    // ready inside the old 2-minute window), so wait up to 15 minutes. If
+    // Daily has no recording at all for a call that ended a while ago, there
+    // never was one (or it was already archived) -- stop right away.
     let recording = null;
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 60; i++) {
       const list = await listDailyRecordings(call.dailyRoomName);
       recording = list.find(r => r.status === "finished");
       if (recording) break;
-      await new Promise(r => setTimeout(r, 5000));
+      const endedMinsAgo = call.endedAt ? (Date.now() - new Date(call.endedAt).getTime()) / 60000 : 0;
+      if (!list.length && endedMinsAgo > 20) break;
+      await new Promise(r => setTimeout(r, 15000));
     }
-    if (!recording) { console.error("[call recording] never finished for room", call.dailyRoomName); return; }
+    if (!recording) {
+      console.error("[call recording] no finished recording for room", call.dailyRoomName);
+      markCallRecording(call.id, { recordingArchiveGaveUp: new Date().toISOString() });
+      return;
+    }
 
     const cfg = getConfig();
     if (!cfg.callRecordingsFolderId) { console.error("[call recording] no callRecordingsFolderId configured -- set it in the admin panel"); return; }
@@ -3228,11 +3250,32 @@ async function archiveCallRecording(call) {
         }
       }
     }
+    markCallRecording(call.id, { recordingArchivedAt: new Date().toISOString() });
   } catch (e) {
     console.error("[call recording] archive failed for call", call.id, e.message);
   } finally {
+    archivingCallIds.delete(call.id);
     if (tempPath) { try { unlinkSync(tempPath); } catch {} }
   }
+}
+
+// A deploy/restart kills an in-progress archive (it runs in the background
+// after the call ends) with nothing to retry it. On boot, pick up any call
+// from the last 3 days that recorded but was never archived or given up on.
+async function resumeCallRecordings() {
+  const cutoff = Date.now() - 3 * 24 * 3600 * 1000;
+  const pending = readJson(CALLS_FILE, []).filter(c =>
+    c.startedAt && c.endedAt && c.dailyRoomName && new Date(c.endedAt).getTime() > cutoff &&
+    !c.recordingArchivedAt && !c.recordingArchiveGaveUp);
+  for (const c of pending) {
+    console.log("[call recording] resuming archive for call", c.id);
+    await archiveCallRecording(c);
+  }
+}
+// Production only (Railway volume): a local dev server shares the same live
+// Daily key and must never pull -- and then delete -- a real recording.
+if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  setTimeout(() => { resumeCallRecordings().catch(e => console.error("[call recording] resume failed", e.message)); }, 20000);
 }
 
 // ── Route handler ────────────────────────────────────────────────────────
