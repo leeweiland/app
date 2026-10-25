@@ -1421,12 +1421,14 @@ async function commitPendingOverrideEdits() {
 let foodMode = 'photo';
 let foodPhotoFile = null;
 
-document.getElementById('foodDate').valueAsDate = new Date();
+// Local calendar date -- valueAsDate uses UTC, which rolls over to tomorrow
+// in the evening across the Americas (synced steps are keyed by local date).
+document.getElementById('foodDate').value = new Date().toLocaleDateString('en-CA');
 document.getElementById('foodDate').addEventListener('change', loadFoodEntries);
 // chat-header.js's automatic phone step sync just saved new numbers.
 window.addEventListener('pra-steps-synced', () => { if (activeHub === 'nutrition' && !viewingUserId) loadFoodEntries(); });
 
-document.getElementById('scanDate').valueAsDate = new Date();
+document.getElementById('scanDate').value = new Date().toLocaleDateString('en-CA');
 
 document.querySelectorAll('.food-mode-opt').forEach(opt => {
   opt.onclick = () => {
