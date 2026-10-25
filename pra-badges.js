@@ -111,6 +111,9 @@
     el.dataset.badgesFor = userId || '';
     // No app account (e.g. a Levels-sheet-only gym kid) -> all zeros.
     const data = userId ? await loadBadges() : { users: {} };
+    // A real account missing from the data is one whose badges this viewer
+    // isn't allowed to see (staff, or the owner) -- show nothing at all.
+    if (userId && !(userId in (data.users || {}))) { el.innerHTML = ''; el.classList.remove('prab-row'); return; }
     const b = (data.users || {})[userId] || {};
     el.innerHTML = CATS.map(cat => {
       const c = b[cat] || { n: 0, rank: null };

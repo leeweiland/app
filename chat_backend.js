@@ -2888,14 +2888,30 @@ function computeBadges() {
       katas: katasBySender.get(u.id) || 0,
     };
   }
-  // Competition ranking (ties share a rank); zero never ranks.
+  return { counts, users };
+}
+// Who may see whose badges: everyone sees their own; Lee's are visible to
+// nobody else; admin/admin2 only to admins; coaches only to staff.
+const BADGE_OWNER_EMAIL = "lee@pacificrimathletics.com";
+function canSeeBadges(viewer, target) {
+  if (viewer.id === target.id) return true;
+  if ((target.email || "").toLowerCase() === BADGE_OWNER_EMAIL) return false;
+  if (target.role === "admin" || target.role === "admin2") return viewer.role === "admin" || viewer.role === "admin2";
+  if (target.role === "coach") return isStaff(viewer);
+  return true;
+}
+// Competition ranking (ties share a rank; zero never ranks) among only the
+// people this viewer can see, so a hidden coach never takes a gold medal
+// out of a student's view.
+function rankBadgesFor(viewer, { counts, users }) {
+  const visible = users.filter(u => counts[u.id] && canSeeBadges(viewer, u)).map(u => u.id);
   const out = {};
-  for (const id of Object.keys(counts)) out[id] = {};
+  for (const id of visible) out[id] = {};
   for (const cat of ["fuel", "photos", "moves", "katas", "steps", "hearts"]) {
-    const sorted = Object.entries(counts).filter(([, c]) => c[cat] > 0).sort((a, b) => b[1][cat] - a[1][cat]);
+    const sorted = visible.filter(id => counts[id][cat] > 0).sort((a, b) => counts[b][cat] - counts[a][cat]);
     let rank = 0, prev = null;
-    sorted.forEach(([id, c], i) => { if (c[cat] !== prev) { rank = i + 1; prev = c[cat]; } out[id][cat] = { n: c[cat], rank }; });
-    for (const id of Object.keys(counts)) if (!out[id][cat]) out[id][cat] = { n: 0, rank: null };
+    sorted.forEach((id, i) => { const n = counts[id][cat]; if (n !== prev) { rank = i + 1; prev = n; } out[id][cat] = { n, rank }; });
+    for (const id of visible) if (!out[id][cat]) out[id][cat] = { n: 0, rank: null };
   }
   return { users: out };
 }
@@ -5521,7 +5537,7 @@ export async function handleChatRequest(req, res, url) {
     // Rank 1/2/3 = gold/silver/bronze on the client. Cached 5 minutes.
     if (p === "/api/chat/badges" && req.method === "GET") {
       if (!badgesCache || Date.now() - badgesCache.at > 5 * 60 * 1000) badgesCache = { at: Date.now(), data: computeBadges() };
-      return sendJson(res, 200, badgesCache.data);
+      return sendJson(res, 200, rankBadgesFor(user, badgesCache.data));
     }
     const userMovesMatch = p.match(/^\/api\/chat\/user-moves\/([^/]+)$/);
     if (userMovesMatch && req.method === "GET") {
