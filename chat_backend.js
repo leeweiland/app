@@ -2837,6 +2837,25 @@ export function isStaff(user) { return user.role === "coach" || isAdmin(user); }
 // "online" and "gym" are both client-facing training roles -- same
 // permissions/behaviors everywhere, just tracking which program someone's
 // actually enrolled in.
+// A coach/admin moved to user/student leaves every team chat: a hand-made
+// group (or channel) where everyone else is staff. Only their membership
+// goes -- their past messages stay in the history -- so the chat drops out
+// of their list, they can't open it, and their name leaves its member list.
+// Auto groups (student/self) are managed by syncDefaultGroups instead.
+function pullFromStaffOnlyChats(userId, users) {
+  const byId = new Map(users.map(u => [u.id, u]));
+  const convos = readJson(CONVOS_FILE, []);
+  let changed = 0;
+  for (const c of convos) {
+    if (c.type !== "group" || c.autoGroupType || !c.participantIds.includes(userId)) continue;
+    const others = c.participantIds.filter(id => id !== userId).map(id => byId.get(id)).filter(Boolean);
+    if (!others.length || !others.every(isStaff)) continue;
+    c.participantIds = c.participantIds.filter(id => id !== userId);
+    changed++;
+  }
+  if (changed) writeJson(CONVOS_FILE, convos);
+  return changed;
+}
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
 // Everyone gets their own row in the chat sidebar: a one-person "notes to
@@ -3892,6 +3911,7 @@ export async function handleChatRequest(req, res, url) {
       if (target.id === user.id && !isAdmin({ role })) return sendJson(res, 400, { error: "Can't remove your own admin access" });
       target.role = role;
       writeJson(USERS_FILE, users);
+      if (!isStaff(target)) pullFromStaffOnlyChats(target.id, users);
       syncDefaultGroups();
       syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
