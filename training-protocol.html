@@ -170,6 +170,13 @@
   .step-placeholder-delete { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.9); color: var(--pra-dim); font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .step-placeholder-delete:hover { border-color: #ff3b3b; color: #ff3b3b; }
   .empty-hint { text-align: center; color: var(--pra-dim); font-size: .88rem; margin-top: 30px; }
+  /* A plain "user" (not an online/gym student) sees their protocol locked:
+     see-through black + blur, nothing clickable underneath. */
+  .protocol-body { position: relative; }
+  .protocol-lock { position: absolute; inset: 0; min-height: 60vh; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; background: rgba(0,0,0,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+  .protocol-lock svg { width: 46px; height: 46px; }
+  .protocol-lock .t { font-family: var(--font-secondary); font-size: 1.05rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
+  .protocol-lock .s { font-size: .85rem; color: #d6d6dc; max-width: 320px; line-height: 1.4; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
@@ -274,6 +281,7 @@
       </div>
     </div>
 
+    <div class="protocol-body" id="protocolBody">
     <div class="empty-hint" id="emptyHint" style="display:none">
       No steps yet.
       <div style="margin-top:14px"><button class="pra-btn" id="addFirstStepBtn" style="display:none">+ Add First Step</button></div>
@@ -289,6 +297,7 @@
       </select>
     </div>
     <div class="protocol-page" id="protocolPage" style="display:none"></div>
+    </div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
   </div>
 
@@ -611,6 +620,7 @@ async function init() {
   titleInput.addEventListener('blur', saveProtocolName);
   titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') titleInput.blur(); });
   await loadSteps();
+  if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
   wireModals();
   await setupBackToChatLink();
 }
@@ -630,6 +640,15 @@ async function init() {
 // group chat instead of just hiding the button; for anyone viewing
 // someone ELSE's protocol without a ?convo= (a rare, unusual path), there
 // genuinely isn't a specific conversation to send them to.
+function showProtocolLock() {
+  const lock = document.createElement('div');
+  lock.className = 'protocol-lock';
+  lock.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="#fff" stroke-width="1.7"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <div class="t">Locked</div>
+    <div class="s">Your custom training protocol is for online and gym students.</div>`;
+  document.getElementById('protocolBody').appendChild(lock);
+}
+
 async function setupBackToChatLink() {
   let convoId = sourceConvoId;
   // Only try to resolve a specific conversation when the viewer IS the
