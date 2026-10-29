@@ -6,8 +6,13 @@
 <title>PRA Chat — Sign In</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <style>
-  body { margin: 0; }
-  .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  /* iOS app runs with ios.scrollEnabled:false, so normal page scrolling never
+     moves on iPhone -- with the keyboard up the lower fields were stuck behind
+     it. Same fix as levels.html: pin html/body and let .pra-root scroll. */
+  html { height: 100%; overflow: hidden; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; overflow: hidden; }
+  .pra-root { position: absolute; inset: 0; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .auth-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
   .auth-card { width: 100%; max-width: 420px; padding: 36px 32px; }
   .auth-logo { text-align: center; margin-bottom: 22px; }
   .auth-tabs { display: flex; gap: 8px; margin-bottom: 26px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 4px; }
@@ -209,6 +214,14 @@ document.querySelectorAll('.pw-toggle').forEach(btn => {
     btn.innerHTML = hidden ? EYE_OPEN : EYE_CLOSED;
     btn.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
   });
+});
+</script>
+<script>
+// Keyboard covers the bottom half of the screen; once it has opened (and the
+// native resize has shrunk the view), bring the focused field back into sight.
+document.addEventListener('focusin', (e) => {
+  if (!e.target.matches('input, textarea, select')) return;
+  setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350);
 });
 </script>
 </body>
