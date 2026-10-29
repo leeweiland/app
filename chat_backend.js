@@ -2791,6 +2791,7 @@ async function sendPushToTargets(targets, payload) {
         // APNs API rather than through getMessaging().send(). See apns.js.
         await sendApnsPush(target.nativeToken.token, {
           title: payload.title, body: payload.body, conversationId: payload.conversationId,
+          sound: payload.ring ? "ring.wav" : undefined,
         });
       } else if (target.nativeToken && fbApp) {
         await getMessaging(fbApp).send({
@@ -2806,7 +2807,10 @@ async function sendPushToTargets(targets, payload) {
           // Android channel ID that doesn't actually exist on the device
           // silently drops the notification entirely, which is worse than
           // omitting it and letting the plugin's own default channel apply.
-          android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF" } },
+          // payload.ring (incoming calls) goes to the app's "calls" channel
+          // (MainActivity.createCallsChannel: ringtone + vibration). FCM falls
+          // back to the default channel on builds that don't have it.
+          android: { priority: "high", notification: { sound: "default", visibility: "public", icon: "ic_stat_notify", color: "#009BFF", ...(payload.ring ? { channelId: "calls" } : {}) } },
         });
       }
     } catch (e) {
@@ -3139,11 +3143,12 @@ function computeMessageStatus(m, convo, users) {
 // and it's what a rejoin/refresh keys off of too.
 // A call nobody picks up stops ringing after CALL_RING_MS and ends as
 // missed -- without this, a caller who closed the app mid-ring left the call
-// "ringing" forever. While it rings, the people being called get a push at
-// the start and again every CALL_RING_REPEAT_MS, so the phone alerts even
-// when the app isn't open.
+// "ringing" forever. While it rings, the people being called get a ringing
+// push (ring: true -- ring.wav on iOS, the "calls" channel on Android) at the
+// start and again every CALL_RING_REPEAT_MS, so the phone rings even when the
+// app isn't open.
 const CALL_RING_MS = 60 * 1000;
-const CALL_RING_REPEAT_MS = 15 * 1000;
+const CALL_RING_REPEAT_MS = 30 * 1000; // the ring sound itself lasts ~28s
 function expireRingingCalls() {
   const calls = readJson(CALLS_FILE, []);
   const now = Date.now();
@@ -3165,7 +3170,7 @@ function ringCallees(callId, caller) {
   const waiting = new Set(callees.filter(id => !call.joinedIds.includes(id) && !call.declinedIds.includes(id)));
   const targets = subs.filter(s => waiting.has(s.userId));
   sendPushToTargets(targets, {
-    title: `${caller.first} ${caller.last}`.trim() + " is calling", body: "Incoming video call. Open the app to answer.", conversationId: call.conversationId,
+    title: `${caller.first} ${caller.last}`.trim() + " is calling", body: "Incoming video call. Open the app to answer.", conversationId: call.conversationId, ring: true,
   }).catch(() => {});
 }
 

@@ -46,7 +46,7 @@ function getApnsJwt() {
   return jwt;
 }
 
-export function sendApnsPush(deviceToken, { title, body, conversationId } = {}) {
+export function sendApnsPush(deviceToken, { title, body, conversationId, sound } = {}) {
   return new Promise((resolve, reject) => {
     let jwt;
     try { jwt = getApnsJwt(); } catch (e) { reject(e); return; }
@@ -55,7 +55,9 @@ export function sendApnsPush(deviceToken, { title, body, conversationId } = {}) 
     client.on("error", reject);
 
     const payload = JSON.stringify({
-      aps: { alert: { title, body }, sound: "default" },
+      // `sound` names a file bundled in the app (ring.wav for calls); iOS
+      // falls back to the default sound if this build doesn't have it.
+      aps: { alert: { title, body }, sound: sound || "default" },
       conversationId: String(conversationId || ""),
     });
 
