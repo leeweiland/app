@@ -3014,6 +3014,12 @@ function syncDefaultGroups() {
     // only actually becoming an online/gym client creates one, including
     // every admin/admin2/coach.
     if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
+    // Made a plain "user" again: pulled from their own coaching group (staff
+    // keep it and its history). Going back to online/gym re-adds them above.
+    else if (u.role === "user") {
+      const own = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === u.id);
+      if (own?.participantIds.includes(u.id)) own.participantIds = own.participantIds.filter(id => id !== u.id);
+    }
   });
   writeJson(CONVOS_FILE, convos);
 
