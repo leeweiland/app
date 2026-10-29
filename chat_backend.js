@@ -2879,29 +2879,59 @@ function movesForUser(u, convos = readJson(CONVOS_FILE, [])) {
 }
 const MOVE_LIKES_FILE = "chat_move_likes.json"; // { [videoMessageId]: [userId, ...] }
 const KATAS_FILE = "chat_katas.json"; // { [videoMessageId]: { senderId, createdAt } } -- videos flagged as a kata on upload
+const MOVE_LIKE_TIMES_FILE = "chat_move_like_times.json"; // { [videoMessageId]: { [userId]: likedAtISO } } -- when each heart was given
+// Badges count the current calendar month only, restarting on the 1st in
+// each person's own timezone. Food-log day keys are already local dates;
+// timestamps get converted to the person's local "YYYY-MM".
+const BADGE_DEFAULT_TZ = "America/Anchorage";
+function monthKeyIn(tz, when = new Date()) {
+  try { return new Date(when).toLocaleDateString("en-CA", { timeZone: tz }).slice(0, 7); }
+  catch { return new Date(when).toLocaleDateString("en-CA", { timeZone: BADGE_DEFAULT_TZ }).slice(0, 7); }
+}
 function computeBadges() {
   const users = readJson(USERS_FILE, []).filter(u => !u.archived);
   const food = readJson("chat_food_log.json", {});
   const scans = readJson("chat_body_scans.json", {});
   const photos = readJson("chat_progress_photos.json", {});
-  const videoCounts = new Map(MessagesDB.countVideosBySender().map(r => [r.senderId, r.n]));
+  const monthOf = new Map(users.map(u => [u.id, monthKeyIn(u.timezone || BADGE_DEFAULT_TZ)]));
+  const tzOf = new Map(users.map(u => [u.id, u.timezone || BADGE_DEFAULT_TZ]));
+  const inMonth = (userId, when) => !!when && monthOf.has(userId) && monthKeyIn(tzOf.get(userId), when) === monthOf.get(userId);
+  // Two days before the UTC month start covers every timezone's 1st.
+  const now = new Date();
+  const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) - 2 * 86400000).toISOString();
+  const recentVideos = MessagesDB.getVideoTimesSince(since);
   const convosForMoves = readJson(CONVOS_FILE, []);
+  const ownGroups = new Map(); // staff only count videos in their own coaching group (see movesForUser)
+  for (const c of convosForMoves) if (c.autoGroupType === "student") ownGroups.set(c.id, c.autoGroupUserId);
+  const usersById = new Map(users.map(u => [u.id, u]));
+  const movesBySender = new Map();
+  for (const v of recentVideos) {
+    const u = usersById.get(v.senderId);
+    if (!u || !inMonth(u.id, v.createdAt)) continue;
+    if (isStaff(u) && ownGroups.get(v.conversationId) !== u.id) continue;
+    movesBySender.set(u.id, (movesBySender.get(u.id) || 0) + 1);
+  }
   const katasBySender = new Map();
-  for (const k of Object.values(readJson(KATAS_FILE, {}))) katasBySender.set(k.senderId, (katasBySender.get(k.senderId) || 0) + 1);
-  // Hearts received = likes on every move the person posted.
+  for (const k of Object.values(readJson(KATAS_FILE, {}))) if (inMonth(k.senderId, k.createdAt)) katasBySender.set(k.senderId, (katasBySender.get(k.senderId) || 0) + 1);
+  // Hearts received this month. Hearts given before like times were
+  // recorded fall back to the move's own post date.
+  const likeTimes = readJson(MOVE_LIKE_TIMES_FILE, {});
   const heartsBySender = new Map();
   for (const [messageId, likers] of Object.entries(readJson(MOVE_LIKES_FILE, {}))) {
     if (!likers?.length) continue;
     const m = MessagesDB.getMessageById(messageId);
-    if (m) heartsBySender.set(m.senderId, (heartsBySender.get(m.senderId) || 0) + likers.length);
+    if (!m) continue;
+    const n = likers.filter(id => inMonth(m.senderId, likeTimes[messageId]?.[id] || m.createdAt)).length;
+    if (n) heartsBySender.set(m.senderId, (heartsBySender.get(m.senderId) || 0) + n);
   }
   const counts = {};
   for (const u of users) {
-    const days = Object.values(food[u.id] || {});
+    const month = monthOf.get(u.id);
+    const days = Object.entries(food[u.id] || {}).filter(([day]) => day.slice(0, 7) === month).map(([, entries]) => entries);
     counts[u.id] = {
       fuel: days.filter(entries => (entries || []).some(e => e.source !== "steps")).length,
-      photos: (scans[u.id] || []).filter(x => x.driveFileId && x.type !== "move").length + (photos[u.id] || []).filter(x => x.driveFileId).length,
-      moves: isStaff(u) ? movesForUser(u, convosForMoves).length : (videoCounts.get(u.id) || 0),
+      photos: (scans[u.id] || []).filter(x => x.driveFileId && x.type !== "move" && inMonth(u.id, x.createdAt)).length + (photos[u.id] || []).filter(x => x.driveFileId && inMonth(u.id, x.createdAt || x.date)).length,
+      moves: movesBySender.get(u.id) || 0,
       steps: days.reduce((sum, entries) => sum + (entries || []).filter(e => e.source === "steps").reduce((a, e) => a + (Number(e.steps) || 0), 0), 0),
       hearts: heartsBySender.get(u.id) || 0,
       katas: katasBySender.get(u.id) || 0,
@@ -5556,8 +5586,9 @@ export async function handleChatRequest(req, res, url) {
 
     // ─── Conversations ─────────────────────────────────────────────────
     // ── Profile badges ─────────────────────────────────────────────────────
-    // Four counts per person, ranked across everyone: distinct days Fuel was
-    // tracked, physique photos, moves (videos uploaded), total steps logged.
+    // Counts per person for the current month (their timezone), ranked
+    // across everyone: distinct days Fuel was tracked, physique photos,
+    // moves (videos uploaded), steps logged, hearts, katas.
     // Rank 1/2/3 = gold/silver/bronze on the client. Cached 5 minutes.
     if (p === "/api/chat/badges" && req.method === "GET") {
       if (!badgesCache || Date.now() - badgesCache.at > 5 * 60 * 1000) badgesCache = { at: Date.now(), data: computeBadges() };
@@ -5597,6 +5628,10 @@ export async function handleChatRequest(req, res, url) {
       if (like === false) set.delete(user.id); else set.add(user.id);
       likes[msg.id] = [...set];
       writeJson(MOVE_LIKES_FILE, likes);
+      const likeTimes = readJson(MOVE_LIKE_TIMES_FILE, {});
+      const times = likeTimes[msg.id] || (likeTimes[msg.id] = {});
+      if (like === false) delete times[user.id]; else if (!times[user.id]) times[user.id] = new Date().toISOString();
+      writeJson(MOVE_LIKE_TIMES_FILE, likeTimes);
       badgesCache = null;
       return sendJson(res, 200, { likes: set.size, likedByMe: set.has(user.id) });
     }

@@ -366,8 +366,10 @@ export function getVideosInMonth(conversationIds, monthStartISO, nextMonthStartI
 
 // Profile badges + moves history: every video a person has uploaded.
 db.exec("CREATE INDEX IF NOT EXISTS idx_messages_sender_type ON messages(senderId, type)");
-export function countVideosBySender() {
-  return db.prepare("SELECT senderId, COUNT(*) AS n FROM messages WHERE type = 'video' GROUP BY senderId").all();
+// Monthly badges: every video posted since `sinceISO` (callers narrow it to
+// each sender's own month in their timezone).
+export function getVideoTimesSince(sinceISO) {
+  return db.prepare("SELECT senderId, conversationId, createdAt FROM messages WHERE type = 'video' AND createdAt >= ?").all(sinceISO);
 }
 export function getVideosBySender(senderId) {
   return db.prepare("SELECT * FROM messages WHERE type = 'video' AND senderId = ? ORDER BY createdAt DESC").all(senderId).map(rowToMessage);
