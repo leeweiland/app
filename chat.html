@@ -3919,7 +3919,13 @@ function renderTypingIndicator(typingUserIds) {
   const row = document.createElement('div');
   row.id = 'typingIndicatorRow';
   row.className = 'bubble-row';
-  row.innerHTML = '<div class="bubble typing-bubble"><span></span><span></span><span></span></div>';
+  const convo = conversations.find(c => c.id === activeConvoId);
+  const names = typingUserIds.map(id => convo?.participants.find(p => p.id === id)?.first).filter(Boolean);
+  const who = names.length > 2 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are typing`
+    : names.length === 2 ? `${names[0]} and ${names[1]} are typing`
+    : names.length === 1 ? `${names[0]} is typing` : '';
+  row.innerHTML = '<div><div class="bubble typing-bubble"><span></span><span></span><span></span></div>'
+    + (who ? `<div class="bubble-time" style="text-align:left">${escapeHtml(who)}</div>` : '') + '</div>';
   body.appendChild(row);
   if (wasAtBottom) body.scrollTop = body.scrollHeight;
 }
