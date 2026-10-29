@@ -1212,15 +1212,9 @@ function nameKey(first, last) {
 // actually collided first. Phone is compared digits-only so "907-717-5182"
 // and "9077175182" are recognized as the same number; an empty phone never
 // matches another empty phone (most existing accounts have none).
-// An account can carry extra sign-in emails (u.altEmails) -- e.g. someone
-// whose Play Store Gmail differs from the email they actually use. Sign-in
-// and password reset accept any of them.
-function userHasEmail(u, emailNorm) {
-  return u.email.trim().toLowerCase() === emailNorm || (u.altEmails || []).some(e => e.trim().toLowerCase() === emailNorm);
-}
 function findDuplicateUserReason(users, { email, phone, first, last }) {
   const emailNorm = String(email || "").toLowerCase().trim();
-  if (emailNorm && users.some(u => userHasEmail(u, emailNorm))) {
+  if (emailNorm && users.some(u => u.email.toLowerCase() === emailNorm)) {
     return "An account with that email already exists";
   }
   const phoneDigits = String(phone || "").replace(/\D/g, "");
@@ -3494,7 +3488,7 @@ export async function handleChatRequest(req, res, url) {
     // Trimmed: phone keyboards/autofill often append a trailing space, which
     // silently matched no account (and the generic response below hides that).
     const emailNorm = String(email || "").trim().toLowerCase();
-    const user = users.find(u => userHasEmail(u, emailNorm));
+    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
     if (!user) console.log("[password reset] no account for", emailNorm.replace(/^(.).*(@.*)$/, "$1***$2"));
     // Always return the same generic response whether or not the email exists,
     // so this endpoint can't be used to enumerate registered accounts.
@@ -3506,8 +3500,7 @@ export async function handleChatRequest(req, res, url) {
       const host = req.headers.host || "localhost:3456";
       const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
       const resetUrl = `${protocol}://${host}/chat-app/reset-password.html?token=${token}`;
-      // To the address they typed (one of theirs) -- that's the inbox they're checking.
-      sendPasswordResetEmail(emailNorm, `${user.first} ${user.last}`, resetUrl)
+      sendPasswordResetEmail(user.email, `${user.first} ${user.last}`, resetUrl)
         .catch(e => console.error("[password reset email]", e.message));
     }
     return sendJson(res, 200, { ok: true, message: "If that email has an account, a reset link is on its way." });
@@ -3541,7 +3534,7 @@ export async function handleChatRequest(req, res, url) {
     const { email, password } = await readJsonBody(req);
     const users = readJson(USERS_FILE, []);
     const emailNorm = String(email || "").trim().toLowerCase(); // same trailing-space trim as forgot-password
-    const user = users.find(u => userHasEmail(u, emailNorm));
+    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
     if (!user || !verifyPassword(password || "", user.passwordSalt, user.passwordHash)) {
       return sendJson(res, 401, { error: "Invalid email or password" });
     }
