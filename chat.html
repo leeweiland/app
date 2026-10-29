@@ -7188,7 +7188,7 @@ async function toggleCameraMenu() {
 }
 
 // ── Call background effects (Daily's built-in video processors) ──────────
-// Off / Blur / Green screen (solid green replacement) / your own image.
+// Off / Blur / your own image.
 // Remembered per device and re-applied on every join. Daily only supports
 // processors on desktop-class browsers -- on iPhone/most phones
 // supportsVideoProcessing is false, so the menu says so instead.
@@ -7203,13 +7203,8 @@ function callBgSupported() {
   return dailyBgSupported() || !!(window.CallBgEffects && CallBgEffects.supported());
 }
 let callBgCameraId = null; // the real camera to go back to when a phone effect is turned off
-function getCallBgMode() { try { return localStorage.getItem(CALL_BG_MODE_KEY) || 'off'; } catch { return 'off'; } }
-// Daily's background-image processor takes a data URL (it rejects blob: URLs).
-function solidGreenDataUrl() {
-  const c = document.createElement('canvas'); c.width = 1280; c.height = 720;
-  const ctx = c.getContext('2d'); ctx.fillStyle = '#00b140'; ctx.fillRect(0, 0, c.width, c.height);
-  return c.toDataURL('image/png');
-}
+// 'green' (the old green-screen option) is gone -- treat a saved one as off.
+function getCallBgMode() { try { const m = localStorage.getItem(CALL_BG_MODE_KEY) || 'off'; return m === 'green' ? 'off' : m; } catch { return 'off'; } }
 // Shrinks an uploaded photo to <=1280px JPEG so it fits in localStorage.
 function shrinkImageToDataUrl(dataUrl) {
   return new Promise((resolve, reject) => {
@@ -7226,6 +7221,8 @@ function shrinkImageToDataUrl(dataUrl) {
   });
 }
 async function applyCallBackground(mode) {
+  if (mode === 'green') mode = 'off';
+  if (mode === 'image') { let img = null; try { img = localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {} if (!img) mode = 'off'; }
   try { localStorage.setItem(CALL_BG_MODE_KEY, mode); } catch {}
   document.getElementById('callBgBtn')?.classList.toggle('active', mode !== 'off');
   if (!dailyCallObject || !callBgSupported()) return;
@@ -7252,10 +7249,11 @@ async function applyCallBackground(mode) {
   }
   let processor = { type: 'none' };
   if (mode === 'blur') processor = { type: 'background-blur', config: { strength: 0.6 } };
-  else if (mode === 'green' || mode === 'image') {
+  else if (mode === 'image') {
+    // Daily's background-image processor takes a data URL (it rejects blob: URLs).
     let dataUrl = null;
-    if (mode === 'image') { try { dataUrl = localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {} }
-    processor = { type: 'background-image', config: { source: dataUrl || solidGreenDataUrl() } };
+    try { dataUrl = localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {}
+    processor = { type: 'background-image', config: { source: dataUrl } };
   }
   try {
     await dailyCallObject.updateInputSettings({ video: { processor } });
@@ -7275,7 +7273,7 @@ function toggleBgMenu() {
   }
   const mode = getCallBgMode();
   let hasImage = false; try { hasImage = !!localStorage.getItem(CALL_BG_IMAGE_KEY); } catch {}
-  const items = [['off', 'No effect'], ['blur', 'Blur background'], ['green', 'Green screen'], ['image', hasImage ? 'My image' : 'Choose image…']];
+  const items = [['off', 'No effect'], ['blur', 'Blur background'], ['image', hasImage ? 'My image' : 'Choose image…']];
   menu.innerHTML = items.map(([m, label]) => `<div class="call-device-item${m === mode ? ' active' : ''}" data-mode="${m}">${label}</div>`).join('')
     + (hasImage ? '<div class="call-device-item" data-mode="pick">Choose a different image…</div>' : '');
   menu.classList.add('show');

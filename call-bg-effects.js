@@ -2,7 +2,7 @@
 // processors aren't supported (iPhone, Android, the native app's WebView).
 //
 // Our own camera stream -> MediaPipe selfie segmentation (person mask) ->
-// canvas composite (blurred camera / solid green / chosen image behind the
+// canvas composite (blurred camera / chosen image behind the
 // person) -> canvas.captureStream() -> handed to Daily as the call's camera.
 //
 //   CallBgEffects.supported()                       -> can this device do it?
@@ -91,7 +91,7 @@
         const w = bgImage.width * s, h = bgImage.height * s;
         ctx.drawImage(bgImage, (vw - w) / 2, (vh - h) / 2, w, h);
       } else {
-        ctx.fillStyle = '#00b140'; ctx.fillRect(0, 0, vw, vh);
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, vw, vh); // image still loading
       }
     }
     function tick(now) {
