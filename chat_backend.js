@@ -5932,9 +5932,13 @@ export async function handleChatRequest(req, res, url) {
           if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
           const calls = readJson(CALLS_FILE, []);
           const room = await createDailyRoom(`call-${randomUUID()}`);
+          // Calling from your own "(You)" notes thread is a ring test: nobody
+          // counts as joined yet, so every one of your OTHER devices rings
+          // (push + banner) and answering on one of them starts the call.
+          const selfTest = convo.autoGroupType === "self";
           const call = {
-            id: randomUUID(), conversationId: convoId, initiatorId: user.id,
-            participantIds: [...convo.participantIds], joinedIds: [user.id], declinedIds: [],
+            id: randomUUID(), conversationId: convoId, initiatorId: user.id, ...(selfTest ? { selfTest: true } : {}),
+            participantIds: [...convo.participantIds], joinedIds: selfTest ? [] : [user.id], declinedIds: [],
             status: "ringing", dailyRoomName: room.name, dailyRoomUrl: room.url,
             createdAt: new Date().toISOString(), startedAt: null, endedAt: null,
           };
@@ -5965,7 +5969,7 @@ export async function handleChatRequest(req, res, url) {
         if (action === "accept") {
           if (call.status !== "ringing" && call.status !== "active") return sendJson(res, 400, { error: "Call already ended" });
           if (!call.joinedIds.includes(user.id)) call.joinedIds.push(user.id);
-          if (call.status === "ringing" && call.joinedIds.length >= 2) { call.status = "active"; call.startedAt = new Date().toISOString(); }
+          if (call.status === "ringing" && (call.joinedIds.length >= 2 || call.selfTest)) { call.status = "active"; call.startedAt = new Date().toISOString(); }
           writeJson(CALLS_FILE, calls);
           try {
             const token = await createDailyMeetingToken(call.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === call.initiatorId);
@@ -5998,7 +6002,7 @@ export async function handleChatRequest(req, res, url) {
             call.status = "ended"; call.endedAt = new Date().toISOString();
             writeJson(CALLS_FILE, calls);
             createCallMessage(call);
-            if (call.startedAt) archiveCallRecording(call); // fire-and-forget, see its own comment
+            if (call.startedAt && !call.selfTest) archiveCallRecording(call); // fire-and-forget, see its own comment
           } else {
             writeJson(CALLS_FILE, calls);
           }
