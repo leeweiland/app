@@ -3137,6 +3137,38 @@ function computeMessageStatus(m, convo, users) {
 // One in-flight call per conversation at a time — /call/start is idempotent
 // against this (returns the existing one instead of creating a second),
 // and it's what a rejoin/refresh keys off of too.
+// A call nobody picks up stops ringing after CALL_RING_MS and ends as
+// missed -- without this, a caller who closed the app mid-ring left the call
+// "ringing" forever. While it rings, the people being called get a push at
+// the start and again every CALL_RING_REPEAT_MS, so the phone alerts even
+// when the app isn't open.
+const CALL_RING_MS = 60 * 1000;
+const CALL_RING_REPEAT_MS = 15 * 1000;
+function expireRingingCalls() {
+  const calls = readJson(CALLS_FILE, []);
+  const now = Date.now();
+  const expired = calls.filter(c => c.status === "ringing" && now - new Date(c.createdAt).getTime() > CALL_RING_MS);
+  if (!expired.length) return;
+  for (const c of expired) { c.status = "ended"; c.endedAt = new Date().toISOString(); }
+  writeJson(CALLS_FILE, calls);
+  expired.forEach(createCallMessage);
+}
+setInterval(() => { try { expireRingingCalls(); } catch (e) { console.error("[call expire]", e.message); } }, 10 * 1000);
+function ringCallees(callId, caller) {
+  const call = readJson(CALLS_FILE, []).find(c => c.id === callId);
+  if (!call || call.status !== "ringing") return;
+  const subs = readJson(PUSH_FILE, []);
+  // In a student's coaching group only the student is being called -- the
+  // other coaches/admins in that group don't need their phones ringing.
+  const convo = readJson(CONVOS_FILE, []).find(c => c.id === call.conversationId);
+  const callees = convo?.autoGroupType === "student" ? [convo.autoGroupUserId] : call.participantIds;
+  const waiting = new Set(callees.filter(id => !call.joinedIds.includes(id) && !call.declinedIds.includes(id)));
+  const targets = subs.filter(s => waiting.has(s.userId));
+  sendPushToTargets(targets, {
+    title: `${caller.first} ${caller.last}`.trim() + " is calling", body: "Incoming video call. Open the app to answer.", conversationId: call.conversationId,
+  }).catch(() => {});
+}
+
 function findOpenCall(conversationId) {
   const calls = readJson(CALLS_FILE, []);
   return calls.find(c => c.conversationId === conversationId && (c.status === "ringing" || c.status === "active")) || null;
@@ -5699,10 +5731,14 @@ export async function handleChatRequest(req, res, url) {
       // the app. Only ever the calls actually being offered to YOU (not
       // ones you started or already answered/declined).
       const myOpenConvoIds = new Set(convos.map(c => c.id));
-      const incomingCall = readJson(CALLS_FILE, []).find(c =>
-        c.status === "ringing" && myOpenConvoIds.has(c.conversationId) &&
-        c.participantIds.includes(user.id) && !c.joinedIds.includes(user.id) && !c.declinedIds.includes(user.id)
-      );
+      // Same callee rule as ringCallees: in a student's coaching group only
+      // the student is offered the call, not every coach in the group.
+      const incomingCall = readJson(CALLS_FILE, []).find(c => {
+        if (c.status !== "ringing" || !myOpenConvoIds.has(c.conversationId)) return false;
+        if (!c.participantIds.includes(user.id) || c.joinedIds.includes(user.id) || c.declinedIds.includes(user.id)) return false;
+        const cv = convos.find(x => x.id === c.conversationId);
+        return cv?.autoGroupType !== "student" || cv.autoGroupUserId === user.id;
+      });
       return sendJson(res, 200, { conversations: enriched, incomingCall: incomingCall ? { ...publicCall(incomingCall), fromConversation: enriched.find(c => c.id === incomingCall.conversationId) } : null });
     }
 
@@ -5904,6 +5940,8 @@ export async function handleChatRequest(req, res, url) {
           };
           calls.push(call);
           writeJson(CALLS_FILE, calls);
+          ringCallees(call.id, user);
+          for (let t = CALL_RING_REPEAT_MS; t < CALL_RING_MS; t += CALL_RING_REPEAT_MS) setTimeout(() => ringCallees(call.id, user), t);
           const token = await createDailyMeetingToken(room.name, user.id, `${user.first} ${user.last}`, true);
           return sendJson(res, 200, { call: publicCall(call), token });
         } catch (e) {

@@ -7121,9 +7121,42 @@ function renderCallParticipants() {
 // loadConversations' poll (runs regardless of which/whether a thread is
 // open) is the only way a callee -- who hasn't joined anything yet, so has
 // no Daily events of their own -- finds out someone's calling them.
+// Ringtone while the incoming-call banner is up: a two-tone chirp every
+// 2s via Web Audio (no sound file), plus vibration where the device
+// supports it (Android; iOS ignores navigator.vibrate).
+let ringTimer = null, ringCtx = null;
+function playRingBurst() {
+  try {
+    ringCtx = ringCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ringCtx.state === 'suspended') ringCtx.resume();
+    [[880, 0], [660, 0.18], [880, 0.5], [660, 0.68]].forEach(([freq, at]) => {
+      const osc = ringCtx.createOscillator(), gain = ringCtx.createGain();
+      osc.frequency.value = freq;
+      const t = ringCtx.currentTime + at;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      osc.connect(gain).connect(ringCtx.destination);
+      osc.start(t); osc.stop(t + 0.17);
+    });
+  } catch {}
+  try { navigator.vibrate?.([400, 200, 400]); } catch {}
+}
+function startRingtone() {
+  if (ringTimer) return;
+  playRingBurst();
+  ringTimer = setInterval(playRingBurst, 2000);
+}
+function stopRingtone() {
+  if (!ringTimer) return;
+  clearInterval(ringTimer); ringTimer = null;
+  try { navigator.vibrate?.(0); } catch {}
+}
+
 function handleIncomingCallPoll(incomingCall) {
   const banner = document.getElementById('incomingCallBanner');
   if (currentCall || !incomingCall) {
+    stopRingtone();
     banner.classList.remove('show');
     if (!incomingCall) pendingIncomingCall = null;
     return;
@@ -7139,6 +7172,7 @@ function handleIncomingCallPoll(incomingCall) {
   pendingIncomingCallName = displayName;
   document.getElementById('incomingCallName').textContent = displayName;
   banner.classList.add('show');
+  startRingtone();
 }
 
 // refreshThread's poll (only the currently-open thread) is how the CALLER
@@ -7338,6 +7372,7 @@ function setupCallUI() {
   document.getElementById('incomingCallAcceptBtn').onclick = async () => {
     if (!pendingIncomingCall) return;
     const call = pendingIncomingCall, convoId = call.conversationId, name = pendingIncomingCallName;
+    stopRingtone();
     document.getElementById('incomingCallBanner').classList.remove('show');
     pendingIncomingCall = null;
     const r = await fetch(`/api/chat/conversations/${convoId}/call/${call.id}/accept`, { method: 'POST' });
@@ -7348,6 +7383,7 @@ function setupCallUI() {
   document.getElementById('incomingCallDeclineBtn').onclick = () => {
     if (!pendingIncomingCall) return;
     const call = pendingIncomingCall;
+    stopRingtone();
     document.getElementById('incomingCallBanner').classList.remove('show');
     pendingIncomingCall = null;
     fetch(`/api/chat/conversations/${call.conversationId}/call/${call.id}/decline`, { method: 'POST' }).catch(() => {});
