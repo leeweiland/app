@@ -729,6 +729,13 @@ async function saveSteps() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ steps }),
   });
+  // A template opened in the Flow Builder is edited in place: keep the
+  // template itself in step with the draft.
+  if (editingBuilder && loadedTemplateId && steps.length) {
+    fetch('/api/chat/protocol-templates/' + loadedTemplateId, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps }),
+    }).catch(() => {});
+  }
 }
 
 // A protocol full of video steps was loading every single one the moment
@@ -1903,8 +1910,12 @@ async function renderProtocolTemplateList() {
     const id = row.dataset.id;
     const t = templates.find(x => x.id === id);
     row.querySelector('.template-item-body').onclick = async () => {
+      // In the Flow Builder, picking a template just opens it for editing --
+      // edits save straight back into it (see saveSteps). Only an unsaved
+      // draft that isn't any template yet would be lost, so only that asks.
+      const builderOpen = editingBuilder && (loadedTemplateId || !steps.length);
       const replaceTarget = editingBuilder ? 'the Flow Builder draft' : "this student's current protocol";
-      if (!confirm(`Replace ${replaceTarget} with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
+      if (!builderOpen && !confirm(`Replace ${replaceTarget} with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
       const fr = await fetch('/api/chat/protocol-templates/' + id);
       if (!fr.ok) { alert('Could not load that template.'); return; }
       const { template } = await fr.json();

@@ -5391,12 +5391,16 @@ export async function handleChatRequest(req, res, url) {
     // title save), so this only ever needs to handle the rename itself.
     if (protocolTemplateMatch && req.method === "PATCH") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
-      const { name } = await readJsonBody(req);
-      if (!String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
+      // Also takes `steps`: a template opened in the Flow Builder saves its
+      // edits back here (saveSteps in training-protocol.html).
+      const { name, steps } = await readJsonBody(req);
+      if (name === undefined && !(Array.isArray(steps) && steps.length)) return sendJson(res, 400, { error: "Name or steps required" });
+      if (name !== undefined && !String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
       const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
       const template = templates.find(t => t.id === protocolTemplateMatch[1]);
       if (!template) return sendJson(res, 404, { error: "Template not found" });
-      template.name = name.trim();
+      if (name !== undefined) template.name = name.trim();
+      if (Array.isArray(steps) && steps.length) template.steps = steps;
       writeJson(PROTOCOL_TEMPLATES_FILE, templates);
       return sendJson(res, 200, { ok: true });
     }
