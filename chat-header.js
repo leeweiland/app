@@ -333,9 +333,9 @@ window.PRABack = (function () {
     { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
     { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
-    // Retreats icon (plane) temporarily pulled from the bottom bar — page
-    // itself is untouched, just not linked from here for now.
     { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
+    // Retreats (plane) goes to the retreats page on the main website.
+    { href: 'https://www.pacificrimathletics.com/retreats', icon: ICON_SVG.retreats, title: 'Retreats', external: true },
     { href: 'https://www.pacificrimathletics.com/online-kickoff', icon: ICON_SVG.onlineKickoff, title: 'Online Kickoff', external: true, staffOnly: true },
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
