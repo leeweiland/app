@@ -802,6 +802,8 @@ function setupAdminTabs() {
       // one, which usually isn't tall enough yet to even be there.
       document.querySelector('.pra-root').scrollTop = 0;
       if (tab.dataset.section === 'usersSection') fitUsersTable();
+      requestAnimationFrame(clearScrollbarStrip);
+      setTimeout(clearScrollbarStrip, 600); // sections that fill in after a fetch
     };
   });
 }
@@ -1091,18 +1093,35 @@ function fitUsersTable() {
   const bar = document.getElementById('chat-app-bottom-bar');
   const barH = bar ? bar.getBoundingClientRect().height : 0;
   const pad = parseFloat(getComputedStyle(document.getElementById('usersSection')).paddingBottom) || 0;
-  sc.style.maxHeight = Math.max(220, window.innerHeight - top - barH - pad - 16) + 'px';
+  let h = Math.max(220, window.innerHeight - top - barH - pad - 16);
+  sc.style.maxHeight = h + 'px';
+  // Whatever page padding/margins still push the page past the screen comes
+  // off the table box too, so the page itself never needs a scrollbar here.
+  const over = root ? root.scrollHeight - root.clientHeight : 0;
+  if (over > 0) sc.style.maxHeight = Math.max(220, h - over) + 'px';
+  clearScrollbarStrip();
 }
 window.addEventListener('resize', fitUsersTable);
 
 // The fixed animated background (.pra-bg) paints over .pra-root's own
 // scrollbar, hiding it. Stop the background at the scrollbar's edge.
+// Same for the fixed top nav, admin tab bar and bottom bar: they end at the
+// scrollbar instead of covering its top/bottom.
 function clearScrollbarStrip() {
-  const root = document.querySelector('.pra-root'), bg = document.querySelector('.pra-bg');
-  if (root && bg) bg.style.right = (root.offsetWidth - root.clientWidth) + 'px';
+  const root = document.querySelector('.pra-root');
+  if (!root) return;
+  const w = (root.offsetWidth - root.clientWidth) + 'px';
+  ['.pra-bg', '#chat-app-header', '#chat-app-bottom-bar', '.admin-tab-bar'].forEach(sel => {
+    const el = document.querySelector(sel);
+    if (el) el.style.right = w;
+  });
 }
 window.addEventListener('resize', clearScrollbarStrip);
-new ResizeObserver(clearScrollbarStrip).observe(document.querySelector('.pra-root'));
+// Content height changes (switching tabs, sections loading) add or remove
+// the scrollbar without resizing .pra-root itself -- watch the content too.
+const stripObserver = new ResizeObserver(clearScrollbarStrip);
+stripObserver.observe(document.querySelector('.pra-root'));
+stripObserver.observe(document.querySelector('.wrap'));
 
 function renderUsers() {
   const q = document.getElementById('userSearchInput').value.trim().toLowerCase();
