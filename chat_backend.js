@@ -251,7 +251,7 @@ const DEFAULT_DAILY_CHECKIN_TIME = "09:00";
 // Rule the AI applies before writing a check-in (admin-editable): it reads
 // the recent conversation and answers SKIP instead of a message when a
 // check-in would land in the middle of an active or unresolved exchange.
-const DEFAULT_DAILY_CHECKIN_RULE = "Look at the most recent exchange. Reply SKIP only if one of these is true: (1) the student asked a question that no coach has answered yet; (2) the student sent a video or photo and no coach has replied after it; (3) a coach asked the student something and the student hasn't answered yet. Otherwise send the check-in, including when the conversation wrapped up with a simple thanks or got it from the student.";
+const DEFAULT_DAILY_CHECKIN_RULE = "Look at the most recent exchange. Skip this student today ONLY if one of these is true: (1) the student asked a question that no coach has answered yet; (2) the student sent a video or photo and no coach has replied after it; (3) a coach asked the student something and the student hasn't answered yet. If none of those is true, send the check-in. A conversation that ended with a coach's reply, or with a simple thanks or got it from the student, is wrapped up, so send.";
 const DEFAULT_DAILY_CHECKIN_TIMEZONE = "America/Anchorage";
 
 export function getConfig() {
