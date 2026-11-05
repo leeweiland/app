@@ -1095,6 +1095,15 @@ function fitUsersTable() {
 }
 window.addEventListener('resize', fitUsersTable);
 
+// The fixed animated background (.pra-bg) paints over .pra-root's own
+// scrollbar, hiding it. Stop the background at the scrollbar's edge.
+function clearScrollbarStrip() {
+  const root = document.querySelector('.pra-root'), bg = document.querySelector('.pra-bg');
+  if (root && bg) bg.style.right = (root.offsetWidth - root.clientWidth) + 'px';
+}
+window.addEventListener('resize', clearScrollbarStrip);
+new ResizeObserver(clearScrollbarStrip).observe(document.querySelector('.pra-root'));
+
 function renderUsers() {
   const q = document.getElementById('userSearchInput').value.trim().toLowerCase();
   const searched = q
