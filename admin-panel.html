@@ -68,6 +68,11 @@
   /* Users list scrolls inside its own box and loads more rows as you near
      the bottom (renderUsers), header row pinned. */
   .table-scroll { overflow: auto; max-height: 65vh; }
+  /* Users & Roles breaks out of .wrap's 780px column to use the browser's
+     width, and its table box is sized in JS (fitUsersTable) to end above
+     the bottom bar so the whole box is on screen. */
+  #usersSection { position: relative; left: 50%; transform: translateX(-50%); width: calc(100vw - 40px); max-width: 1800px; box-sizing: border-box; }
+  @media (max-width: 600px) { #usersSection { width: calc(100vw - 24px); padding: 16px; } }
   .table-scroll thead th { position: sticky; top: 0; z-index: 3; background: var(--pra-panel); }
   .table-scroll thead th.sticky-col { z-index: 4; }
   table { width: auto; border-collapse: collapse; table-layout: auto; }
@@ -793,6 +798,7 @@ function setupAdminTabs() {
       // (e.g. Appointments) landed on the SAME scroll depth in the next
       // one, which usually isn't tall enough yet to even be there.
       document.querySelector('.pra-root').scrollTop = 0;
+      if (tab.dataset.section === 'usersSection') fitUsersTable();
     };
   });
 }
@@ -1071,6 +1077,21 @@ function syncStickyColWidth() {
   table.style.setProperty('--sticky-col-1-w', col1.getBoundingClientRect().width + 'px');
 }
 
+// Table box height = what's left of the screen below its top edge, minus the
+// bottom nav bar and the panel's own bottom padding -- so the box always fits
+// on screen (phone or desktop) and the rows scroll inside it.
+function fitUsersTable() {
+  const sc = document.querySelector('#usersTableWrap .table-scroll');
+  if (!sc || !sc.offsetParent) return;
+  const root = document.querySelector('.pra-root');
+  const top = sc.getBoundingClientRect().top + (root?.scrollTop || 0);
+  const bar = document.getElementById('chat-app-bottom-bar');
+  const barH = bar ? bar.getBoundingClientRect().height : 0;
+  const pad = parseFloat(getComputedStyle(document.getElementById('usersSection')).paddingBottom) || 0;
+  sc.style.maxHeight = Math.max(220, window.innerHeight - top - barH - pad - 16) + 'px';
+}
+window.addEventListener('resize', fitUsersTable);
+
 function renderUsers() {
   const q = document.getElementById('userSearchInput').value.trim().toLowerCase();
   const searched = q
@@ -1166,6 +1187,7 @@ function renderUsers() {
 
   const scroller = document.querySelector('#usersTableWrap .table-scroll');
   if (scroller) {
+    fitUsersTable();
     scroller.scrollTop = prevScrollTop;
     scroller.addEventListener('scroll', () => {
       if (usersPage < totalPages - 1 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 120) {
