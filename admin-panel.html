@@ -65,7 +65,11 @@
   .admin-tab:hover { color: #fff; }
   .admin-tab.active { background: var(--pra-blue); color: #fff; }
   #adminTabBarSpacer { margin-bottom: 20px; }
-  .table-scroll { overflow-x: auto; }
+  /* Users list scrolls inside its own box and loads more rows as you near
+     the bottom (renderUsers), header row pinned. */
+  .table-scroll { overflow: auto; max-height: 65vh; }
+  .table-scroll thead th { position: sticky; top: 0; z-index: 3; background: var(--pra-panel); }
+  .table-scroll thead th.sticky-col { z-index: 4; }
   table { width: auto; border-collapse: collapse; table-layout: auto; }
   th { text-align: left; font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; color: var(--pra-dim); padding: 6px 10px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
   td { padding: 7px 10px; border-bottom: 1px solid var(--pra-border); font-size: .8rem; white-space: nowrap; }
@@ -194,6 +198,12 @@
 
     <div class="pra-panel section" id="usersSection">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
+      <div style="margin:-4px 0 14px">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" class="pra-toggle" id="movesPublicDefault"/> Show students' moves history on their profiles by default
+        </label>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Saves right away. Applies to everyone who hasn't changed the switch on their own profile; a student who turns theirs off stays private.</div>
+      </div>
       <div class="users-toolbar">
         <!-- Chrome deliberately ignores autocomplete="off" on fields it
              heuristically decides look like a login/email field (has for
@@ -216,11 +226,6 @@
         <button class="pra-btn" id="addUserBtn" style="white-space:nowrap">+ Add User</button>
       </div>
       <div id="usersTableWrap">Loading…</div>
-      <div class="pagination" id="usersPagination" style="display:none">
-        <button id="usersPrevBtn">←</button>
-        <div class="page-label" id="usersPageLabel"></div>
-        <button id="usersNextBtn">→</button>
-      </div>
     </div>
 
     <div class="pra-panel section" id="chatConfigSection" style="display:none">
@@ -300,12 +305,6 @@
       <div class="field">
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
-      </div>
-      <div class="field">
-        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" class="pra-toggle" id="movesPublicDefault"/> Show students' moves history on their profiles by default
-        </label>
-        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Applies to everyone who hasn't changed the switch on their own profile. A student who turns theirs off stays private.</div>
       </div>
 
       <div class="save-msg" id="saveMsg"></div>
@@ -606,7 +605,7 @@
 let me = null;
 let allUsers = [];
 let usersPage = 0;
-const USERS_PER_PAGE = 10;
+const USERS_PER_PAGE = 25;
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
@@ -847,8 +846,6 @@ async function init() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { usersPage = 0; renderUsers(); }, 200);
   });
-  document.getElementById('usersPrevBtn').onclick = () => { usersPage--; renderUsers(); };
-  document.getElementById('usersNextBtn').onclick = () => { usersPage++; renderUsers(); };
 
   document.getElementById('addUserBtn').onclick = () => {
     ['newUserFirst', 'newUserLast', 'newUserEmail', 'newUserPhone', 'newUserPassword'].forEach(id => document.getElementById(id).value = '');
@@ -1081,9 +1078,12 @@ function renderUsers() {
     : allUsers;
   const filtered = sortUsers(searched);
 
+  // Infinite scroll: usersPage = how many extra batches have been loaded by
+  // scrolling the table box (reset to 0 by search/sort/reload).
   const totalPages = Math.max(1, Math.ceil(filtered.length / USERS_PER_PAGE));
   usersPage = Math.min(usersPage, totalPages - 1);
-  const pageUsers = filtered.slice(usersPage * USERS_PER_PAGE, (usersPage + 1) * USERS_PER_PAGE);
+  const pageUsers = filtered.slice(0, (usersPage + 1) * USERS_PER_PAGE);
+  const prevScrollTop = document.querySelector('#usersTableWrap .table-scroll')?.scrollTop || 0;
 
   const rows = pageUsers.map(u => `
     <tr style="${u.archived ? 'opacity:.5' : ''}">
@@ -1164,11 +1164,16 @@ function renderUsers() {
     });
   });
 
-  const pagination = document.getElementById('usersPagination');
-  pagination.style.display = filtered.length > USERS_PER_PAGE ? 'flex' : 'none';
-  document.getElementById('usersPageLabel').textContent = `Page ${usersPage + 1} of ${totalPages}`;
-  document.getElementById('usersPrevBtn').disabled = usersPage === 0;
-  document.getElementById('usersNextBtn').disabled = usersPage >= totalPages - 1;
+  const scroller = document.querySelector('#usersTableWrap .table-scroll');
+  if (scroller) {
+    scroller.scrollTop = prevScrollTop;
+    scroller.addEventListener('scroll', () => {
+      if (usersPage < totalPages - 1 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 120) {
+        usersPage++;
+        renderUsers();
+      }
+    }, { passive: true });
+  }
 
   document.querySelectorAll('.role-select').forEach(sel => {
     const prevValue = sel.value;
@@ -1478,6 +1483,13 @@ async function loadCalendarStatus() {
     row.innerHTML = `<span style="color:#ff3b3b">✕ Could not check status</span>`;
   }
 }
+
+document.getElementById('movesPublicDefault').addEventListener('change', (e) => {
+  fetch('/api/admin/chat-config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ movesPublicDefault: e.target.checked }),
+  }).catch(() => {});
+});
 
 async function saveConfig() {
   await fetch('/api/admin/chat-config', {
