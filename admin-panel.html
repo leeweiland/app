@@ -301,6 +301,12 @@
         <label class="pra-label">Giphy API Key (optional — enables GIF search in chat)</label>
         <input class="pra-input" id="gifApiKey" placeholder="Get a free key at developers.giphy.com"/>
       </div>
+      <div class="field">
+        <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" class="pra-toggle" id="movesPublicDefault"/> Show students' moves history on their profiles by default
+        </label>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Applies to everyone who hasn't changed the switch on their own profile. A student who turns theirs off stays private.</div>
+      </div>
 
       <div class="save-msg" id="saveMsg"></div>
     </div>
@@ -1343,6 +1349,7 @@ async function loadConfig() {
   document.getElementById('clientNotesFolderId').value = d.clientNotesFolderId || '';
   document.getElementById('callRecordingsFolderId').value = d.callRecordingsFolderId || '';
   document.getElementById('callSummaryEnabled').checked = d.callSummaryEnabled !== false;
+  document.getElementById('movesPublicDefault').checked = d.movesPublicDefault !== false;
   document.getElementById('callSummaryPrompt').value = d.callSummaryPrompt || '';
   document.getElementById('bodyScanPhotosFolderId').value = d.bodyScanPhotosFolderId || '';
   document.getElementById('nutritionPhotosFolderId').value = d.nutritionPhotosFolderId || '';
@@ -1487,6 +1494,7 @@ async function saveConfig() {
       clientNotesFolderId: document.getElementById('clientNotesFolderId').value.trim(),
       callRecordingsFolderId: document.getElementById('callRecordingsFolderId').value.trim(),
       callSummaryEnabled: document.getElementById('callSummaryEnabled').checked,
+      movesPublicDefault: document.getElementById('movesPublicDefault').checked,
       callSummaryPrompt: document.getElementById('callSummaryPrompt').value,
       bodyScanPhotosFolderId: document.getElementById('bodyScanPhotosFolderId').value.trim(),
       nutritionPhotosFolderId: document.getElementById('nutritionPhotosFolderId').value.trim(),

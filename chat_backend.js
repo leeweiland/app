@@ -254,6 +254,13 @@ const DEFAULT_DAILY_CHECKIN_TIME = "09:00";
 const DEFAULT_DAILY_CHECKIN_RULE = "Look at the most recent exchange. Skip this student today ONLY if one of these is true: (1) the student asked a question that no coach has answered yet; (2) the student sent a video or photo and no coach has replied after it; (3) a coach asked the student something and the student hasn't answered yet. If none of those is true, send the check-in. A conversation that ended with a coach's reply, or with a simple thanks or got it from the student, is wrapped up, so send.";
 const DEFAULT_DAILY_CHECKIN_TIMEZONE = "America/Anchorage";
 
+// Whether someone's moves history shows on their profile: their own choice
+// (the toggle on their profile sets showMoves) wins; anyone who never chose
+// follows the admin setting movesPublicDefault (Admin panel, on by default).
+function movesVisible(u, cfg = getConfig()) {
+  return typeof u?.showMoves === "boolean" ? u.showMoves : cfg.movesPublicDefault !== false;
+}
+
 export function getConfig() {
   const cfg = readJson(CONFIG_FILE, {
     profilePhotosFolderId: "", chatImagesFolderId: "", chatVideosFolderId: "",
@@ -359,6 +366,7 @@ export function getConfig() {
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
   if (cfg.defaultProtocolEnabled === undefined) cfg.defaultProtocolEnabled = false;
+  if (cfg.movesPublicDefault === undefined) cfg.movesPublicDefault = true;
   if (cfg.physiqueMontageFolderId === undefined) cfg.physiqueMontageFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
@@ -3806,7 +3814,7 @@ export async function handleChatRequest(req, res, url) {
         // A move (video) whose sender shows their moves publicly on their
         // profile is viewable by any signed-in user (profile moves history).
         const sender = allUsers.find(u => u.id === msg.senderId);
-        const publicMove = msg.type === "video" && sender && sender.showMoves === true
+        const publicMove = msg.type === "video" && sender && movesVisible(sender)
           && (!isStaff(sender) || (convo?.autoGroupType === "student" && convo.autoGroupUserId === sender.id)); // same rule as movesForUser
         // Allowed if ANY message using this file is in a chat the viewer is
         // in -- checking only the first copy blocked everyone else in a bulk
@@ -4192,7 +4200,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, dailyCheckinQuietValue, dailyCheckinQuietUnit, dailyCheckinRule, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, dailyCheckinQuietValue, dailyCheckinQuietUnit, dailyCheckinRule, appointments, movesPublicDefault } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -4216,6 +4224,7 @@ export async function handleChatRequest(req, res, url) {
         if (welcomeMessageEnabled !== undefined) cfg.welcomeMessageEnabled = !!welcomeMessageEnabled;
         if (welcomeMessageText !== undefined) cfg.welcomeMessageText = welcomeMessageText;
         if (callSummaryEnabled !== undefined) cfg.callSummaryEnabled = !!callSummaryEnabled;
+        if (movesPublicDefault !== undefined) cfg.movesPublicDefault = !!movesPublicDefault;
         if (callSummaryPrompt !== undefined) cfg.callSummaryPrompt = callSummaryPrompt;
         if (dailyCheckinEnabled !== undefined) cfg.dailyCheckinEnabled = !!dailyCheckinEnabled;
         if (dailyCheckinPrompt !== undefined) cfg.dailyCheckinPrompt = dailyCheckinPrompt;
@@ -5695,7 +5704,7 @@ export async function handleChatRequest(req, res, url) {
       const target = readJson(USERS_FILE, []).find(u => u.id === userMovesMatch[1] && !u.archived);
       if (!target) return sendJson(res, 404, { error: "User not found" });
       const isSelf = target.id === user.id;
-      const showMoves = target.showMoves === true; // private unless the person turned it on
+      const showMoves = movesVisible(target);
       // Enough to draw a profile header (last name only for staff/self, same
       // rule as the rest of the app).
       const owner = { id: target.id, first: target.first, last: (isStaff(user) || isSelf) ? target.last : "", role: target.role, profilePictureFileId: target.profilePictureFileId || null };
@@ -5716,7 +5725,7 @@ export async function handleChatRequest(req, res, url) {
       const msg = MessagesDB.getMessageById(moveLikeMatch[1]);
       if (!msg || msg.type !== "video") return sendJson(res, 404, { error: "Move not found" });
       const owner = readJson(USERS_FILE, []).find(u => u.id === msg.senderId);
-      const canSee = owner && (owner.showMoves === true || owner.id === user.id || isStaff(user));
+      const canSee = owner && (movesVisible(owner) || owner.id === user.id || isStaff(user));
       if (!canSee) return sendJson(res, 403, { error: "This move is private" });
       const { like } = await readJsonBody(req);
       const likes = readJson(MOVE_LIKES_FILE, {});
