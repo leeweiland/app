@@ -3148,11 +3148,17 @@ function computeMessageStatus(m, convo, users) {
 // start and again every CALL_RING_REPEAT_MS, so the phone rings even when the
 // app isn't open.
 const CALL_RING_MS = 60 * 1000;
+const CALL_ACTIVE_MAX_MS = 4 * 60 * 60 * 1000;
 const CALL_RING_REPEAT_MS = 30 * 1000; // the ring sound itself lasts ~28s
 function expireRingingCalls() {
   const calls = readJson(CALLS_FILE, []);
   const now = Date.now();
-  const expired = calls.filter(c => c.status === "ringing" && now - new Date(c.createdAt).getTime() > CALL_RING_MS);
+  // Also any call still "active" hours later: both sides dropped (app killed,
+  // connection lost) without either one hanging up, which otherwise leaves
+  // the conversation stuck on that dead call.
+  const expired = calls.filter(c =>
+    (c.status === "ringing" && now - new Date(c.createdAt).getTime() > CALL_RING_MS) ||
+    (c.status === "active" && now - new Date(c.startedAt || c.createdAt).getTime() > CALL_ACTIVE_MAX_MS));
   if (!expired.length) return;
   for (const c of expired) { c.status = "ended"; c.endedAt = new Date().toISOString(); }
   writeJson(CALLS_FILE, calls);

@@ -661,6 +661,13 @@
   /* Above the lightbox (9999) -- a call is the one thing that should never
      get buried under anything else already open. */
   .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
+  /* A page opened during a call (protocol link, nav icon) loads in here
+     instead of navigating away, which would hang up. Sits under the
+     minimized call tile (10002) and the full call screen (10000). */
+  .call-side-page { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column; }
+  .call-side-page-bar { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px; background: #0a0a0f; border-bottom: 1px solid var(--pra-border); }
+  .call-side-page-bar button { background: transparent; border: 1px solid var(--pra-border); color: #fff; border-radius: 8px; padding: 7px 12px; font-family: var(--font-secondary); font-size: .74rem; letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+  .call-side-page iframe { flex: 1; width: 100%; border: 0; background: #000; }
   .call-screen.show { display: flex; }
   .call-status-row { padding: max(14px, env(safe-area-inset-top)) 16px 10px; text-align: center; color: var(--pra-dim); font-size: .85rem; flex-shrink: 0; }
   .call-status-name { color: #fff; font-size: 1.1rem; font-weight: 400; margin-bottom: 2px; }
@@ -7151,6 +7158,10 @@ function stopRingtone() {
   if (!ringTimer) return;
   clearInterval(ringTimer); ringTimer = null;
   try { navigator.vibrate?.(0); } catch {}
+  // Release the audio context so it can't hold onto the phone's audio
+  // session while the call itself needs the mic/speaker.
+  try { ringCtx?.close(); } catch {}
+  ringCtx = null;
 }
 
 function handleIncomingCallPoll(incomingCall) {
@@ -7326,6 +7337,41 @@ function toggleBgMenu() {
     };
   });
 }
+
+// While a call is live, following a link would leave chat.html and hang up
+// the call. Same-site links open in a full-screen panel over the chat
+// (call shrinks to its corner tile and keeps running); other sites open
+// in a new window.
+function closeCallSidePage() { document.getElementById('callSidePage')?.remove(); }
+function openCallSidePage(href) {
+  closeCallSidePage();
+  const panel = document.createElement('div');
+  panel.id = 'callSidePage';
+  panel.className = 'call-side-page';
+  panel.innerHTML = '<div class="call-side-page-bar"><button type="button">&larr; Back to chat</button></div><iframe></iframe>';
+  panel.querySelector('button').onclick = closeCallSidePage;
+  const frame = panel.querySelector('iframe');
+  // A page inside the panel heading back to chat (its own Back To Chat
+  // button) just closes the panel instead of loading a second chat inside it.
+  frame.addEventListener('load', () => {
+    try { if (frame.contentWindow.location.pathname === location.pathname) closeCallSidePage(); } catch {}
+  });
+  frame.src = href;
+  document.body.appendChild(panel);
+  if (!callMinimized) setCallMinimized(true);
+}
+document.addEventListener('click', (e) => {
+  if (!dailyCallObject) return;
+  const a = e.target.closest('a[href]');
+  if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+  let url; try { url = new URL(a.href, location.href); } catch { return; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+  if (url.origin === location.origin && url.pathname === location.pathname && url.search === location.search) return; // same page / #hash
+  e.preventDefault();
+  e.stopPropagation();
+  if (url.origin !== location.origin) { window.open(url.href, '_blank'); return; }
+  openCallSidePage(url.href);
+}, true);
 
 function setupCallUI() {
   document.getElementById('startCallBtn').onclick = startCall;
