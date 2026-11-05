@@ -248,6 +248,10 @@ const DEFAULT_DAILY_CHECKIN_PROMPT = "You are a supportive movement/strength coa
 // Gym schedule's own GYM_TZ/DEFAULT_APPOINTMENTS_CONFIG.timezone, since
 // that's where this business is actually based.
 const DEFAULT_DAILY_CHECKIN_TIME = "09:00";
+// Rule the AI applies before writing a check-in (admin-editable): it reads
+// the recent conversation and answers SKIP instead of a message when a
+// check-in would land in the middle of an active or unresolved exchange.
+const DEFAULT_DAILY_CHECKIN_RULE = "Look at the most recent exchange. Reply SKIP only if one of these is true: (1) the student asked a question that no coach has answered yet; (2) the student sent a video or photo and no coach has replied after it; (3) a coach asked the student something and the student hasn't answered yet. Otherwise send the check-in, including when the conversation wrapped up with a simple thanks or got it from the student.";
 const DEFAULT_DAILY_CHECKIN_TIMEZONE = "America/Anchorage";
 
 export function getConfig() {
@@ -315,6 +319,9 @@ export function getConfig() {
     dailyCheckinFrequencyValue: 1,
     dailyCheckinFrequencyUnit: "days",
     dailyCheckinSenderId: "",
+    dailyCheckinQuietValue: 2,
+    dailyCheckinQuietUnit: "days",
+    dailyCheckinRule: DEFAULT_DAILY_CHECKIN_RULE,
     defaultProtocolEnabled: false,
     appointments: { ...DEFAULT_APPOINTMENTS_CONFIG },
   });
@@ -345,6 +352,9 @@ export function getConfig() {
   if (!cfg.dailyCheckinTimezone) cfg.dailyCheckinTimezone = DEFAULT_DAILY_CHECKIN_TIMEZONE;
   if (!cfg.dailyCheckinFrequencyValue) cfg.dailyCheckinFrequencyValue = 1;
   if (!cfg.dailyCheckinFrequencyUnit) cfg.dailyCheckinFrequencyUnit = "days";
+  if (cfg.dailyCheckinQuietValue === undefined) cfg.dailyCheckinQuietValue = 2;
+  if (!cfg.dailyCheckinQuietUnit) cfg.dailyCheckinQuietUnit = "days";
+  if (cfg.dailyCheckinRule === undefined) cfg.dailyCheckinRule = DEFAULT_DAILY_CHECKIN_RULE;
   if (cfg.gymTrainingChannelId === undefined) cfg.gymTrainingChannelId = "";
   if (cfg.gymLevelTestChannelId === undefined) cfg.gymLevelTestChannelId = "";
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
@@ -2182,28 +2192,43 @@ function currentMinutesInZone(timeZone) {
   const minute = Number(parts.find(p => p.type === "minute").value);
   return hour * 60 + minute;
 }
-async function generateDailyCheckin(conversationId, studentId, promptText) {
-  const recent = MessagesDB.getConversationMessages(conversationId, { limit: 12 })
-    .filter(m => m.type === "text" && m.text && m.text.trim());
+// Returns the check-in text, or null when the rule (ruleText) says to skip.
+// Videos/photos show up in the transcript as [sent a video] etc. with dates,
+// so the rule can see that kind of activity too, not just text.
+async function generateDailyCheckin(conversationId, studentId, promptText, ruleText) {
+  const MEDIA = { video: "[sent a video]", image: "[sent a photo]", file: "[sent a file]", call: "[video call]" };
+  const recent = MessagesDB.getConversationMessages(conversationId, { limit: 15 })
+    .filter(m => (m.type === "text" && m.text && m.text.trim()) || MEDIA[m.type]);
   const transcript = recent.length
-    ? recent.map(m => `${m.senderId === studentId ? "Student" : "Coach"}: ${m.text.trim()}`).join("\n")
+    ? recent.map(m => `[${(m.createdAt || "").slice(0, 16).replace("T", " ")}] ${m.senderId === studentId ? "Student" : "Coach"}: ${m.type === "text" ? m.text.trim() : MEDIA[m.type]}`).join("\n")
     : "(No recent messages yet -- this student's chat is new or quiet.)";
+  const rule = (ruleText || "").trim();
+  const system = (promptText || DEFAULT_DAILY_CHECKIN_PROMPT)
+    + (rule ? `\n\nBefore writing anything, apply this rule to the conversation:\n${rule}\n\nAnswer as JSON: {"send": true or false, "reason": "one short sentence on why", "message": "the check-in text, or empty when not sending"}.` : "");
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: promptText || DEFAULT_DAILY_CHECKIN_PROMPT },
-        { role: "user", content: `Here are the student's last several chat messages, oldest first:\n\n${transcript}` },
+        { role: "system", content: system },
+        { role: "user", content: `Today is ${new Date().toISOString().slice(0, 10)}. Here are the student's last several chat messages, oldest first:\n\n${transcript}` },
       ],
-      max_tokens: 200,
+      max_tokens: 300,
       temperature: 0.7,
+      ...(rule ? { response_format: { type: "json_object" } } : {}),
     }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || "Check-in generation failed");
-  return (data.choices?.[0]?.message?.content || "").trim() || null;
+  const out = (data.choices?.[0]?.message?.content || "").trim();
+  if (!rule) return out || null;
+  // Asking for a reason alongside the yes/no keeps the model from skipping
+  // by default (a bare "reply SKIP" made it skip resolved chats too).
+  let verdict;
+  try { verdict = JSON.parse(out); } catch { return null; }
+  if (!verdict.send) { console.log(`[daily checkin] skipped ${studentId}: ${verdict.reason || ""}`); return null; }
+  return String(verdict.message || "").trim() || null;
 }
 // Whole calendar days between two YYYY-MM-DD strings (both already read in
 // the same zone via todayInZone/dailyCheckinSentDate) -- parsed as UTC
@@ -2230,9 +2255,16 @@ async function checkDailyCoachCheckins() {
   const [targetHour, targetMinute] = (cfg.dailyCheckinTime || DEFAULT_DAILY_CHECKIN_TIME).split(":").map(Number);
   // Too early in the day for today's send yet -- every user, already-sent
   // or not, gets skipped this poll rather than checked one by one.
-  if (currentMinutesInZone(timeZone) < targetHour * 60 + targetMinute) return;
+  const nowMinutes = currentMinutesInZone(timeZone), targetMinutes = targetHour * 60 + targetMinute;
+  if (nowMinutes < targetMinutes) return;
+  // ...and only within 3 hours after it, so a student skipped for recent
+  // activity (below) gets their check-in at the usual time on a later day,
+  // never late at night.
+  if (nowMinutes > targetMinutes + 180) return;
   const today = todayInZone(timeZone);
   const requiredDays = dailyCheckinRequiredDays(cfg);
+  const quietValue = Math.max(0, Number(cfg.dailyCheckinQuietValue) || 0);
+  const quietMs = quietValue * (cfg.dailyCheckinQuietUnit === "hours" ? 3600000 : 86400000);
   const users = readJson(USERS_FILE, []);
   const convos = readJson(CONVOS_FILE, []);
   const staffIds = users.filter(u => !u.archived && (isAdmin(u) || u.role === "coach")).map(u => u.id);
@@ -2247,9 +2279,19 @@ async function checkDailyCoachCheckins() {
     if (user.dailyCheckinSentDate && daysBetweenDateStrings(user.dailyCheckinSentDate, today) < requiredDays) continue;
     const convo = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === user.id);
     if (!convo) continue;
+    // The AI already said SKIP today -- don't ask again on the next poll.
+    if (user.dailyCheckinSkippedDate === today) continue;
+    // Any activity in the group (messages, videos, photos -- from the
+    // student or a coach) within the quiet window means a conversation is
+    // going; leave it alone. The previous automated check-in doesn't count.
+    if (quietMs) {
+      const lastActivity = MessagesDB.getConversationMessages(convo.id, { limit: 5 })
+        .filter(m => m.id !== user.dailyCheckinLastMessageId).pop();
+      if (lastActivity && Date.now() - new Date(lastActivity.createdAt).getTime() < quietMs) continue;
+    }
     try {
-      const text = await generateDailyCheckin(convo.id, user.id, cfg.dailyCheckinPrompt);
-      if (!text) continue;
+      const text = await generateDailyCheckin(convo.id, user.id, cfg.dailyCheckinPrompt, cfg.dailyCheckinRule);
+      if (!text) { user.dailyCheckinSkippedDate = today; changed = true; continue; }
       // Admin-configured "Sent As" (dailyCheckinSenderId), if set and that
       // person is actually a staff member currently in THIS student's
       // group -- otherwise the previous behavior (whichever coach/admin
@@ -2259,9 +2301,11 @@ async function checkDailyCoachCheckins() {
       const configuredSenderId = cfg.dailyCheckinSenderId && staffIds.includes(cfg.dailyCheckinSenderId) && convo.participantIds.includes(cfg.dailyCheckinSenderId)
         ? cfg.dailyCheckinSenderId : null;
       const senderId = configuredSenderId || convo.participantIds.find(id => staffIds.includes(id)) || staffIds[0] || user.id;
-      MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+      const checkinId = randomUUID();
+      MessagesDB.insertMessage({ id: checkinId, conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
       notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
       user.dailyCheckinSentDate = today;
+      user.dailyCheckinLastMessageId = checkinId;
       changed = true;
     } catch (e) {
       console.error(`[daily checkin] user ${user.id} failed:`, e.message);
@@ -4148,7 +4192,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, appointments } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, dailyCheckinQuietValue, dailyCheckinQuietUnit, dailyCheckinRule, appointments } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -4178,6 +4222,9 @@ export async function handleChatRequest(req, res, url) {
         if (dailyCheckinTime !== undefined) cfg.dailyCheckinTime = dailyCheckinTime;
         if (dailyCheckinTimezone !== undefined) cfg.dailyCheckinTimezone = dailyCheckinTimezone;
         if (dailyCheckinFrequencyValue !== undefined) cfg.dailyCheckinFrequencyValue = Math.max(1, Number(dailyCheckinFrequencyValue) || 1);
+        if (dailyCheckinQuietValue !== undefined) cfg.dailyCheckinQuietValue = Math.max(0, Number(dailyCheckinQuietValue) || 0);
+        if (dailyCheckinQuietUnit !== undefined) cfg.dailyCheckinQuietUnit = dailyCheckinQuietUnit === "hours" ? "hours" : "days";
+        if (dailyCheckinRule !== undefined) cfg.dailyCheckinRule = String(dailyCheckinRule);
         if (dailyCheckinFrequencyUnit !== undefined) cfg.dailyCheckinFrequencyUnit = dailyCheckinFrequencyUnit;
         if (dailyCheckinSenderId !== undefined) cfg.dailyCheckinSenderId = dailyCheckinSenderId;
         if (appointments !== undefined) cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...cfg.appointments, ...appointments };

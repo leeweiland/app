@@ -376,6 +376,22 @@
       </div>
       <div class="pra-muted" style="font-size:.74rem;margin-top:-10px;margin-bottom:14px">The poller checks hourly, so a check-in lands within about an hour after the time above, not to-the-minute (a month is treated as 30 days).</div>
       <div class="field">
+        <label class="pra-label">Skip If There's Been Activity In The Last</label>
+        <div style="display:flex;gap:8px;max-width:320px">
+          <input class="pra-input" id="dailyCheckinQuietValue" type="number" min="0" style="width:70px;flex-shrink:0"/>
+          <select class="pra-input" id="dailyCheckinQuietUnit" style="flex:1">
+            <option value="hours">Hours</option>
+            <option value="days">Days</option>
+          </select>
+        </div>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Any message, video or photo in the student's group (from them or a coach) inside this window means a conversation is going, so no check-in that day. It goes out at the usual send time once things have been quiet this long. 0 turns this off.</div>
+      </div>
+      <div class="field">
+        <label class="pra-label">Send Rule (the AI checks this against the recent conversation before writing)</label>
+        <textarea class="pra-input" id="dailyCheckinRule" rows="5" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
+        <div class="pra-muted" style="font-size:.74rem;margin-top:4px">If the rule says not to send (for example the student's question hasn't been answered yet), that student is skipped for the day and checked again next time.</div>
+      </div>
+      <div class="field">
         <label class="pra-label">Sent As</label>
         <select class="pra-input" id="dailyCheckinSenderId" style="width:100%"></select>
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Which staff member these check-in messages appear to come from. "Auto" picks whichever coach/admin happens to be in that student's group first — not predictable, and can vary group to group.</div>
@@ -1346,6 +1362,9 @@ async function loadConfig() {
   document.getElementById('dailyCheckinTimezone').value = d.dailyCheckinTimezone || 'America/Anchorage';
   document.getElementById('dailyCheckinFrequencyValue').value = d.dailyCheckinFrequencyValue || 1;
   document.getElementById('dailyCheckinFrequencyUnit').value = d.dailyCheckinFrequencyUnit || 'days';
+  document.getElementById('dailyCheckinQuietValue').value = d.dailyCheckinQuietValue ?? 2;
+  document.getElementById('dailyCheckinQuietUnit').value = d.dailyCheckinQuietUnit || 'days';
+  document.getElementById('dailyCheckinRule').value = d.dailyCheckinRule || '';
   await loadDailyCheckinSenderOptions();
   document.getElementById('dailyCheckinSenderId').value = d.dailyCheckinSenderId || '';
 
@@ -1486,6 +1505,9 @@ async function saveConfig() {
       dailyCheckinTimezone: document.getElementById('dailyCheckinTimezone').value,
       dailyCheckinFrequencyValue: Number(document.getElementById('dailyCheckinFrequencyValue').value) || 1,
       dailyCheckinFrequencyUnit: document.getElementById('dailyCheckinFrequencyUnit').value,
+      dailyCheckinQuietValue: Math.max(0, Number(document.getElementById('dailyCheckinQuietValue').value) || 0),
+      dailyCheckinQuietUnit: document.getElementById('dailyCheckinQuietUnit').value,
+      dailyCheckinRule: document.getElementById('dailyCheckinRule').value,
       dailyCheckinSenderId: document.getElementById('dailyCheckinSenderId').value,
     }),
   });
