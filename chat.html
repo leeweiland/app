@@ -2164,11 +2164,11 @@ function buildDirectory() {
     // row; then pinned; then everything else as usual.
     if (!!a.isOwnGroup !== !!b.isOwnGroup) return a.isOwnGroup ? -1 : 1;
     if (!!a.isSelfRow !== !!b.isSelfRow) return a.isSelfRow ? -1 : 1;
-    // Renewal alerts (the "R" badge) float to the top like new messages do,
-    // until the thread is opened and the alert is acknowledged.
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    // Renewal alerts (the "R" badge) jump to the top under pinned, like a new
+    // message does, until the thread is opened and the alert is acknowledged.
     const ar = !!a.renewal?.unhandled, br = !!b.renewal?.unhandled;
     if (ar !== br) return ar ? -1 : 1;
-    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
     if (a.timestamp) return -1;
