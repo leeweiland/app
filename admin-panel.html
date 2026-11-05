@@ -74,8 +74,8 @@
   /* Users & Roles breaks out of .wrap's 780px column to use the browser's
      width, and its table box is sized in JS (fitUsersTable) to end above
      the bottom bar so the whole box is on screen. */
-  #usersSection { position: relative; left: 50%; transform: translateX(-50%); width: calc(100vw - 40px); max-width: 1800px; box-sizing: border-box; }
-  @media (max-width: 600px) { #usersSection { width: calc(100vw - 24px); padding: 16px; } }
+  #usersSection, #archetypesSection { position: relative; left: 50%; transform: translateX(-50%); width: calc(100vw - 40px); max-width: 1800px; box-sizing: border-box; }
+  @media (max-width: 600px) { #usersSection, #archetypesSection { width: calc(100vw - 24px); padding: 16px; } }
   .table-scroll thead th { position: sticky; top: 0; z-index: 3; background: var(--pra-panel); }
   .table-scroll thead th.sticky-col { z-index: 4; }
   table { width: auto; border-collapse: collapse; table-layout: auto; }
@@ -152,7 +152,8 @@
      nothing here collides with this page's own .field/.card etc. Every
      field saves itself the same debounced way as the two sections above;
      there's no separate "Save Archetypes" button either. ── */
-  .arch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+  /* Fills the full-width panel: 4 across on a wide desktop, down to 1 on a phone. */
+  .arch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 14px; margin-top: 14px; }
   .arch-card { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 10px; overflow: hidden; }
   .arch-hdr { padding: 10px 14px; background: rgba(0,155,255,0.08); border-bottom: 1px solid var(--pra-border); display: flex; align-items: center; gap: 8px; }
   .arch-mbti { font-weight: 700; color: var(--pra-blue); font-size: .85rem; }
