@@ -24,6 +24,9 @@
      visible content. height:100% only pins vertical size; it doesn't force
      the box to claim the full horizontal area the same explicit way. */
   .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  /* Visible page scrollbar on the right (every admin tab) -- the browser's
+     default one was dark-on-dark and effectively invisible. */
+  .pra-root { scrollbar-width: auto; scrollbar-color: #8a8a99 rgba(255,255,255,0.08); }
   .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
   .section { padding: 24px; margin-bottom: 20px; }
   /* position:fixed + a synced spacer, NOT position:sticky -- same pattern
