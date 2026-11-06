@@ -2165,9 +2165,10 @@ function buildDirectory() {
     if (!!a.isOwnGroup !== !!b.isOwnGroup) return a.isOwnGroup ? -1 : 1;
     if (!!a.isSelfRow !== !!b.isSelfRow) return a.isSelfRow ? -1 : 1;
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-    // Renewal alerts (the "R" badge) jump to the top under pinned, like a new
-    // message does, until the thread is opened and the alert is acknowledged.
-    const ar = !!a.renewal?.unhandled, br = !!b.renewal?.unhandled;
+    // Renewal alerts (the "R" badge) jump the student's GROUP to the top under
+    // pinned, like a new message does, until it's opened. Their one-on-one row
+    // keeps its normal place.
+    const ar = !!(a.isGroup && a.renewal?.unhandled), br = !!(b.isGroup && b.renewal?.unhandled);
     if (ar !== br) return ar ? -1 : 1;
     if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
     if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
