@@ -403,6 +403,11 @@
   .bubble-edit-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
   .bubble-edit-textarea { font-size: .88rem; line-height: 1.4; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--pra-blue); background: rgba(0,0,0,0.3); color: var(--pra-text); resize: vertical; width: 100%; box-sizing: border-box; font-family: inherit; }
   .bubble-edit-btns { display: flex; gap: 6px; }
+  /* While editing, the message grows to nearly the full thread width and
+     the box grows with the text; Save/Cancel re-renders it back to normal. */
+  .bubble-row.editing { max-width: 94%; width: 94%; }
+  .bubble-row.editing > div, .bubble-row.editing .bubble-wrap, .bubble-row.editing .bubble { width: 100%; max-width: 100%; }
+  .bubble-row.editing .bubble-edit-textarea { min-height: 10em; max-height: 60vh; font-size: .95rem; padding: 10px 12px; }
   .bubble-edit-save { background: var(--pra-blue); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: .78rem; cursor: pointer; }
   .bubble-edit-cancel { background: none; border: 1px solid var(--pra-border); color: var(--pra-dim); border-radius: 6px; padding: 4px 10px; font-size: .78rem; cursor: pointer; }
   .reaction-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
@@ -4533,7 +4538,7 @@ function linkifyUrls(escapedText) {
       return;
     }
     if (e.target.closest('.bubble-edit-cancel')) {
-      editingMessageId = null;
+      endEditMessage(e.target.closest('.bubble-row'));
       refreshThread(false);
       return;
     }
@@ -6432,12 +6437,28 @@ function startEditMessage(mid) {
       <button class="bubble-edit-cancel">Cancel</button>
     </div>
   </div>`;
-  bubble.querySelector('.bubble-edit-textarea').focus();
+  row.classList.add('editing');
+  const ta = bubble.querySelector('.bubble-edit-textarea');
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
+  ta.addEventListener('input', grow);
+  grow();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  row.scrollIntoView({ block: 'nearest' });
+}
+
+// Drops the reused-row cache for the edited message so the next render
+// rebuilds it as a normal bubble (otherwise an unchanged message keeps the
+// expanded edit box on screen).
+function endEditMessage(row) {
+  editingMessageId = null;
+  if (row) { row.classList.remove('editing'); delete row.dataset.json; }
+  lastRenderedMessagesJson = null;
 }
 
 async function saveEditMessage(mid, text) {
   if (!activeConvoId || !mid || !text.trim()) return;
-  editingMessageId = null;
+  endEditMessage(document.querySelector(`.bubble-row[data-mid="${mid}"]`));
   await fetch(`/api/chat/conversations/${activeConvoId}/messages/${mid}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
