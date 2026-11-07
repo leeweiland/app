@@ -66,6 +66,9 @@
   .unit-row { display: flex; gap: 6px; }
   .unit-row input { flex: 1; min-width: 0; }
   .unit-row select { flex: 0 0 78px; padding-left: 8px; padding-right: 8px; }
+  /* On a phone the Height box gets its own full-width row -- squeezed next to
+     Age, the ft and in boxes were too narrow to see or type in. */
+  @container (max-width: 520px) { .field-row:has(#profileHeightFt) { flex-wrap: wrap; } .field-row .field:has(#profileHeightFt) { flex: 1 1 100%; } }
   #resultBox { display: none; margin-top: 24px; padding: 22px; }
   .bodyfat-tile { text-align: center; padding: 16px; border-radius: 10px; background: rgba(0,155,255,0.08); border: 1px solid var(--pra-blue-dim); margin-bottom: 18px; }
   .bodyfat-tile .val { font-size: 1.8rem; font-weight: 700; color: var(--pra-blue); }
@@ -1059,6 +1062,15 @@ document.getElementById('profileHeightUnit').addEventListener('change', (e) => {
 // used to flow straight into calcCalorieTarget's formula unchecked,
 // producing a multi-million-calorie target. Snap back into range the
 // moment the field loses focus, so a bad value never survives to save.
+// A whole height typed into the feet box ("510" for 5'10", or "70" inches)
+// is split into feet + inches instead of being clamped to 8 ft.
+document.getElementById('profileHeightFt').addEventListener('blur', (e) => {
+  const n = Math.round(Number(e.target.value));
+  const inEl = document.getElementById('profileHeightIn');
+  if (!Number.isFinite(n) || n <= 8) return;
+  if (n >= 300 && n <= 811 && n % 100 < 12) { e.target.value = Math.floor(n / 100); inEl.value = n % 100; }
+  else if (n >= 36 && n <= 96) { e.target.value = Math.floor(n / 12); inEl.value = n % 12; }
+}, true);
 [['profileHeightFt', 0, 8], ['profileHeightIn', 0, 11], ['profileHeightCm', 50, 300]].forEach(([id, min, max]) => {
   document.getElementById(id).addEventListener('blur', (e) => {
     if (e.target.value === '') return;

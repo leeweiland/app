@@ -118,6 +118,18 @@ async function loadConfig() {
   const meRes = await fetch('/api/auth/me');
   if (!meRes.ok) { location.href = '/chat-app/login.html?next=' + encodeURIComponent(location.pathname); return; }
   me = (await meRes.json()).user;
+  // Already took it: go straight to their own result (it has a Take Quiz
+  // button to retake, which comes back here with ?retake=1).
+  if (!new URLSearchParams(location.search).has('retake')) {
+    try {
+      const pr = await fetch('/api/chat/profile/' + encodeURIComponent(me.id));
+      const p = pr.ok ? (await pr.json()).profile : null;
+      if (p?.archetypeTitle) {
+        location.replace(`/personality-quiz/results.html?title=${encodeURIComponent(slugify(p.archetypeTitle))}&gender=${encodeURIComponent(p.gender || 'male')}`);
+        return;
+      }
+    } catch {}
+  }
 
   const res = await fetch('/personality-quiz/config.json?_=' + Date.now());
   CONFIG = await res.json();

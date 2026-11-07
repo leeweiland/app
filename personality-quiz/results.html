@@ -82,7 +82,7 @@ async function main() {
 
   if (!result) {
     app.innerHTML = `<div class="container not-found"><h1>Result Not Found</h1><p>Sorry, we couldn't find a result for this type.</p>
-      <p><a href="/personality-quiz/index.html">Take The Quiz</a></p></div>`;
+      <p><a href="/personality-quiz/index.html?retake=1">Take The Quiz</a></p></div>`;
     return;
   }
 
@@ -139,7 +139,7 @@ async function main() {
       <h1>${result.title}</h1>
       <p>${result.summary}</p>
       <img class="result-image" src="${imageUrl}" alt="${result.title}">
-      <a class="take-quiz-btn" href="/personality-quiz/index.html">Take Quiz</a>
+      <a class="take-quiz-btn" href="/personality-quiz/index.html?retake=1">Take Quiz</a>
       ${sectionsHtml}
       <div class="explore-section">
         <h2>Explore All Training Personality Types</h2>
