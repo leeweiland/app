@@ -362,14 +362,19 @@
        plus their question into their own group chat (see resolvedConvoId). -->
   <!-- Admin: Drive folders the move-video search looks in -->
   <div class="modal-backdrop" id="videoFoldersModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:6px">Move Video Folders</div>
+    <div class="pra-panel modal-box" style="max-width:600px;overflow-y:auto">
+      <div class="pra-h2" style="margin-bottom:6px">Protocol Settings</div>
+      <div class="pra-h2" style="margin:4px 0 6px;font-size:1.05rem">Move Video Folders</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Adding a video to a step searches these Google Drive folders, including every folder inside them.</div>
       <div id="videoFoldersList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
         <input class="pra-input" id="videoFolderInput" placeholder="Paste a Drive folder link or ID" style="flex:1"/>
         <button class="pra-btn pra-btn-ghost" id="videoFolderAddBtn" type="button">Add</button>
       </div>
+      <div class="pra-h2" style="margin:20px 0 6px;font-size:1.05rem">AI Plan Prompt</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:8px">The instructions the AI gets when a coach taps the AI button to build a plan. The app adds two things after this: real example plans from your protocols (so it copies your format), and the coach's description of the client.</div>
+      <textarea class="pra-textarea" id="protocolAiPromptInput" rows="9" style="width:100%;font-size:.82rem"></textarea>
+      <button class="pra-btn pra-btn-ghost" id="protocolAiPromptResetBtn" type="button" style="margin-top:6px;font-size:.72rem;padding:6px 10px">Reset to default</button>
       <div class="pra-muted" id="videoFoldersMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
       <div style="display:flex;gap:10px;margin-top:10px">
         <button class="pra-btn" id="videoFoldersSaveBtn" style="flex:1">Save</button>
@@ -579,7 +584,7 @@ document.addEventListener('keydown', (e) => {
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 // Admin Settings: edit the list of Drive folders searched for move videos.
-let videoFolders = [];
+let videoFolders = [], defaultAiPrompt = '';
 function renderVideoFolders() {
   document.getElementById('videoFoldersList').innerHTML = videoFolders.length ? videoFolders.map((f, i) => `
     <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--pra-border);border-radius:10px;padding:8px 10px">
@@ -601,9 +606,15 @@ function setupVideoFolders() {
     msg().textContent = 'Loading…';
     openModal('videoFoldersModal');
     const r = await fetch('/api/chat/training-protocol/video-folders');
-    videoFolders = r.ok ? (await r.json()).folders : [];
+    const d = r.ok ? await r.json() : {};
+    videoFolders = d.folders || [];
+    defaultAiPrompt = d.defaultAiPrompt || '';
+    document.getElementById('protocolAiPromptInput').value = d.aiPrompt || '';
     msg().textContent = '';
     renderVideoFolders();
+  };
+  document.getElementById('protocolAiPromptResetBtn').onclick = () => {
+    document.getElementById('protocolAiPromptInput').value = defaultAiPrompt;
   };
   document.getElementById('videoFolderAddBtn').onclick = () => {
     const input = document.getElementById('videoFolderInput');
@@ -618,7 +629,7 @@ function setupVideoFolders() {
     msg().textContent = 'Saving…';
     const r = await fetch('/api/chat/training-protocol/video-folders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folderIds: videoFolders.map(f => f.id) }),
+      body: JSON.stringify({ folderIds: videoFolders.map(f => f.id), aiPrompt: document.getElementById('protocolAiPromptInput').value }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { msg().textContent = d.error || 'Could not save.'; return; }

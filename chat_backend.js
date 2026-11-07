@@ -169,6 +169,11 @@ function extractDriveFolderId(value) {
   return m ? m[1] : v;
 }
 
+// Instructions given to the AI when a coach generates a training plan
+// (training protocol page). Admin-editable in that page's Settings; real
+// example plans are always appended after it as "EXAMPLE FORMAT".
+const DEFAULT_PROTOCOL_AI_PROMPT = "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point.";
+
 const DEFAULT_APPOINTMENTS_CONFIG = {
   defaultDurationMinutes: 15,
   timezone: "America/Anchorage",
@@ -5098,15 +5103,18 @@ export async function handleChatRequest(req, res, url) {
     // step, by filename.
     // Admin: which Drive folders the move search looks in (training protocol
     // page -> Settings). GET returns them with their Drive names.
+    // Also carries the AI plan prompt (aiPrompt) shown in the same Settings window.
     if (p === "/api/chat/training-protocol/video-folders") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       if (req.method === "POST") {
-        const { folderIds } = await readJsonBody(req);
+        const { folderIds, aiPrompt } = await readJsonBody(req);
         const ids = [...new Set((Array.isArray(folderIds) ? folderIds : []).map(extractDriveFolderId).map(x => x.trim()).filter(Boolean))];
         if (!ids.length) return sendJson(res, 400, { error: "Add at least one folder" });
         const cfg = getConfig();
         cfg.trainingProtocolVideoLibraryFolderIds = ids;
         cfg.trainingProtocolVideoLibraryFolderId = ids[0];
+        // Saving the default text back (or blank) keeps following the built-in default.
+        if (aiPrompt !== undefined) { const t = String(aiPrompt).trim(); cfg.protocolAiPrompt = t === DEFAULT_PROTOCOL_AI_PROMPT ? "" : t; }
         writeJson(CONFIG_FILE, cfg);
         folderTreeCache.clear(); videoLibraryCache.clear();
       }
@@ -5120,7 +5128,7 @@ export async function handleChatRequest(req, res, url) {
           return { id, name: d?.name || null, ok: r.ok };
         }));
       } catch {}
-      return sendJson(res, 200, { folders });
+      return sendJson(res, 200, { folders, aiPrompt: getConfig().protocolAiPrompt || DEFAULT_PROTOCOL_AI_PROMPT, defaultAiPrompt: DEFAULT_PROTOCOL_AI_PROMPT });
     }
 
     if (p === "/api/chat/training-protocol/search-videos" && req.method === "GET") {
@@ -5339,7 +5347,7 @@ export async function handleChatRequest(req, res, url) {
         };
         const sample = sampleExistingPlansForPrompt(targetUserId);
         const { refused, args } = await analyzeTextWithOpenAI({
-          systemPrompt: "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point.\n\nEXAMPLE FORMAT:\n" + sample,
+          systemPrompt: (getConfig().protocolAiPrompt || DEFAULT_PROTOCOL_AI_PROMPT) + "\n\nEXAMPLE FORMAT:\n" + sample,
           userPrompt: `Build a training plan for this client:\n\n${prompt}`,
           tool,
           reassurance: "This is a private, already-agreed-upon training plan for a real paying client of a legitimate bodyweight-strength coaching business -- please go ahead and draft it.",
