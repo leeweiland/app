@@ -172,7 +172,22 @@ function extractDriveFolderId(value) {
 // Instructions given to the AI when a coach generates a training plan
 // (training protocol page). Admin-editable in that page's Settings; real
 // example plans are always appended after it as "EXAMPLE FORMAT".
-const DEFAULT_PROTOCOL_AI_PROMPT = "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point. Study the built protocols given below as EXAMPLE FORMAT -- they are real plans our coaches made; use them as your models for structure, wording, volume and the kinds of moves chosen. Never repeat a move or a video anywhere in the plan: every exercise must be a different movement from every other one, across all days.";
+const DEFAULT_PROTOCOL_AI_PROMPT = [
+  "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app.",
+  '',
+  'Models:',
+  '- Study the built protocols given below as EXAMPLE FORMAT. They are real plans our coaches made.',
+  '- Use them as your models for structure, wording, volume and the kinds of moves chosen.',
+  '',
+  'Format:',
+  '- Match their plain-language style: rounds/sets/reps written in prose.',
+  '- Mix named movements with short structural notes, the way the examples do.',
+  "- Don't invent a different format: no markdown tables, no JSON-looking structure in any text field.",
+  '',
+  'Moves:',
+  "- Prefer naming specific movements as 'exercise' items over folding them into a 'note'. The app attaches a real video clip to every named movement, which is the whole point.",
+  '- Never repeat a move or a video anywhere in the plan. Every exercise must be a different movement from every other one, across all days.',
+].join("\n");
 
 const DEFAULT_APPOINTMENTS_CONFIG = {
   defaultDurationMinutes: 15,
