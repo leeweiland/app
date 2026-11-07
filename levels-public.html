@@ -63,6 +63,7 @@
     </div>
     <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
     <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
+    <div id="moreSentinel" style="height:1px"></div>
   </div>
 </div>
 <script>
@@ -115,7 +116,44 @@ function render() {
   else if (NUMERIC_CATS.includes(sort)) list = [...list].sort((a, b) => effectiveLevel(b, sort) - effectiveLevel(a, sort) || bySuper(a, b));
   else list = [...list].sort(bySuper);
   document.getElementById('emptyHint').style.display = list.length ? 'none' : 'block';
-  document.getElementById('list').innerHTML = list.map(cardHtml).join('');
+  shownList = list; shown = 0;
+  document.getElementById('list').innerHTML = '';
+  showMore();
+  reportHeight();
+}
+
+// Infinite scroll: 20 cards at a time, more when the bottom marker comes
+// into view. Inside an iframe the observer measures against the website's
+// own viewport, so it loads as the visitor scrolls the outer page.
+const PAGE = 20;
+let shownList = [], shown = 0;
+function showMore() {
+  const next = shownList.slice(shown, shown + PAGE);
+  if (!next.length) return;
+  document.getElementById('list').insertAdjacentHTML('beforeend', next.map(cardHtml).join(''));
+  shown += next.length;
+  reportHeight();
+}
+new IntersectionObserver(entries => { if (entries[0].isIntersecting) showMore(); }, { rootMargin: '1200px 0px' })
+  .observe(document.getElementById('moreSentinel'));
+
+// Embedded on the website: no scrollbar of our own -- report our height so
+// the page's embed component (PRALevelsEmbed in Framer) grows to fit.
+// Reported directly after every change, not only from the ResizeObserver:
+// browsers pause observers in a background/offscreen frame.
+const embedded = window.self !== window.top;
+let lastH = 0;
+function reportHeight() {
+  if (!embedded) return;
+  const h = document.querySelector('.wrap').getBoundingClientRect().height;
+  if (Math.abs(h - lastH) > 2) { lastH = h; window.parent.postMessage({ type: 'pra-levels-height', height: Math.ceil(h) }, '*'); }
+}
+if (embedded) {
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+  new ResizeObserver(reportHeight).observe(document.querySelector('.wrap'));
+  window.addEventListener('load', reportHeight);
+  window.addEventListener('resize', reportHeight);
 }
 
 let t;
