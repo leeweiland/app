@@ -5234,21 +5234,23 @@ export async function handleChatRequest(req, res, url) {
     // with none yet saved, a small built-in example keeps the output in the
     // same shape instead of inventing a format from scratch.
     function sampleExistingPlansForPrompt(excludeUserId) {
-      // Coach-built templates (Flow Builder) are the models first; real
-      // student protocols fill in if there are fewer than 3 templates.
-      const samples = [];
-      for (const t of readJson(PROTOCOL_TEMPLATES_FILE, [])) {
-        if (!t.steps?.length) continue;
-        samples.push(t.steps);
-        if (samples.length >= 3) break;
-      }
-      if (samples.length < 4) {
-        const protocols = readJson(TRAINING_PROTOCOLS_FILE, {});
-        for (const [uid, rec] of Object.entries(protocols)) {
-          if (uid === excludeUserId || uid === BUILDER_PROTOCOL_ID || !rec?.steps?.length) continue;
-          samples.push(rec.steps);
-          if (samples.length >= 4) break;
-        }
+      // The 12 most recently built/edited protocols (saved templates and
+      // students' own protocols together, newest first) are the models.
+      // Copies of the same plan (e.g. the default applied to many students)
+      // count once.
+      const candidates = [
+        ...readJson(PROTOCOL_TEMPLATES_FILE, []).map(t => ({ steps: t.steps, at: t.updatedAt || t.createdAt })),
+        ...Object.entries(readJson(TRAINING_PROTOCOLS_FILE, {}))
+          .filter(([uid]) => uid !== excludeUserId && uid !== BUILDER_PROTOCOL_ID)
+          .map(([, rec]) => ({ steps: rec?.steps, at: rec?.updatedAt })),
+      ].filter(c => c.steps?.length).sort((x, y) => String(y.at || "").localeCompare(String(x.at || "")));
+      const samples = [], seenPlans = new Set();
+      for (const c of candidates) {
+        const sig = JSON.stringify(c.steps.map(st => [st.type, st.content || st.moveLabel || st.name || st.dayNumber || ""]));
+        if (seenPlans.has(sig)) continue;
+        seenPlans.add(sig);
+        samples.push(c.steps);
+        if (samples.length >= 12) break;
       }
       // Walk each sample's step graph the way the Flow canvas actually lays
       // it out, NOT a plain parentId chain: a day's own content lives down
@@ -5623,7 +5625,7 @@ export async function handleChatRequest(req, res, url) {
       const template = templates.find(t => t.id === protocolTemplateMatch[1]);
       if (!template) return sendJson(res, 404, { error: "Template not found" });
       if (name !== undefined) template.name = name.trim();
-      if (Array.isArray(steps) && steps.length) template.steps = steps;
+      if (Array.isArray(steps) && steps.length) { template.steps = steps; template.updatedAt = new Date().toISOString(); }
       writeJson(PROTOCOL_TEMPLATES_FILE, templates);
       return sendJson(res, 200, { ok: true });
     }
