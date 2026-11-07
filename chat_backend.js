@@ -172,7 +172,7 @@ function extractDriveFolderId(value) {
 // Instructions given to the AI when a coach generates a training plan
 // (training protocol page). Admin-editable in that page's Settings; real
 // example plans are always appended after it as "EXAMPLE FORMAT".
-const DEFAULT_PROTOCOL_AI_PROMPT = "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point.";
+const DEFAULT_PROTOCOL_AI_PROMPT = "You are a bodyweight-strength/mobility training coach's assistant, drafting a client's training protocol inside their coaching app. Match the plain-language, rounds/sets/reps-in-prose style and the mix of named movements + short structural notes shown in the example below -- don't invent a different format (no markdown tables, no JSON-looking structure in any text field). Prefer naming specific movements as 'exercise' items over folding them into a 'note' -- this app attaches a real video clip to every named movement, which is the whole point. Study the built protocols given below as EXAMPLE FORMAT -- they are real plans our coaches made; use them as your models for structure, wording, volume and the kinds of moves chosen. Never repeat a move or a video anywhere in the plan: every exercise must be a different movement from every other one, across all days.";
 
 const DEFAULT_APPOINTMENTS_CONFIG = {
   defaultDurationMinutes: 15,
@@ -5219,19 +5219,20 @@ export async function handleChatRequest(req, res, url) {
     // with none yet saved, a small built-in example keeps the output in the
     // same shape instead of inventing a format from scratch.
     function sampleExistingPlansForPrompt(excludeUserId) {
+      // Coach-built templates (Flow Builder) are the models first; real
+      // student protocols fill in if there are fewer than 3 templates.
       const samples = [];
-      const protocols = readJson(TRAINING_PROTOCOLS_FILE, {});
-      for (const [uid, rec] of Object.entries(protocols)) {
-        if (uid === excludeUserId || !rec?.steps?.length) continue;
-        samples.push(rec.steps);
-        if (samples.length >= 2) break;
+      for (const t of readJson(PROTOCOL_TEMPLATES_FILE, [])) {
+        if (!t.steps?.length) continue;
+        samples.push(t.steps);
+        if (samples.length >= 3) break;
       }
-      if (samples.length < 3) {
-        const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
-        for (const t of templates) {
-          if (!t.steps?.length) continue;
-          samples.push(t.steps);
-          if (samples.length >= 3) break;
+      if (samples.length < 4) {
+        const protocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+        for (const [uid, rec] of Object.entries(protocols)) {
+          if (uid === excludeUserId || uid === BUILDER_PROTOCOL_ID || !rec?.steps?.length) continue;
+          samples.push(rec.steps);
+          if (samples.length >= 4) break;
         }
       }
       // Walk each sample's step graph the way the Flow canvas actually lays
@@ -5369,15 +5370,24 @@ export async function handleChatRequest(req, res, url) {
               .filter(f => !seen.has(f.id) && seen.add(f.id));
           } catch (e) { /* best-effort -- fall through with no videos matched */ }
         }
+        // No duplicate moves or videos anywhere in the plan, whatever the
+        // model returned: a repeated move name, or a move that matches a
+        // video already used, is dropped.
+        const usedMoves = new Set(), usedVideos = new Set();
         const days = args.days.map(day => ({
           summary: day.summary || "",
           items: (day.items || []).map(item => {
             if (item.kind === "exercise" && item.move) {
+              const key = String(item.move).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+              if (usedMoves.has(key)) return null;
               const match = matchVideoForMove(item.move, videoFiles);
+              if (match && usedVideos.has(match.id)) return null;
+              usedMoves.add(key);
+              if (match) usedVideos.add(match.id);
               return { kind: "exercise", move: item.move, caption: item.caption || "", driveFileId: match?.id || null, name: match?.name || null };
             }
             return { kind: "note", text: item.text || item.move || "" };
-          }),
+          }).filter(Boolean),
         }));
         return sendJson(res, 200, { days });
       } catch (e) {
