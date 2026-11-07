@@ -273,6 +273,7 @@
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
           <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
+          <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
         </div>
         <div class="protocol-head-controls-right">
           <button class="icon-btn" id="aiGenerateBtn" title="AI: build a workout plan from a description" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.5l1.4 3.6 3.6 1.4-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4L12 3.5Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/><path d="M18.5 13.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
@@ -359,6 +360,24 @@
 
   <!-- Ask a Question — student-only, posts a preview of this step's media
        plus their question into their own group chat (see resolvedConvoId). -->
+  <!-- Admin: Drive folders the move-video search looks in -->
+  <div class="modal-backdrop" id="videoFoldersModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:6px">Move Video Folders</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Adding a video to a step searches these Google Drive folders, including every folder inside them.</div>
+      <div id="videoFoldersList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px">
+        <input class="pra-input" id="videoFolderInput" placeholder="Paste a Drive folder link or ID" style="flex:1"/>
+        <button class="pra-btn pra-btn-ghost" id="videoFolderAddBtn" type="button">Add</button>
+      </div>
+      <div class="pra-muted" id="videoFoldersMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="pra-btn" id="videoFoldersSaveBtn" style="flex:1">Save</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('videoFoldersModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="askQuestionModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">Ask a Question</div>
@@ -558,6 +577,56 @@ document.addEventListener('keydown', (e) => {
 });
 
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// Admin Settings: edit the list of Drive folders searched for move videos.
+let videoFolders = [];
+function renderVideoFolders() {
+  document.getElementById('videoFoldersList').innerHTML = videoFolders.length ? videoFolders.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--pra-border);border-radius:10px;padding:8px 10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.86rem;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name || (f.ok === false ? 'Folder not found or no access' : 'New folder'))}</div>
+        <div class="pra-muted" style="font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.id)}</div>
+      </div>
+      <button class="icon-btn" data-remove="${i}" type="button" title="Remove">✕</button>
+    </div>`).join('') : '<div class="pra-muted" style="font-size:.82rem">No folders yet.</div>';
+  document.querySelectorAll('#videoFoldersList [data-remove]').forEach(b => {
+    b.onclick = () => { videoFolders.splice(Number(b.dataset.remove), 1); renderVideoFolders(); };
+  });
+}
+function setupVideoFolders() {
+  const btn = document.getElementById('protocolSettingsBtn');
+  const msg = () => document.getElementById('videoFoldersMsg');
+  btn.style.display = '';
+  btn.onclick = async () => {
+    msg().textContent = 'Loading…';
+    openModal('videoFoldersModal');
+    const r = await fetch('/api/chat/training-protocol/video-folders');
+    videoFolders = r.ok ? (await r.json()).folders : [];
+    msg().textContent = '';
+    renderVideoFolders();
+  };
+  document.getElementById('videoFolderAddBtn').onclick = () => {
+    const input = document.getElementById('videoFolderInput');
+    const v = input.value.trim();
+    if (!v) return;
+    const id = (v.match(/\/folders\/([a-zA-Z0-9_-]+)/) || [])[1] || v;
+    if (!videoFolders.some(f => f.id === id)) videoFolders.push({ id, name: null });
+    input.value = '';
+    renderVideoFolders();
+  };
+  document.getElementById('videoFoldersSaveBtn').onclick = async () => {
+    msg().textContent = 'Saving…';
+    const r = await fetch('/api/chat/training-protocol/video-folders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderIds: videoFolders.map(f => f.id) }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { msg().textContent = d.error || 'Could not save.'; return; }
+    videoFolders = d.folders || videoFolders;
+    renderVideoFolders();
+    msg().textContent = videoFolders.some(f => f.ok === false) ? 'Saved. One or more folders could not be opened -- check the link and sharing.' : 'Saved.';
+  };
+}
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 // Click the dark overlay itself (not anything inside the panel) to close
 // whichever modal it belongs to — e.currentTarget is always the backdrop
@@ -592,6 +661,7 @@ async function init() {
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
+  if (me.role === 'admin' || me.role === 'admin2') setupVideoFolders();
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
@@ -1126,7 +1196,7 @@ async function setProtocolMode(mode, builder) {
   viewMode = mode;
   editingBuilder = builder;
   activeId = builder ? BUILDER_PROTOCOL_ID : targetUserId;
-  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+  document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode && (btn.dataset.builder === 'true') === builder);
   });
   document.getElementById('defaultProtocolRow').style.display = (canEdit && editingBuilder) ? 'flex' : 'none';
@@ -1152,7 +1222,7 @@ async function setProtocolMode(mode, builder) {
   }
 }
 function setupViewModeToggle() {
-  document.querySelectorAll('.view-mode-btn').forEach(btn => {
+  document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'true');
   });
   document.getElementById('pageDaySelect').onchange = (e) => {

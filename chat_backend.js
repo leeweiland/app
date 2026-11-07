@@ -2683,6 +2683,13 @@ async function getAllDescendantFolderIds(rootId, accessToken) {
 // an AI-generate call doesn't re-walk + re-list a potentially large Drive
 // folder tree on every single request.
 const videoLibraryCache = new Map(); // folderId -> { files, expiresAt }
+// The Drive folders searched for move videos (each with all its subfolders):
+// the list set from the training protocol page's admin Settings, falling
+// back to the single Chat Configuration folder.
+function videoLibraryFolderIds(cfg = getConfig()) {
+  const list = (cfg.trainingProtocolVideoLibraryFolderIds || []).map(extractDriveFolderId).filter(Boolean);
+  return list.length ? list : [cfg.trainingProtocolVideoLibraryFolderId].filter(Boolean);
+}
 async function listVideoLibraryFiles(folderId, accessToken) {
   const cached = videoLibraryCache.get(folderId);
   if (cached && cached.expiresAt > Date.now()) return cached.files;
@@ -4837,7 +4844,7 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
-    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "label-video", "ai-generate", "apply", "default-protocol", "video-error"];
+    const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "video-folders", "label-video", "ai-generate", "apply", "default-protocol", "video-error"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
       const targetUserId = protocolMatch[1];
@@ -5089,15 +5096,43 @@ export async function handleChatRequest(req, res, url) {
 
     // Search the admin-configured Drive folder for a video to attach as a
     // step, by filename.
+    // Admin: which Drive folders the move search looks in (training protocol
+    // page -> Settings). GET returns them with their Drive names.
+    if (p === "/api/chat/training-protocol/video-folders") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      if (req.method === "POST") {
+        const { folderIds } = await readJsonBody(req);
+        const ids = [...new Set((Array.isArray(folderIds) ? folderIds : []).map(extractDriveFolderId).map(x => x.trim()).filter(Boolean))];
+        if (!ids.length) return sendJson(res, 400, { error: "Add at least one folder" });
+        const cfg = getConfig();
+        cfg.trainingProtocolVideoLibraryFolderIds = ids;
+        cfg.trainingProtocolVideoLibraryFolderId = ids[0];
+        writeJson(CONFIG_FILE, cfg);
+        folderTreeCache.clear(); videoLibraryCache.clear();
+      }
+      const ids = videoLibraryFolderIds();
+      let folders = ids.map(id => ({ id, name: null }));
+      try {
+        const accessToken = await getDriveAccessToken();
+        folders = await Promise.all(ids.map(async id => {
+          const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=name&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          const d = r.ok ? await r.json() : null;
+          return { id, name: d?.name || null, ok: r.ok };
+        }));
+      } catch {}
+      return sendJson(res, 200, { folders });
+    }
+
     if (p === "/api/chat/training-protocol/search-videos" && req.method === "GET") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
       const cfg = getConfig();
-      if (!cfg.trainingProtocolVideoLibraryFolderId) return sendJson(res, 200, { files: [], needsConfig: true });
+      const roots = videoLibraryFolderIds(cfg);
+      if (!roots.length) return sendJson(res, 200, { files: [], needsConfig: true });
       try {
         const accessToken = await getDriveAccessToken();
         const q = (url.searchParams.get("q") || "").trim();
         const nameFilter = q ? ` and name contains '${q.replace(/'/g, "\\'")}'` : "";
-        const folderIds = await getAllDescendantFolderIds(cfg.trainingProtocolVideoLibraryFolderId, accessToken);
+        const folderIds = [...new Set((await Promise.all(roots.map(id => getAllDescendantFolderIds(id, accessToken)))).flat())];
         const parentsClause = folderIds.map(id => `'${id}' in parents`).join(" or ");
         const driveQuery = `(${parentsClause}) and mimeType contains 'video/' and trashed = false${nameFilter}`;
         // Small page size + pageToken pass-through — the picker loads more
@@ -5318,10 +5353,12 @@ export async function handleChatRequest(req, res, url) {
         // than silently dropping it.
         const cfg = getConfig();
         let videoFiles = [];
-        if (cfg.trainingProtocolVideoLibraryFolderId) {
+        if (videoLibraryFolderIds(cfg).length) {
           try {
             const accessToken = await getDriveAccessToken();
-            videoFiles = await listVideoLibraryFiles(cfg.trainingProtocolVideoLibraryFolderId, accessToken);
+            const seen = new Set();
+            videoFiles = (await Promise.all(videoLibraryFolderIds(cfg).map(id => listVideoLibraryFiles(id, accessToken)))).flat()
+              .filter(f => !seen.has(f.id) && seen.add(f.id));
           } catch (e) { /* best-effort -- fall through with no videos matched */ }
         }
         const days = args.days.map(day => ({
