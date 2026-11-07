@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { request as httpsRequest } from "https";
-import { execFileSync } from "child_process";
+import { execFileSync, execFile } from "child_process";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import Busboy from "busboy";
@@ -1933,6 +1933,67 @@ function publicBookRateLimited(req) {
 }
 const escHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// ── Public Levels board (embedded on pacificrimathletics.com/levels) ──────
+// Signed-out, read-only: names, program, levels, and a profile photo. Cached
+// 10 minutes so website traffic never hits the Levels/APP sheets directly.
+// Photos are served only for people on this board, as 160px JPEG thumbnails
+// made once with ffmpeg and kept on the volume.
+let publicLevelsCache = null;
+async function getPublicLevels() {
+  if (publicLevelsCache && Date.now() - publicLevelsCache.at < 10 * 60 * 1000) return publicLevelsCache;
+  const enriched = await enrichLevelsPeople(await fetchAllLevels());
+  const people = enriched.map(p => ({
+    first: p.first, last: p.last, program: p.program, levels: p.levels || {}, team: !!p.team,
+    photo: p.profilePictureFileId || null,
+  }));
+  publicLevelsCache = { at: Date.now(), people, photoIds: new Set(people.map(p => p.photo).filter(Boolean)) };
+  return publicLevelsCache;
+}
+const PUBLIC_AVATAR_DIR = join(DATA_DIR, "public_avatar_cache");
+async function publicAvatarFile(fileId) {
+  const out = join(PUBLIC_AVATAR_DIR, fileId.replace(/[^\w-]/g, "") + ".jpg");
+  if (existsSync(out)) return out;
+  mkdirSync(PUBLIC_AVATAR_DIR, { recursive: true });
+  const accessToken = await getDriveAccessToken();
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!r.ok) throw new Error(`Drive ${r.status}`);
+  const src = join(tmpdir(), `pubav-${randomUUID()}`);
+  writeFileSync(src, Buffer.from(await r.arrayBuffer()));
+  try {
+    await new Promise((resolve, reject) => execFile(FFMPEG_EXE, ["-y", "-i", src, "-vf", "scale=160:160:force_original_aspect_ratio=increase,crop=160:160", "-frames:v", "1", "-q:v", "4", out], { timeout: 30000 }, (e) => e ? reject(e) : resolve()));
+  } finally { try { unlinkSync(src); } catch {} }
+  return out;
+}
+async function handlePublicLevelsRequest(req, res, url) {
+  const p = url.pathname;
+  if (p === "/api/public/levels" && req.method === "GET") {
+    try {
+      const { people } = await getPublicLevels();
+      res.setHeader("Cache-Control", "public, max-age=300");
+      sendJson(res, 200, { people, categories: LEVELS_CATEGORIES });
+    } catch (e) {
+      console.error("[public levels]", e.message);
+      sendJson(res, 500, { error: "Could not load levels" });
+    }
+    return true;
+  }
+  const photoMatch = p.match(/^\/api\/public\/levels\/photo\/([\w-]+)$/);
+  if (photoMatch && req.method === "GET") {
+    try {
+      const { photoIds } = await getPublicLevels();
+      if (!photoIds.has(photoMatch[1])) { res.writeHead(404); res.end(); return true; }
+      const file = await publicAvatarFile(photoMatch[1]);
+      res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" });
+      createReadStream(file).pipe(res);
+    } catch (e) {
+      console.error("[public levels photo]", e.message);
+      res.writeHead(404); res.end();
+    }
+    return true;
+  }
+  return false;
+}
+
 async function handlePublicGymRequest(req, res, url) {
   const p = url.pathname;
 
@@ -3492,6 +3553,7 @@ export async function handleChatRequest(req, res, url) {
 
   // Signed-out Gym booking page -- checked before anything that needs a session.
   if (await handlePublicGymRequest(req, res, url)) return true;
+  if (await handlePublicLevelsRequest(req, res, url)) return true;
 
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {

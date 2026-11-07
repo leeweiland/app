@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Levels — Pacific Rim Athletics</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<style>
+  /* Public, signed-out copy of levels.html for embedding on the website
+     (pacificrimathletics.com/levels). Read-only: no edit, no profile panel,
+     no app header. Data from /api/public/levels. */
+  html, body { margin: 0; background: #000; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
+  .controls { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
+  .controls .grow { flex: 1; min-width: 200px; }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .person-card { padding: 16px 18px; }
+  .person-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; background: #1b1b22; border: 1px solid var(--pra-border); display: flex; align-items: center; justify-content: center; font-family: var(--font-secondary); color: #fff; font-size: .95rem; overflow: hidden; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .person-meta { flex: 1; min-width: 0; }
+  .person-name { font-weight: 400; font-size: 1rem; color: #fff; }
+  .person-sub { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-top: 2px; }
+  .super-level-badge { flex-shrink: 0; white-space: nowrap; font-family: var(--font-secondary); font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); }
+  .super-level-badge .num { color: #009bff; font-weight: 700; font-size: .95rem; }
+  .levels-col { display: flex; flex-direction: column; gap: 6px; }
+  .level-chip { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 8px; padding: 6px 12px; font-size: .8rem; }
+  .level-chip .cat { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-dim); text-transform: uppercase; letter-spacing: .04em; flex: 0 0 auto; display: inline-grid; }
+  .level-chip .cat > span, .level-chip .cat::after { grid-area: 1 / 1; }
+  .level-chip .cat::after { content: "Ninja Strength"; visibility: hidden; }
+  .level-chip .chip-val { font-weight: 700; white-space: nowrap; }
+  .level-stripes { display: flex; gap: 6px; align-items: center; margin: 0 16px 0 12px; min-width: 0; flex: 1 1 auto; }
+  .level-stripes i { flex: 1 1 0; min-width: 5px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+  .level-stripes i.on { background: #009bff; }
+  @media (max-width: 420px) {
+    .level-chip { gap: 8px; padding: 6px 10px; }
+    .level-stripes { gap: 3px; margin-left: 4px; margin-right: 8px; }
+  }
+  .empty-hint { text-align: center; color: var(--pra-dim); font-size: .85rem; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="pra-root" style="background:#000">
+  <div class="wrap">
+    <div class="controls">
+      <div class="grow">
+        <label class="pra-label" style="display:block;margin-bottom:6px">Search</label>
+        <input class="pra-input" id="searchInput" placeholder="Search a name…" style="width:100%"/>
+      </div>
+      <div>
+        <label class="pra-label" style="display:block;margin-bottom:6px">Sort By</label>
+        <select class="pra-select" id="sortSelect" style="max-width:220px">
+          <option value="superLevel">Highest Super Level</option>
+          <option value="highestLevel">Highest Level</option>
+          <option value="HANDSTAND">Highest Handstand</option>
+          <option value="NINJA STRENGTH">Highest Ninja Strength</option>
+          <option value="POWERMOVES">Highest Powermoves</option>
+          <option value="FREERUN">Highest Freerun</option>
+          <option value="CIRQUE">Highest Cirque</option>
+          <option value="first">Alphabetical</option>
+        </select>
+      </div>
+    </div>
+    <div class="list" id="list"><div class="pra-muted">Loading…</div></div>
+    <div class="empty-hint" id="emptyHint" style="display:none">No one matches.</div>
+  </div>
+</div>
+<script>
+// Same level math as levels.html.
+const NUMERIC_CATS = ['NINJA STRENGTH', 'HANDSTAND', 'POWERMOVES', 'FREERUN', 'CIRQUE'];
+const NUM_COLORS = { 1: '#ffffff', 2: '#ffd700', 3: '#cd7f32', 4: '#22c55e', 5: '#3b82f6', 6: '#a855f7', 7: '#ef4444', 8: '#d1d5db', 9: '#9a9aa5', 10: '#009bff' };
+const catLabel = c => c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase());
+const isChecked = v => ['x', 'yes'].includes(String(v || '').trim().toLowerCase());
+const numColor = n => NUM_COLORS[Number(n)] || '#5f727f';
+function effectiveLevel(p, cat) {
+  const raw = Number(p.levels[cat]) || 0;
+  if (raw > 0) return raw;
+  return isChecked(p.levels['FOUNDATION']) ? 1 : 0;
+}
+const superLevel = p => NUMERIC_CATS.reduce((sum, cat) => sum + effectiveLevel(p, cat), 0);
+const highestSingle = p => Math.max(...NUMERIC_CATS.map(cat => effectiveLevel(p, cat)));
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+const stripes = n => `<span class="level-stripes">${Array.from({ length: 10 }, (_, i) => `<i${i < n ? ' class="on"' : ''}></i>`).join('')}</span>`;
+
+function cardHtml(p) {
+  const initials = ((p.first || '')[0] || '') + ((p.last || '')[0] || '');
+  const avatar = p.photo ? `<img src="/api/public/levels/photo/${encodeURIComponent(p.photo)}" alt="" loading="lazy"/>` : escapeHtml(initials.toUpperCase());
+  const foundation = isChecked(p.levels['FOUNDATION']);
+  const rows = [`<div class="level-chip"><span class="cat"><span>Foundation</span></span>${stripes(foundation ? 10 : 0)}<span class="chip-val" style="color:#fff">${foundation ? '✓' : 'In Progress'}</span></div>`];
+  NUMERIC_CATS.forEach(cat => {
+    const n = effectiveLevel(p, cat);
+    rows.push(`<div class="level-chip"><span class="cat"><span>${catLabel(cat)}</span></span>${stripes(n)}<span class="chip-val"><span style="color:${numColor(n)}">${n}</span><span style="color:#009bff">/10</span></span></div>`);
+  });
+  return `<div class="pra-panel person-card">
+    <div class="person-head">
+      <div class="avatar">${avatar}</div>
+      <div class="person-meta">
+        <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last || '')}</div>
+        <div class="person-sub">${escapeHtml(p.program || '')}</div>
+      </div>
+      <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
+    </div>
+    <div class="levels-col">${rows.join('')}</div>
+  </div>`;
+}
+
+let all = [];
+function render() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  let list = q ? all.filter(p => (p.first + ' ' + (p.last || '')).toLowerCase().includes(q)) : all;
+  const bySuper = (a, b) => superLevel(b) - superLevel(a);
+  if (sort === 'first') list = [...list].sort((a, b) => a.first.localeCompare(b.first));
+  else if (sort === 'highestLevel') list = [...list].sort((a, b) => highestSingle(b) - highestSingle(a) || bySuper(a, b));
+  else if (NUMERIC_CATS.includes(sort)) list = [...list].sort((a, b) => effectiveLevel(b, sort) - effectiveLevel(a, sort) || bySuper(a, b));
+  else list = [...list].sort(bySuper);
+  document.getElementById('emptyHint').style.display = list.length ? 'none' : 'block';
+  document.getElementById('list').innerHTML = list.map(cardHtml).join('');
+}
+
+let t;
+document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 200); });
+document.getElementById('sortSelect').addEventListener('change', render);
+fetch('/api/public/levels').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => { all = d.people || []; render(); })
+  .catch(() => { document.getElementById('list').innerHTML = '<div class="pra-muted">Could not load levels right now.</div>'; });
+</script>
+</body>
+</html>

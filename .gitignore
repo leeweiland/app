@@ -22,3 +22,4 @@ chat_messages.db-shm
 chat_messages.db-wal
 documents/pra-release-bundle
 native-plugins/*/android/build/
+public_avatar_cache/
