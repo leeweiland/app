@@ -137,6 +137,8 @@
   .step-card { padding: 14px 16px; position: relative; }
   .step-day-badge { text-align: center; font-family: var(--font-secondary); font-size: 1.3rem; font-weight: 700; color: var(--pra-blue); padding: 6px 0; }
   .step-type { font-family: var(--font-secondary); font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 8px; }
+  /* Clear of the drag handle (top-left) and the edit/delete buttons (top-right). */
+  .step-drag-handle ~ .step-type { padding-left: 26px; padding-right: 58px; min-height: 24px; display: flex; align-items: center; }
   .step-card video, .step-card img { width: 100%; border-radius: 8px; display: block; background: #000; }
   /* Clears the drag handle sitting at top-left of the card (position:
      absolute, so it doesn't push text out of the way on its own) — text
@@ -1238,7 +1240,7 @@ function render() {
         <div class="pra-panel step-card">
           ${canEdit ? `<button class="step-drag-handle" data-id="${s.id}" title="Drag to move">⠿</button>` : ''}
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
-          ${canEdit && s.type === 'text' ? `<button class="step-edit" data-id="${s.id}" title="Edit text">✎</button>` : ''}
+          ${canEdit && (s.type === 'text' || s.type === 'video') ? `<button class="step-edit" data-id="${s.id}" title="${s.type === 'video' ? 'Rename video' : 'Edit text'}">✎</button>` : ''}
           ${!canEdit && (s.type === 'video' || s.type === 'image') ? `<button class="step-ask" data-id="${s.id}" title="Ask a question about this">?</button>` : ''}
           ${renderStepContent(s, { autoplay: false })}
         </div>
@@ -1287,7 +1289,8 @@ function render() {
       const s = steps.find(x => x.id === btn.dataset.id);
       if (!s) return;
       editingStepId = s.id;
-      document.getElementById('textStepInput').value = s.content || '';
+      // Video steps: the pencil renames the move label shown above the clip.
+      document.getElementById('textStepInput').value = s.type === 'video' ? videoStepLabel(s) : (s.content || '');
       openModal('textModal');
     };
   });
@@ -1721,6 +1724,16 @@ function stripVideoExt(name) {
   return String(name || '').replace(/\.[a-z0-9]{2,4}$/i, '');
 }
 
+// The label shown above a video: a coach's own rename as typed; otherwise
+// the auto label with any word that isn't in the filename dropped (so it
+// never shows an invented name), falling back to the filename itself.
+function videoStepLabel(s) {
+  if (s.moveLabelManual && s.moveLabel) return s.moveLabel;
+  const fileWords = new Set(stripVideoExt(s.name).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const kept = String(s.moveLabel || '').split(/\s+/).filter(w => fileWords.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  return kept.length ? kept.join(' ') : stripVideoExt(s.name);
+}
+
 function renderStepContent(s, { autoplay = true } = {}) {
   if (s.type === 'video') {
     // Autoplay+muted so it moves like a thumbnail the moment it scrolls
@@ -1729,7 +1742,7 @@ function renderStepContent(s, { autoplay = true } = {}) {
     // the AI-derived short move name (see requestVideoMoveLabel) -- falls
     // back to the raw Drive filename (extension stripped) until that
     // finishes, or forever if it failed/was never run (older steps).
-    const labelText = s.moveLabel || stripVideoExt(s.name);
+    const labelText = videoStepLabel(s);
     const label = labelText ? `<div class="step-type">${escapeHtml(labelText)}</div>` : '';
     // The comment above stepVideoLazyObserver already names the exact
     // failure this guards against -- a protocol with many video steps
@@ -2160,7 +2173,8 @@ function wireModals() {
     if (editingStepId) {
       snapshotBeforeChange();
       const s = steps.find(x => x.id === editingStepId);
-      if (s) s.content = content;
+      if (s?.type === 'video') { s.moveLabel = content.replace(/\s+/g, ' ').slice(0, 80); s.moveLabelManual = true; }
+      else if (s) s.content = content;
       editingStepId = null;
       render();
       await saveSteps();

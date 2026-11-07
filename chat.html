@@ -660,6 +660,9 @@
   /* ── Video calls ── */
   /* Above the lightbox (9999) -- a call is the one thing that should never
      get buried under anything else already open. */
+  /* Video call button while a call is live in this thread: solid bright green. */
+  #startCallBtn.call-live { background: #22c55e; border-color: #22c55e; opacity: 1; box-shadow: 0 0 12px rgba(34,197,94,.7); }
+  #startCallBtn.call-live svg * { stroke: #fff !important; }
   .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
   /* A page opened during a call (protocol link, nav icon) loads in here
      instead of navigating away, which would hang up. Sits under the
@@ -6942,7 +6945,10 @@ async function startCall() {
   const d = await r.json();
   if (!r.ok) { await alertDialog(d.error || 'Could not start the call.'); return; }
   await joinCall(d.call, d.token, activeConvoId, displayName);
+  document.getElementById('startCallBtn')?.classList.remove('call-live');
   clearTimeout(callRingTimeout);
+  // Joined someone else's call (the green button) -- it's theirs to time out.
+  if (d.call.initiatorId !== me.id) return;
   // No push/native ringing yet (see header comment) -- the other side only
   // sees this if they already have the app open, so a call that's gone
   // unanswered this long is treated the same as declined.
@@ -7076,6 +7082,13 @@ function closeCallScreen() {
 
 async function endCall() {
   const call = currentCall, convoId = currentCallConvoId;
+  // A coach who joined another coach's live call just leaves it -- the call
+  // keeps going for the student and whoever started it.
+  if (call && call.initiatorId !== me.id && isStaffMe() && call.status === 'active') {
+    try { await dailyCallObject?.leave(); } catch {}
+    closeCallScreen();
+    return;
+  }
   closeCallScreen();
   if (call && convoId) {
     fetch(`/api/chat/conversations/${convoId}/call/${call.id}/end`, { method: 'POST' }).catch(() => {});
@@ -7196,6 +7209,11 @@ function handleIncomingCallPoll(incomingCall) {
 // getting a Daily event of their own -- e.g. a decline that happens before
 // the callee has joined the room at all has no Daily-side signal.
 function handleActiveCallPoll(activeCall, convoId) {
+  // A call already live in this thread (someone else's) lights the video
+  // button bright green -- tapping it joins that call instead of dialing.
+  const live = !currentCall && convoId === activeConvoId && activeCall && (activeCall.status === 'active' || activeCall.status === 'ringing');
+  document.getElementById('startCallBtn')?.classList.toggle('call-live', !!live);
+  document.getElementById('startCallBtn')?.setAttribute('title', live ? 'Join the live call' : 'Video call');
   if (!currentCall || currentCallConvoId !== convoId) return;
   if (!activeCall || activeCall.id !== currentCall.id || activeCall.status === 'ended' || activeCall.status === 'declined') {
     closeCallScreen();

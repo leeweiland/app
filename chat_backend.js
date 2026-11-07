@@ -352,6 +352,7 @@ export function getConfig() {
   if (cfg.welcomeMessageEnabled === undefined) cfg.welcomeMessageEnabled = true;
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
   if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
+  if (cfg.callSummaryMinMinutes === undefined) cfg.callSummaryMinMinutes = 2;
   if (!cfg.callSummaryPrompt) cfg.callSummaryPrompt = DEFAULT_CALL_SUMMARY_PROMPT;
   if (cfg.dailyCheckinEnabled === undefined) cfg.dailyCheckinEnabled = true;
   if (!cfg.dailyCheckinPrompt) cfg.dailyCheckinPrompt = DEFAULT_DAILY_CHECKIN_PROMPT;
@@ -3260,7 +3261,11 @@ function createCallMessage(call) {
     createdAt: call.endedAt,
   };
   MessagesDB.insertMessage(msg);
-  notifyParticipants(call.conversationId, null, {
+  // Only the people actually called hear about it -- in a student's group
+  // that's the student, not every coach in it (same rule as ringCallees).
+  const convo = readJson(CONVOS_FILE, []).find(c => c.id === call.conversationId);
+  const notifyIds = new Set((convo?.autoGroupType === "student" ? [convo.autoGroupUserId] : call.participantIds).filter(id => id !== call.initiatorId));
+  sendPushToTargets(readJson(PUSH_FILE, []).filter(t => notifyIds.has(t.userId)), {
     title: "Video call", body: outcome === "missed" ? "Missed video call" : "Video call ended", conversationId: call.conversationId,
   }).catch(() => {});
 }
@@ -3405,11 +3410,18 @@ async function archiveCallRecording(call) {
         driveFileName: `${namePart} ${dateStr}`,
         createdAt: new Date(now).toISOString(),
       });
-      notifyParticipants(call.conversationId, null, {
+      // "Your session recording is ready" is for the student, not every coach in the group.
+      const recConvo = readJson(CONVOS_FILE, []).find(c => c.id === call.conversationId);
+      const recIds = new Set(recConvo?.autoGroupType === "student" ? [recConvo.autoGroupUserId] : call.participantIds);
+      sendPushToTargets(readJson(PUSH_FILE, []).filter(t => recIds.has(t.userId)), {
         title: "Video call recording", body: "Your session recording is ready", conversationId: call.conversationId,
       }).catch(() => {});
 
-      if (cfg.callSummaryEnabled) {
+      // Short calls (a quick check-in, a dropped connection) get no AI recap --
+      // admin-set minimum, 2 minutes by default.
+      const callSecs = call.startedAt && call.endedAt ? (new Date(call.endedAt) - new Date(call.startedAt)) / 1000 : 0;
+      const longEnough = callSecs >= (Number(cfg.callSummaryMinMinutes) || 0) * 60;
+      if (cfg.callSummaryEnabled && longEnough) {
         const summary = await summarizeCallRecording(tempPath, cfg.callSummaryPrompt);
         if (summary) {
           MessagesDB.insertMessage({
@@ -4200,7 +4212,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (req.method === "POST") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, dailyCheckinQuietValue, dailyCheckinQuietUnit, dailyCheckinRule, appointments, movesPublicDefault } = await readJsonBody(req);
+        const { profilePhotosFolderId, chatImagesFolderId, chatVideosFolderId, trainingProtocolFolderId, trainingProtocolVideoLibraryFolderId, powerbaticsVideosFolderId, favoritesFolderId, intakeFormsFolderId, clientNotesFolderId, callRecordingsFolderId, bodyScanPhotosFolderId, nutritionPhotosFolderId, gymTrainingChannelId, gymTrainingFolderId, gymLevelTestChannelId, gymLevelTestFolderId, onlineLevelTestChannelId, physiqueMontageFolderId, gifApiKey, welcomeMessageEnabled, welcomeMessageText, callSummaryEnabled, callSummaryPrompt, dailyCheckinEnabled, dailyCheckinPrompt, dailyCheckinTime, dailyCheckinTimezone, dailyCheckinFrequencyValue, dailyCheckinFrequencyUnit, dailyCheckinSenderId, dailyCheckinQuietValue, dailyCheckinQuietUnit, dailyCheckinRule, appointments, movesPublicDefault, callSummaryMinMinutes } = await readJsonBody(req);
         const cfg = getConfig();
         if (profilePhotosFolderId !== undefined) cfg.profilePhotosFolderId = profilePhotosFolderId;
         if (chatImagesFolderId !== undefined) cfg.chatImagesFolderId = chatImagesFolderId;
@@ -4225,6 +4237,7 @@ export async function handleChatRequest(req, res, url) {
         if (welcomeMessageText !== undefined) cfg.welcomeMessageText = welcomeMessageText;
         if (callSummaryEnabled !== undefined) cfg.callSummaryEnabled = !!callSummaryEnabled;
         if (movesPublicDefault !== undefined) cfg.movesPublicDefault = !!movesPublicDefault;
+        if (callSummaryMinMinutes !== undefined && Number.isFinite(Number(callSummaryMinMinutes))) cfg.callSummaryMinMinutes = Math.max(0, Number(callSummaryMinMinutes));
         if (callSummaryPrompt !== undefined) cfg.callSummaryPrompt = callSummaryPrompt;
         if (dailyCheckinEnabled !== undefined) cfg.dailyCheckinEnabled = !!dailyCheckinEnabled;
         if (dailyCheckinPrompt !== undefined) cfg.dailyCheckinPrompt = dailyCheckinPrompt;
@@ -5132,12 +5145,17 @@ export async function handleChatRequest(req, res, url) {
           },
         };
         const { refused, args } = await analyzeTextWithOpenAI({
-          systemPrompt: "You label gym training-app video filenames with just the movement/exercise name they show, for a coach building a client's training protocol. Filenames are often formatted like 'FIRSTNAME LASTNAME LOCATION ELEMENT KATA LEVEL N APPARATUS MOVE' -- strip all of that down to only the move/exercise itself.",
+          systemPrompt: "You label gym training-app video filenames with just the movement/exercise name they show, for a coach building a client's training protocol. Filenames are often formatted like 'FIRSTNAME LASTNAME LOCATION ELEMENT KATA LEVEL N APPARATUS MOVE' -- strip all of that down to only the move/exercise itself. Use ONLY words that appear in the filename, in the filename's wording: never add, rename, translate or guess words.",
           userPrompt: `Filename: ${filename}`,
           tool,
         });
         if (refused || !args?.moveName) return sendJson(res, 200, { moveLabel: null });
-        return sendJson(res, 200, { moveLabel: String(args.moveName).slice(0, 60) });
+        // Keep only words that are really in the filename -- a made-up move
+        // name is worse than the plain filename fallback.
+        const fileWords = new Set(String(filename).toLowerCase().replace(/\.[a-z0-9]{2,4}$/i, "").split(/[^a-z0-9]+/).filter(Boolean));
+        const kept = String(args.moveName).split(/\s+/).filter(w => fileWords.has(w.toLowerCase().replace(/[^a-z0-9]/g, "")));
+        if (!kept.length) return sendJson(res, 200, { moveLabel: null });
+        return sendJson(res, 200, { moveLabel: kept.join(" ").slice(0, 60) });
       } catch (e) {
         // Best-effort labeling -- a failure here should never block saving
         // the video step itself, just leaves it on the filename fallback.
@@ -5990,6 +6008,13 @@ export async function handleChatRequest(req, res, url) {
         try {
           const existing = findOpenCall(convoId);
           if (existing) {
+            // Joining a call that's already live (a coach tapping the green
+            // video button) -- count them as on the call.
+            if (existing.status === "active" && !existing.joinedIds.includes(user.id)) {
+              const all = readJson(CALLS_FILE, []);
+              const c = all.find(x => x.id === existing.id);
+              if (c) { c.joinedIds.push(user.id); writeJson(CALLS_FILE, all); }
+            }
             const token = await createDailyMeetingToken(existing.dailyRoomName, user.id, `${user.first} ${user.last}`, user.id === existing.initiatorId);
             return sendJson(res, 200, { call: publicCall(existing), token });
           }
