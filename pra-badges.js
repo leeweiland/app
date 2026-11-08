@@ -114,8 +114,12 @@
     // A real account missing from the data is one whose badges this viewer
     // isn't allowed to see (staff, or the owner) -- show nothing at all.
     if (userId && !(userId in (data.users || {}))) { el.innerHTML = ''; el.classList.remove('prab-row'); return; }
-    const b = (data.users || {})[userId] || {};
-    el.innerHTML = CATS.map(cat => {
+    el.innerHTML = rowHtml((data.users || {})[userId] || {});
+  }
+  // The badge icons for one person's { cat: { n, rank } } data -- also used
+  // directly by the signed-out public Levels board (levels-public.html).
+  function rowHtml(b) {
+    return CATS.map(cat => {
       const c = b[cat] || { n: 0, rank: null };
       const color = cat === 'hearts' ? BLUE : (RANK_COLORS[c.rank] || BLUE);
       return `<div class="prab" aria-label="${ARIA[cat]}: ${c.n}" style="color:${color}"><div class="prab-icon">${ICONS[cat]}</div><div class="prab-num">${fmt(c.n)}</div></div>`;
@@ -331,5 +335,5 @@
     }
   }
 
-  window.PRABadges = { mount, mountMoves, openProfile };
+  window.PRABadges = { mount, mountMoves, openProfile, rowHtml };
 })();

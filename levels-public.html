@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Levels — Pacific Rim Athletics</title>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="/chat-app/pra-badges.js"></script>
 <style>
   /* Public, signed-out copy of levels.html for embedding on the website
      (pacificrimathletics.com/levels). Read-only: no edit, no profile panel,
@@ -57,6 +58,12 @@
           <option value="POWERMOVES">Highest Powermoves</option>
           <option value="FREERUN">Highest Freerun</option>
           <option value="CIRQUE">Highest Cirque</option>
+          <option value="badge:fuel">Most Fuel Days</option>
+          <option value="badge:photos">Most Physique Photos</option>
+          <option value="badge:moves">Most Moves</option>
+          <option value="badge:katas">Most Katas</option>
+          <option value="badge:steps">Most Steps</option>
+          <option value="badge:hearts">Most Hearts</option>
           <option value="first">Alphabetical</option>
         </select>
       </div>
@@ -96,8 +103,9 @@ function cardHtml(p) {
     <div class="person-head">
       <div class="avatar">${avatar}</div>
       <div class="person-meta">
-        <div class="person-name">${escapeHtml(p.first)} ${escapeHtml(p.last || '')}</div>
+        <div class="person-name">${escapeHtml(p.first)}${p.last ? ' ' + escapeHtml(p.last) + '.' : ''}</div>
         <div class="person-sub">${escapeHtml(p.program || '')}</div>
+        ${p.badges ? `<div class="prab-row prab-inline" style="margin-top:6px">${PRABadges.rowHtml(p.badges)}</div>` : ''}
       </div>
       <div class="super-level-badge">Super Level <span class="num">${superLevel(p)}</span></div>
     </div>
@@ -114,6 +122,11 @@ function render() {
   if (sort === 'first') list = [...list].sort((a, b) => a.first.localeCompare(b.first));
   else if (sort === 'highestLevel') list = [...list].sort((a, b) => highestSingle(b) - highestSingle(a) || bySuper(a, b));
   else if (NUMERIC_CATS.includes(sort)) list = [...list].sort((a, b) => effectiveLevel(b, sort) - effectiveLevel(a, sort) || bySuper(a, b));
+  else if (sort.startsWith('badge:')) {
+    // This month's badge counts (they reset on the 1st, same as the app).
+    const cat = sort.slice(6), n = p => p.badges?.[cat]?.n || 0;
+    list = [...list].sort((a, b) => n(b) - n(a) || bySuper(a, b));
+  }
   else list = [...list].sort(bySuper);
   document.getElementById('emptyHint').style.display = list.length ? 'none' : 'block';
   shownList = list; shown = 0;

@@ -1942,10 +1942,21 @@ let publicLevelsCache = null;
 async function getPublicLevels() {
   if (publicLevelsCache && Date.now() - publicLevelsCache.at < 10 * 60 * 1000) return publicLevelsCache;
   const enriched = await enrichLevelsPeople(await fetchAllLevels());
-  const people = enriched.map(p => ({
-    first: p.first, last: p.last, program: p.program, levels: p.levels || {}, team: !!p.team,
-    photo: p.profilePictureFileId || null,
-  }));
+  // Badges as a signed-out visitor sees them: same rule as a student viewer
+  // (canSeeBadges), so coaches/admins and Lee show none. People with no app
+  // account get zeros, like in the app.
+  const idByName = new Map(readJson(USERS_FILE, []).filter(u => !u.archived).map(u => [nameKey(u.first, u.last), u.id]));
+  const ranked = rankBadgesFor({ id: "public", role: "online" }, computeBadges()).users;
+  const people = enriched.map(p => {
+    const uid = idByName.get(nameKey(p.first, p.last));
+    return {
+      // Last initial only on the public website.
+      first: p.first, last: (p.last || "").trim().charAt(0).toUpperCase(),
+      program: p.program, levels: p.levels || {}, team: !!p.team,
+      photo: p.profilePictureFileId || null,
+      badges: uid ? (ranked[uid] || null) : {},
+    };
+  });
   publicLevelsCache = { at: Date.now(), people, photoIds: new Set(people.map(p => p.photo).filter(Boolean)) };
   return publicLevelsCache;
 }
