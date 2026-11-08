@@ -1951,7 +1951,7 @@ async function getPublicLevels() {
     const uid = idByName.get(nameKey(p.first, p.last));
     return {
       // Last initial only on the public website.
-      first: p.first, last: (p.last || "").trim().charAt(0).toUpperCase(),
+      first: (p.first || "").trim(), last: (p.last || "").trim().charAt(0).toUpperCase(),
       program: p.program, levels: p.levels || {}, team: !!p.team,
       photo: p.profilePictureFileId || null,
       badges: uid ? (ranked[uid] || null) : {},
