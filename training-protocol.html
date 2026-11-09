@@ -1328,9 +1328,9 @@ async function setProtocolMode(mode, builder) {
   const nameEl = document.getElementById('clientName');
   nameEl.textContent = programOpen ? editingProgram.studentName : clientLabel;
   nameEl.style.pointerEvents = programOpen ? 'none' : '';
-  // A student who isn't in the app has no chat to go back to.
-  const backBtn = document.getElementById('backBtn');
-  if (backBtn.dataset.ready) backBtn.style.display = programOpen ? 'none' : '';
+  // A student who isn't in the app has no chat of their own -- Back To Chat
+  // stays (keeps the name centered) and goes back to this page's own chat.
+  document.getElementById('backBtn').title = programOpen ? `${editingProgram.studentName} isn't in the app yet, so this goes back to ${ownPage ? 'your chat' : clientLabel + "'s chat"}` : '';
   if (programOpen !== !!nameEl.dataset.program) {
     // Not in the app yet -> their badges are all zeros; back to the page owner's on leaving.
     PRABadges.mount(document.getElementById('clientBadges'), programOpen ? null : targetUserId);
