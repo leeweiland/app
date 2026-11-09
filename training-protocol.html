@@ -81,6 +81,18 @@
   .back-to-chat-btn { flex-shrink: 0; padding: 5px 14px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-size: .8rem; cursor: pointer; transition: color .15s, border-color .15s; }
   @media (hover: hover) { .back-to-chat-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); } }
   .view-mode-toggle { display: flex; gap: 6px; }
+  /* Phones: the view menu gets its own full-width row that scrolls sideways
+     (swipe, or drag with a mouse), and every icon sits in one row under it. */
+  @media (max-width: 760px) {
+    .protocol-head-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 10px; }
+    .protocol-head-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
+    .view-mode-toggle::-webkit-scrollbar { display: none; }
+    .view-mode-toggle .view-mode-btn { flex-shrink: 0; white-space: nowrap; padding: 4px 10px; font-size: .68rem; }
+    .protocol-head-row > .view-mode-toggle { gap: 4px; }
+    .protocol-head-controls-left { grid-area: left; gap: 6px; }
+    .protocol-head-row > .protocol-head-controls-right { grid-area: right; justify-self: stretch; justify-content: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    .protocol-head-controls-right::-webkit-scrollbar { display: none; }
+  }
   .view-mode-btn { padding: 5px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-family: var(--font-primary); font-weight: 700; font-size: .78rem; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
   .view-mode-btn.active { color: var(--pra-blue); border-color: var(--pra-blue); background: var(--pra-blue-dim); }
   @media (hover: hover) { .view-mode-btn:not(.active):hover { color: #fff; border-color: var(--pra-dim); } }
@@ -750,6 +762,9 @@ async function init() {
   titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') titleInput.blur(); });
   await loadSteps();
   if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
+  // On a phone the menu scrolls -- start with the current view in sight.
+  { const el = document.getElementById('viewModeToggle'), act = el.querySelector('.view-mode-btn.active');
+    if (act && el.scrollWidth > el.clientWidth) { const e = el.getBoundingClientRect(), r = act.getBoundingClientRect(); el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2; } }
   wireModals();
   await setupBackToChatLink();
 }
@@ -1278,7 +1293,19 @@ async function setProtocolMode(mode, builder) {
     applyViewModeDisplay();
   }
 }
+// Drag the view menu sideways with a mouse when it overflows (phones/narrow
+// windows). A drag never counts as a click on the button it started on.
+function setupMenuDragScroll(el) {
+  let down = false, startX = 0, startLeft = 0, moved = false;
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' || el.scrollWidth <= el.clientWidth) return; down = true; moved = false; startX = e.clientX; startLeft = el.scrollLeft; });
+  el.addEventListener('pointermove', e => { if (!down) return; const dx = e.clientX - startX; if (!moved && Math.abs(dx) > 5) moved = true; if (moved) el.scrollLeft = startLeft - dx; });
+  const end = () => { down = false; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointerleave', end);
+  el.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+}
 function setupViewModeToggle() {
+  setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'true');
   });
