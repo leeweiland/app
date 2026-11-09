@@ -95,7 +95,7 @@ workflows:
               config.build_settings['CURRENT_PROJECT_VERSION'] = '$BUILD_NUMBER'
               # The App Store version these builds ship as. 1.0 is already
               # approved/closed, so bump this for each new App Store release.
-              config.build_settings['MARKETING_VERSION'] = '1.1'
+              config.build_settings['MARKETING_VERSION'] = '1.2'
             end
             project.save
           "
