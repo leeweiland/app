@@ -2173,12 +2173,14 @@ async function renderStudentProtocolList(filterOnly) {
       </div>
       ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
+      ${SP_DELETE_BTN}
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
     const t = rows.find(x => x.id === row.dataset.id);
     row.querySelector('.sp-edit').onclick = () => editStudentProtocol(t);
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t);
+    row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderStudentProtocolList());
   });
 }
 
@@ -2196,6 +2198,19 @@ async function editStudentProtocol(t) {
 }
 
 const SP_EDIT_BTN = '<button class="sp-edit" style="flex-shrink:0;min-width:66px;padding:7px 12px;border-radius:999px;border:1.5px solid #fff;background:rgba(255,255,255,0.08);color:#fff;font-weight:800;font-size:.74rem;letter-spacing:.04em;cursor:pointer">EDIT</button>';
+const SP_DELETE_BTN = '<button class="template-delete-btn" title="Delete this saved protocol" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>';
+// Deletes a saved protocol (shared or a student's) from its list. Anything
+// already applied to a student keeps its own copy and is untouched.
+async function deleteSavedProtocol(t, refresh) {
+  const label = t.studentName ? `${t.studentName}'s saved program "${t.name}"` : `the saved protocol "${t.name}"`;
+  if (!confirm(`Delete ${label}?\n\nIt's removed from this list for good. Nothing already applied to a student changes.`)) return;
+  const r = await fetch('/api/chat/protocol-templates/' + t.id, { method: 'DELETE' });
+  if (!r.ok) { alert('Could not delete it.'); return; }
+  // It was open for editing -> step out of it.
+  if (editingProgram && editingProgram.id === t.id) { editingProgram = null; await setProtocolMode('flow', false); }
+  if (loadedTemplateId === t.id) loadedTemplateId = null;
+  refresh();
+}
 const SP_APPLY_BTN = '<button class="pra-btn sp-apply" style="flex-shrink:0;min-width:66px;padding:7px 12px;font-size:.74rem">APPLY</button>';
 
 // The Flow Builder is the workbench: a blank draft, a work in progress, or a
@@ -2321,7 +2336,7 @@ async function renderProtocolTemplateList() {
       </div>
       ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
-      <button class="template-delete-btn" title="Delete template">🗑</button>
+      ${SP_DELETE_BTN}
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
@@ -2330,12 +2345,7 @@ async function renderProtocolTemplateList() {
     row.style.cursor = 'default';
     row.querySelector('.sp-edit').onclick = () => openInFlowBuilder(t, 'loadProtocolTemplateModal');
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t, 'loadProtocolTemplateModal');
-    row.querySelector('.template-delete-btn').onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm(`Delete the saved template "${t.name}"? This only removes the template — it won't affect any student's current protocol.`)) return;
-      await fetch('/api/chat/protocol-templates/' + id, { method: 'DELETE' });
-      renderProtocolTemplateList();
-    };
+    row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderProtocolTemplateList());
   });
 }
 
