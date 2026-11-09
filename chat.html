@@ -519,7 +519,7 @@
   .modal-box.bulk-compose-box { max-width: 760px; }
   .bulk-compose-box #bulkComposeText { min-height: 140px; }
   .bulk-compose-box .compose-recipients { max-height: 110px; }
-  .bulk-personalize { position: relative; display: inline-block; margin-top: 8px; }
+  .bulk-personalize { position: relative; display: inline-block; margin-top: 8px; margin-right: 6px; }
   .bulk-personalize > button { font-size: .72rem; padding: 6px 12px; }
   .bulk-personalize-menu { position: absolute; top: 100%; left: 0; margin-top: 4px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; z-index: 5; display: none; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .bulk-personalize-menu.show { display: block; }
@@ -1180,6 +1180,10 @@
             <div class="shortcode-menu-item bulk-token-btn" data-token="%FIRSTNAME%">First Name</div>
             <div class="shortcode-menu-item bulk-token-btn" data-token="%LASTNAME%">Last Name</div>
           </div>
+        </div>
+        <div class="bulk-personalize">
+          <button class="pra-btn pra-btn-ghost" id="bulkLinkBtn" type="button">Link &#9662;</button>
+          <div class="bulk-personalize-menu" id="bulkLinkMenu"></div>
         </div>
         <div class="pra-panel bulk-picker" id="bulkEmojiPanel">
           <div class="emoji-tabs" id="bulkEmojiTabs"></div>
@@ -2647,7 +2651,27 @@ function bulkTargetPerson(t) {
   if (convo.type !== 'group') return convo.participants.find(p => p.id !== me.id) || null;
   return null;
 }
+// Link dropdown: %LINK_X% tokens become a link to that part of the app.
+// The protocol link points at the recipient's OWN protocol (their user id).
+const APP_LINKS = [
+  { token: '%LINK_PROTOCOL%', label: 'Custom Training Protocol', title: 'Your Training Protocol', path: (p) => p ? `/chat-app/training-protocol.html?userId=${p.id}` : null },
+  { token: '%LINK_LEVELS%', label: 'Levels', title: 'Levels', path: () => '/chat-app/levels.html' },
+  { token: '%LINK_BODY%', label: 'Body Mastery Builder', title: 'Body Mastery Builder', path: () => '/chat-app/body-scan.html' },
+  { token: '%LINK_VIDEOS%', label: 'Training Videos', title: 'Training Videos', path: () => '/chat-app/moves-dictionary.html' },
+  { token: '%LINK_QUIZ%', label: 'Training Personality Quiz', title: 'Training Personality Quiz', path: () => '/personality-quiz/index.html' },
+  { token: '%LINK_MAP%', label: 'Strength Ninjas Map', title: 'Strength Ninjas Map', path: () => '/chat-app/users-map.html' },
+  { token: '%LINK_PROFILE%', label: 'Profile', title: 'Your Profile', path: () => '/chat-app/profile.html' },
+  { token: '%LINK_SHOP%', label: 'Shop', title: 'Shop', url: 'https://vimfti-ev.myshopify.com/' },
+  { token: '%LINK_RETREATS%', label: 'Retreats', title: 'Retreats', url: 'https://www.pacificrimathletics.com/retreats' },
+];
 function personalizeBulkText(text, t) {
+  if (/%LINK_[A-Z]+%/i.test(text)) {
+    const person = bulkTargetPerson(t);
+    for (const l of APP_LINKS) {
+      const href = l.url || (l.path(person) ? location.origin + l.path(person) : '');
+      text = text.split(l.token).join(href);
+    }
+  }
   if (!/%(FIRST|LAST)NAME%/i.test(text)) return text;
   const p = bulkTargetPerson(t);
   return text.replace(/%FIRSTNAME%/gi, p?.first || 'there').replace(p?.last ? /%LASTNAME%/gi : / ?%LASTNAME%/gi, p?.last || '');
@@ -2698,11 +2722,14 @@ async function sendBulkMessages() {
 (function setupBulkComposer() {
   const ta = document.getElementById('bulkComposeText');
   const pMenu = document.getElementById('bulkPersonalizeMenu');
-  document.getElementById('bulkPersonalizeBtn').onclick = (e) => { e.stopPropagation(); pMenu.classList.toggle('show'); };
-  document.addEventListener('click', (e) => { if (!e.target.closest('.bulk-personalize')) pMenu.classList.remove('show'); });
+  const lMenu = document.getElementById('bulkLinkMenu');
+  lMenu.innerHTML = APP_LINKS.map(l => `<div class="shortcode-menu-item bulk-token-btn" data-token="${l.token}">${l.label}</div>`).join('');
+  document.getElementById('bulkPersonalizeBtn').onclick = (e) => { e.stopPropagation(); lMenu.classList.remove('show'); pMenu.classList.toggle('show'); };
+  document.getElementById('bulkLinkBtn').onclick = (e) => { e.stopPropagation(); pMenu.classList.remove('show'); lMenu.classList.toggle('show'); };
+  document.addEventListener('click', (e) => { if (!e.target.closest('.bulk-personalize')) { pMenu.classList.remove('show'); lMenu.classList.remove('show'); } });
   document.querySelectorAll('.bulk-token-btn').forEach(b => {
     b.onclick = () => {
-      pMenu.classList.remove('show');
+      pMenu.classList.remove('show'); lMenu.classList.remove('show');
       const at = ta.selectionStart ?? ta.value.length;
       ta.value = ta.value.slice(0, at) + b.dataset.token + ta.value.slice(ta.selectionEnd ?? at);
       ta.focus();
@@ -4493,6 +4520,15 @@ function linkifyMentions(escapedText, convo) {
 // the ESCAPED text — entities like &amp; inside a query string still work
 // correctly as an href value once the browser decodes them, so no separate
 // unescaped pass is needed.
+// Links to a page of this app show its name ("Your Training Protocol")
+// instead of the raw address, and open in place (not a new tab / the phone's
+// browser, where they wouldn't be signed in).
+function appLinkTitle(clean) {
+  let u; try { u = new URL(clean.replace(/&amp;/g, '&')); } catch { return null; }
+  if (u.origin !== location.origin) return null;
+  const hit = APP_LINKS.find(l => l.path && (l.path({ id: 'x' }) || '').split('?')[0] === u.pathname);
+  return hit ? hit.title : null;
+}
 function linkifyUrls(escapedText) {
   return escapedText.replace(/https?:\/\/[^\s<]+/g, (url) => {
     // Trailing punctuation almost always belongs to the sentence, not the
@@ -4500,6 +4536,8 @@ function linkifyUrls(escapedText) {
     const trailing = url.match(/[).,!?;:]+$/)?.[0] || '';
     const clean = trailing ? url.slice(0, -trailing.length) : url;
     if (!clean) return url;
+    const appTitle = appLinkTitle(clean);
+    if (appTitle) return `<a href="${clean}" class="bubble-link">${appTitle}</a>${trailing}`;
     return `<a href="${clean}" target="_blank" rel="noopener noreferrer" class="bubble-link">${clean}</a>${trailing}`;
   });
 }
