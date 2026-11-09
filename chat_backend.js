@@ -3082,7 +3082,9 @@ function buildStudentsOverview(crm, crmError, sheet) {
       || (u ? `${u.first || ""} ${u.last || ""}`.trim() : "");
     return { name, email: c.email, phone: c.phone, crmContactId: c.id, programType: c.programType || null, enrolled: true, appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
   };
-  const crmItems = crm.map(fromCrm);
+  // Students = ENROLLED with an Online or Gym program; enrolled contacts with
+  // no program set aren't counted (Lee: max is online + gym).
+  const crmItems = crm.map(fromCrm).filter(i => i.programType === "online" || i.programType === "gym");
   const appItems = users.map(fromUser);
   const onPhone = appItems.filter(i => i.platforms.length);
   const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
