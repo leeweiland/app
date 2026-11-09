@@ -2044,7 +2044,6 @@ async function renderStudentProtocolList(filterOnly) {
         <div class="template-item-title">${escapeHtml(t.studentName || t.name)}${t.accountId ? ' <span style="color:#009bff;font-weight:600;font-size:.72rem">&middot; in app</span>' : ''}</div>
         <div class="template-item-text">${t.days} day${t.days === 1 ? '' : 's'} &middot; ${t.videos} video${t.videos === 1 ? '' : 's'} &middot; ${escapeHtml(t.pageTitle || '')}</div>
       </div>
-      ${t.sourceUrl ? `<a class="template-delete-btn" href="${escapeHtml(t.sourceUrl)}" target="_blank" rel="noopener" title="Open their old custom page" style="text-decoration:none">&#8599;</a>` : ''}
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
