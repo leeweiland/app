@@ -514,6 +514,15 @@
   .template-text-row { position: relative; }
   .shortcode-btn { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); font-size: .68rem; font-weight: 700; cursor: pointer; z-index: 1; }
   .shortcode-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  /* Bulk "Message Selected": wider on desktop, roomier message box, and a
+     Personalize dropdown that inserts %FIRSTNAME% / %LASTNAME%. */
+  .modal-box.bulk-compose-box { max-width: 760px; }
+  .bulk-compose-box #bulkComposeText { min-height: 140px; }
+  .bulk-compose-box .compose-recipients { max-height: 110px; }
+  .bulk-personalize { position: relative; display: inline-block; margin-top: 8px; }
+  .bulk-personalize > button { font-size: .72rem; padding: 6px 12px; }
+  .bulk-personalize-menu { position: absolute; top: 100%; left: 0; margin-top: 4px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; z-index: 5; display: none; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .bulk-personalize-menu.show { display: block; }
   .shortcode-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 4px; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 8px; padding: 4px; z-index: 2; display: none; min-width: 130px; }
   .shortcode-menu.show { display: block; }
   .shortcode-menu-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: .8rem; }
@@ -1151,7 +1160,7 @@
   <!-- Bulk-message modal — sends into each selected chat/group's OWN thread,
        never one shared new group with everyone selected lumped together. -->
   <div class="modal-backdrop" id="bulkComposeModal">
-    <div class="pra-panel modal-box">
+    <div class="pra-panel modal-box bulk-compose-box">
       <div class="pra-h2" style="margin-bottom:10px">Message Selected</div>
       <div class="compose-recipients" id="bulkComposeRecipients"></div>
       <!-- Same composer as the chat panel: emoji, GIF, attach photos/videos,
@@ -1161,13 +1170,16 @@
         <div class="composer-pill">
           <button class="icon-btn composer-icon" id="bulkEmojiBtn" type="button">😊</button>
           <button class="icon-btn composer-icon" id="bulkGifBtn" type="button">GIF</button>
-          <textarea class="composer-textarea" id="bulkComposeText" rows="3" placeholder="Type a message — each chat/group gets it separately… use %FIRSTNAME% for their first name"></textarea>
+          <textarea class="composer-textarea" id="bulkComposeText" rows="3" placeholder="Type a message — each chat/group gets it separately…"></textarea>
           <button class="icon-btn composer-icon" id="bulkAttachBtn" type="button" title="Attach photos or videos"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <input type="file" id="bulkFileInput" accept="image/*,video/*" multiple style="display:none"/>
         </div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="pra-btn pra-btn-ghost bulk-token-btn" type="button" data-token="%FIRSTNAME%" style="font-size:.7rem;padding:5px 10px">+ First Name</button>
-          <button class="pra-btn pra-btn-ghost bulk-token-btn" type="button" data-token="%LASTNAME%" style="font-size:.7rem;padding:5px 10px">+ Last Name</button>
+        <div class="bulk-personalize">
+          <button class="pra-btn pra-btn-ghost" id="bulkPersonalizeBtn" type="button">Personalize &#9662;</button>
+          <div class="bulk-personalize-menu" id="bulkPersonalizeMenu">
+            <div class="shortcode-menu-item bulk-token-btn" data-token="%FIRSTNAME%">First Name</div>
+            <div class="shortcode-menu-item bulk-token-btn" data-token="%LASTNAME%">Last Name</div>
+          </div>
         </div>
         <div class="pra-panel bulk-picker" id="bulkEmojiPanel">
           <div class="emoji-tabs" id="bulkEmojiTabs"></div>
@@ -2685,8 +2697,12 @@ async function sendBulkMessages() {
 
 (function setupBulkComposer() {
   const ta = document.getElementById('bulkComposeText');
+  const pMenu = document.getElementById('bulkPersonalizeMenu');
+  document.getElementById('bulkPersonalizeBtn').onclick = (e) => { e.stopPropagation(); pMenu.classList.toggle('show'); };
+  document.addEventListener('click', (e) => { if (!e.target.closest('.bulk-personalize')) pMenu.classList.remove('show'); });
   document.querySelectorAll('.bulk-token-btn').forEach(b => {
     b.onclick = () => {
+      pMenu.classList.remove('show');
       const at = ta.selectionStart ?? ta.value.length;
       ta.value = ta.value.slice(0, at) + b.dataset.token + ta.value.slice(ta.selectionEnd ?? at);
       ta.focus();
