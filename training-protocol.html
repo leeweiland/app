@@ -270,7 +270,7 @@
   <div class="wrap">
     <div class="protocol-head">
       <div class="protocol-head-row protocol-name-row">
-        <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
+        <div style="display:flex;align-items:center;gap:8px"><button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button><span id="notInAppNote" class="pra-muted" style="display:none;font-size:.74rem">(student not in app yet)</span></div>
         <div class="client-name" id="clientName">Loading…</div>
         <span></span>
       </div>
@@ -1335,6 +1335,7 @@ async function setProtocolMode(mode, builder) {
   backBtn.style.opacity = programOpen ? '.35' : '';
   backBtn.style.cursor = programOpen ? 'not-allowed' : '';
   backBtn.title = programOpen ? `${editingProgram.studentName} isn't in the app yet, so there's no chat` : '';
+  document.getElementById('notInAppNote').style.display = programOpen ? '' : 'none';
   if (programOpen !== !!nameEl.dataset.program) {
     // Not in the app yet -> their badges are all zeros; back to the page owner's on leaving.
     PRABadges.mount(document.getElementById('clientBadges'), programOpen ? null : targetUserId);
