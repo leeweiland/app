@@ -5813,11 +5813,26 @@ export async function handleChatRequest(req, res, url) {
       const accounts = wantStudent
         ? new Map(readJson(USERS_FILE, []).filter(u => u.role === "online" || u.role === "gym").map(u => [nameKey(`${u.first}${u.last}`), u.id]))
         : new Map();
+      // Whether that account's current protocol is a custom one of their own
+      // (Edit opens it) -- not empty and not one of the shared templates
+      // (e.g. Simple But Brutal), whether linked by id or just by its name.
+      const protocols = wantStudent ? readJson(TRAINING_PROTOCOLS_FILE, {}) : {};
+      const shared = readJson(PROTOCOL_TEMPLATES_FILE, []).filter(t => t.kind !== "student");
+      const sharedIds = new Set(shared.map(t => t.id));
+      const sharedNames = new Set(shared.map(t => t.name.trim().toLowerCase()));
+      const hasCustom = (uid) => {
+        const pr = uid && protocols[uid];
+        if (!pr || !(pr.steps || []).length) return false;
+        if (pr.templateId && sharedIds.has(pr.templateId)) return false;
+        const nm = String(pr.protocolName || "").trim().toLowerCase();
+        return !(nm && sharedNames.has(nm)) && !/simple (but brutal )?powerbatics basics/i.test(nm);
+      };
       const list = templates
         .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length,
           ...(wantStudent ? { studentName: t.studentName || "", pageTitle: t.pageTitle || "", sourceUrl: t.sourceUrl || "",
             days: t.steps.filter(s => s.type === "day").length, videos: t.steps.filter(s => s.type === "video").length,
-            accountId: accounts.get(nameKey(t.studentName)) || null } : {}) }))
+            accountId: accounts.get(nameKey(t.studentName)) || null,
+            accountHasCustom: hasCustom(accounts.get(nameKey(t.studentName))) } : {}) }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return sendJson(res, 200, { templates: list });
     }

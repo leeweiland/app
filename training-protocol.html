@@ -458,10 +458,23 @@
   <div class="modal-backdrop" id="studentProtocolsModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:6px">Student Custom Protocols</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">Built from each student's custom page. Pick one to load it onto this student.</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">Built from each student's custom page. Edit opens that student's own protocol; Apply puts it on the one you have open.</div>
       <input class="pra-input" id="studentProtocolsSearch" placeholder="Search students..." style="margin-bottom:8px"/>
       <div id="studentProtocolsResults" class="modal-scroll-body"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('studentProtocolsModal')">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Apply confirm: spells out exactly which protocol goes onto exactly whom. -->
+  <div class="modal-backdrop" id="applyStudentProtocolModal">
+    <div class="pra-panel modal-box" style="max-width:460px">
+      <div class="pra-h2" style="margin-bottom:14px">Apply Protocol?</div>
+      <div id="applyStudentProtocolText" style="font-size:1rem;line-height:1.5;margin-bottom:10px"></div>
+      <div id="applyStudentProtocolNote" class="pra-muted" style="font-size:.82rem;line-height:1.45;margin-bottom:18px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="pra-btn pra-btn-ghost" style="flex:1" onclick="closeModal('applyStudentProtocolModal')">Cancel</button>
+        <button class="pra-btn" id="applyStudentProtocolConfirm" style="flex:1">Yes, Apply</button>
+      </div>
     </div>
   </div>
 
@@ -2039,28 +2052,50 @@ async function renderStudentProtocolList(filterOnly) {
   const rows = studentProtocols.filter(t => !q || t.name.toLowerCase().includes(q) || (t.pageTitle || '').toLowerCase().includes(q));
   if (!rows.length) { list.innerHTML = `<div class="pra-muted" style="padding:8px;font-size:.82rem">${studentProtocols.length ? 'No match.' : 'No student protocols yet.'}</div>`; return; }
   list.innerHTML = rows.map(t => `
-    <div class="template-item" data-id="${t.id}">
+    <div class="template-item" data-id="${t.id}" style="cursor:default">
       <div class="template-item-body">
         <div class="template-item-title">${escapeHtml(t.studentName || t.name)}${t.accountId ? ' <span style="color:#009bff;font-weight:600;font-size:.72rem">&middot; in app</span>' : ''}</div>
         <div class="template-item-text">${t.days} day${t.days === 1 ? '' : 's'} &middot; ${t.videos} video${t.videos === 1 ? '' : 's'} &middot; ${escapeHtml(t.pageTitle || '')}</div>
       </div>
+      ${t.accountId && t.accountHasCustom ? '<button class="pra-btn pra-btn-ghost sp-edit" style="padding:6px 10px;font-size:.72rem;flex-shrink:0" title="Open this student\'s own protocol">EDIT</button>' : ''}
+      <button class="pra-btn sp-apply" style="padding:6px 10px;font-size:.72rem;flex-shrink:0">APPLY</button>
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
     const t = rows.find(x => x.id === row.dataset.id);
-    row.querySelector('.template-item-body').onclick = () => loadProtocolTemplateOntoPage(t, 'studentProtocolsModal');
+    // Edit: that student's OWN protocol page (their flow), not the coach's Flow Builder.
+    const edit = row.querySelector('.sp-edit');
+    if (edit) edit.onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(t.accountId); };
+    row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t);
   });
+}
+
+// Apply from the Student Custom Protocols list: one clear question naming
+// the protocol and whoever it lands on, then the same load as the folder.
+function confirmApplyStudentProtocol(t) {
+  const who = editingBuilder ? 'the shared Flow Builder draft (not any student)' : (document.getElementById('clientName').textContent || 'this student').trim();
+  document.getElementById('applyStudentProtocolText').innerHTML =
+    `Are you sure you want to apply <strong style="color:#009bff">${escapeHtml(t.name)}</strong> to <strong style="color:#009bff">${escapeHtml(who)}</strong>?`;
+  const current = protocolName ? `"${escapeHtml(protocolName)}"` : (steps.length ? 'their current protocol' : '');
+  document.getElementById('applyStudentProtocolNote').innerHTML = steps.length
+    ? `This replaces ${current} (${steps.length} step${steps.length === 1 ? '' : 's'}). Ctrl+Z undoes it until you leave this page.`
+    : 'There is nothing on this protocol yet.';
+  document.getElementById('applyStudentProtocolConfirm').onclick = async () => {
+    closeModal('applyStudentProtocolModal');
+    await loadProtocolTemplateOntoPage(t, 'studentProtocolsModal', true);
+  };
+  openModal('applyStudentProtocolModal');
 }
 
 // Shared by Load a Template and Student Custom Protocols: puts a saved
 // protocol onto whatever's open (a student's protocol or the Flow Builder).
-async function loadProtocolTemplateOntoPage(t, modalId) {
+async function loadProtocolTemplateOntoPage(t, modalId, confirmed) {
   // In the Flow Builder, picking a template just opens it for editing --
   // edits save straight back into it (see saveSteps). Only an unsaved
   // draft that isn't any template yet would be lost, so only that asks.
   const builderOpen = editingBuilder && (loadedTemplateId || !steps.length);
   const replaceTarget = editingBuilder ? 'the Flow Builder draft' : "this student's current protocol";
-  if (!builderOpen && !confirm(`Replace ${replaceTarget} with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
+  if (!confirmed && !builderOpen && !confirm(`Replace ${replaceTarget} with "${t.name}"? This can't be undone once you leave the page (though Ctrl+Z works until then).`)) return;
   const fr = await fetch('/api/chat/protocol-templates/' + t.id);
   if (!fr.ok) { alert('Could not load that template.'); return; }
   const { template } = await fr.json();
