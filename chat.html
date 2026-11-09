@@ -652,11 +652,15 @@
   .students-count-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.04); color: #fff; font-family: var(--font-secondary); font-size: .8rem; cursor: pointer; }
   .students-count-btn:hover { border-color: var(--pra-blue); }
   .students-count-btn svg { width: 18px; height: 18px; }
-  .students-box { max-width: 640px; }
-  .students-grid { display: grid; grid-template-columns: max-content 1fr auto; row-gap: 7px; }
-  .students-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid var(--pra-border); border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: .88rem; }
-  .students-row .src { color: var(--pra-dim); }
-  .students-checks { grid-column: 1 / -1; font-size: .72rem; margin: 10px 0 0; text-transform: uppercase; letter-spacing: .06em; color: var(--pra-dim); }
+  .modal-box.students-box { max-width: 860px; }
+  /* count | name | (source): the source column starts right after the
+     longest name in its own grid (the Checks rows are a separate grid). */
+  .students-grid { display: grid; grid-template-columns: auto max-content minmax(0, 1fr); row-gap: 7px; }
+  .students-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: 12px; min-width: 0; padding: 11px 12px; border: 1px solid var(--pra-border); border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: .88rem; }
+  .students-row .nm { white-space: normal; }
+  .students-row .src { color: var(--pra-dim); min-width: 0; overflow-wrap: anywhere; }
+  .students-row .n { text-align: right; min-width: 2.2em; }
+  .students-checks { font-size: .72rem; margin: 16px 0 7px; text-transform: uppercase; letter-spacing: .06em; color: var(--pra-dim); }
   .students-row:hover { border-color: var(--pra-blue); }
   .students-row .n { font-family: var(--font-secondary); font-size: 1rem; color: var(--pra-blue); }
   .students-row.extra { opacity: .85; }
@@ -7487,9 +7491,12 @@ function renderStudentsOverview() {
   const extras = new Set(['crm_no_app', 'app_not_enrolled']);
   // Grid with subgrid rows so every "(source)" starts at the same spot,
   // right after the longest name.
-  document.getElementById('studentsBody').innerHTML = '<div class="students-grid">' + (studentsData?.buckets || []).map(b =>
-    `${b.key === 'crm_no_app' ? '<div class="students-checks">Checks</div>' : ''}
-     <button type="button" class="students-row${extras.has(b.key) ? ' extra' : ''}" data-key="${b.key}"><span class="nm">${escapeHtml(b.name)}</span><span class="src">${b.source ? '(' + escapeHtml(b.source) + ')' : ''}</span><span class="n">${b.count}</span></button>`).join('') + '</div>';
+  const rowHtml = (b) => `<button type="button" class="students-row${extras.has(b.key) ? ' extra' : ''}" data-key="${b.key}"><span class="n">${b.count}</span><span class="nm">${escapeHtml(b.name)}</span><span class="src">${b.source ? '(' + escapeHtml(b.source) + ')' : ''}</span></button>`;
+  const buckets = studentsData?.buckets || [];
+  document.getElementById('studentsBody').innerHTML =
+    '<div class="students-grid">' + buckets.filter(b => !extras.has(b.key)).map(rowHtml).join('') + '</div>' +
+    '<div class="students-checks">Checks</div>' +
+    '<div class="students-grid">' + buckets.filter(b => extras.has(b.key)).map(rowHtml).join('') + '</div>';
   document.querySelectorAll('#studentsBody .students-row').forEach(btn => { btn.onclick = () => renderStudentsList(btn.dataset.key); });
 }
 function renderStudentsList(key) {
