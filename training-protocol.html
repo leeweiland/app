@@ -698,6 +698,12 @@ async function init() {
   }
 
   canEdit = me.role === 'coach' || me.role === 'admin' || me.role === 'admin2';
+  // A coach working on someone else's protocol is editing THAT student's
+  // flow/page -- label it so ("Your Flow" only when it really is yours).
+  if (canEdit && client && (client.id || targetUserId) !== me.id) {
+    document.getElementById('flowViewBtn').textContent = 'Student Flow';
+    document.getElementById('pageViewBtn').textContent = 'Student Page';
+  }
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
   if (me.role === 'admin' || me.role === 'admin2') setupVideoFolders();
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
