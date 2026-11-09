@@ -291,10 +291,10 @@
           <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Page</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
+          <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
+          <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Student Page</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
           <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
-          <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Program Flow</button>
-          <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Program Page</button>
           <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
         </div>
         <div class="protocol-head-controls-right">
@@ -566,6 +566,7 @@ let editingBuilder = false;
 // student's saved program (a student not in the app yet), edited in its
 // own workspace so the Flow Builder never holds a student's program.
 let builderMode = 'false';
+let clientLabel = '';
 let editingProgram = null; // {id, name, studentName} while builderMode === 'program'
 const programKey = (id) => '__program__' + id;
 let activeId = targetUserId;
@@ -719,7 +720,8 @@ async function init() {
 
   const uRes = await fetch('/api/chat/users/' + targetUserId);
   const client = uRes.ok ? (await uRes.json()).user : null;
-  document.getElementById('clientName').textContent = client ? `${client.first} ${client.last}` : 'Unknown client';
+  clientLabel = client ? `${client.first} ${client.last}` : 'Unknown client';
+  document.getElementById('clientName').textContent = clientLabel;
   if (client) PRABadges.mount(document.getElementById('clientBadges'), client.id || targetUserId);
   // Name opens their profile panel (the same one used everywhere).
   if (client) {
@@ -1298,7 +1300,20 @@ async function setProtocolMode(mode, builder) {
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode && btn.dataset.builder === key);
   });
-  ['programFlowBtn', 'programPageBtn'].forEach(id => { document.getElementById(id).style.display = (canEdit && editingProgram) ? '' : 'none'; });
+  const programOpen = key === 'program';
+  const ownPage = me && targetUserId === me.id;
+  // Program buttons: while it's open, or on your own page (no other student here to clash with).
+  ['programFlowBtn', 'programPageBtn'].forEach(id => { document.getElementById(id).style.display = (canEdit && editingProgram && (programOpen || ownPage)) ? '' : 'none'; });
+  // On someone else's page, their Student Flow/Page step aside while another student's program is open.
+  ['flowViewBtn', 'pageViewBtn'].forEach(id => { document.getElementById(id).style.display = (programOpen && !ownPage) ? 'none' : ''; });
+  const nameEl = document.getElementById('clientName');
+  nameEl.textContent = programOpen ? editingProgram.studentName : clientLabel;
+  nameEl.style.pointerEvents = programOpen ? 'none' : '';
+  if (programOpen !== !!nameEl.dataset.program) {
+    // Not in the app yet -> their badges are all zeros; back to the page owner's on leaving.
+    PRABadges.mount(document.getElementById('clientBadges'), programOpen ? null : targetUserId);
+    if (programOpen) nameEl.dataset.program = '1'; else delete nameEl.dataset.program;
+  }
   document.getElementById('defaultProtocolRow').style.display = (canEdit && key === 'true') ? 'flex' : 'none';
   const note = document.getElementById('protocolBuilderNote');
   note.textContent = key === 'program'
