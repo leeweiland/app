@@ -653,7 +653,10 @@
   .students-count-btn:hover { border-color: var(--pra-blue); }
   .students-count-btn svg { width: 18px; height: 18px; }
   .students-box { max-width: 640px; }
-  .students-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid var(--pra-border); border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: .88rem; margin-bottom: 7px; }
+  .students-grid { display: grid; grid-template-columns: max-content 1fr auto; row-gap: 7px; }
+  .students-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid var(--pra-border); border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: .88rem; }
+  .students-row .src { color: var(--pra-dim); }
+  .students-checks { grid-column: 1 / -1; font-size: .72rem; margin: 10px 0 0; text-transform: uppercase; letter-spacing: .06em; color: var(--pra-dim); }
   .students-row:hover { border-color: var(--pra-blue); }
   .students-row .n { font-family: var(--font-secondary); font-size: 1rem; color: var(--pra-blue); }
   .students-row.extra { opacity: .85; }
@@ -7470,8 +7473,9 @@ async function loadStudents(fresh) {
   const r = await fetch('/api/chat/students-overview' + (fresh ? '?fresh=1' : ''));
   if (!r.ok) return null;
   studentsData = await r.json();
-  const total = studentsData.buckets.find(b => b.key === 'crm_all');
-  document.getElementById('studentsCountNum').textContent = studentsData.crmError ? '!' : (total ? total.count : '0');
+  // The button shows active app students (installed on iPhone/Android).
+  const total = studentsData.buckets.find(b => b.key === 'app_students');
+  document.getElementById('studentsCountNum').textContent = total ? total.count : '0';
   return studentsData;
 }
 function renderStudentsOverview() {
@@ -7481,9 +7485,11 @@ function renderStudentsOverview() {
   document.getElementById('studentsSearch').style.display = 'none';
   document.getElementById('studentsMsg').textContent = studentsData?.crmError ? 'Could not reach the CRM: ' + studentsData.crmError : '';
   const extras = new Set(['crm_no_app', 'app_not_enrolled']);
-  document.getElementById('studentsBody').innerHTML = (studentsData?.buckets || []).map(b =>
-    `${b.key === 'crm_no_app' ? '<div class="pra-muted" style="font-size:.72rem;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em">Checks</div>' : ''}
-     <button type="button" class="students-row${extras.has(b.key) ? ' extra' : ''}" data-key="${b.key}"><span>${escapeHtml(b.label)}</span><span class="n">${b.count}</span></button>`).join('');
+  // Grid with subgrid rows so every "(source)" starts at the same spot,
+  // right after the longest name.
+  document.getElementById('studentsBody').innerHTML = '<div class="students-grid">' + (studentsData?.buckets || []).map(b =>
+    `${b.key === 'crm_no_app' ? '<div class="students-checks">Checks</div>' : ''}
+     <button type="button" class="students-row${extras.has(b.key) ? ' extra' : ''}" data-key="${b.key}"><span class="nm">${escapeHtml(b.name)}</span><span class="src">${b.source ? '(' + escapeHtml(b.source) + ')' : ''}</span><span class="n">${b.count}</span></button>`).join('') + '</div>';
   document.querySelectorAll('#studentsBody .students-row').forEach(btn => { btn.onclick = () => renderStudentsList(btn.dataset.key); });
 }
 function renderStudentsList(key) {

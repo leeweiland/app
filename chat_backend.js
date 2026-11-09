@@ -3069,19 +3069,22 @@ function buildStudentsOverview(crm, crmError) {
   const appItems = users.map(fromUser);
   const onPhone = appItems.filter(i => i.platforms.length);
   const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
+  // [key, name, source, items] -- the panel lines up the (source) column.
   const buckets = [
-    ["crm_all", "Total students (CRM enrolled)", crmItems],
-    ["crm_online", "Online students (CRM)", crmItems.filter(i => i.programType === "online")],
-    ["crm_gym", "Gym students (CRM)", crmItems.filter(i => i.programType === "gym")],
-    ["app_students", "App students (on iPhone/Android)", onPhone.filter(i => i.role === "online" || i.role === "gym")],
-    ["app_online", "App online students (on iPhone/Android)", onPhone.filter(i => i.role === "online")],
-    ["app_gym", "App gym students (on iPhone/Android)", onPhone.filter(i => i.role === "gym")],
-    ["app_all", "All app students & users", appItems],
-    ["app_users", "All app users", appItems.filter(i => i.role === "user")],
-    // Extra checks: enrolled but no app account, and app students not enrolled.
-    ["crm_no_app", "Enrolled in CRM but not on the app", crmItems.filter(i => !i.appUserId)],
-    ["app_not_enrolled", "App students not enrolled in CRM", appItems.filter(i => (i.role === "online" || i.role === "gym") && !i.enrolled)],
-  ].map(([key, label, items]) => ({ key, label, count: items.length, items: byName(items) }));
+    ["crm_all", "All Students", "CRM", crmItems],
+    ["crm_online", "Online Students", "CRM", crmItems.filter(i => i.programType === "online")],
+    ["crm_gym", "Gym Students", "CRM", crmItems.filter(i => i.programType === "gym")],
+    ["app_students", "App All Students", "iPhone/Android", onPhone.filter(i => i.role === "online" || i.role === "gym")],
+    ["app_online", "App Online Students", "iPhone/Android", onPhone.filter(i => i.role === "online")],
+    ["app_gym", "App Gym Students", "iPhone/Android", onPhone.filter(i => i.role === "gym")],
+    ["app_all", "App All Students & Users", "iPhone/Android", onPhone],
+    ["app_users", "App Users", "iPhone/Android", onPhone.filter(i => i.role === "user")],
+    // App account made but the app was never installed on a phone.
+    ["unaccepted", "Unaccepted Invites", "", appItems.filter(i => !i.platforms.length)],
+    // Checks: enrolled but no app account; app students not ENROLLED in the CRM.
+    ["crm_no_app", "Enrolled in CRM but not on app", "", crmItems.filter(i => !i.appUserId)],
+    ["app_not_enrolled", "App Students not Enrolled Status in CRM", "", appItems.filter(i => (i.role === "online" || i.role === "gym") && !i.enrolled)],
+  ].map(([key, name, source, items]) => ({ key, name, source, label: source ? `${name} (${source})` : name, count: items.length, items: byName(items) }));
   return { buckets, crmError };
 }
 
