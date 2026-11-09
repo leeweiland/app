@@ -1263,7 +1263,7 @@
        thread while it waits). See confirmDialog()/promptDialog() below. -->
   <div class="modal-backdrop" id="genericDialogModal">
     <div class="pra-panel modal-box" style="max-width:360px">
-      <div class="pra-h2" id="genericDialogMessage" style="margin-bottom:14px;font-size:.95rem;font-weight:600"></div>
+      <div class="pra-h2" id="genericDialogMessage" style="margin-bottom:14px;font-size:.95rem;font-weight:600;white-space:pre-line"></div>
       <textarea class="pra-input" id="genericDialogInput" rows="2" style="width:100%;box-sizing:border-box;margin-bottom:14px;display:none;resize:vertical"></textarea>
       <div style="display:flex;gap:10px">
         <button class="pra-btn pra-btn-ghost" id="genericDialogCancelBtn" style="flex:1">Cancel</button>
@@ -7531,14 +7531,27 @@ function renderStudentsList(key) {
   });
 }
 const STUDENT_ACTION_TEXT = {
-  make_user: (n) => `Make ${n} a User? They come out of their coaching group, and their CRM status is set to FINISHED.`,
+  // Mark Finished / Make User: spells out everything that happens.
+  make_user: (n, i) => i?.appUserId
+    ? `Are you sure you want to finish ${n}?
+
+• Demote them to a User in the app
+• Change their CRM status to FINISHED
+• Remove them from their coaching group (coaches keep the history)
+• Lock their Custom Training Protocol
+• Stop student-only features (renewal alerts, student check-ins)`
+    : `Are you sure you want to mark ${n} as finished?
+
+• Change their CRM status to FINISHED
+• They have no app account, so nothing changes in the app`,
   make_online: (n) => `Make ${n} an Online student in the app?`,
   make_gym: (n) => `Make ${n} a Gym student in the app?`,
   blacklist: (n) => `Blacklist ${n}? Their app account is archived (logged out, can't sign in) and their CRM status is set to BLACKLIST, which runs the CRM's blacklist opt-outs.`,
 };
 async function runStudentAction(action, item) {
   if (!item) return;
-  if (!(await confirmDialog(STUDENT_ACTION_TEXT[action](item.name || 'this person'), 'Yes'))) return;
+  const okLabel = action === 'make_user' ? (item.appUserId ? 'Yes, make them a User' : 'Yes, mark finished') : action === 'blacklist' ? 'Yes, blacklist' : 'Yes';
+  if (!(await confirmDialog(STUDENT_ACTION_TEXT[action](item.name || 'this person', item), okLabel))) return;
   const msg = document.getElementById('studentsMsg');
   msg.textContent = 'Working...';
   const r = await fetch('/api/chat/students-overview/action', {
