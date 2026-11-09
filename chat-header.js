@@ -333,7 +333,8 @@ window.PRABack = (function () {
     { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
     { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
     { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
-    { href: 'https://vimfti-ev.myshopify.com/', icon: ICON_SVG.shop, title: 'Shop', external: true },
+    // Shop = the website's /shop page (clothing) inside the app, in app mode.
+    { href: '/chat-app/shop.html', icon: ICON_SVG.shop, title: 'Shop' },
     // Retreats (plane) shows the website's retreats page inside the app, in
     // the site's "app mode" (?app=1 hides the site's own logo, menu, promo
     // bar and footer).
