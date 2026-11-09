@@ -671,9 +671,11 @@
   .student-item .line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; }
   .student-item .tag { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--pra-border); color: var(--pra-dim); }
   .student-item .tag.on { color: #3fb950; border-color: rgba(63,185,80,.5); }
-  .student-item .line button { font-size: .7rem; padding: 5px 10px; }
-  .student-item .line button:first-of-type { margin-left: 6px; }
-  .student-item .line .danger { color: #ff5c5c; border-color: rgba(255,92,92,.5); }
+  /* The action buttons stay together on one line (pushed right), even when
+     the tags before them wrap. */
+  .student-item .acts { display: inline-flex; flex-wrap: nowrap; gap: 5px; margin-left: auto; }
+  .student-item .acts button { font-size: .66rem; padding: 4px 8px; white-space: nowrap; }
+  .student-item .acts .danger { color: #ff5c5c; border-color: rgba(255,92,92,.5); }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
   .modal-backdrop.show { display: flex; }
   /* vh doesn't account for mobile browser/OS chrome (address bar, nav
@@ -7536,7 +7538,7 @@ function renderStudentsList(key) {
     ].join('');
     return `<div class="student-item"><div class="nm">${escapeHtml(i.name || '(no name on file)')}</div>
       <div class="meta">${escapeHtml([i.email, i.phone].filter(Boolean).join(' · '))}</div>
-      <div class="line">${tags}${acts}</div></div>`;
+      <div class="line">${tags}<span class="acts">${acts}</span></div></div>`;
   }).join('') : '<div class="pra-muted" style="font-size:.85rem;padding:8px 0">Nobody here.</div>';
   document.querySelectorAll('#studentsBody [data-act]').forEach(btn => {
     btn.onclick = () => runStudentAction(btn.dataset.act, items[Number(btn.dataset.i)]);
