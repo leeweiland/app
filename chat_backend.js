@@ -1291,8 +1291,8 @@ async function fetchStudentEligibilityUncached() {
   }
   const [blacklistRows, onlineRows, gymRows] = await Promise.all([
     fetchTab(STUDENT_BLACKLIST_TAB, "A1:B"),
-    fetchTab(ONLINE_SHEET_TAB, "A1:E"),
-    fetchTab(GYM_SHEET_TAB, "A1:E"),
+    fetchTab(ONLINE_SHEET_TAB, "A1:G"),
+    fetchTab(GYM_SHEET_TAB, "A1:G"),
   ]);
   const blacklisted = new Set(blacklistRows.filter(([first, last]) => first || last).map(([first, last]) => nameKey(first, last)));
   function toEligibleSet(rows) {
@@ -1319,7 +1319,20 @@ async function fetchStudentEligibilityUncached() {
     });
     return ends;
   }
-  studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows), endDates: { online: toEndDateMap(onlineRows), gym: toEndDateMap(gymRows) } };
+  // Name by email / phone -- for CRM contacts saved without a name (the
+  // Students panel). Online tab: F Phone, G Email; Gym tab: F Email, G Phone.
+  const namesByEmail = new Map(), namesByPhone = new Map();
+  const addNames = (rows, emailIdx, phoneIdx) => rows.forEach(r => {
+    const name = `${r[0] || ""} ${r[1] || ""}`.trim();
+    if (!name) return;
+    const em = String(r[emailIdx] || "").trim().toLowerCase();
+    const ph = String(r[phoneIdx] || "").replace(/\D/g, "").slice(-10);
+    if (em) namesByEmail.set(em, name);
+    if (ph.length === 10) namesByPhone.set(ph, name);
+  });
+  addNames(onlineRows, 6, 5);
+  addNames(gymRows, 5, 6);
+  studentEligibilityCache = { at: Date.now(), online: toEligibleSet(onlineRows), gym: toEligibleSet(gymRows), endDates: { online: toEndDateMap(onlineRows), gym: toEndDateMap(gymRows) }, namesByEmail, namesByPhone };
   return studentEligibilityCache;
 }
 // Pre-warms the above cache at boot (every deploy restarts the process,
@@ -3049,7 +3062,7 @@ async function crmFindContactId(email, phone) {
 }
 // Buckets for the Students panel. "On iPhone/Android" = the app is installed
 // on their phone (an iPhone/Android push registration exists).
-function buildStudentsOverview(crm, crmError) {
+function buildStudentsOverview(crm, crmError, sheet) {
   const users = readJson(USERS_FILE, []).filter(u => !u.archived && ["user", "online", "gym"].includes(u.role));
   const platforms = new Map();
   for (const s of readJson(PUSH_FILE, [])) if (s.nativeToken?.platform) { const set = platforms.get(s.userId) || new Set(); set.add(s.nativeToken.platform); platforms.set(s.userId, set); }
@@ -3063,7 +3076,11 @@ function buildStudentsOverview(crm, crmError) {
   };
   const fromCrm = (c) => {
     const u = userByEmail.get(c.email.toLowerCase()) || (last10(c.phone) && userByPhone.get(last10(c.phone))) || null;
-    return { name: `${c.first} ${c.last}`.trim(), email: c.email, phone: c.phone, crmContactId: c.id, programType: c.programType || null, enrolled: true, appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
+    // CRM name, else the kickoff/buyers sheet's, else their app account's.
+    const name = `${c.first} ${c.last}`.trim()
+      || sheet?.namesByEmail?.get(c.email.toLowerCase()) || (last10(c.phone) && sheet?.namesByPhone?.get(last10(c.phone)))
+      || (u ? `${u.first || ""} ${u.last || ""}`.trim() : "");
+    return { name, email: c.email, phone: c.phone, crmContactId: c.id, programType: c.programType || null, enrolled: true, appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
   };
   const crmItems = crm.map(fromCrm);
   const appItems = users.map(fromUser);
@@ -3973,7 +3990,8 @@ export async function handleChatRequest(req, res, url) {
     if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
     let crm = [], crmError = null;
     try { crm = await crmEnrolledContacts(url.searchParams.get("fresh") === "1"); } catch (e) { crmError = e.message; }
-    return sendJson(res, 200, buildStudentsOverview(crm, crmError));
+    const sheet = await fetchStudentEligibility().catch(() => null);
+    return sendJson(res, 200, buildStudentsOverview(crm, crmError, sheet));
   }
   if (p === "/api/chat/students-overview/action" && req.method === "POST") {
     const me = getSessionUser(req);

@@ -7514,7 +7514,7 @@ function renderStudentsList(key) {
       i.appUserId && i.role !== 'gym' ? `<button class="pra-btn pra-btn-ghost" data-act="make_gym" data-i="${idx}">Make Gym</button>` : '',
       `<button class="pra-btn pra-btn-ghost danger" data-act="blacklist" data-i="${idx}">Blacklist</button>`,
     ].join('');
-    return `<div class="student-item"><div class="nm">${escapeHtml(i.name || '(no name)')}</div>
+    return `<div class="student-item"><div class="nm">${escapeHtml(i.name || '(no name on file)')}</div>
       <div class="meta">${escapeHtml([i.email, i.phone].filter(Boolean).join(' · '))}</div>
       <div class="tags">${tags}</div><div class="acts">${acts}</div></div>`;
   }).join('') : '<div class="pra-muted" style="font-size:.85rem;padding:8px 0">Nobody here.</div>';
@@ -7557,6 +7557,8 @@ function setupStudentsPanel() {
     if (!studentsData) { document.getElementById('studentsBody').innerHTML = '<div class="pra-muted" style="font-size:.85rem">Loading...</div>'; await loadStudents(false); }
     renderStudentsOverview();
   };
+  // Tap outside the panel to close it.
+  document.getElementById('studentsModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal('studentsModal'); });
   document.getElementById('studentsBackBtn').onclick = () => { document.getElementById('studentsSearch').value = ''; renderStudentsOverview(); };
   document.getElementById('studentsSearch').oninput = () => { if (studentsBucket) renderStudentsList(studentsBucket); };
   document.getElementById('studentsRefreshBtn').onclick = async () => {
