@@ -2057,17 +2057,30 @@ async function renderStudentProtocolList(filterOnly) {
         <div class="template-item-title">${escapeHtml(t.studentName || t.name)}${t.accountId ? ' <span style="color:#009bff;font-weight:600;font-size:.72rem">&middot; in app</span>' : ''}</div>
         <div class="template-item-text">${t.days} day${t.days === 1 ? '' : 's'} &middot; ${t.videos} video${t.videos === 1 ? '' : 's'} &middot; ${escapeHtml(t.pageTitle || '')}</div>
       </div>
-      ${t.accountId && t.accountHasCustom ? '<button class="pra-btn pra-btn-ghost sp-edit" style="padding:6px 10px;font-size:.72rem;flex-shrink:0" title="Open this student\'s own protocol">EDIT</button>' : ''}
-      <button class="pra-btn sp-apply" style="padding:6px 10px;font-size:.72rem;flex-shrink:0">APPLY</button>
+      <button class="sp-edit" title="${t.accountId && t.accountHasCustom ? 'Open this student\'s own protocol' : 'Edit this program in the Flow Builder'}" style="flex-shrink:0;min-width:66px;padding:7px 12px;border-radius:999px;border:1.5px solid #fff;background:rgba(255,255,255,0.08);color:#fff;font-weight:800;font-size:.74rem;letter-spacing:.04em;cursor:pointer">EDIT</button>
+      <button class="pra-btn sp-apply" style="flex-shrink:0;min-width:66px;padding:7px 12px;font-size:.74rem">APPLY</button>
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
     const t = rows.find(x => x.id === row.dataset.id);
-    // Edit: that student's OWN protocol page (their flow), not the coach's Flow Builder.
-    const edit = row.querySelector('.sp-edit');
-    if (edit) edit.onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(t.accountId); };
+    row.querySelector('.sp-edit').onclick = () => editStudentProtocol(t);
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t);
   });
+}
+
+// Edit: a student in the app with their own custom protocol -> that
+// student's OWN protocol page (their flow, not the coach's Flow Builder).
+// Anyone else -> this program itself, opened in the Flow Builder, where
+// edits save straight back into it (see saveSteps).
+async function editStudentProtocol(t) {
+  if (t.accountId && t.accountHasCustom) { location.href = 'training-protocol.html?userId=' + encodeURIComponent(t.accountId); return; }
+  // The Flow Builder draft is what "Auto-apply to every new student" hands
+  // out -- never put one student's program there while that's on.
+  const d = await fetch('/api/chat/training-protocol/default-protocol').then(r => r.json()).catch(() => ({}));
+  if (d.enabled) { alert(`"Auto-apply this draft to every new student" is ON in the Flow Builder, so opening ${t.studentName}'s program there would give it to every new student. Turn that off first, then press Edit again.`); return; }
+  closeModal('studentProtocolsModal');
+  if (!editingBuilder) await setProtocolMode('flow', true);
+  await loadProtocolTemplateOntoPage(t, 'studentProtocolsModal');
 }
 
 // Apply from the Student Custom Protocols list: one clear question naming
