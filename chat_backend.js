@@ -3292,21 +3292,42 @@ function syncDefaultGroups() {
     // a snapshot taken when the toggle was flipped, so editing the draft
     // later changes what the NEXT new student gets without needing the
     // toggle re-flipped.
-    if (cfg.defaultProtocolEnabled) {
-      const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
-      const draft = allProtocols[BUILDER_PROTOCOL_ID];
-      if (draft?.steps?.length) {
-        let changed = false;
-        newlyCreatedGroups.forEach(({ person }) => {
-          const idMap = new Map();
-          draft.steps.forEach(s => idMap.set(s.id, randomUUID()));
-          const clonedSteps = draft.steps.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
-          allProtocols[person.id] = { ...allProtocols[person.id], steps: clonedSteps, protocolName: draft.protocolName || null, updatedAt: new Date().toISOString(), updatedBy: null };
-          changed = true;
-        });
-        if (changed) writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
+    //
+    // A saved student custom program under this person's first + last name
+    // (kind:"student", see /api/chat/protocol-templates?kind=student) wins
+    // over the auto-applied draft, toggle on or off -- someone who already
+    // had a custom program on the old site gets it the moment they join.
+    const allProtocols = readJson(TRAINING_PROTOCOLS_FILE, {});
+    const draft = cfg.defaultProtocolEnabled ? allProtocols[BUILDER_PROTOCOL_ID] : null;
+    const nameKey = s => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+    const savedTemplates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+    const studentPrograms = savedTemplates.filter(t => t.kind === "student" && Array.isArray(t.steps) && t.steps.length);
+    const sharedNames = new Set(savedTemplates.filter(t => t.kind !== "student").map(t => String(t.name || "").trim().toLowerCase()));
+    const cloneSteps = (src) => {
+      const idMap = new Map();
+      src.forEach(s => idMap.set(s.id, randomUUID()));
+      return src.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
+    };
+    let changed = false;
+    newlyCreatedGroups.forEach(({ person }) => {
+      const mine = studentPrograms.find(t => nameKey(t.studentName) === nameKey(`${person.first}${person.last}`));
+      const existing = allProtocols[person.id];
+      if (mine) {
+        // Never over a custom protocol a coach already built for them (e.g.
+        // a user promoted to online gets a new group) -- only empty or the
+        // auto-applied draft.
+        const nm = String(existing?.protocolName || "").trim().toLowerCase();
+        const hasOwn = existing?.steps?.length && !sharedNames.has(nm) && !/simple (but brutal )?powerbatics basics/i.test(nm);
+        if (hasOwn && existing.templateId !== mine.id) return;
+        allProtocols[person.id] = { ...existing, steps: cloneSteps(mine.steps), protocolName: mine.name, templateId: mine.id, updatedAt: new Date().toISOString(), updatedBy: "auto-student-program" };
+        changed = true;
+        console.log(`[protocol] ${person.first} ${person.last}: applied their saved program "${mine.name}"`);
+      } else if (draft?.steps?.length) {
+        allProtocols[person.id] = { ...existing, steps: cloneSteps(draft.steps), protocolName: draft.protocolName || null, updatedAt: new Date().toISOString(), updatedBy: null };
+        changed = true;
       }
-    }
+    });
+    if (changed) writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
   }
 }
 
