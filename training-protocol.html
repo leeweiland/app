@@ -67,9 +67,9 @@
      actual rule copied over too, or the input falls back to the browser's
      default white-box styling (which is exactly what it did before this
      was added). */
-  /* A wrapping box (not a one-line input) so a long title shows in full on a
-     phone instead of scrolling sideways; height follows the text (fitProtocolTitle). */
-  #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; resize: none; overflow: hidden; display: block; line-height: 1.3; }
+  /* One line; the font shrinks until the whole title fits (fitProtocolTitle)
+     instead of scrolling sideways on a phone. */
+  #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; }
   #protocolTitleInput.tile-val-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   #protocolTitleInput.tile-val-input[readonly] { cursor: default; }
   /* .pra-toggle is admin-panel.html's own locally-defined iOS-style
@@ -275,7 +275,7 @@
         <span></span>
       </div>
       <div id="clientBadges" class="prab-inline" style="margin:0 0 8px;justify-content:center"></div>
-      <textarea class="tile-val-input" id="protocolTitleInput" rows="1" placeholder="Name this protocol…" style="display:none;width:100%;text-align:center;font-size:1.1rem;font-weight:600;color:#fff;margin:2px 0 2px"></textarea>
+      <input class="tile-val-input" id="protocolTitleInput" placeholder="Name this protocol…" style="display:none;width:100%;text-align:center;font-size:1.1rem;font-weight:600;color:#fff;margin:2px 0 2px"/>
       <div class="pra-muted" id="protocolBuilderNote" style="display:none;font-size:.78rem;text-align:center;margin:0 0 10px">Editing the shared Flow Builder draft — not tied to any student until you Apply it.</div>
       <label id="defaultProtocolRow" style="display:none;align-items:center;justify-content:center;gap:8px;font-size:.78rem;color:var(--pra-dim);margin:0 0 10px;cursor:pointer">
         <input type="checkbox" class="pra-toggle" id="defaultProtocolToggle"/>
@@ -777,7 +777,7 @@ async function init() {
   const titleInput = document.getElementById('protocolTitleInput');
   titleInput.addEventListener('blur', saveProtocolName);
   titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); } });
-  titleInput.addEventListener('input', () => { titleInput.value = titleInput.value.replace(/\n/g, ' '); fitProtocolTitle(); });
+  titleInput.addEventListener('input', fitProtocolTitle);
   window.addEventListener('resize', fitProtocolTitle);
   await loadSteps();
   if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
@@ -876,8 +876,9 @@ function updateProtocolTitleHint() {
 function fitProtocolTitle() {
   const t = document.getElementById('protocolTitleInput');
   if (!t || t.style.display === 'none') return;
-  t.style.height = 'auto';
-  t.style.height = t.scrollHeight + 'px';
+  let px = 17.6; // 1.1rem
+  t.style.fontSize = px + 'px';
+  while (px > 10 && t.scrollWidth > t.clientWidth + 1) { px -= 0.5; t.style.fontSize = px + 'px'; }
 }
 async function saveProtocolName() {
   if (!canEdit) return;
