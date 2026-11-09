@@ -2072,10 +2072,15 @@ async function loadProtocolTemplateOntoPage(t, modalId) {
   // drifting. A direct save (not saveSteps(), which never sends
   // templateId) is what actually persists the link.
   loadedTemplateId = template.id;
+  // The title comes with it -- otherwise the old title stays on screen over
+  // the new steps (and a later rename would push that wrong name onto the
+  // template just loaded).
+  protocolName = template.name || '';
+  updateProtocolTitleHint();
   render();
   await fetch('/api/chat/training-protocol/' + activeId, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ steps, templateId: template.id }),
+    body: JSON.stringify({ steps, templateId: template.id, name: protocolName }),
   });
   closeModal(modalId);
 }
