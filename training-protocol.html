@@ -304,6 +304,7 @@
           <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
           <button class="icon-btn" id="loadTemplateBtn" title="Saved protocols (edit in the Flow Builder, or apply)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
           <button class="icon-btn" id="studentProtocolsBtn" title="Student custom protocols (built from their old custom pages)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke="#fff" stroke-width="1.6"/><circle cx="9" cy="10" r="2" stroke="#009bff" stroke-width="1.5"/><path d="M5.8 16.5c.5-1.8 1.7-2.8 3.2-2.8s2.7 1 3.2 2.8" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/><path d="M14 9.5h3.5M14 13h3.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn" id="deleteProtocolBtn" title="Delete this protocol" style="display:none;color:#ff5c5c"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         </div>
       </div>
     </div>
@@ -748,6 +749,7 @@ async function init() {
   if (me.role === 'admin' || me.role === 'admin2') setupVideoFolders();
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('resetFlowBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('deleteProtocolBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentProtocolsBtn').style.display = canEdit ? '' : 'none';
@@ -2052,6 +2054,7 @@ function setupProtocolTemplates() {
   };
   document.getElementById('newBlankProtocolBtn').onclick = () => newBlankInFlowBuilder();
   document.getElementById('resetFlowBtn').onclick = () => resetFlow();
+  document.getElementById('deleteProtocolBtn').onclick = () => deleteOpenProtocol();
   document.getElementById('studentProtocolsBtn').onclick = () => {
     document.getElementById('studentProtocolsSearch').value = '';
     openModal('studentProtocolsModal');
@@ -2231,6 +2234,47 @@ async function openInFlowBuilder(t, modalId) {
 // Reset icon: clears whatever flow is open -- the Flow Builder draft, a
 // student's protocol, or your own. Only this record; a saved protocol it was
 // opened from stays as it is.
+// Delete icon (icon strip): removes what's open.
+// - a student's saved program (Student Flow of someone not in the app): deleted from the list
+// - the Flow Builder showing a saved protocol: that saved protocol is deleted and the draft cleared
+// - a student's or your own protocol: removed entirely (any saved protocol it came from stays)
+async function deleteOpenProtocol() {
+  if (builderMode === 'program' && editingProgram) {
+    return deleteSavedProtocol({ id: editingProgram.id, name: editingProgram.name, studentName: editingProgram.studentName }, () => {});
+  }
+  if (builderMode === 'true') {
+    if (!loadedTemplateId) {
+      if (!steps.length) return;
+      if (await flowBuilderAutoApplyOn('clearing it')) return;
+      if (!confirm(`Delete the unsaved Flow Builder draft${protocolName ? ` "${protocolName}"` : ''} (${steps.length} steps)?\nCtrl+Z undoes it until you leave this page.`)) return;
+      return clearOpenRecord();
+    }
+    if (await flowBuilderAutoApplyOn('deleting it')) return;
+    const name = protocolName || 'this saved protocol';
+    if (!confirm(`Delete the saved protocol "${name}" for good?\n\nIt's removed from Saved Protocols and the Flow Builder is cleared. Students who already have it keep their own copy.`)) return;
+    const r = await fetch('/api/chat/protocol-templates/' + loadedTemplateId, { method: 'DELETE' });
+    if (!r.ok && r.status !== 404) { alert('Could not delete it.'); return; }
+    return clearOpenRecord();
+  }
+  if (!steps.length) return;
+  const own = me && targetUserId === me.id;
+  const who = own ? 'your own protocol' : `${(document.getElementById('clientName').textContent || 'this student').trim()}'s protocol`;
+  if (!confirm(`Delete ${who}${protocolName ? ` "${protocolName}"` : ''} (${steps.length} steps)?\n\n${own ? '' : 'They will have no protocol. '}Any saved protocol it came from stays saved.\nCtrl+Z undoes it until you leave this page.`)) return;
+  return clearOpenRecord();
+}
+async function clearOpenRecord() {
+  snapshotBeforeChange();
+  steps = [];
+  loadedTemplateId = null;
+  protocolName = '';
+  updateProtocolTitleHint();
+  render();
+  await fetch('/api/chat/training-protocol/' + activeId, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ steps, templateId: null, name: '' }),
+  });
+}
+
 async function resetFlow() {
   if (!steps.length) return;
   const name = (document.getElementById('clientName').textContent || '').trim();
