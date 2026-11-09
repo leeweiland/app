@@ -5649,9 +5649,22 @@ export async function handleChatRequest(req, res, url) {
     // downloaded up front, just enough to recognize which one they want.
     if (p === "/api/chat/protocol-templates" && req.method === "GET") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
-      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      // ?kind=student lists the per-student custom protocols (built from each
+      // student's old custom.pacificrimathletics.com page, ready to drop onto
+      // that student once they join the app) -- kept out of the regular
+      // template list so it stays a short menu of reusable programs.
+      const wantStudent = url.searchParams.get("kind") === "student";
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []).filter(t => (t.kind === "student") === wantStudent);
+      // Which of those students already have an app account (matched by name).
+      const nameKey = s => String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+      const accounts = wantStudent
+        ? new Map(readJson(USERS_FILE, []).filter(u => u.role === "online" || u.role === "gym").map(u => [nameKey(`${u.first}${u.last}`), u.id]))
+        : new Map();
       const list = templates
-        .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length }))
+        .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length,
+          ...(wantStudent ? { studentName: t.studentName || "", pageTitle: t.pageTitle || "", sourceUrl: t.sourceUrl || "",
+            days: t.steps.filter(s => s.type === "day").length, videos: t.steps.filter(s => s.type === "video").length,
+            accountId: accounts.get(nameKey(t.studentName)) || null } : {}) }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return sendJson(res, 200, { templates: list });
     }
