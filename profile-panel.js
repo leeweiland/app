@@ -223,13 +223,23 @@
     const u = state.user;
     if (!staff || !u.id || !QUICK_ROLES.includes(u.role)) { wrap.innerHTML = ''; return; }
     const label = (r) => r === 'user' ? 'a User' : r === 'online' ? 'Online' : 'Gym';
-    wrap.innerHTML = QUICK_ROLES.filter(r => r !== u.role).map(r => `<button class="pra-btn pra-btn-ghost pp-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">Make ${label(r)}</button>`).join('')
+    // "Mark Finished" (role user) also sets their CRM status to FINISHED --
+    // same action as the Students panel (chat_backend.js students-overview/action).
+    wrap.innerHTML = QUICK_ROLES.filter(r => r !== u.role).map(r => `<button class="pra-btn pra-btn-ghost pp-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + label(r)}</button>`).join('')
       + `<button class="pra-btn pra-btn-ghost pp-archive-btn" style="flex:1;font-size:.78rem${u.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${u.archived ? 'Unarchive' : 'Archive'}</button>`;
     wrap.querySelectorAll('.pp-role-btn').forEach(btn => {
       btn.onclick = async () => {
-        const r = await fetch(`/api/chat/users/${u.id}/role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: btn.dataset.role }) });
-        if (!r.ok) { const d = await r.json().catch(() => ({})); await alertBox(d.error || 'Could not change role.'); return; }
-        u.role = (await r.json()).user.role;
+        if (btn.dataset.role === 'user') {
+          const name = `${u.first || ''} ${u.last || ''}`.trim() || 'them';
+          if (!(await confirmBox(`Are you sure you want to mark ${name} finished?\n\n• Demote them to a User in the app\n• Change their CRM status to FINISHED\n• Remove them from their coaching group (coaches keep the history)\n• Lock their Custom Training Protocol\n• Stop student-only features (renewal alerts, student check-ins)`, 'Yes, mark finished'))) return;
+          const r = await fetch('/api/chat/students-overview/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'make_user', appUserId: u.id, email: u.email, phone: u.phone }) });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); await alertBox(d.error || 'Could not mark finished.'); return; }
+          u.role = 'user';
+        } else {
+          const r = await fetch(`/api/chat/users/${u.id}/role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: btn.dataset.role }) });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); await alertBox(d.error || 'Could not change role.'); return; }
+          u.role = (await r.json()).user.role;
+        }
         root.querySelector('.pp-role').innerHTML = roleBadgeHtml(u);
         renderAccountActions(root, state, staff);
         notifyChanged();

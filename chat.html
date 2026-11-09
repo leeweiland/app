@@ -3418,11 +3418,23 @@ function renderLevelsAccountActions(otherUser) {
   // rely on the backend rejecting a non-staff request.
   if (!isStaffMe() || !LEVELS_QUICK_ROLES.includes(otherUser.role)) { wrap.innerHTML = ''; return; }
   const targets = LEVELS_QUICK_ROLES.filter(r => r !== otherUser.role);
-  wrap.innerHTML = targets.map(r => `<button class="pra-btn pra-btn-ghost levels-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">Make ${levelsRoleLabel(r)}</button>`).join('') + `
+  wrap.innerHTML = targets.map(r => `<button class="pra-btn pra-btn-ghost levels-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + levelsRoleLabel(r)}</button>`).join('') + `
     <button class="pra-btn pra-btn-ghost" id="levelsArchiveToggleBtn" style="flex:1;font-size:.78rem${otherUser.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${otherUser.archived ? 'Unarchive' : 'Archive'}</button>
   `;
   wrap.querySelectorAll('.levels-role-btn').forEach(btn => {
     btn.onclick = async () => {
+      // Mark Finished = same as the Students panel: app User + CRM FINISHED.
+      if (btn.dataset.role === 'user') {
+        const name = `${otherUser.first || ''} ${otherUser.last || ''}`.trim() || 'them';
+        if (!(await confirmDialog(STUDENT_ACTION_TEXT.make_user(name, { appUserId: otherUser.id }), 'Yes, mark finished'))) return;
+        const r = await fetch('/api/chat/students-overview/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'make_user', appUserId: otherUser.id, email: otherUser.email, phone: otherUser.phone }) });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || 'Could not mark finished.'); return; }
+        otherUser.role = 'user';
+        levelsModalUser = otherUser;
+        renderLevelsAccountActions(otherUser);
+        await loadConversations();
+        return;
+      }
       const r = await fetch(`/api/chat/users/${otherUser.id}/role`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: btn.dataset.role })
       });
