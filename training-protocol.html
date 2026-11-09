@@ -67,7 +67,9 @@
      actual rule copied over too, or the input falls back to the browser's
      default white-box styling (which is exactly what it did before this
      was added). */
-  #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; }
+  /* A wrapping box (not a one-line input) so a long title shows in full on a
+     phone instead of scrolling sideways; height follows the text (fitProtocolTitle). */
+  #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; resize: none; overflow: hidden; display: block; line-height: 1.3; }
   #protocolTitleInput.tile-val-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   #protocolTitleInput.tile-val-input[readonly] { cursor: default; }
   /* .pra-toggle is admin-panel.html's own locally-defined iOS-style
@@ -273,7 +275,7 @@
         <span></span>
       </div>
       <div id="clientBadges" class="prab-inline" style="margin:0 0 8px;justify-content:center"></div>
-      <input class="tile-val-input" id="protocolTitleInput" placeholder="Name this protocol…" style="display:none;width:100%;text-align:center;font-size:1.1rem;font-weight:600;color:#fff;margin:2px 0 2px"/>
+      <textarea class="tile-val-input" id="protocolTitleInput" rows="1" placeholder="Name this protocol…" style="display:none;width:100%;text-align:center;font-size:1.1rem;font-weight:600;color:#fff;margin:2px 0 2px"></textarea>
       <div class="pra-muted" id="protocolBuilderNote" style="display:none;font-size:.78rem;text-align:center;margin:0 0 10px">Editing the shared Flow Builder draft — not tied to any student until you Apply it.</div>
       <label id="defaultProtocolRow" style="display:none;align-items:center;justify-content:center;gap:8px;font-size:.78rem;color:var(--pra-dim);margin:0 0 10px;cursor:pointer">
         <input type="checkbox" class="pra-toggle" id="defaultProtocolToggle"/>
@@ -772,7 +774,9 @@ async function init() {
   if (canEdit) setupApplyProtocol();
   const titleInput = document.getElementById('protocolTitleInput');
   titleInput.addEventListener('blur', saveProtocolName);
-  titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') titleInput.blur(); });
+  titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); } });
+  titleInput.addEventListener('input', () => { titleInput.value = titleInput.value.replace(/\n/g, ' '); fitProtocolTitle(); });
+  window.addEventListener('resize', fitProtocolTitle);
   await loadSteps();
   if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
   // On a phone the menu scrolls -- start with the current view in sight.
@@ -864,7 +868,14 @@ function updateProtocolTitleHint() {
   // switching Flow<->Page) happens to re-run this mid-edit.
   if (document.activeElement !== input) input.value = protocolName || '';
   input.style.display = (canEdit || protocolName) ? '' : 'none';
+  fitProtocolTitle();
   document.getElementById('protocolBuilderNote').style.display = editingBuilder ? '' : 'none';
+}
+function fitProtocolTitle() {
+  const t = document.getElementById('protocolTitleInput');
+  if (!t || t.style.display === 'none') return;
+  t.style.height = 'auto';
+  t.style.height = t.scrollHeight + 'px';
 }
 async function saveProtocolName() {
   if (!canEdit) return;
