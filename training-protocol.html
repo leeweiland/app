@@ -269,6 +269,8 @@
           <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
         </div>
         <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
+          <button class="view-mode-btn" id="ownFlowBtn" type="button" style="display:none" title="Your own protocol">Your Flow</button>
+          <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Page</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
@@ -703,6 +705,12 @@ async function init() {
   if (canEdit && client && (client.id || targetUserId) !== me.id) {
     document.getElementById('flowViewBtn').textContent = 'Student Flow';
     document.getElementById('pageViewBtn').textContent = 'Student Page';
+    // Your Flow / Your Page jump to the coach's own protocol.
+    [['ownFlowBtn', 'flow'], ['ownPageBtn', 'page']].forEach(([id, view]) => {
+      const b = document.getElementById(id);
+      b.style.display = '';
+      b.onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&view=' + view; };
+    });
   }
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
   if (me.role === 'admin' || me.role === 'admin2') setupVideoFolders();
@@ -721,7 +729,7 @@ async function init() {
   // "Flow" button's hardcoded `active` class in the HTML above (which this
   // overrides for students) — setViewMode() itself isn't used yet since
   // steps haven't loaded.
-  if (!canEdit) {
+  if (!canEdit || params.get('view') === 'page') {
     viewMode = 'page';
     document.getElementById('flowViewBtn').classList.remove('active');
     document.getElementById('pageViewBtn').classList.add('active');
@@ -1310,7 +1318,7 @@ function render() {
 
   if (!steps.length) {
     emptyHint.style.display = 'block';
-    document.getElementById('viewModeToggle').style.display = 'none';
+    document.getElementById('viewModeToggle').style.display = canEdit ? '' : 'none';
     applyViewModeDisplay();
     return;
   }
