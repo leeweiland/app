@@ -1161,9 +1161,13 @@
         <div class="composer-pill">
           <button class="icon-btn composer-icon" id="bulkEmojiBtn" type="button">😊</button>
           <button class="icon-btn composer-icon" id="bulkGifBtn" type="button">GIF</button>
-          <textarea class="composer-textarea" id="bulkComposeText" rows="3" placeholder="Type a message — each chat/group gets it separately…"></textarea>
+          <textarea class="composer-textarea" id="bulkComposeText" rows="3" placeholder="Type a message — each chat/group gets it separately… use %FIRSTNAME% for their first name"></textarea>
           <button class="icon-btn composer-icon" id="bulkAttachBtn" type="button" title="Attach photos or videos"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           <input type="file" id="bulkFileInput" accept="image/*,video/*" multiple style="display:none"/>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="pra-btn pra-btn-ghost bulk-token-btn" type="button" data-token="%FIRSTNAME%" style="font-size:.7rem;padding:5px 10px">+ First Name</button>
+          <button class="pra-btn pra-btn-ghost bulk-token-btn" type="button" data-token="%LASTNAME%" style="font-size:.7rem;padding:5px 10px">+ Last Name</button>
         </div>
         <div class="pra-panel bulk-picker" id="bulkEmojiPanel">
           <div class="emoji-tabs" id="bulkEmojiTabs"></div>
@@ -2619,6 +2623,24 @@ function bulkUploadFiles(convoId, files, onProgress) {
 // the JSON data files with no locking, so firing these concurrently risks
 // two requests clobbering each other's write. Photos/videos upload ONCE (to
 // the first chat) and are then copied into every other chat.
+// %FIRSTNAME% / %LASTNAME% in a bulk message become each recipient's name:
+// a student's group -> the student, a DM -> the other person, your own
+// notes -> you, other groups -> left blank-safe (the word "there").
+function bulkTargetPerson(t) {
+  if (t.contactId) return contacts.find(c => c.id === t.contactId) || null;
+  const convo = conversations.find(c => c.id === t.convoId);
+  if (!convo) return null;
+  if (convo.autoGroupType === 'self') return me;
+  if (convo.autoGroupType === 'student') return convo.participants.find(p => p.id === convo.autoGroupUserId) || null;
+  if (convo.type !== 'group') return convo.participants.find(p => p.id !== me.id) || null;
+  return null;
+}
+function personalizeBulkText(text, t) {
+  if (!/%(FIRST|LAST)NAME%/i.test(text)) return text;
+  const p = bulkTargetPerson(t);
+  return text.replace(/%FIRSTNAME%/gi, p?.first || 'there').replace(p?.last ? /%LASTNAME%/gi : / ?%LASTNAME%/gi, p?.last || '');
+}
+
 async function sendBulkMessages() {
   const text = document.getElementById('bulkComposeText').value.trim();
   if (!text && !bulkFiles.length && !bulkGifUrl) return;
@@ -2643,7 +2665,7 @@ async function sendBulkMessages() {
       }
       if (!convoId) continue;
       let ok = true;
-      if (text) ok = (await post(convoId, { text })).ok && ok;
+      if (text) ok = (await post(convoId, { text: personalizeBulkText(text, t) })).ok && ok;
       if (bulkGifUrl) ok = (await post(convoId, { gifUrl: bulkGifUrl })).ok && ok;
       if (bulkFiles.length) {
         if (!uploadedIds) {
@@ -2663,6 +2685,15 @@ async function sendBulkMessages() {
 
 (function setupBulkComposer() {
   const ta = document.getElementById('bulkComposeText');
+  document.querySelectorAll('.bulk-token-btn').forEach(b => {
+    b.onclick = () => {
+      const at = ta.selectionStart ?? ta.value.length;
+      ta.value = ta.value.slice(0, at) + b.dataset.token + ta.value.slice(ta.selectionEnd ?? at);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = at + b.dataset.token.length;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+  });
   const emojiPanel = document.getElementById('bulkEmojiPanel');
   const gifPanel = document.getElementById('bulkGifPanel');
   setupEmojiPicker('bulkEmojiTabs', 'bulkEmojiGrid', (emoji) => {
