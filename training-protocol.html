@@ -835,7 +835,23 @@ async function setupBackToChatLink() {
   resolvedConvoId = convoId;
   const backBtn = document.getElementById('backBtn');
   backBtn.style.display = '';
-  backBtn.onclick = () => {
+  backBtn.dataset.ready = '1';
+  backBtn.onclick = async () => {
+    // Staff on a student's protocol: back to THAT student's chat (their own
+    // "<Name> Group", else any thread with them), not whichever thread
+    // chat.html happens to open on. Looked up on click -- the conversations
+    // list is a heavy call, not worth making on every page load.
+    if (!convoId && canEdit && me && targetUserId !== me.id) {
+      backBtn.disabled = true;
+      try {
+        const r = await fetch('/api/chat/conversations');
+        const list = r.ok ? (await r.json()).conversations || [] : [];
+        const withThem = list.filter(c => !c.isChannel && (c.participantIds || []).includes(targetUserId));
+        const own = withThem.find(c => c.type === 'group' && (c.name || '').toLowerCase().startsWith(clientLabel.toLowerCase()));
+        convoId = (own || withThem.find(c => c.type === 'group') || withThem[0])?.id || null;
+      } catch {}
+      backBtn.disabled = false;
+    }
     location.href = convoId ? '/chat-app/chat.html?convo=' + encodeURIComponent(convoId) : '/chat-app/chat.html';
   };
 }
@@ -1310,6 +1326,9 @@ async function setProtocolMode(mode, builder) {
   const nameEl = document.getElementById('clientName');
   nameEl.textContent = programOpen ? editingProgram.studentName : clientLabel;
   nameEl.style.pointerEvents = programOpen ? 'none' : '';
+  // A student who isn't in the app has no chat to go back to.
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn.dataset.ready) backBtn.style.display = programOpen ? 'none' : '';
   if (programOpen !== !!nameEl.dataset.program) {
     // Not in the app yet -> their badges are all zeros; back to the page owner's on leaving.
     PRABadges.mount(document.getElementById('clientBadges'), programOpen ? null : targetUserId);
