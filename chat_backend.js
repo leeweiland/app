@@ -3014,6 +3014,77 @@ function pullFromStaffOnlyChats(userId, users) {
 }
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
+// ── CRM bridge for the Students panel ───────────────────────────────────
+const CRM_BASE_URL = process.env.CRM_BASE_URL || "https://crm-app-production-eb8f.up.railway.app";
+function crmFetch(path, opts = {}) {
+  const key = process.env.PRA_APP_BRIDGE_KEY;
+  if (!key) return Promise.reject(new Error("CRM link not configured (PRA_APP_BRIDGE_KEY)"));
+  return fetch(CRM_BASE_URL + path, { ...opts, headers: { ...(opts.headers || {}), "x-pra-app-key": key, "Content-Type": "application/json" } });
+}
+let crmEnrolledCache = null; // { at, contacts }
+async function crmEnrolledContacts(fresh = false) {
+  if (!fresh && crmEnrolledCache && Date.now() - crmEnrolledCache.at < 2 * 60 * 1000) return crmEnrolledCache.contacts;
+  const all = [];
+  for (let offset = 0; offset < 10000; offset += 200) {
+    const r = await crmFetch(`/api/contacts?status=ENROLLED&limit=200&offset=${offset}`);
+    if (!r.ok) throw new Error(`CRM returned ${r.status}`);
+    const d = await r.json();
+    all.push(...(d.contacts || []));
+    if ((d.contacts || []).length < 200) break;
+  }
+  const contacts = all.map(c => ({ id: c.id, first: c.first || "", last: c.last || "", email: c.email || "", phone: c.phone || "", programType: (c.programType || "").toLowerCase() }));
+  crmEnrolledCache = { at: Date.now(), contacts };
+  return contacts;
+}
+const last10 = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+async function crmFindContactId(email, phone) {
+  for (const q of [email, last10(phone)].filter(Boolean)) {
+    const r = await crmFetch(`/api/contacts?q=${encodeURIComponent(q)}&limit=5`);
+    if (!r.ok) continue;
+    const list = (await r.json()).contacts || [];
+    const hit = list.find(c => (email && (c.email || "").toLowerCase() === String(email).toLowerCase()) || (last10(phone) && last10(c.phone) === last10(phone)));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+// Buckets for the Students panel. "On iPhone/Android" = the app is installed
+// on their phone (an iPhone/Android push registration exists).
+function buildStudentsOverview(crm, crmError) {
+  const users = readJson(USERS_FILE, []).filter(u => !u.archived && ["user", "online", "gym"].includes(u.role));
+  const platforms = new Map();
+  for (const s of readJson(PUSH_FILE, [])) if (s.nativeToken?.platform) { const set = platforms.get(s.userId) || new Set(); set.add(s.nativeToken.platform); platforms.set(s.userId, set); }
+  const userByEmail = new Map(users.map(u => [(u.email || "").toLowerCase(), u]));
+  const userByPhone = new Map(users.filter(u => last10(u.phone)).map(u => [last10(u.phone), u]));
+  const crmByEmail = new Map(crm.filter(c => c.email).map(c => [c.email.toLowerCase(), c]));
+  const crmByPhone = new Map(crm.filter(c => last10(c.phone)).map(c => [last10(c.phone), c]));
+  const fromUser = (u) => {
+    const c = crmByEmail.get((u.email || "").toLowerCase()) || (last10(u.phone) && crmByPhone.get(last10(u.phone))) || null;
+    return { name: `${u.first || ""} ${u.last || ""}`.trim(), email: u.email || "", phone: u.phone || "", appUserId: u.id, role: u.role, platforms: [...(platforms.get(u.id) || [])], crmContactId: c?.id || null, programType: c?.programType || null, enrolled: !!c };
+  };
+  const fromCrm = (c) => {
+    const u = userByEmail.get(c.email.toLowerCase()) || (last10(c.phone) && userByPhone.get(last10(c.phone))) || null;
+    return { name: `${c.first} ${c.last}`.trim(), email: c.email, phone: c.phone, crmContactId: c.id, programType: c.programType || null, enrolled: true, appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
+  };
+  const crmItems = crm.map(fromCrm);
+  const appItems = users.map(fromUser);
+  const onPhone = appItems.filter(i => i.platforms.length);
+  const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
+  const buckets = [
+    ["crm_all", "Total students (CRM enrolled)", crmItems],
+    ["crm_online", "Online students (CRM)", crmItems.filter(i => i.programType === "online")],
+    ["crm_gym", "Gym students (CRM)", crmItems.filter(i => i.programType === "gym")],
+    ["app_students", "App students (on iPhone/Android)", onPhone.filter(i => i.role === "online" || i.role === "gym")],
+    ["app_online", "App online students (on iPhone/Android)", onPhone.filter(i => i.role === "online")],
+    ["app_gym", "App gym students (on iPhone/Android)", onPhone.filter(i => i.role === "gym")],
+    ["app_all", "All app students & users", appItems],
+    ["app_users", "All app users", appItems.filter(i => i.role === "user")],
+    // Extra checks: enrolled but no app account, and app students not enrolled.
+    ["crm_no_app", "Enrolled in CRM but not on the app", crmItems.filter(i => !i.appUserId)],
+    ["app_not_enrolled", "App students not enrolled in CRM", appItems.filter(i => (i.role === "online" || i.role === "gym") && !i.enrolled)],
+  ].map(([key, label, items]) => ({ key, label, count: items.length, items: byName(items) }));
+  return { buckets, crmError };
+}
+
 // Everyone gets their own row in the chat sidebar: a one-person "notes to
 // self" thread (autoGroupType "self"). Created lazily the first time their
 // conversation list loads; a no-op read after that.
@@ -3885,6 +3956,67 @@ export async function handleChatRequest(req, res, url) {
       writeJson(SESSIONS_FILE, sessions);
     }
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
+  }
+
+  // ─── Students panel (coaches/admins) ─────────────────────────────────────
+  // Counts + lists comparing the CRM's ENROLLED contacts with app accounts,
+  // and quick actions that change both sides. The CRM is reached with the
+  // shared PRA_APP_BRIDGE_KEY (crm-app auth_backend.js praAppBridgeUser),
+  // through its own contacts endpoints, so a status change there fires the
+  // same opt-outs / Blacklist sheet / automations as doing it by hand.
+  if (p === "/api/chat/students-overview" && req.method === "GET") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    let crm = [], crmError = null;
+    try { crm = await crmEnrolledContacts(url.searchParams.get("fresh") === "1"); } catch (e) { crmError = e.message; }
+    return sendJson(res, 200, buildStudentsOverview(crm, crmError));
+  }
+  if (p === "/api/chat/students-overview/action" && req.method === "POST") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    const { action, appUserId, crmContactId, email, phone } = await readJsonBody(req);
+    if (!["make_user", "make_online", "make_gym", "blacklist"].includes(action)) return sendJson(res, 400, { error: "Unknown action" });
+    const users = readJson(USERS_FILE, []);
+    const target = appUserId ? users.find(u => u.id === appUserId) : null;
+    if ((action === "make_online" || action === "make_gym") && !target) return sendJson(res, 400, { error: "They don't have an app account yet." });
+    if (target && !["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Only student/user accounts can be changed here." });
+    const done = [];
+    if (target) {
+      if (action === "blacklist") {
+        target.archived = true;
+        writeJson(USERS_FILE, users);
+        const sessions = readJson(SESSIONS_FILE, {});
+        Object.keys(sessions).forEach(token => { if (sessions[token].userId === target.id) delete sessions[token]; });
+        writeJson(SESSIONS_FILE, sessions);
+        syncDefaultGroups();
+        done.push("App account archived");
+      } else {
+        target.role = action === "make_user" ? "user" : action === "make_online" ? "online" : "gym";
+        writeJson(USERS_FILE, users);
+        if (target.role === "user") pullFromStaffOnlyChats(target.id, users);
+        syncDefaultGroups();
+        syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
+        done.push(`App role: ${target.role}`);
+      }
+    }
+    // CRM side: FINISHED for make_user, BLACKLIST for blacklist.
+    if (action === "make_user" || action === "blacklist") {
+      let crmResult;
+      try {
+        const id = crmContactId || await crmFindContactId(email || target?.email, phone || target?.phone);
+        if (!id) crmResult = "No matching CRM contact";
+        else {
+          const status = action === "make_user" ? "FINISHED" : "BLACKLIST";
+          const r = await crmFetch(`/api/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+          crmResult = r.ok ? `CRM status: ${status}` : `CRM update failed (${r.status})`;
+        }
+      } catch (e) { crmResult = `CRM update failed: ${e.message}`; }
+      done.push(crmResult);
+      crmEnrolledCache = null;
+    }
+    return sendJson(res, 200, { ok: true, done });
   }
 
   // ─── Media streaming proxy (Range-aware) ─────────────────────────────────

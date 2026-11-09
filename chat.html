@@ -648,6 +648,24 @@
   .camera-trim-handle-end { right: 0; }
 
   /* ── Modal (contacts / group / search / media) ── */
+  /* Students panel (coaches/admins): count button by "Chats" + overview/list modal. */
+  .students-count-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.04); color: #fff; font-family: var(--font-secondary); font-size: .8rem; cursor: pointer; }
+  .students-count-btn:hover { border-color: var(--pra-blue); }
+  .students-count-btn svg { width: 18px; height: 18px; }
+  .students-box { max-width: 640px; }
+  .students-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid var(--pra-border); border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-align: left; font-size: .88rem; margin-bottom: 7px; }
+  .students-row:hover { border-color: var(--pra-blue); }
+  .students-row .n { font-family: var(--font-secondary); font-size: 1rem; color: var(--pra-blue); }
+  .students-row.extra { opacity: .85; }
+  .student-item { border: 1px solid var(--pra-border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .student-item .nm { font-size: .9rem; color: #fff; }
+  .student-item .meta { font-size: .72rem; color: var(--pra-dim); margin-top: 2px; word-break: break-all; }
+  .student-item .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .student-item .tag { font-family: var(--font-secondary); font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--pra-border); color: var(--pra-dim); }
+  .student-item .tag.on { color: #3fb950; border-color: rgba(63,185,80,.5); }
+  .student-item .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .student-item .acts button { font-size: .7rem; padding: 5px 10px; }
+  .student-item .acts .danger { color: #ff5c5c; border-color: rgba(255,92,92,.5); }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 600; padding: 16px; box-sizing: border-box; }
   .modal-backdrop.show { display: flex; }
   /* vh doesn't account for mobile browser/OS chrome (address bar, nav
@@ -879,7 +897,13 @@
     <div class="sidebar pra-panel" style="border-radius:0">
       <div class="sidebar-head" style="flex-direction:column;align-items:stretch;gap:10px">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div class="pra-h2 pra-glow" style="font-family:var(--font-secondary)">Chats</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="pra-h2 pra-glow" style="font-family:var(--font-secondary)">Chats</div>
+            <button class="students-count-btn" id="studentsCountBtn" type="button" title="Students" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="17" cy="9" r="2.3" stroke="#009bff" stroke-width="1.5"/><path d="M15 14.4c2.2.3 3.8 1.9 4.5 4.6" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span id="studentsCountNum">…</span>
+            </button>
+          </div>
           <div class="sidebar-actions">
             <button class="icon-btn" id="bulkSelectBtn" title="Select chats/groups to message at once" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="3.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M5.5 7.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="12.5" y="12.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M14.5 16.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="newGroupBtn" title="New group" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
@@ -1050,6 +1074,24 @@
   </div>
 
   <!-- New group modal -->
+  <div class="modal-backdrop" id="studentsModal">
+    <div class="pra-panel modal-box modal-box-flex students-box" style="padding:0">
+      <div style="padding:20px 20px 12px;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="pra-btn pra-btn-ghost" id="studentsBackBtn" type="button" style="display:none;padding:5px 10px;font-size:.75rem">&larr; Back</button>
+          <div class="pra-h2" id="studentsTitle" style="flex:1">Students</div>
+          <button class="pra-btn pra-btn-ghost" id="studentsRefreshBtn" type="button" style="padding:5px 10px;font-size:.72rem">Refresh</button>
+        </div>
+        <input class="pra-input" id="studentsSearch" placeholder="Search name, email or phone..." style="margin-top:12px;display:none"/>
+        <div class="pra-muted" id="studentsMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+      </div>
+      <div id="studentsBody" style="flex:1 1 auto;overflow-y:auto;min-height:0;padding:0 20px 8px"></div>
+      <div style="padding:12px 20px 18px;flex-shrink:0">
+        <button class="pra-btn pra-btn-ghost" style="width:100%" onclick="closeModal('studentsModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="groupModal">
     <div class="pra-panel modal-box modal-box-flex" style="padding:0">
       <div style="padding:22px 22px 14px;flex-shrink:0">
@@ -2024,6 +2066,7 @@ async function init() {
     document.getElementById('templateAddForm').style.display = isAdminMe() ? '' : 'none';
     await loadFavorites();
     loadCoachMonthlyStats(); // fire-and-forget -- badges just render blank until it resolves
+    setupStudentsPanel();
   }
 
   // Neither of these gates the conversation list itself -- contacts only
@@ -7416,6 +7459,106 @@ document.addEventListener('click', (e) => {
   if (url.origin !== location.origin) { window.open(url.href, '_blank'); return; }
   openCallSidePage(url.href);
 }, true);
+
+// ── Students panel (coaches/admins) ─────────────────────────────────────
+// Count button next to "Chats" = everyone ENROLLED in the CRM. Opens an
+// overview of CRM vs app counts; each opens its list with actions that
+// change the app account and the CRM status together
+// (/api/chat/students-overview in chat_backend.js).
+let studentsData = null, studentsBucket = null;
+async function loadStudents(fresh) {
+  const r = await fetch('/api/chat/students-overview' + (fresh ? '?fresh=1' : ''));
+  if (!r.ok) return null;
+  studentsData = await r.json();
+  const total = studentsData.buckets.find(b => b.key === 'crm_all');
+  document.getElementById('studentsCountNum').textContent = studentsData.crmError ? '!' : (total ? total.count : '0');
+  return studentsData;
+}
+function renderStudentsOverview() {
+  studentsBucket = null;
+  document.getElementById('studentsTitle').textContent = 'Students';
+  document.getElementById('studentsBackBtn').style.display = 'none';
+  document.getElementById('studentsSearch').style.display = 'none';
+  document.getElementById('studentsMsg').textContent = studentsData?.crmError ? 'Could not reach the CRM: ' + studentsData.crmError : '';
+  const extras = new Set(['crm_no_app', 'app_not_enrolled']);
+  document.getElementById('studentsBody').innerHTML = (studentsData?.buckets || []).map(b =>
+    `${b.key === 'crm_no_app' ? '<div class="pra-muted" style="font-size:.72rem;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em">Checks</div>' : ''}
+     <button type="button" class="students-row${extras.has(b.key) ? ' extra' : ''}" data-key="${b.key}"><span>${escapeHtml(b.label)}</span><span class="n">${b.count}</span></button>`).join('');
+  document.querySelectorAll('#studentsBody .students-row').forEach(btn => { btn.onclick = () => renderStudentsList(btn.dataset.key); });
+}
+function renderStudentsList(key) {
+  const bucket = studentsData?.buckets.find(b => b.key === key);
+  if (!bucket) return renderStudentsOverview();
+  studentsBucket = key;
+  document.getElementById('studentsTitle').textContent = `${bucket.label} (${bucket.count})`;
+  document.getElementById('studentsBackBtn').style.display = '';
+  const search = document.getElementById('studentsSearch');
+  search.style.display = '';
+  const q = search.value.trim().toLowerCase();
+  const items = q ? bucket.items.filter(i => `${i.name} ${i.email} ${i.phone}`.toLowerCase().includes(q)) : bucket.items;
+  document.getElementById('studentsBody').innerHTML = items.length ? items.map((i, idx) => {
+    const tags = [
+      i.role ? `<span class="tag">App: ${escapeHtml(i.role)}</span>` : '<span class="tag">No app account</span>',
+      ...i.platforms.map(p => `<span class="tag on">${p === 'ios' ? 'iPhone' : 'Android'}</span>`),
+      i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : '<span class="tag">Not enrolled in CRM</span>',
+    ].join('');
+    const acts = [
+      i.appUserId && i.role !== 'user' ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Make User</button>` : (!i.appUserId && i.enrolled ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Mark Finished</button>` : ''),
+      i.appUserId && i.role !== 'online' ? `<button class="pra-btn pra-btn-ghost" data-act="make_online" data-i="${idx}">Make Online</button>` : '',
+      i.appUserId && i.role !== 'gym' ? `<button class="pra-btn pra-btn-ghost" data-act="make_gym" data-i="${idx}">Make Gym</button>` : '',
+      `<button class="pra-btn pra-btn-ghost danger" data-act="blacklist" data-i="${idx}">Blacklist</button>`,
+    ].join('');
+    return `<div class="student-item"><div class="nm">${escapeHtml(i.name || '(no name)')}</div>
+      <div class="meta">${escapeHtml([i.email, i.phone].filter(Boolean).join(' · '))}</div>
+      <div class="tags">${tags}</div><div class="acts">${acts}</div></div>`;
+  }).join('') : '<div class="pra-muted" style="font-size:.85rem;padding:8px 0">Nobody here.</div>';
+  document.querySelectorAll('#studentsBody [data-act]').forEach(btn => {
+    btn.onclick = () => runStudentAction(btn.dataset.act, items[Number(btn.dataset.i)]);
+  });
+}
+const STUDENT_ACTION_TEXT = {
+  make_user: (n) => `Make ${n} a User? They come out of their coaching group, and their CRM status is set to FINISHED.`,
+  make_online: (n) => `Make ${n} an Online student in the app?`,
+  make_gym: (n) => `Make ${n} a Gym student in the app?`,
+  blacklist: (n) => `Blacklist ${n}? Their app account is archived (logged out, can't sign in) and their CRM status is set to BLACKLIST, which runs the CRM's blacklist opt-outs.`,
+};
+async function runStudentAction(action, item) {
+  if (!item) return;
+  if (!(await confirmDialog(STUDENT_ACTION_TEXT[action](item.name || 'this person'), 'Yes'))) return;
+  const msg = document.getElementById('studentsMsg');
+  msg.textContent = 'Working...';
+  const r = await fetch('/api/chat/students-overview/action', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, appUserId: item.appUserId, crmContactId: item.crmContactId, email: item.email, phone: item.phone }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { msg.textContent = d.error || 'Could not do that.'; return; }
+  msg.textContent = `${item.name}: ${(d.done || []).join(' · ')}`;
+  const keep = msg.textContent;
+  await loadStudents(true);
+  renderStudentsList(studentsBucket);
+  msg.textContent = keep;
+  if (typeof loadConversations === 'function') loadConversations();
+}
+function setupStudentsPanel() {
+  if (!isStaffMe()) return;
+  const btn = document.getElementById('studentsCountBtn');
+  btn.style.display = '';
+  loadStudents(false);
+  btn.onclick = async () => {
+    openModal('studentsModal');
+    document.getElementById('studentsSearch').value = '';
+    if (!studentsData) { document.getElementById('studentsBody').innerHTML = '<div class="pra-muted" style="font-size:.85rem">Loading...</div>'; await loadStudents(false); }
+    renderStudentsOverview();
+  };
+  document.getElementById('studentsBackBtn').onclick = () => { document.getElementById('studentsSearch').value = ''; renderStudentsOverview(); };
+  document.getElementById('studentsSearch').oninput = () => { if (studentsBucket) renderStudentsList(studentsBucket); };
+  document.getElementById('studentsRefreshBtn').onclick = async () => {
+    document.getElementById('studentsMsg').textContent = 'Refreshing...';
+    await loadStudents(true);
+    studentsBucket ? renderStudentsList(studentsBucket) : renderStudentsOverview();
+  };
+}
 
 function setupCallUI() {
   document.getElementById('startCallBtn').onclick = startCall;
