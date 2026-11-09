@@ -7517,7 +7517,7 @@ function renderStudentsList(key) {
       i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : '<span class="tag">Not enrolled in CRM</span>',
     ].join('');
     const acts = [
-      i.appUserId && i.role !== 'user' ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Make User</button>` : (!i.appUserId && i.enrolled ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Mark Finished</button>` : ''),
+      (i.appUserId && i.role !== 'user') || (!i.appUserId && i.enrolled) ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Mark Finished</button>` : '',
       i.appUserId && i.role !== 'online' ? `<button class="pra-btn pra-btn-ghost" data-act="make_online" data-i="${idx}">Make Online</button>` : '',
       i.appUserId && i.role !== 'gym' ? `<button class="pra-btn pra-btn-ghost" data-act="make_gym" data-i="${idx}">Make Gym</button>` : '',
       `<button class="pra-btn pra-btn-ghost danger" data-act="blacklist" data-i="${idx}">Blacklist</button>`,
@@ -7533,14 +7533,14 @@ function renderStudentsList(key) {
 const STUDENT_ACTION_TEXT = {
   // Mark Finished / Make User: spells out everything that happens.
   make_user: (n, i) => i?.appUserId
-    ? `Are you sure you want to finish ${n}?
+    ? `Are you sure you want to mark ${n} finished?
 
 • Demote them to a User in the app
 • Change their CRM status to FINISHED
 • Remove them from their coaching group (coaches keep the history)
 • Lock their Custom Training Protocol
 • Stop student-only features (renewal alerts, student check-ins)`
-    : `Are you sure you want to mark ${n} as finished?
+    : `Are you sure you want to mark ${n} finished?
 
 • Change their CRM status to FINISHED
 • They have no app account, so nothing changes in the app`,
@@ -7550,7 +7550,7 @@ const STUDENT_ACTION_TEXT = {
 };
 async function runStudentAction(action, item) {
   if (!item) return;
-  const okLabel = action === 'make_user' ? (item.appUserId ? 'Yes, make them a User' : 'Yes, mark finished') : action === 'blacklist' ? 'Yes, blacklist' : 'Yes';
+  const okLabel = action === 'make_user' ? 'Yes, mark finished' : action === 'blacklist' ? 'Yes, blacklist' : 'Yes';
   if (!(await confirmDialog(STUDENT_ACTION_TEXT[action](item.name || 'this person', item), okLabel))) return;
   const msg = document.getElementById('studentsMsg');
   msg.textContent = 'Working...';
