@@ -84,13 +84,17 @@
   /* Phones: the view menu gets its own full-width row that scrolls sideways
      (swipe, or drag with a mouse), and every icon sits in one row under it. */
   @media (max-width: 760px) {
-    .protocol-head-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 10px; }
-    .protocol-head-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
+    /* name sits on the right, same line as Back To Chat */
+    .protocol-name-row { grid-template-columns: auto minmax(0, 1fr); }
+    .protocol-name-row > .client-name { justify-self: end; text-align: right; }
+    .protocol-name-row > span:last-child { display: none; }
+    .protocol-controls-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 10px; }
+    .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
     .view-mode-toggle::-webkit-scrollbar { display: none; }
     .view-mode-toggle .view-mode-btn { flex-shrink: 0; white-space: nowrap; padding: 4px 10px; font-size: .68rem; }
-    .protocol-head-row > .view-mode-toggle { gap: 4px; }
+    .protocol-controls-row > .view-mode-toggle { gap: 4px; }
     .protocol-head-controls-left { grid-area: left; gap: 6px; }
-    .protocol-head-row > .protocol-head-controls-right { grid-area: right; justify-self: stretch; justify-content: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    .protocol-controls-row > .protocol-head-controls-right { grid-area: right; justify-self: stretch; justify-content: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     .protocol-head-controls-right::-webkit-scrollbar { display: none; }
   }
   .view-mode-btn { padding: 5px 16px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font-family: var(--font-primary); font-weight: 700; font-size: .78rem; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
@@ -263,7 +267,7 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="protocol-head">
-      <div class="protocol-head-row">
+      <div class="protocol-head-row protocol-name-row">
         <button class="back-to-chat-btn" id="backBtn" style="display:none">← Back To Chat</button>
         <div class="client-name" id="clientName">Loading…</div>
         <span></span>
@@ -275,7 +279,7 @@
         <input type="checkbox" class="pra-toggle" id="defaultProtocolToggle"/>
         Auto-apply this draft to every new student
       </label>
-      <div class="protocol-head-row">
+      <div class="protocol-head-row protocol-controls-row">
         <div class="protocol-head-controls-left">
           <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
           <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
@@ -286,6 +290,8 @@
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
+          <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Program Flow</button>
+          <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Program Page</button>
           <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
           <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
         </div>
@@ -553,6 +559,13 @@ let loadedTemplateId = null;
 // needed to support it.
 const BUILDER_PROTOCOL_ID = '__builder__';
 let editingBuilder = false;
+// false = the student's/your own record; 'true' = the shared Flow Builder
+// draft (blank or a shared, non-student protocol only); 'program' = one
+// student's saved program (a student not in the app yet), edited in its
+// own workspace so the Flow Builder never holds a student's program.
+let builderMode = 'false';
+let editingProgram = null; // {id, name, studentName} while builderMode === 'program'
+const programKey = (id) => '__program__' + id;
 let activeId = targetUserId;
 // The conversation "Ask a Question" (student-only) posts into — resolved
 // once by setupBackToChatLink() (same logic the "Back To Chat" button
@@ -1264,15 +1277,23 @@ function applyViewModeDisplay() {
 // undoing past the point you switched would silently cross-apply an edit
 // from one protocol onto the other.
 async function setProtocolMode(mode, builder) {
-  const builderChanged = builder !== editingBuilder;
+  // builder: false | true | 'program' (see builderMode)
+  const key = builder === 'program' ? 'program' : builder ? 'true' : 'false';
+  const builderChanged = key !== builderMode;
+  builderMode = key;
   viewMode = mode;
-  editingBuilder = builder;
-  activeId = builder ? BUILDER_PROTOCOL_ID : targetUserId;
+  editingBuilder = key !== 'false';
+  activeId = key === 'program' ? programKey(editingProgram.id) : key === 'true' ? BUILDER_PROTOCOL_ID : targetUserId;
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === mode && (btn.dataset.builder === 'true') === builder);
+    btn.classList.toggle('active', btn.dataset.mode === mode && btn.dataset.builder === key);
   });
-  document.getElementById('defaultProtocolRow').style.display = (canEdit && editingBuilder) ? 'flex' : 'none';
-  if (builderChanged && builder) loadDefaultProtocolToggle();
+  ['programFlowBtn', 'programPageBtn'].forEach(id => { document.getElementById(id).style.display = (canEdit && editingProgram) ? '' : 'none'; });
+  document.getElementById('defaultProtocolRow').style.display = (canEdit && key === 'true') ? 'flex' : 'none';
+  const note = document.getElementById('protocolBuilderNote');
+  note.textContent = key === 'program'
+    ? `Editing ${editingProgram.studentName}'s saved program (not in the app yet). Changes save straight into it.`
+    : 'Editing the shared Flow Builder draft — not tied to any student until you Apply it.';
+  if (builderChanged && key === 'true') loadDefaultProtocolToggle();
   if (builderChanged) {
     undoStack = []; redoStack = [];
     updateUndoRedoButtons();
@@ -1307,7 +1328,7 @@ function setupMenuDragScroll(el) {
 function setupViewModeToggle() {
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
-    btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'true');
+    btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'program' ? 'program' : btn.dataset.builder === 'true');
   });
   document.getElementById('pageDaySelect').onchange = (e) => {
     pageSelectedDay = e.target.value;
@@ -2121,7 +2142,11 @@ async function renderStudentProtocolList(filterOnly) {
 // edits save straight back into it (see saveSteps).
 async function editStudentProtocol(t) {
   if (t.accountId && t.accountHasCustom) { location.href = 'training-protocol.html?userId=' + encodeURIComponent(t.accountId); return; }
-  await openInFlowBuilder(t, 'studentProtocolsModal');
+  closeModal('studentProtocolsModal');
+  editingProgram = { id: t.id, name: t.name, studentName: t.studentName || t.name };
+  builderMode = ''; // force a switch even if another program was open
+  await setProtocolMode('flow', 'program');
+  await loadProtocolTemplateOntoPage(t, 'studentProtocolsModal', true);
 }
 
 const SP_EDIT_BTN = '<button class="sp-edit" style="flex-shrink:0;min-width:66px;padding:7px 12px;border-radius:999px;border:1.5px solid #fff;background:rgba(255,255,255,0.08);color:#fff;font-weight:800;font-size:.74rem;letter-spacing:.04em;cursor:pointer">EDIT</button>';
@@ -2139,7 +2164,7 @@ async function flowBuilderAutoApplyOn(what) {
 async function openInFlowBuilder(t, modalId) {
   if (await flowBuilderAutoApplyOn(`opening "${t.name}"`)) return;
   closeModal(modalId);
-  if (!editingBuilder) await setProtocolMode('flow', true);
+  if (builderMode !== 'true') await setProtocolMode('flow', true);
   await loadProtocolTemplateOntoPage(t, modalId);
 }
 // Reset icon: clears whatever flow is open -- the Flow Builder draft, a
@@ -2149,8 +2174,8 @@ async function resetFlow() {
   if (!steps.length) return;
   const name = (document.getElementById('clientName').textContent || '').trim();
   const own = !editingBuilder && me && targetUserId === me.id;
-  const what = editingBuilder ? 'the Flow Builder' : own ? 'your own protocol' : `${name}'s protocol`;
-  if (editingBuilder && await flowBuilderAutoApplyOn('clearing it')) return;
+  const what = builderMode === 'program' ? `${editingProgram.studentName}'s saved program` : editingBuilder ? 'the Flow Builder' : own ? 'your own protocol' : `${name}'s protocol`;
+  if (builderMode === 'true' && await flowBuilderAutoApplyOn('clearing it')) return;
   if (!confirm(`Clear EVERYTHING from ${what}${protocolName ? ` ("${protocolName}", ${steps.length} steps)` : ` (${steps.length} steps)`}?\n\n${editingBuilder ? 'Any saved protocol it was opened from stays saved.' : own ? '' : `${name} will see an empty protocol.`}\nCtrl+Z undoes it until you leave this page.`)) return;
   snapshotBeforeChange();
   steps = [];
@@ -2166,7 +2191,7 @@ async function resetFlow() {
 async function newBlankInFlowBuilder() {
   if (await flowBuilderAutoApplyOn('starting a blank protocol')) return;
   closeModal('loadProtocolTemplateModal');
-  if (!editingBuilder) await setProtocolMode('flow', true);
+  if (builderMode !== 'true') await setProtocolMode('flow', true);
   // Only an unsaved draft (not a saved protocol) would be lost.
   if (steps.length && !loadedTemplateId && !confirm('The Flow Builder has an unsaved draft. Throw it away and start blank? (Save it with the save icon first if you want to keep it.)')) return;
   snapshotBeforeChange();
@@ -2184,7 +2209,11 @@ async function newBlankInFlowBuilder() {
 // Apply from the Student Custom Protocols list: one clear question naming
 // the protocol and whoever it lands on, then the same load as the folder.
 function confirmApplyStudentProtocol(t, fromModal = 'studentProtocolsModal') {
-  const who = editingBuilder ? 'the shared Flow Builder draft (not any student)' : (document.getElementById('clientName').textContent || 'this student').trim();
+  if (t.kind === 'student' || fromModal === 'studentProtocolsModal') {
+    if (builderMode === 'true') { alert(`Student programs don't go in the Flow Builder. Open the student (Student Flow) and Apply it there, or press Edit to work on ${t.studentName || t.name}'s program.`); return; }
+    if (builderMode === 'program') { alert(`You're editing ${editingProgram.studentName}'s saved program. Open a student (Student Flow) to apply a program to them.`); return; }
+  }
+  const who = builderMode === 'program' ? `${editingProgram.studentName}'s saved program` : editingBuilder ? 'the shared Flow Builder draft (not any student)' : (document.getElementById('clientName').textContent || 'this student').trim();
   document.getElementById('applyStudentProtocolText').innerHTML =
     `Are you sure you want to apply <strong style="color:#009bff">${escapeHtml(t.name)}</strong> to <strong style="color:#009bff">${escapeHtml(who)}</strong>?`;
   const current = protocolName ? `"${escapeHtml(protocolName)}"` : (steps.length ? 'their current protocol' : '');
