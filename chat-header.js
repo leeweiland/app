@@ -659,7 +659,7 @@ window.PRABack = (function () {
       const KEY = 'praBlackFriday2026Closed';
       if (Date.now() > SALE_END) return;
       if (!/\/chat\.html$/.test(path) && path !== '/chat-app/' && path !== '/') return;
-      try { if (localStorage.getItem(KEY)) return; } catch {}
+      try { if (sessionStorage.getItem(KEY)) return; } catch {}
       const shop = [...bottomBar.querySelectorAll('a.cah-bottom-item')].find(x => x.title === 'Shop');
       if (!shop) return;
       const NEON = 'rgb(212, 255, 0)';
@@ -680,7 +680,7 @@ window.PRABack = (function () {
       el.className = 'bf-bob';
       el.innerHTML = `<div class="bf-box" role="link" aria-label="Black Friday sale, up to 20% off — open the Shop"><div class="bf-text">BLACK FRIDAY<div class="bf-sub">Up to 20% off in the Shop</div></div><button class="bf-x" type="button" aria-label="Close">✕</button></div><div class="bf-arrow"></div><div class="bf-head"></div>`;
       document.body.appendChild(el);
-      const close = (e) => { if (e) e.stopPropagation(); try { localStorage.setItem(KEY, '1'); } catch {} el.remove(); window.removeEventListener('resize', place); };
+      const close = (e) => { if (e) e.stopPropagation(); try { sessionStorage.setItem(KEY, '1'); } catch {} el.remove(); window.removeEventListener('resize', place); };
       el.querySelector('.bf-x').addEventListener('click', close);
       el.querySelector('.bf-box').addEventListener('click', () => { location.href = shop.href; });
       // The box can't hang off-screen, but the arrow always lines up with the
