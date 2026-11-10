@@ -31,6 +31,8 @@
 
   /* ── Sidebar ── */
   .sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid var(--pra-border); display: flex; flex-direction: column; }
+  /* Black Friday early-renewal banner, top of the chats panel; removed after the sale (script below). */
+  .bf-renew-banner { flex-shrink: 0; background: rgb(212,255,0); color: #000; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: .74rem; letter-spacing: .03em; line-height: 1.25; text-align: center; padding: 6px 10px; }
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
   .sidebar-resizer:hover::after, .sidebar-resizer.dragging::after { left: 0; width: 5px; background: var(--pra-blue); }
@@ -914,6 +916,8 @@
 
   <div class="chat-shell">
     <div class="sidebar pra-panel" style="border-radius:0">
+      <div class="bf-renew-banner" id="bfRenewBanner">Insane Black Friday Early Renewal Savings - Ask Your Coach</div>
+      <script>if (Date.now() > Date.parse('2026-12-01T10:00:00Z')) document.getElementById('bfRenewBanner').remove();</script>
       <div class="sidebar-head" style="flex-direction:column;align-items:stretch;gap:10px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:10px">
