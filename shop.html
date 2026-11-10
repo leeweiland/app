@@ -13,7 +13,8 @@
   .frame-head { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--pra-border); }
   .frame-head .pra-h2 { flex: 1; }
   iframe { flex: 1; width: 100%; border: 0; display: block; background: #000; }
-  .fallback { display: none; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 20px; text-align: center; }
+  .frame-wrap { position: relative; }
+  .fallback { display: none; position: absolute; left: 12px; right: 12px; bottom: 12px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 10px; background: rgba(13,13,17,.92); border: 1px solid var(--pra-border); }
   .fallback.show { display: flex; }
 </style>
 </head>
@@ -24,23 +25,21 @@
   <div class="frame-wrap">
     <!-- ?app=1 = the website's app mode: no site logo, menu, promo bar or footer. -->
     <iframe id="shopFrame" src="https://www.pacificrimathletics.com/shop?app=1" title="Pacific Rim Athletics Shop" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-    <div class="fallback pra-center" id="fallback">
-      <div class="pra-h2">This page can't be embedded here.</div>
-      <div class="pra-muted" style="font-size:.85rem;max-width:360px">The shop didn't load here.</div>
-      <a class="pra-btn" href="https://www.pacificrimathletics.com/shop" target="_blank" rel="noopener" style="text-decoration:none">Open the Shop ↗</a>
+    <div class="fallback" id="fallback">
+      <div class="pra-muted" style="font-size:.8rem">Still loading…</div>
+      <a class="pra-btn" href="https://www.pacificrimathletics.com/shop" target="_blank" rel="noopener" style="text-decoration:none;padding:8px 14px;font-size:.75rem">Open the Shop ↗</a>
     </div>
   </div>
 </div>
 <script>
-  const frame = document.getElementById('shopFrame');
+  // Never hide the page: on phones the website can take well over 4s to
+  // finish loading (video, animations), and the old 4s cutoff swapped it for
+  // a "can't be shown here" screen. If it still hasn't loaded after 15s, just
+  // offer a small "open in browser" link on top — the page stays visible.
+  const frame = document.querySelector('iframe');
   let loaded = false;
-  frame.addEventListener('load', () => { loaded = true; });
-  setTimeout(() => {
-    if (!loaded) {
-      frame.style.display = 'none';
-      document.getElementById('fallback').classList.add('show');
-    }
-  }, 4000);
+  frame.addEventListener('load', () => { loaded = true; document.getElementById('fallback').classList.remove('show'); });
+  setTimeout(() => { if (!loaded) document.getElementById('fallback').classList.add('show'); }, 15000);
 </script>
 </body>
 </html>
