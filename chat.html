@@ -216,6 +216,9 @@
      flush against the status bar/camera cutout with no clearance of its
      own unless it gets the same treatment directly. */
   .thread-head.no-app-header { padding-top: max(12px, env(safe-area-inset-top)); }
+  /* Mobile thread view is edge-to-edge: the Black Friday banner takes the notch/status-bar inset so it sits below the camera, and the thread head goes back to normal padding under it. */
+  .bf-renew-banner.no-app-header { padding-top: calc(env(safe-area-inset-top, 0px) + 6px); }
+  #bfRenewBanner ~ .thread-head.no-app-header { padding-top: 12px; }
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -2909,6 +2912,7 @@ function updateHeaderForThreadView() {
   if (headerSpacer) headerSpacer.style.display = hide ? 'none' : '';
   if (bottomBarSpacer) bottomBarSpacer.style.display = hide ? 'none' : '';
   document.querySelector('.thread-head')?.classList.toggle('no-app-header', hide);
+  document.getElementById('bfRenewBanner')?.classList.toggle('no-app-header', hide);
 }
 window.addEventListener('resize', updateHeaderForThreadView);
 
