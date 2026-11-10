@@ -678,7 +678,7 @@ window.PRABack = (function () {
       const el = document.createElement('div');
       el.id = 'pra-bf-pointer';
       el.className = 'bf-bob';
-      el.innerHTML = `<div class="bf-box" role="link" aria-label="Black Friday sale — open the Shop"><div class="bf-text">BLACK FRIDAY<div class="bf-sub">20% off in the Shop</div></div><button class="bf-x" type="button" aria-label="Close">✕</button></div><div class="bf-arrow"></div><div class="bf-head"></div>`;
+      el.innerHTML = `<div class="bf-box" role="link" aria-label="Black Friday sale, up to 20% off — open the Shop"><div class="bf-text">BLACK FRIDAY<div class="bf-sub">Up to 20% off in the Shop</div></div><button class="bf-x" type="button" aria-label="Close">✕</button></div><div class="bf-arrow"></div><div class="bf-head"></div>`;
       document.body.appendChild(el);
       const close = (e) => { if (e) e.stopPropagation(); try { localStorage.setItem(KEY, '1'); } catch {} el.remove(); window.removeEventListener('resize', place); };
       el.querySelector('.bf-x').addEventListener('click', close);
