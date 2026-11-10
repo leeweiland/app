@@ -651,6 +651,59 @@ window.PRABack = (function () {
     root.appendChild(bottomBarSpacer);
     root.appendChild(bottomBar);
 
+    // Black Friday pointer: a neon callout floating over the main chat panel
+    // with an arrow down to the Shop icon. Shows when the app opens (main
+    // chat page only) until it's closed with its X; gone after the sale.
+    (function blackFridayPointer() {
+      const SALE_END = Date.parse('2026-12-01T10:00:00Z'); // ~midnight Alaska, Nov 30
+      const KEY = 'praBlackFriday2026Closed';
+      if (Date.now() > SALE_END) return;
+      if (!/\/chat\.html$/.test(path) && path !== '/chat-app/' && path !== '/') return;
+      try { if (localStorage.getItem(KEY)) return; } catch {}
+      const shop = [...bottomBar.querySelectorAll('a.cah-bottom-item')].find(x => x.title === 'Shop');
+      if (!shop) return;
+      const NEON = 'rgb(212, 255, 0)';
+      const st = document.createElement('style');
+      st.textContent = `
+        #pra-bf-pointer { position: fixed; z-index: 9000; display: flex; flex-direction: column; align-items: center; pointer-events: none; font-family: var(--font-primary, 'Century Gothic', sans-serif); }
+        #pra-bf-pointer .bf-box { pointer-events: auto; display: flex; align-items: center; gap: 10px; background: #0b0b0f; border: 2px solid ${NEON}; border-radius: 12px; padding: 10px 10px 10px 14px; box-shadow: 0 0 18px ${NEON}88, inset 0 0 10px ${NEON}33; cursor: pointer; }
+        #pra-bf-pointer .bf-text { color: ${NEON}; font-weight: 800; letter-spacing: .08em; font-size: .95rem; line-height: 1.15; text-shadow: 0 0 8px ${NEON}aa; white-space: nowrap; }
+        #pra-bf-pointer .bf-sub { color: #fff; font-weight: 600; letter-spacing: .02em; font-size: .72rem; text-shadow: none; opacity: .9; }
+        #pra-bf-pointer .bf-x { pointer-events: auto; flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid ${NEON}; background: transparent; color: ${NEON}; font-weight: 800; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+        #pra-bf-pointer .bf-arrow { width: 4px; height: 34px; background: ${NEON}; box-shadow: 0 0 10px ${NEON}; border-radius: 2px; }
+        #pra-bf-pointer .bf-head { width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-top: 14px solid ${NEON}; filter: drop-shadow(0 0 6px ${NEON}); }
+        #pra-bf-pointer.bf-bob { animation: praBfBob 1.4s ease-in-out infinite; }
+        @keyframes praBfBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }`;
+      document.head.appendChild(st);
+      const el = document.createElement('div');
+      el.id = 'pra-bf-pointer';
+      el.className = 'bf-bob';
+      el.innerHTML = `<div class="bf-box" role="link" aria-label="Black Friday sale — open the Shop"><div class="bf-text">BLACK FRIDAY<div class="bf-sub">20% off in the Shop</div></div><button class="bf-x" type="button" aria-label="Close">✕</button></div><div class="bf-arrow"></div><div class="bf-head"></div>`;
+      document.body.appendChild(el);
+      const close = (e) => { if (e) e.stopPropagation(); try { localStorage.setItem(KEY, '1'); } catch {} el.remove(); window.removeEventListener('resize', place); };
+      el.querySelector('.bf-x').addEventListener('click', close);
+      el.querySelector('.bf-box').addEventListener('click', () => { location.href = shop.href; });
+      // The box can't hang off-screen, but the arrow always lines up with the
+      // Shop icon's center.
+      function place() {
+        const r = shop.getBoundingClientRect();
+        if (!r.width) return;
+        const cx = r.left + r.width / 2;
+        const w = el.offsetWidth || 220;
+        const left = Math.max(8, Math.min(window.innerWidth - w - 8, cx - w / 2));
+        el.style.left = left + 'px';
+        el.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+        const box = el.querySelector('.bf-box');
+        const shift = cx - (left + w / 2);
+        el.querySelector('.bf-arrow').style.transform = `translateX(${shift}px)`;
+        el.querySelector('.bf-head').style.transform = `translateX(${shift}px)`;
+        box.style.transform = '';
+      }
+      requestAnimationFrame(place);
+      setTimeout(place, 400);
+      window.addEventListener('resize', place);
+    })();
+
     // Device-frame mode needs the page's real content to scroll separately
     // from the fixed bars (see the .pra-device-frame CSS comment for why) —
     // move everything that isn't itself `position: fixed` (the bars, the
