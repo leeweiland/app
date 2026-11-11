@@ -1946,23 +1946,28 @@ function setupSidebarResize() {
   });
 }
 
-// Drag the handle along the top edge of the composer to reserve more typing
-// room -- composerFloorHeight is a floor, not a fixed height: the textarea's
-// own auto-grow (see the 'input' listener in setupComposer) still takes
-// over and grows it further for a long message, this just controls how big
-// it starts out / shrinks back down to. Height (not width) persists across
-// visits, same convention as setupSidebarResize.
-let composerFloorHeight = 0;
+// The composer is always exactly as tall as what's typed: one line when
+// empty, growing line by line and shrinking back as text is deleted (see
+// fitComposer). Dragging the handle on its top edge sets how tall it may
+// grow before it scrolls instead -- a cap, never a starting size, so it
+// doesn't open big. The cap persists across visits, same convention as
+// setupSidebarResize.
+function fitComposer(textInput) {
+  textInput.style.height = 'auto';
+  // scrollHeight includes the padding, but style.height on this content-box
+  // textarea doesn't -- without subtracting it every size ran half a line tall.
+  const cs = getComputedStyle(textInput);
+  const pad = cs.boxSizing === 'border-box' ? 0 : parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  textInput.style.height = (textInput.scrollHeight - pad) + 'px';
+}
 function setupComposerResize() {
   const resizer = document.getElementById('composerResizer');
   const textInput = document.getElementById('textInput');
-  const MIN = 36, MAX = 360;
+  const MIN = 120, MAX = 360;
   const saved = Number(localStorage.getItem('pra-chat-composer-height'));
-  if (saved) {
-    composerFloorHeight = Math.min(MAX, Math.max(MIN, saved));
-    document.documentElement.style.setProperty('--composer-max-h', composerFloorHeight + 'px');
-    textInput.style.height = Math.max(textInput.scrollHeight, composerFloorHeight) + 'px';
-  }
+  let cap = saved ? Math.min(MAX, Math.max(MIN, saved)) : 0;
+  if (cap) document.documentElement.style.setProperty('--composer-max-h', cap + 'px');
+  fitComposer(textInput);
 
   let dragging = false, startY = 0, startHeight = 0;
   resizer.addEventListener('mousedown', (e) => {
@@ -1974,16 +1979,18 @@ function setupComposerResize() {
     if (!dragging) return;
     // Dragging UP (handle sits above the composer) should grow it, so this
     // is startY minus the current Y, not the other way around.
-    const height = Math.min(MAX, Math.max(MIN, startHeight + (startY - e.clientY)));
-    composerFloorHeight = height;
-    document.documentElement.style.setProperty('--composer-max-h', height + 'px');
-    textInput.style.height = Math.max(textInput.scrollHeight, height) + 'px';
+    // Shown at the dragged height while dragging so the new cap is visible;
+    // snaps back to the text's own height on release.
+    cap = Math.min(MAX, Math.max(MIN, startHeight + (startY - e.clientY)));
+    document.documentElement.style.setProperty('--composer-max-h', cap + 'px');
+    textInput.style.height = cap + 'px';
   });
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
     dragging = false; resizer.classList.remove('dragging');
     document.body.style.userSelect = '';
-    localStorage.setItem('pra-chat-composer-height', composerFloorHeight);
+    localStorage.setItem('pra-chat-composer-height', cap);
+    fitComposer(textInput);
   });
 }
 
@@ -5053,8 +5060,7 @@ function setupComposer() {
   }
   textInput.addEventListener('input', (e) => {
     if (!e.isComposing) convertEmoticonAtCaret(textInput);
-    textInput.style.height = 'auto';
-    textInput.style.height = Math.max(textInput.scrollHeight, composerFloorHeight) + 'px';
+    fitComposer(textInput);
     updateMentionDropdown(textInput);
   });
 
