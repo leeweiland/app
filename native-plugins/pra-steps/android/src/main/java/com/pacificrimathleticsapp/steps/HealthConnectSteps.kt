@@ -11,7 +11,6 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -47,7 +46,7 @@ object HealthConnectSteps {
     // every read below only touches what was actually granted.
     private val READ_TYPES: List<KClass<out Record>> = listOf(
         StepsRecord::class, DistanceRecord::class, ActiveCaloriesBurnedRecord::class,
-        HeartRateRecord::class, RestingHeartRateRecord::class, HeartRateVariabilityRmssdRecord::class,
+        RestingHeartRateRecord::class, HeartRateVariabilityRmssdRecord::class,
         SleepSessionRecord::class, ExerciseSessionRecord::class, WeightRecord::class, BodyFatRecord::class
     )
     private val ALL_PERMISSIONS = READ_TYPES.map { HealthPermission.getReadPermission(it) }.toSet()
@@ -124,7 +123,7 @@ object HealthConnectSteps {
     }
 
     // One object per day (oldest first): date, steps, distanceM, activeKcal,
-    // avgHr, restingHr, hrvMs, sleepMin, weightKg, bodyFatPct, workouts
+    // restingHr, hrvMs, sleepMin, weightKg, bodyFatPct, workouts
     // [{type,start,end,kcal}], sources [package names]. A value is left out
     // when there's no data or no permission for it.
     @JvmStatic
@@ -158,7 +157,6 @@ object HealthConnectSteps {
                 if (allowed(StepsRecord::class)) metrics += StepsRecord.COUNT_TOTAL
                 if (allowed(DistanceRecord::class)) metrics += DistanceRecord.DISTANCE_TOTAL
                 if (allowed(ActiveCaloriesBurnedRecord::class)) metrics += ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL
-                if (allowed(HeartRateRecord::class)) metrics += HeartRateRecord.BPM_AVG
                 if (allowed(RestingHeartRateRecord::class)) metrics += RestingHeartRateRecord.BPM_AVG
                 if (allowed(WeightRecord::class)) metrics += WeightRecord.WEIGHT_AVG
                 if (metrics.isNotEmpty()) safely {
@@ -172,7 +170,6 @@ object HealthConnectSteps {
                         r[StepsRecord.COUNT_TOTAL]?.let { o.put("steps", it) }
                         r[DistanceRecord.DISTANCE_TOTAL]?.let { o.put("distanceM", Math.round(it.inMeters)) }
                         r[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.let { o.put("activeKcal", Math.round(it.inKilocalories)) }
-                        r[HeartRateRecord.BPM_AVG]?.let { o.put("avgHr", it) }
                         r[RestingHeartRateRecord.BPM_AVG]?.let { o.put("restingHr", it) }
                         r[WeightRecord.WEIGHT_AVG]?.let { o.put("weightKg", Math.round(it.inKilograms * 10) / 10.0) }
                         r.dataOrigins.forEach { sources[key]?.add(it.packageName) }
