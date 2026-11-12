@@ -1356,8 +1356,13 @@ async function setKickoffSheetStatus({ email, phone, first, last }, status) {
     const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${tab}'!A1:G`)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     const rows = ((await r.json()).values || []);
     const hits = (test) => rows.map((row, i) => i > 0 && test(row) ? i : -1).filter(i => i > 0);
-    let idx = hits(row => (em && String(row[emailIdx] || "").trim().toLowerCase() === em) || (ph.length === 10 && String(row[phoneIdx] || "").replace(/\D/g, "").slice(-10) === ph));
-    if (!idx.length && nk) idx = hits(row => nameKey(row[0], row[1]) === nk);
+    // Families share an email/phone (a parent's), so when the name is known
+    // an email/phone hit must also match the name; a nickname mismatch with
+    // no name hit at all still falls back to the email/phone rows.
+    const contactHits = hits(row => (em && String(row[emailIdx] || "").trim().toLowerCase() === em) || (ph.length === 10 && String(row[phoneIdx] || "").replace(/\D/g, "").slice(-10) === ph));
+    const nameHits = nk ? hits(row => nameKey(row[0], row[1]) === nk) : [];
+    let idx = nk ? contactHits.filter(i => nameHits.includes(i)) : contactHits;
+    if (!idx.length) idx = nameHits.length ? nameHits : contactHits;
     idx.filter(i => String(rows[i][4] || "").trim().toUpperCase() !== status)
       .forEach(i => data.push({ range: `'${tab}'!E${i + 1}`, values: [[status]] }));
   }
@@ -4092,7 +4097,7 @@ export async function handleChatRequest(req, res, url) {
       done.push(crmResult);
       crmEnrolledCache = null;
       try {
-        const sheetStatus = action === "make_user" ? "FINISHED" : "BAD FIT / BLACKLIST";
+        const sheetStatus = action === "make_user" ? "FINISHED" : "BLACKLIST";
         const n = await setKickoffSheetStatus({ email: email || target?.email, phone: phone || target?.phone, first: target?.first, last: target?.last }, sheetStatus);
         done.push(n ? `Kickoff sheet: ${n} row${n === 1 ? "" : "s"} set to ${sheetStatus}` : "Kickoff sheet: no rows to change");
       } catch (e) { done.push(`Kickoff sheet update failed: ${e.message}`); }
