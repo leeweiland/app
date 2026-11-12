@@ -658,6 +658,8 @@ window.PRABack = (function () {
       const SALE_END = Date.parse('2026-12-01T10:00:00Z'); // ~midnight Alaska, Nov 30
       const KEY = 'praBlackFriday2026Closed';
       if (Date.now() > SALE_END) return;
+      // Students only -- coaches and admins don't need the sale pointer.
+      if (['coach', 'admin', 'admin2'].includes(myRole)) return;
       if (!/\/chat\.html$/.test(path) && path !== '/chat-app/' && path !== '/') return;
       try { if (sessionStorage.getItem(KEY)) return; } catch {}
       const shop = [...bottomBar.querySelectorAll('a.cah-bottom-item')].find(x => x.title === 'Shop');
