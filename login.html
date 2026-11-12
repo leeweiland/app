@@ -99,12 +99,6 @@
           <div class="field"><label class="pra-label">Last Name</label><br/>
             <input class="pra-input" id="suLast" required style="margin-top:6px"/></div>
         </div>
-        <div class="field"><span class="pra-label">I'm a</span>
-          <div class="student-type">
-            <label><input type="radio" name="suStudentType" value="gym"/>Gym Student</label>
-            <label><input type="radio" name="suStudentType" value="online"/>Online Student</label>
-          </div>
-        </div>
         <div class="field"><label class="pra-label">Email</label><br/>
           <input class="pra-input" type="email" id="suEmail" autocapitalize="none" autocorrect="off" spellcheck="false" required style="margin-top:6px"/></div>
         <div class="field"><label class="pra-label">Phone</label><br/>
@@ -181,10 +175,7 @@ loginForm.addEventListener('submit', async (e) => {
 signupForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   errMsg.textContent = '';
-  const studentType = document.querySelector('input[name="suStudentType"]:checked')?.value;
-  if (!studentType) { errMsg.textContent = 'Choose Gym Student or Online Student'; return; }
   const fd = new FormData();
-  fd.append('studentType', studentType);
   fd.append('first', document.getElementById('suFirst').value);
   fd.append('last', document.getElementById('suLast').value);
   fd.append('email', document.getElementById('suEmail').value);

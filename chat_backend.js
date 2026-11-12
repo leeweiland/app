@@ -1415,6 +1415,9 @@ function renewalForStudent(student, viewer, eligibility) {
 // forward, since this only ever touches accounts still sitting at the plain
 // "user" default.
 async function syncStudentRoles(users) {
+  // Disabled 2026-11-12 (Lee): no auto-upgrade from the kickoff/buyers
+  // sheets -- coaches set students up manually.
+  return;
   try {
     const { online, gym } = await fetchStudentEligibility();
     let changed = false;
@@ -3722,7 +3725,7 @@ export async function handleChatRequest(req, res, url) {
       fields = await readJsonBody(req);
     }
 
-    const { first, last, email, phone, password, agreedToTerms, studentType } = fields;
+    const { first, last, email, phone, password, agreedToTerms } = fields;
     if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
     // Guideline 1.2 requires agreement to no-tolerance terms BEFORE an
     // account is created — enforced server-side too since the checkbox
@@ -3741,12 +3744,11 @@ export async function handleChatRequest(req, res, url) {
       id: newUserId,
       first, last, email: String(email).trim().toLowerCase(), phone: phone || "",
       passwordSalt: salt, passwordHash: hash,
-      // first-ever signup bootstraps the admin. Otherwise the signup form's
-      // Gym/Online choice sets the role straight away (Lee's call, 2026-10-13:
-      // no buyers-sheet check), so syncDefaultGroups below creates their group,
-      // welcome message and default protocol immediately. Anything else (an
-      // older app build that doesn't send it) still lands as a plain "user".
-      role: users.length === 0 ? "admin" : (studentType === "gym" || studentType === "online" ? studentType : "user"),
+      // first-ever signup bootstraps the admin.
+      // Lee's call, 2026-11-12: everyone signs up as a plain "user" -- a
+      // coach upgrades current students by hand (the CRM and sheets aren't
+      // reliable enough to grant access automatically).
+      role: users.length === 0 ? "admin" : "user",
       profilePictureFileId: profilePictureFileId || null,
       ip, geo, // geo: { city, region, country, lat, lng } | null — used by the users map
       createdAt: new Date().toISOString(),

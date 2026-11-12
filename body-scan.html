@@ -44,6 +44,13 @@
   .hub-tab { flex: 0 0 auto; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-family: var(--font-secondary); font-size: .76rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); white-space: nowrap; }
   .hub-tab:hover { color: #fff; }
   .hub-tab.active { background: var(--pra-blue); color: #fff; }
+  /* Plain "user" accounts (not a current student) see the Physique tab
+     behind a see-through lock -- same look as the training protocol lock. */
+  #hubPanelPhysique { position: relative; }
+  .physique-lock { position: absolute; inset: 0; min-height: 60vh; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; background: rgba(0,0,0,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+  .physique-lock svg { width: 46px; height: 46px; }
+  .physique-lock .t { font-family: var(--font-secondary); font-size: 1.05rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
+  .physique-lock .s { font-size: .85rem; color: #d6d6dc; max-width: 320px; line-height: 1.4; }
   .hub-panel { display: none; }
   .hub-panel.active { display: block; }
   /* Reused by the Reports tab's Daily/Weekly/Monthly period selector. */
@@ -796,7 +803,7 @@ function renderHubTabs(preserveActive) {
     physiqueHistoryLoaded = true;
     loadPhysiqueHistory();
   }
-  if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); }
+  if (activeHub === 'physique') { loadPastScans(); loadCheckinStatus(); syncPhysiqueLock(); }
   if (activeHub === 'nutrition') loadFoodEntries();
   if (activeHub === 'health') loadHealth();
   if (activeHub === 'moves' && !movesLoaded) { movesLoaded = true; loadFavoritedVideos(); }
@@ -1955,6 +1962,22 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
   svg += `<text x="2" y="${(y(hiY) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${fmtY(hiY)}</text>`;
   svg += `<text x="2" y="${(y(loY) + 4).toFixed(1)}" fill="var(--pra-dim)" font-size="11">${fmtY(loY)}</text>`;
   svgEl.innerHTML = svg;
+}
+
+// Locked for a plain "user" looking at their own page; staff viewing
+// someone else (viewingUserId) and students see it normally.
+function syncPhysiqueLock() {
+  const panel = document.getElementById('hubPanelPhysique');
+  const existing = panel.querySelector('.physique-lock');
+  const locked = !!me && me.role === 'user' && !viewingUserId;
+  if (!locked) { existing?.remove(); return; }
+  if (existing) return;
+  const lock = document.createElement('div');
+  lock.className = 'physique-lock';
+  lock.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="#fff" stroke-width="1.7"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <div class="t">Locked</div>
+    <div class="s">To access your Body Scan you must be a current Student.</div>`;
+  panel.appendChild(lock);
 }
 
 (async () => {
