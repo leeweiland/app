@@ -1239,8 +1239,8 @@ function findLevelsEntries(people, first, last) {
 // program) — as long as they aren't on the shared blacklist, checked two
 // ways: the dedicated BLACKLIST tab, and a "BLACKLIST" marker some rows
 // carry directly in their own Status column instead.
-const ONLINE_SHEET_TAB = "ONLINE KICKOFF / BUYERS";
-const GYM_SHEET_TAB = "GYM KICKOFF / BUYERS";
+const ONLINE_SHEET_TAB = "ONLINE BUYERS";
+const GYM_SHEET_TAB = "GYM BUYERS";
 const STUDENT_BLACKLIST_TAB = "BLACKLIST ONLINE & GYM";
 function nameKey(first, last) {
   return `${String(first || "").trim().toLowerCase()}|${String(last || "").trim().toLowerCase()}`;
@@ -1343,7 +1343,7 @@ async function fetchStudentEligibilityUncached() {
 fetchStudentEligibility().catch(() => {});
 
 // Mark Finished / Blacklist from the Students panel also updates the
-// person's Status (column E) on the ONLINE + GYM KICKOFF / BUYERS tabs:
+// person's Status (column E) on the ONLINE BUYERS + GYM BUYERS tabs:
 // every row matched by email or phone (name only if neither matches) that
 // isn't already that status. Online tab: F Phone, G Email; Gym: F Email, G Phone.
 async function setKickoffSheetStatus({ email, phone, first, last }, status) {
@@ -4099,8 +4099,8 @@ export async function handleChatRequest(req, res, url) {
       try {
         const sheetStatus = action === "make_user" ? "FINISHED" : "BLACKLIST";
         const n = await setKickoffSheetStatus({ email: email || target?.email, phone: phone || target?.phone, first: target?.first, last: target?.last }, sheetStatus);
-        done.push(n ? `Kickoff sheet: ${n} row${n === 1 ? "" : "s"} set to ${sheetStatus}` : "Kickoff sheet: no rows to change");
-      } catch (e) { done.push(`Kickoff sheet update failed: ${e.message}`); }
+        done.push(n ? `Buyers sheet: ${n} row${n === 1 ? "" : "s"} set to ${sheetStatus}` : "Buyers sheet: no rows to change");
+      } catch (e) { done.push(`Buyers sheet update failed: ${e.message}`); }
     }
     return sendJson(res, 200, { ok: true, done });
   }
