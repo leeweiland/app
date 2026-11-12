@@ -7647,16 +7647,18 @@ const STUDENT_ACTION_TEXT = {
 
 • Demote them to a User in the app
 • Change their CRM status to FINISHED
+• Set them to FINISHED on the Online/Gym Kickoff / Buyers sheet
 • Remove them from their coaching group (coaches keep the history)
-• Lock their Custom Training Protocol
+• Lock their Custom Training Protocol and Body Scan
 • Stop student-only features (renewal alerts, student check-ins)`
     : `Are you sure you want to mark ${n} finished?
 
 • Change their CRM status to FINISHED
+• Set them to FINISHED on the Online/Gym Kickoff / Buyers sheet
 • They have no app account, so nothing changes in the app`,
   make_online: (n) => `Make ${n} an Online student in the app?`,
   make_gym: (n) => `Make ${n} a Gym student in the app?`,
-  blacklist: (n) => `Blacklist ${n}? Their app account is archived (logged out, can't sign in) and their CRM status is set to BLACKLIST, which runs the CRM's blacklist opt-outs.`,
+  blacklist: (n) => `Blacklist ${n}? Their app account is archived (logged out, can't sign in), their CRM status is set to BLACKLIST, which runs the CRM's blacklist opt-outs, and the Kickoff / Buyers sheet is set to BAD FIT / BLACKLIST.`,
 };
 async function runStudentAction(action, item) {
   if (!item) return;

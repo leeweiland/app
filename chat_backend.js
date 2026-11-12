@@ -1342,6 +1342,36 @@ async function fetchStudentEligibilityUncached() {
 // seconds) on the user-facing request path.
 fetchStudentEligibility().catch(() => {});
 
+// Mark Finished / Blacklist from the Students panel also updates the
+// person's Status (column E) on the ONLINE + GYM KICKOFF / BUYERS tabs:
+// every row matched by email or phone (name only if neither matches) that
+// isn't already that status. Online tab: F Phone, G Email; Gym: F Email, G Phone.
+async function setKickoffSheetStatus({ email, phone, first, last }, status) {
+  const accessToken = await getGoogleAccessToken();
+  const em = String(email || "").trim().toLowerCase();
+  const ph = String(phone || "").replace(/\D/g, "").slice(-10);
+  const nk = (first || last) ? nameKey(first, last) : null;
+  const data = [];
+  for (const [tab, emailIdx, phoneIdx] of [[ONLINE_SHEET_TAB, 6, 5], [GYM_SHEET_TAB, 5, 6]]) {
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${tab}'!A1:G`)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const rows = ((await r.json()).values || []);
+    const hits = (test) => rows.map((row, i) => i > 0 && test(row) ? i : -1).filter(i => i > 0);
+    let idx = hits(row => (em && String(row[emailIdx] || "").trim().toLowerCase() === em) || (ph.length === 10 && String(row[phoneIdx] || "").replace(/\D/g, "").slice(-10) === ph));
+    if (!idx.length && nk) idx = hits(row => nameKey(row[0], row[1]) === nk);
+    idx.filter(i => String(rows[i][4] || "").trim().toUpperCase() !== status)
+      .forEach(i => data.push({ range: `'${tab}'!E${i + 1}`, values: [[status]] }));
+  }
+  if (!data.length) return 0;
+  const w = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values:batchUpdate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
+  });
+  if (!w.ok) throw new Error(`Sheets ${w.status}`);
+  studentEligibilityCache = null;
+  return data.length;
+}
+
 // ── Renewal alerts (2026-09-19) ──────────────────────────────────────────
 // Staff (coach/admin) see a student's chat -- and their coaching group -- flagged when
 // the student's END DATE is within 2 months (orange) or 1 month (pink). Same rule as
@@ -4061,6 +4091,11 @@ export async function handleChatRequest(req, res, url) {
       } catch (e) { crmResult = `CRM update failed: ${e.message}`; }
       done.push(crmResult);
       crmEnrolledCache = null;
+      try {
+        const sheetStatus = action === "make_user" ? "FINISHED" : "BAD FIT / BLACKLIST";
+        const n = await setKickoffSheetStatus({ email: email || target?.email, phone: phone || target?.phone, first: target?.first, last: target?.last }, sheetStatus);
+        done.push(n ? `Kickoff sheet: ${n} row${n === 1 ? "" : "s"} set to ${sheetStatus}` : "Kickoff sheet: no rows to change");
+      } catch (e) { done.push(`Kickoff sheet update failed: ${e.message}`); }
     }
     return sendJson(res, 200, { ok: true, done });
   }
