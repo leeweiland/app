@@ -1962,7 +1962,10 @@ function fitComposer(textInput) {
   // textarea doesn't -- without subtracting it every size ran half a line tall.
   const cs = getComputedStyle(textInput);
   const pad = cs.boxSizing === 'border-box' ? 0 : parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-  textInput.style.height = (textInput.scrollHeight - pad) + 'px';
+  // Never shorter than one full line: Android's WebView can report a smaller
+  // scrollHeight, which left "Type a message…" hanging out the bottom of the box.
+  const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.35;
+  textInput.style.height = Math.max(textInput.scrollHeight - pad, line + (cs.boxSizing === 'border-box' ? parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) : 0)) + 'px';
 }
 function setupComposerResize() {
   const resizer = document.getElementById('composerResizer');
@@ -4859,6 +4862,25 @@ function setupComposer() {
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
+  // On a narrow phone the box between the icons can be too short for even the
+  // smaller 13px "Type a message…" -- it got cut off -- so the placeholder
+  // switches to the longest wording that actually fits the box's width.
+  (function fitPlaceholder() {
+    const ctx = document.createElement('canvas').getContext('2d');
+    const fit = () => {
+      const cs = getComputedStyle(textInput);
+      const room = textInput.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (room <= 0) return;
+      ctx.font = `400 13px ${cs.fontFamily}`;
+      textInput.placeholder = ['Type a message…', 'Message…', 'Message'].find(t => ctx.measureText(t).width <= room) || 'Message';
+      // Re-size to the content once the box has its real width -- a height
+      // measured while the box was hidden or still laying out was wrong.
+      if (!textInput.value) fitComposer(textInput);
+    };
+    new ResizeObserver(fit).observe(textInput);
+    window.addEventListener('resize', fit);
+    fit();
+  })();
   // `pointer: coarse` is the standard touch-vs-desktop signal, used below
   // for Enter-to-send. Everyone on touch gets a dedicated camera icon
   // ALONGSIDE the paperclip (not student-only — that gating hid it during
