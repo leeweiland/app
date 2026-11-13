@@ -4171,25 +4171,41 @@ document.getElementById('threadApptInfo').addEventListener('click', async (e) =>
 // images/videos in the new bubbles haven't loaded yet, so scrollHeight is
 // still short of its final size, leaving the view resting just above the
 // real bottom once media finishes loading. Re-apply as each one loads.
+// Opening a thread (or a new message arriving while you're at the bottom)
+// keeps you at the newest message while photos/videos load in and grow:
+// for ~6s every bubble that changes size re-snaps to the bottom. The old
+// version only re-snapped while within 200px of the bottom, so one tall
+// photo/video loading in a media-heavy group (e.g. a gym training channel)
+// grew past that margin and stranded you above the newest messages. Lets
+// go the moment the person touches/scrolls the thread themselves, so it
+// never yanks them away from older history they're reading.
+let releaseThreadStick = null;
 function scrollThreadToBottom(body) {
-  body.scrollTop = body.scrollHeight;
-  body.querySelectorAll('img, video').forEach(el => {
-    const loaded = el.tagName === 'IMG' ? el.complete : el.readyState >= 1;
-    if (loaded) return;
-    el.addEventListener(el.tagName === 'IMG' ? 'load' : 'loadedmetadata', () => {
-      // Fires whenever ANY not-yet-loaded media in the thread finishes
-      // loading its size — which, now that videos only lazy-load once
-      // actually scrolled into view, could happen long after this call
-      // and long after the user has since scrolled away to read older
-      // history. Only re-snap if they're still sitting at the bottom right
-      // now; otherwise this was yanking them back to the newest message
-      // the moment some video they scrolled past finished loading its
-      // preview frame. Wider margin than the usual 40px "at bottom" check
-      // since the media's own height just changed from a placeholder size.
-      const stillAtBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 200;
-      if (stillAtBottom) body.scrollTop = body.scrollHeight;
-    }, { once: true });
+  if (releaseThreadStick) releaseThreadStick();
+  const snap = () => { body.scrollTop = body.scrollHeight; };
+  snap();
+  if (typeof ResizeObserver === 'undefined') return;
+  const ro = new ResizeObserver(snap);
+  [...body.children].forEach(el => ro.observe(el));
+  // Rows added during the window (a poll tick re-rendering) get watched too.
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) ro.observe(n); }));
+    snap();
   });
+  mo.observe(body, { childList: true });
+  let timer = 0;
+  const release = () => {
+    ro.disconnect(); mo.disconnect(); clearTimeout(timer);
+    body.removeEventListener('touchstart', release);
+    body.removeEventListener('wheel', release);
+    body.removeEventListener('mousedown', release);
+    if (releaseThreadStick === release) releaseThreadStick = null;
+  };
+  timer = setTimeout(release, 6000);
+  body.addEventListener('touchstart', release, { passive: true });
+  body.addEventListener('wheel', release, { passive: true });
+  body.addEventListener('mousedown', release);
+  releaseThreadStick = release;
 }
 
 // WhatsApp-style read receipts: one grey check (sent, i.e. saved server-
