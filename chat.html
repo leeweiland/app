@@ -226,6 +226,8 @@
   .thread-head-icons, .thread-group-members, .thread-protocol-link, .thread-appt-row, #bfRenewBanner { transition: max-height .2s ease, opacity .2s ease, padding .2s ease, margin .2s ease; max-height: 140px; }
   #threadWrap.kb-open .thread-head-icons, #threadWrap.kb-open .thread-group-members, #threadWrap.kb-open .thread-protocol-link, #threadWrap.kb-open .thread-appt-row, #threadWrap.kb-open #bfRenewBanner { max-height: 0 !important; opacity: 0; overflow: hidden; padding-top: 0 !important; padding-bottom: 0 !important; margin: 0 !important; border: 0; pointer-events: none; }
   #threadWrap.kb-open .thread-head { gap: 0; padding-top: 8px; padding-bottom: 8px; }
+  /* ...but never up under the phone's status bar / camera cutout. */
+  #threadWrap.kb-open .thread-head.no-app-header { padding-top: max(8px, env(safe-area-inset-top)); }
   .thread-head-name { font-family: var(--font-secondary); font-weight: 400; font-size: .95rem; overflow-wrap: break-word; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
