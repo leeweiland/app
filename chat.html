@@ -220,6 +220,12 @@
   .thread-head-row1 { display: flex; align-items: center; gap: 12px; }
   .thread-head-icons { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
   .thread-head-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  /* Phones, keyboard up: the thread header slides down to just back arrow,
+     avatar and name so the messages keep the room; it slides back open when
+     the keyboard goes away (setupComposer toggles .kb-open). */
+  .thread-head-icons, .thread-group-members, .thread-protocol-link, .thread-appt-row, #bfRenewBanner { transition: max-height .2s ease, opacity .2s ease, padding .2s ease, margin .2s ease; max-height: 140px; }
+  #threadWrap.kb-open .thread-head-icons, #threadWrap.kb-open .thread-group-members, #threadWrap.kb-open .thread-protocol-link, #threadWrap.kb-open .thread-appt-row, #threadWrap.kb-open #bfRenewBanner { max-height: 0 !important; opacity: 0; overflow: hidden; padding-top: 0 !important; padding-bottom: 0 !important; margin: 0 !important; border: 0; pointer-events: none; }
+  #threadWrap.kb-open .thread-head { gap: 0; padding-top: 8px; padding-bottom: 8px; }
   .thread-head-name { font-family: var(--font-secondary); font-weight: 400; font-size: .95rem; overflow-wrap: break-word; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
@@ -4579,14 +4585,17 @@ function linkifyUrls(escapedText) {
     img.src = src;
     resetTransform();
     backdrop.classList.add('show');
+    PRABack.push('lightbox', () => close(true));
   }
   function openVideo(src) {
     img.style.display = 'none';
     video.style.display = 'block';
     video.src = src;
     backdrop.classList.add('show');
+    PRABack.push('lightbox', () => close(true));
   }
-  function close() {
+  function close(fromBack) {
+    if (fromBack !== true && backdrop.classList.contains('show')) PRABack.closed('lightbox');
     backdrop.classList.remove('show');
     img.src = '';
     video.pause(); video.src = '';
@@ -4862,6 +4871,24 @@ function setupComposer() {
   const emojiPanel = document.getElementById('emojiPanel');
   const gifPanel = document.getElementById('gifPanel');
   const templatesPanel = document.getElementById('templatesPanel');
+  // Phones: slide the thread header closed while the keyboard is up (see the
+  // .kb-open CSS) and back open when it goes away. Focus is the trigger; the
+  // native keyboard-hide event also reopens it when the keyboard is dismissed
+  // without leaving the box. Short delay on blur so tapping Send (which can
+  // blur for a moment) doesn't make the header jump.
+  (function collapseHeaderWhileTyping() {
+    const wrap = document.getElementById('threadWrap');
+    const isPhone = () => (document.querySelector('.pra-root')?.getBoundingClientRect().width || innerWidth) <= 768;
+    const open = () => wrap.classList.remove('kb-open');
+    textInput.addEventListener('focus', () => { if (isPhone()) wrap.classList.add('kb-open'); });
+    textInput.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== textInput) open(); }, 150));
+    const kb = window.Capacitor?.Plugins?.Keyboard;
+    if (kb?.addListener) {
+      kb.addListener('keyboardWillHide', open);
+      // Tapping the box again after the keyboard was dismissed doesn't re-fire focus.
+      kb.addListener('keyboardWillShow', () => { if (document.activeElement === textInput && isPhone()) wrap.classList.add('kb-open'); });
+    }
+  })();
   // On a narrow phone the box between the icons can be too short for even the
   // smaller 13px "Type a message…" -- it got cut off -- so the placeholder
   // switches to the longest wording that actually fits the box's width.
