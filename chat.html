@@ -4882,13 +4882,40 @@ function setupComposer() {
     const wrap = document.getElementById('threadWrap');
     const isPhone = () => (document.querySelector('.pra-root')?.getBoundingClientRect().width || innerWidth) <= 768;
     const open = () => wrap.classList.remove('kb-open');
-    textInput.addEventListener('focus', () => { if (isPhone()) wrap.classList.add('kb-open'); });
+    // Keyboard opening keeps your place in the thread: measured BEFORE the
+    // keyboard/header animation, then held for ~1s while things resize. At
+    // (or within a bubble of) the bottom -> stays pinned to the bottom so the
+    // last bubble rises above the keyboard; scrolled up -> that spot keeps
+    // the same distance from the bottom (bumped up just enough not to be
+    // covered). Same helper as the CRM Inbox's conversation-panel.js.
+    let anchorRaf = 0;
+    const holdThreadPosition = () => {
+      const th = document.getElementById('threadBody');
+      if (!th) return;
+      const dist = Math.max(0, th.scrollHeight - th.scrollTop - th.clientHeight);
+      const fromBottom = dist < 60 ? 0 : dist;
+      // Held up to 2.5s (a cold first keyboard can take over 1s to resize the
+      // page), but let go the moment the person touches/scrolls the thread.
+      const until = performance.now() + 2500;
+      cancelAnimationFrame(anchorRaf);
+      const release = () => { cancelAnimationFrame(anchorRaf); th.removeEventListener('touchstart', release); th.removeEventListener('wheel', release); };
+      th.addEventListener('touchstart', release, { passive: true });
+      th.addEventListener('wheel', release, { passive: true });
+      setTimeout(release, 2600);
+      const step = () => {
+        const t = document.getElementById('threadBody');
+        if (t) t.scrollTop = Math.max(0, t.scrollHeight - t.clientHeight - fromBottom);
+        if (performance.now() < until) anchorRaf = requestAnimationFrame(step);
+      };
+      anchorRaf = requestAnimationFrame(step);
+    };
+    textInput.addEventListener('focus', () => { if (isPhone()) { if (!wrap.classList.contains('kb-open')) holdThreadPosition(); wrap.classList.add('kb-open'); } });
     textInput.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== textInput) open(); }, 150));
     const kb = window.Capacitor?.Plugins?.Keyboard;
     if (kb?.addListener) {
       kb.addListener('keyboardWillHide', open);
       // Tapping the box again after the keyboard was dismissed doesn't re-fire focus.
-      kb.addListener('keyboardWillShow', () => { if (document.activeElement === textInput && isPhone()) wrap.classList.add('kb-open'); });
+      kb.addListener('keyboardWillShow', () => { if (document.activeElement === textInput && isPhone()) { holdThreadPosition(); wrap.classList.add('kb-open'); } });
     }
   })();
   // On a narrow phone the box between the icons can be too short for even the
