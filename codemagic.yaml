@@ -33,6 +33,8 @@ workflows:
           # PushNotifications.register() resolves but no token/error ever
           # reaches JS. This copy restores the version with those methods.
           cp ios-config/AppDelegate.swift ios/App/App/AppDelegate.swift
+          # Root view controller subclass that turns on edge-swipe back.
+          cp ios-config/SceneDelegate.swift ios/App/App/SceneDelegate.swift
           # Same wipe-every-build problem as the two files above — the
           # branded black-square/white-silhouette icon (matching the
           # Android launcher icon) would otherwise get overwritten with
@@ -95,7 +97,7 @@ workflows:
               config.build_settings['CURRENT_PROJECT_VERSION'] = '$BUILD_NUMBER'
               # The App Store version these builds ship as. 1.0 is already
               # approved/closed, so bump this for each new App Store release.
-              config.build_settings['MARKETING_VERSION'] = '1.2'
+              config.build_settings['MARKETING_VERSION'] = '1.3'
             end
             project.save
           "
