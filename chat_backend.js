@@ -6321,6 +6321,7 @@ export async function handleChatRequest(req, res, url) {
       };
       const list = templates
         .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length,
+          ...(t.kind ? { kind: t.kind } : {}),
           // Program templates (drip settings live on the template itself).
           ...(t.settings || t.kind === "program" ? { isProgram: true, settings: programSettings(t) } : {}),
           ...(wantStudent ? { studentName: t.studentName || "", pageTitle: t.pageTitle || "", sourceUrl: t.sourceUrl || "",
@@ -6368,14 +6369,34 @@ export async function handleChatRequest(req, res, url) {
       // edits back here (saveSteps in training-protocol.html).
       // ...and `settings`: a program template's drip/CTA settings (Protocol
       // Settings modal), merged over the current ones.
-      const { name, steps, settings } = await readJsonBody(req);
-      if (name === undefined && !(Array.isArray(steps) && steps.length) && settings === undefined) return sendJson(res, 400, { error: "Name, steps or settings required" });
+      // ...and `bumps` / `goal`: a program template's add-ons and goal line
+      // (the Flow Builder's program editor). Every other field on the record
+      // (kind, settings, builtAt, anything unknown) is left exactly as it is.
+      const { name, steps, settings, bumps, goal } = await readJsonBody(req);
+      if (name === undefined && !(Array.isArray(steps) && steps.length) && settings === undefined && bumps === undefined && goal === undefined) return sendJson(res, 400, { error: "Name, steps, settings, bumps or goal required" });
       if (name !== undefined && !String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
       const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
       const template = templates.find(t => t.id === protocolTemplateMatch[1]);
       if (!template) return sendJson(res, 404, { error: "Template not found" });
+      // A program's step ids are what enrolled users and install_template.mjs
+      // key on -- refuse a save that would lose or duplicate one.
+      if (template.kind === "program" && Array.isArray(steps) && steps.length) {
+        const ids = steps.map(s => s && typeof s === "object" ? s.id : null);
+        if (ids.some(id => typeof id !== "string" || !id)) return sendJson(res, 400, { error: "Every step needs an id" });
+        if (new Set(ids).size !== ids.length) return sendJson(res, 400, { error: "Duplicate step ids" });
+      }
+      if (bumps !== undefined) {
+        const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+        if (!isObj(bumps) || Object.keys(bumps).length > 30) return sendJson(res, 400, { error: "Add-ons must be an object" });
+        for (const b of Object.values(bumps)) {
+          if (!isObj(b) || (b.moves !== undefined && (!Array.isArray(b.moves) || b.moves.length > 100 || !b.moves.every(isObj)))) return sendJson(res, 400, { error: "Each add-on needs a moves list" });
+        }
+      }
+      if (goal !== undefined && typeof goal !== "string") return sendJson(res, 400, { error: "Goal must be text" });
       if (name !== undefined) template.name = name.trim();
       if (Array.isArray(steps) && steps.length) { template.steps = steps; template.updatedAt = new Date().toISOString(); }
+      if (bumps !== undefined) { template.bumps = bumps; template.updatedAt = new Date().toISOString(); }
+      if (goal !== undefined) { template.goal = goal.trim().slice(0, 300); template.updatedAt = new Date().toISOString(); }
       if (settings !== undefined) {
         try { template.settings = sanitizeProgramSettings(settings, template.settings); }
         catch (e) { return sendJson(res, 400, { error: e.message }); }

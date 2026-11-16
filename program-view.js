@@ -194,6 +194,7 @@
   // Shared with training-protocol.html's renderStepContent for the step
   // types it doesn't know (compact = the coach Flow canvas card).
   function stepHtml(s, opts = {}) {
+    injectCss(); // the Flow canvas uses these cards before any program view renders
     const compact = !!opts.compact;
     if (s.type === 'timer') {
       if (compact) return `<div class="step-type">Timer</div><div class="pv-compact"><b>${Number(s.rounds) || 1} rounds</b> · ${Number(s.workSeconds) || 0}s work / ${Number(s.restSeconds) || 0}s rest</div>`;

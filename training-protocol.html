@@ -267,6 +267,26 @@
   .template-add-form { border-top: 1px solid var(--pra-border); margin-top: 10px; padding-top: 10px; }
   .template-add-form input, .template-add-form textarea { width: 100%; margin-bottom: 6px; }
   .template-add-form textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+  /* Program editor (a kind:"program" template edited in place, see openTemplateEditor) */
+  .tpl-bar { display: none; flex-direction: column; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 14px; border: 1px solid rgba(0,155,255,0.45); border-radius: 12px; background: var(--pra-blue-dim); }
+  .tpl-bar-title { font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--pra-blue); text-align: center; }
+  .tpl-bar-title b { color: #fff; font-family: var(--font-primary); font-size: .95rem; letter-spacing: .01em; text-transform: none; display: block; margin-top: 2px; }
+  .tpl-bar-note { font-size: .74rem; color: #cfe9ff; text-align: center; }
+  .tpl-bar-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .tpl-bar-actions .pra-btn { padding: 7px 14px; font-size: .74rem; }
+  .tpl-save-status { font-size: .72rem; color: var(--pra-dim); min-height: 1em; }
+  .tpl-save-status.err { color: #ff7b7b; }
+  .step-form-field { margin-bottom: 12px; }
+  .step-form-field .pra-label { display: block; margin-bottom: 4px; }
+  .step-form-field .pra-input, .step-form-field .pra-textarea { width: 100%; box-sizing: border-box; }
+  .step-form-field .pra-textarea { resize: vertical; font-family: inherit; }
+  .step-form-help { font-size: .72rem; color: var(--pra-dim); margin-top: 4px; line-height: 1.4; }
+  .step-form-check { display: flex; align-items: center; gap: 10px; font-size: .86rem; cursor: pointer; }
+  .step-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .bump-card { border: 1px solid var(--pra-border); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+  .bump-card-key { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 8px; }
+  .bump-move { border-top: 1px solid var(--pra-border); padding-top: 10px; margin-top: 10px; }
+  .bump-move-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: .78rem; color: var(--pra-dim); }
 </style>
 </head>
 <body>
@@ -288,6 +308,20 @@
         <input type="checkbox" class="pra-toggle" id="defaultProtocolToggle"/>
         Auto-apply this draft to every new student
       </label>
+      <!-- Program editor bar: shown only while a kind:"program" template is
+           open for editing (openTemplateEditor). Edits go straight into the
+           template, never the Flow Builder draft. -->
+      <div class="tpl-bar" id="tplBar">
+        <div class="tpl-bar-title">Editing program<b id="tplBarName"></b></div>
+        <div class="tpl-bar-note">Every change saves straight into this program. Students enrolled in it see changes live. The Flow Builder draft is not touched.</div>
+        <div class="tpl-bar-actions">
+          <button class="pra-btn" id="tplPreviewBtn" type="button">Preview as student</button>
+          <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button">Add-ons &amp; goal</button>
+          <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
+          <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button">Exit program editor</button>
+        </div>
+        <div class="tpl-save-status" id="tplSaveStatus"></div>
+      </div>
       <div class="protocol-head-row protocol-controls-row">
         <div class="protocol-head-controls-left">
           <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
@@ -303,6 +337,9 @@
           <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
           <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
           <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Student Page</button>
+          <button class="view-mode-btn" id="tplFlowBtn" data-mode="flow" data-builder="tpl" style="display:none">Program Flow</button>
+          <button class="view-mode-btn" id="tplPageBtn" data-mode="page" data-builder="tpl" style="display:none">Program Page</button>
+          <button class="view-mode-btn" id="tplStudentViewBtn" type="button" style="display:none">Student View</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
           <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
           <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
@@ -358,6 +395,11 @@
         <div class="type-choice" id="chooseImage"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.4" fill="#009bff"/><path d="M5 16l3.2-3.5 2.3 2.3 2.2-2.6L17 16" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/><path d="M19.5 3.5v6M16.8 6.2l2.7-2.7 2.7 2.7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload Image</div>
         <div class="type-choice" id="chooseText"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>Text</div>
         <div class="type-choice" id="chooseTemplate"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 14.5l3 3M18.5 14.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Saved Text</div>
+        <!-- Program-only step types (shown in the program editor) -->
+        <div class="type-choice tpl-only" id="chooseSection" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16M4 12h10M4 18h16" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M17 10.5l2.5 1.5-2.5 1.5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Section</div>
+        <div class="type-choice tpl-only" id="chooseTimer" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="13.5" r="7" stroke="#fff" stroke-width="1.6"/><path d="M12 13.5V9.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/><path d="M10 3.5h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Timer</div>
+        <div class="type-choice tpl-only" id="chooseCta" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="8" width="17" height="8" rx="4" stroke="#fff" stroke-width="1.6"/><path d="M10 12h5M13 10l2 2-2 2" stroke="#009bff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Button (CTA)</div>
+        <div class="type-choice tpl-only" id="chooseYoutube" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="18" height="12" rx="3.5" stroke="#fff" stroke-width="1.6"/><path d="M10.2 9.6v4.8l4.2-2.4-4.2-2.4Z" fill="#009bff"/></svg>YouTube</div>
       </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closeModal('chooseTypeModal')">Cancel</button>
     </div>
@@ -397,6 +439,34 @@
       <div style="display:flex;gap:10px;margin-top:14px">
         <button class="pra-btn" id="textStepSaveBtn" style="flex:1">Add Step</button>
         <button class="pra-btn pra-btn-ghost" onclick="closeModal('textModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Program editor: one form per step type (openStepEditor). Only the
+       fields shown here are written; anything else on the step is kept. -->
+  <div class="modal-backdrop" id="stepEditModal">
+    <div class="pra-panel modal-box" style="max-width:520px">
+      <div class="pra-h2" id="stepEditTitle" style="margin-bottom:14px;flex-shrink:0">Edit Step</div>
+      <div id="stepEditFields" class="modal-scroll-body"></div>
+      <div class="pra-muted" id="stepEditMsg" style="font-size:.78rem;min-height:1em;margin-top:6px;flex-shrink:0"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-shrink:0">
+        <button class="pra-btn" id="stepEditSaveBtn" style="flex:1">Save</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('stepEditModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Program editor: the template's add-ons (bumps) and goal line. -->
+  <div class="modal-backdrop" id="bumpsModal">
+    <div class="pra-panel modal-box" style="max-width:600px">
+      <div class="pra-h2" style="margin-bottom:6px;flex-shrink:0">Add-ons &amp; Goal</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:12px;flex-shrink:0">Saved into this program. Students see the add-ons they own.</div>
+      <div id="bumpsFields" class="modal-scroll-body"></div>
+      <div class="pra-muted" id="bumpsMsg" style="font-size:.78rem;min-height:1em;margin-top:6px;flex-shrink:0"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-shrink:0">
+        <button class="pra-btn" id="bumpsSaveBtn" style="flex:1">Save</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('bumpsModal')">Cancel</button>
       </div>
     </div>
   </div>
@@ -617,6 +687,12 @@ let builderMode = 'false';
 let clientLabel = '';
 let editingProgram = null; // {id, name, studentName} while builderMode === 'program'
 const programKey = (id) => '__program__' + id;
+// builderMode 'tpl' = a kind:"program" template (e.g. the Powerbatics
+// Handstand Protocol) open in the program editor: its steps load with their
+// OWN ids (enrolled users and install_template.mjs key on them) and every
+// change PATCHes the template itself. Never reads or writes the shared
+// Flow Builder draft, never auto-applies, never applies to a student.
+let editingTemplate = null; // {id, name, record} while builderMode === 'tpl'
 let activeId = targetUserId;
 // The conversation "Ask a Question" (student-only) posts into — resolved
 // once by setupBackToChatLink() (same logic the "Back To Chat" button
@@ -764,7 +840,7 @@ async function loadDripSettings() {
   if (!dripTemplates.length) return;
   const sel = document.getElementById('dripTemplateSelect');
   const has = (id) => id && dripTemplates.some(t => t.id === id);
-  const pick = has(currentProgramTemplateId) ? currentProgramTemplateId : has(loadedTemplateId) ? loadedTemplateId : dripTemplates[0].id;
+  const pick = has(editingTemplate?.id) ? editingTemplate.id : has(currentProgramTemplateId) ? currentProgramTemplateId : has(loadedTemplateId) ? loadedTemplateId : dripTemplates[0].id;
   sel.innerHTML = dripTemplates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
   sel.value = pick;
   sel.style.display = dripTemplates.length > 1 ? '' : 'none';
@@ -810,7 +886,12 @@ function setupDripSettings() {
     const t = dripTemplates.find(x => x.id === id);
     if (t) t.settings = d.settings || settings;
     msgEl.textContent = 'Saved.';
-    if (viewMode === 'program') showProgramView();
+    if (editingTemplate && editingTemplate.id === id) {
+      programSettingsForSteps = d.settings || settings;
+      if (editingTemplate.record) editingTemplate.record.settings = d.settings || settings;
+      if (viewMode === 'flow' || viewMode === 'page') render();
+    }
+    if (viewMode === 'program') showProgramView(lastProgramViewOpt);
   };
 }
 
@@ -831,17 +912,22 @@ function dayNumberOfStep(s) {
 function openGroupChat() {
   location.href = resolvedConvoId ? '/chat-app/chat.html?convo=' + encodeURIComponent(resolvedConvoId) : '/chat-app/chat.html';
 }
-async function showProgramView() {
+// opt.templateId: preview that template (the program editor's "Preview as
+// student"); opt.btnId: which menu button lights up.
+let lastProgramViewOpt = {};
+async function showProgramView(opt = {}) {
+  lastProgramViewOpt = opt;
   viewMode = 'program';
   document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('programViewBtn').classList.add('active');
+  document.getElementById(opt.btnId || 'programViewBtn').classList.add('active');
   applyViewModeDisplay();
   const box = document.getElementById('programView');
-  if (!box.firstChild) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
-  const preview = !!(programPreviewTemplateId && canEdit);
+  if (!box.firstChild || opt.templateId) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
+  const previewId = opt.templateId || (programPreviewTemplateId && canEdit ? programPreviewTemplateId : null);
+  const preview = !!previewId;
   const wanted = params.get('program') || enrolledPrograms[0]?.templateId || '';
   const url = preview
-    ? '/api/chat/protocol-program/template/' + encodeURIComponent(programPreviewTemplateId)
+    ? '/api/chat/protocol-program/template/' + encodeURIComponent(previewId)
     : '/api/chat/protocol-program/' + encodeURIComponent(targetUserId) + (wanted ? '?templateId=' + encodeURIComponent(wanted) : '');
   const r = await fetch(url).catch(() => null);
   const data = r ? await r.json().catch(() => ({})) : {};
@@ -858,7 +944,7 @@ async function showProgramView() {
     onAsk: (id) => openAskQuestionModal(id),
     onOpenChat: isSelf && !preview ? openGroupChat : null,
     chatLabel: me.role === 'trainee' ? 'Questions? Message Lee & Alexis' : 'Open your group chat',
-    onUnlock: () => showProgramView(),
+    onUnlock: () => showProgramView(opt),
   });
 }
 
@@ -965,7 +1051,10 @@ async function init() {
   { const el = document.getElementById('viewModeToggle'), act = el.querySelector('.view-mode-btn.active');
     if (act && el.scrollWidth > el.clientWidth) { const e = el.getBoundingClientRect(), r = act.getBoundingClientRect(); el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2; } }
   wireModals();
+  setupTemplateEditor();
   await setupBackToChatLink();
+  // ?editTemplate=<id> reopens the program editor (survives a reload).
+  if (canEdit && params.get('editTemplate')) await openTemplateEditor({ id: params.get('editTemplate'), name: '' });
 }
 
 // Deep-links back to the exact conversation this page was opened from
@@ -1061,13 +1150,16 @@ function migrateSteps(raw) {
 // saveProtocolName() below is what actually persists an edit.
 function updateProtocolTitleHint() {
   const input = document.getElementById('protocolTitleInput');
-  input.readOnly = !canEdit;
+  // A program's name is how enrollments and install_template.mjs find it --
+  // not renamed from here.
+  input.readOnly = !canEdit || builderMode === 'tpl';
+  input.title = builderMode === 'tpl' ? "A program's name is fixed (enrollments find it by name)" : '';
   // Never stomp what's being typed right now if a save elsewhere (e.g.
   // switching Flow<->Page) happens to re-run this mid-edit.
   if (document.activeElement !== input) input.value = protocolName || '';
   input.style.display = (canEdit || protocolName) ? '' : 'none';
   fitProtocolTitle();
-  document.getElementById('protocolBuilderNote').style.display = editingBuilder ? '' : 'none';
+  document.getElementById('protocolBuilderNote').style.display = editingBuilder && builderMode !== 'tpl' ? '' : 'none';
 }
 function fitProtocolTitle() {
   const t = document.getElementById('protocolTitleInput');
@@ -1077,7 +1169,7 @@ function fitProtocolTitle() {
   while (px > 10 && t.scrollWidth > t.clientWidth + 1) { px -= 0.5; t.style.fontSize = px + 'px'; }
 }
 async function saveProtocolName() {
-  if (!canEdit) return;
+  if (!canEdit || builderMode === 'tpl') return;
   const input = document.getElementById('protocolTitleInput');
   const name = input.value.trim();
   if (name === (protocolName || '')) return; // unchanged -- skip a no-op save
@@ -1099,6 +1191,7 @@ async function saveProtocolName() {
 }
 
 async function loadSteps() {
+  if (builderMode === 'tpl') return loadTemplateSteps();
   const r = await fetch('/api/chat/training-protocol/' + activeId);
   if (!r.ok) { document.getElementById('emptyHint').textContent = "You don't have access to this."; document.getElementById('emptyHint').style.display = 'block'; return; }
   const d = await r.json();
@@ -1112,6 +1205,7 @@ async function loadSteps() {
 }
 
 async function saveSteps() {
+  if (builderMode === 'tpl') return saveTemplateSteps();
   await fetch('/api/chat/training-protocol/' + activeId, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ steps }),
@@ -1330,8 +1424,9 @@ function renderPageView() {
   }
 
   container.innerHTML = visible.map(s => {
-    if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}</div>`;
+    if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}${s.title ? `<div style="font-size:.95rem;color:#fff;margin-top:4px">${escapeHtml(s.title)}</div>` : ''}</div>`;
     if (s.type === 'section') return `<div class="page-day-heading">${escapeHtml(s.title || s.content || '')}</div>`;
+    if (builderMode === 'tpl' && s.type === 'text') return `<div class="pra-panel page-step-card">${PRAProgram.textHtml(s.content, s.title)}</div>`;
     return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
   }).join('');
   container.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
@@ -1346,6 +1441,8 @@ function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id &
 // picker, differing only in which direction the new step attaches.
 function openAddStepModal(target) {
   pendingStepTarget = target;
+  // Section / Timer / Button / YouTube only exist in programs.
+  document.querySelectorAll('#chooseTypeModal .tpl-only').forEach(el => { el.style.display = builderMode === 'tpl' ? '' : 'none'; });
   openModal('chooseTypeModal');
 }
 
@@ -1476,7 +1573,7 @@ function applyViewModeDisplay() {
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
   document.getElementById('katasPage').style.display = viewMode === 'katas' ? 'flex' : 'none';
   document.getElementById('programView').style.display = viewMode === 'program' ? 'block' : 'none';
-  if (viewMode !== 'program') document.getElementById('programViewBtn').classList.remove('active');
+  if (viewMode !== 'program') ['programViewBtn', 'tplStudentViewBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
   document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas' && viewMode !== 'program') ? 'block' : 'none';
   // The day-select row also needs at least one <option value="day-id">
   // (see syncPageDaySelectOptions, called from renderPageView) — hidden
@@ -1494,14 +1591,19 @@ function applyViewModeDisplay() {
 // undoing past the point you switched would silently cross-apply an edit
 // from one protocol onto the other.
 async function setProtocolMode(mode, builder) {
-  // builder: false | true | 'program' (see builderMode)
-  const key = builder === 'program' ? 'program' : builder ? 'true' : 'false';
+  // builder: false | true | 'program' | 'tpl' (see builderMode)
+  const key = builder === 'program' ? 'program' : builder === 'tpl' ? 'tpl' : builder ? 'true' : 'false';
   const builderChanged = key !== builderMode;
   builderMode = key;
   viewMode = mode;
   ['katasViewBtn', 'studentKatasBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
   editingBuilder = key !== 'false';
-  activeId = key === 'program' ? programKey(editingProgram.id) : key === 'true' ? BUILDER_PROTOCOL_ID : targetUserId;
+  // Leaving the program editor (any way out) forgets the template.
+  if (key !== 'tpl' && editingTemplate) leaveTemplateEditorState();
+  // The program editor has no protocol record at all -- loadSteps/saveSteps
+  // go to the template, and every training-protocol write is guarded.
+  activeId = key === 'tpl' ? null : key === 'program' ? programKey(editingProgram.id) : key === 'true' ? BUILDER_PROTOCOL_ID : targetUserId;
+  syncTemplateEditorChrome();
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode && btn.dataset.builder === key);
   });
@@ -1607,7 +1709,7 @@ function setupViewModeToggle() {
   if (params.get('view') === 'katas') setTimeout(() => showKatas(ownKatas ? 'own' : 'students'), 0);
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
-    btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'program' ? 'program' : btn.dataset.builder === 'true');
+    btn.onclick = () => setProtocolMode(btn.dataset.mode, ['program', 'tpl'].includes(btn.dataset.builder) ? btn.dataset.builder : btn.dataset.builder === 'true');
   });
   document.getElementById('pageDaySelect').onchange = (e) => {
     pageSelectedDay = e.target.value;
@@ -1695,7 +1797,8 @@ function render() {
         <div class="pra-panel step-card">
           ${canEdit ? `<button class="step-drag-handle" data-id="${s.id}" title="Drag to move">⠿</button>` : ''}
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
-          ${canEdit && (s.type === 'text' || s.type === 'video') ? `<button class="step-edit" data-id="${s.id}" title="${s.type === 'video' ? 'Rename video' : 'Edit text'}">✎</button>` : ''}
+          ${canEdit && builderMode === 'tpl' ? `<button class="step-edit" data-id="${s.id}" title="Edit step">✎</button>`
+            : canEdit && (s.type === 'text' || s.type === 'video') ? `<button class="step-edit" data-id="${s.id}" title="${s.type === 'video' ? 'Rename video' : 'Edit text'}">✎</button>` : ''}
           ${!canEdit && (s.type === 'video' || s.type === 'image') ? `<button class="step-ask" data-id="${s.id}" title="Ask a question about this">?</button>` : ''}
           ${renderStepContent(s, { autoplay: false })}
         </div>
@@ -1721,9 +1824,10 @@ function render() {
   });
   world.querySelectorAll('.step-delete').forEach(btn => {
     btn.onclick = async () => {
-      snapshotBeforeChange();
       const id = btn.dataset.id;
       const target = steps.find(s => s.id === id);
+      if (builderMode === 'tpl' && !confirm(`Delete this ${STEP_TYPE_LABELS[target?.type] || 'step'} from "${editingTemplate?.name || 'the program'}"? Enrolled students stop seeing it.\nCtrl+Z undoes it until you leave this page.`)) return;
+      snapshotBeforeChange();
       // Deleting a step reconnects whatever was attached to it straight to
       // its own parent — the closest step still standing — rather than
       // leaving anything behind in its place. A continuation child takes
@@ -1743,6 +1847,7 @@ function render() {
     btn.onclick = () => {
       const s = steps.find(x => x.id === btn.dataset.id);
       if (!s) return;
+      if (builderMode === 'tpl') { openStepEditor(s); return; }
       editingStepId = s.id;
       // Video steps: the pencil renames the move label shown above the clip.
       document.getElementById('textStepInput').value = s.type === 'video' ? videoStepLabel(s) : (s.content || '');
@@ -2197,7 +2302,7 @@ function renderStepContent(s, { autoplay = true } = {}) {
     // the AI-derived short move name (see requestVideoMoveLabel) -- falls
     // back to the raw Drive filename (extension stripped) until that
     // finishes, or forever if it failed/was never run (older steps).
-    const labelText = videoStepLabel(s);
+    const labelText = videoStepLabel(s) + (s.sound && builderMode === 'tpl' ? ' · sound' : '');
     const label = labelText ? `<div class="step-type">${escapeHtml(labelText)}</div>` : '';
     // The comment above stepVideoLazyObserver already names the exact
     // failure this guards against -- a protocol with many video steps
@@ -2227,14 +2332,18 @@ function renderStepContent(s, { autoplay = true } = {}) {
     return `<div class="step-type">Image</div><img src="/api/chat/media/${s.driveFileId}"/>`;
   }
   if (s.type === 'day') {
-    return `<div class="step-day-badge">Day ${s.dayNumber}</div>`;
+    // A program day carries a title/category; a plain protocol day doesn't.
+    const sub = [s.title, s.category].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<div class="step-day-badge">Day ${s.dayNumber}</div>${sub ? `<div class="pv-compact" style="text-align:center;margin-top:-2px">${sub}</div>` : ''}`;
   }
   // Program step types (timer / cta / youtube / section) -- program-view.js.
   // The Flow canvas (autoplay false) gets the compact card.
   if (['timer', 'cta', 'youtube', 'section'].includes(s.type)) {
     return PRAProgram.stepHtml(s, { compact: !autoplay, settings: programSettingsForSteps, dayNumber: dayNumberOfStep(s) });
   }
-  return `<div class="step-text">${escapeHtml(s.content || '')}</div>`;
+  // A program text step may have its own title (shown above the text).
+  const textTitle = s.title ? `<div class="step-type">${escapeHtml(s.title)}</div>` : '';
+  return `${textTitle}<div class="step-text"${textTitle ? ' style="margin-top:0"' : ''}>${escapeHtml(s.content || '')}</div>`;
 }
 
 // Assigns every step a fresh id when applying a saved template — reusing
@@ -2262,7 +2371,7 @@ function setupProtocolTemplates() {
   };
   document.getElementById('saveProtocolTemplateConfirmBtn').onclick = async () => {
     const name = document.getElementById('saveProtocolTemplateName').value.trim();
-    if (!name) return;
+    if (!name || builderMode === 'tpl') return;
     const r = await fetch('/api/chat/protocol-templates', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, steps }),
     });
@@ -2359,6 +2468,7 @@ function setupAiGenerate() {
     const prompt = document.getElementById('aiGeneratePrompt').value.trim();
     const status = document.getElementById('aiGenerateStatus');
     if (!prompt) { status.textContent = 'Describe the client/plan first.'; return; }
+    if (builderMode === 'tpl') { status.textContent = 'Not available while editing a program.'; return; }
     const replaceTarget = editingBuilder ? 'the Flow Builder draft' : "this client's current protocol";
     if (steps.length && !confirm(`This replaces ${replaceTarget} steps with the generated plan. Continue?`)) return;
     const btn = document.getElementById('aiGenerateRunBtn');
@@ -2448,6 +2558,7 @@ async function deleteSavedProtocol(t, refresh) {
   if (!r.ok) { alert('Could not delete it.'); return; }
   // It was open for editing -> step out of it.
   if (editingProgram && editingProgram.id === t.id) { editingProgram = null; await setProtocolMode('flow', false); }
+  if (editingTemplate && editingTemplate.id === t.id) await exitTemplateEditor();
   if (loadedTemplateId === t.id) loadedTemplateId = null;
   refresh();
 }
@@ -2463,6 +2574,9 @@ async function flowBuilderAutoApplyOn(what) {
   return !!d.enabled;
 }
 async function openInFlowBuilder(t, modalId) {
+  // A program template is edited in place in its own editor -- never copied
+  // into the Flow Builder draft, so auto-apply doesn't come into it.
+  if (t.kind === 'program') { closeModal(modalId); return openTemplateEditor(t); }
   if (await flowBuilderAutoApplyOn(`opening "${t.name}"`)) return;
   closeModal(modalId);
   if (builderMode !== 'true') await setProtocolMode('flow', true);
@@ -2476,6 +2590,7 @@ async function openInFlowBuilder(t, modalId) {
 // - the Flow Builder showing a saved protocol: that saved protocol is deleted and the draft cleared
 // - a student's or your own protocol: removed entirely (any saved protocol it came from stays)
 async function deleteOpenProtocol() {
+  if (builderMode === 'tpl') return;
   if (builderMode === 'program' && editingProgram) {
     return deleteSavedProtocol({ id: editingProgram.id, name: editingProgram.name, studentName: editingProgram.studentName }, () => {});
   }
@@ -2500,6 +2615,7 @@ async function deleteOpenProtocol() {
   return clearOpenRecord();
 }
 async function clearOpenRecord() {
+  if (builderMode === 'tpl') return;
   snapshotBeforeChange();
   steps = [];
   loadedTemplateId = null;
@@ -2513,7 +2629,7 @@ async function clearOpenRecord() {
 }
 
 async function resetFlow() {
-  if (!steps.length) return;
+  if (!steps.length || builderMode === 'tpl') return;
   const name = (document.getElementById('clientName').textContent || '').trim();
   const own = !editingBuilder && me && targetUserId === me.id;
   const what = builderMode === 'program' ? `${editingProgram.studentName}'s saved program` : editingBuilder ? 'the Flow Builder' : own ? 'your own protocol' : `${name}'s protocol`;
@@ -2551,6 +2667,7 @@ async function newBlankInFlowBuilder() {
 // Apply from the Student Custom Protocols list: one clear question naming
 // the protocol and whoever it lands on, then the same load as the folder.
 function confirmApplyStudentProtocol(t, fromModal = 'studentProtocolsModal') {
+  if (builderMode === 'tpl') { alert(`You're editing the program "${editingTemplate?.name || ''}". Nothing gets applied from here. Exit the program editor first, then open a student to apply a protocol to them.`); return; }
   if (t.kind === 'student' || fromModal === 'studentProtocolsModal') {
     if (builderMode === 'true') { alert(`Student programs don't go in the Flow Builder. Open the student (Student Flow) and Apply it there, or press Edit to work on ${t.studentName || t.name}'s program.`); return; }
     if (builderMode === 'program') { alert(`You're editing ${editingProgram.studentName}'s saved program. Open a student (Student Flow) to apply a program to them.`); return; }
@@ -2572,6 +2689,7 @@ function confirmApplyStudentProtocol(t, fromModal = 'studentProtocolsModal') {
 // Shared by Load a Template and Student Custom Protocols: puts a saved
 // protocol onto whatever's open (a student's protocol or the Flow Builder).
 async function loadProtocolTemplateOntoPage(t, modalId, confirmed) {
+  if (builderMode === 'tpl') return; // never swap steps into a program being edited
   // In the Flow Builder, picking a template just opens it for editing --
   // edits save straight back into it (see saveSteps). Only an unsaved
   // draft that isn't any template yet would be lost, so only that asks.
@@ -2698,6 +2816,7 @@ async function setupApplyProtocol() {
   document.getElementById('applyProtocolSearchInput').addEventListener('input', renderApplyProtocolTargetList);
 
   document.getElementById('applyProtocolConfirmBtn').onclick = async () => {
+    if (builderMode === 'tpl') return; // a program being edited is never applied to anyone
     const name = document.getElementById('applyProtocolName').value.trim();
     const target = applyProtocolTarget;
     const toAllBlank = target === APPLY_TO_BLANK_VALUE;
@@ -2754,6 +2873,7 @@ function wireModals() {
   };
   document.getElementById('chooseText').onclick = () => {
     closeModal('chooseTypeModal');
+    if (builderMode === 'tpl') { openStepEditor(null, { type: 'text', title: '', content: '' }); return; }
     document.getElementById('textStepInput').value = '';
     openModal('textModal');
   };
@@ -2765,6 +2885,7 @@ function wireModals() {
   };
   document.getElementById('chooseDay').onclick = async () => {
     closeModal('chooseTypeModal');
+    if (builderMode === 'tpl') { openStepEditor(null, { type: 'day', dayNumber: nextDayNumber(), title: '', category: '' }); return; }
     await commitNewStep({ type: 'day', dayNumber: nextDayNumber() });
   };
 
@@ -2998,6 +3119,306 @@ async function submitNewTemplate() {
   document.getElementById('templateAddTitle').value = '';
   document.getElementById('templateAddText').value = '';
   searchTemplates(document.getElementById('templateSearchInput').value || '');
+}
+
+// ── Program editor (builderMode 'tpl') ─────────────────────────────────
+// Edits a kind:"program" template (e.g. the Powerbatics Handstand Protocol)
+// in place. Steps keep their own ids; every change is a PATCH of the
+// template's steps; the shared Flow Builder draft (__builder__) is never
+// read or written here, so its auto-apply setting doesn't come into it.
+const STEP_TYPE_LABELS = { section: 'Section', day: 'Day', video: 'Video', image: 'Image', text: 'Text', timer: 'Timer', cta: 'Button (CTA)', youtube: 'YouTube', placeholder: 'Empty slot' };
+let tplSaveChain = Promise.resolve();
+function setTplStatus(text, isError) {
+  const el = document.getElementById('tplSaveStatus');
+  el.textContent = text || '';
+  el.classList.toggle('err', !!isError);
+}
+async function openTemplateEditor(t) {
+  if (!canEdit || !t?.id) return;
+  editingTemplate = { id: t.id, name: t.name || '', record: null };
+  builderMode = ''; // force a fresh load even if another program was open
+  try { const u = new URL(location.href); u.searchParams.set('editTemplate', t.id); history.replaceState(null, '', u); } catch {}
+  await setProtocolMode('flow', 'tpl');
+}
+async function loadTemplateSteps() {
+  const id = editingTemplate?.id;
+  const r = id ? await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id)).catch(() => null) : null;
+  const d = r && r.ok ? await r.json().catch(() => ({})) : {};
+  if (builderMode !== 'tpl' || editingTemplate?.id !== id) return; // switched away meanwhile
+  if (!d.template) {
+    steps = []; render();
+    document.getElementById('emptyHint').textContent = 'Could not load this program.';
+    setTplStatus('Could not load this program.', true);
+    return;
+  }
+  if (d.template.kind !== 'program') { await exitTemplateEditor(); return; }
+  editingTemplate.record = d.template;
+  editingTemplate.name = d.template.name || '';
+  steps = migrateSteps(d.template.steps || []); // ids as they are -- never fresh ones
+  lastAiPrompt = '';
+  protocolName = editingTemplate.name;
+  loadedTemplateId = null;
+  programSettingsForSteps = d.template.settings || null;
+  syncTemplateEditorChrome();
+  updateProtocolTitleHint();
+  render();
+}
+// Saves are queued so two quick edits can't land out of order.
+function saveTemplateSteps() {
+  const id = editingTemplate?.id;
+  if (!id) return Promise.resolve();
+  if (!steps.length) { setTplStatus('A program needs at least one step, so this was not saved. Ctrl+Z to undo.', true); return Promise.resolve(); }
+  const body = JSON.stringify({ steps });
+  setTplStatus('Saving…');
+  tplSaveChain = tplSaveChain.then(async () => {
+    const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body,
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (editingTemplate?.id !== id) return;
+    if (!r || !r.ok) { setTplStatus(`Not saved: ${d.error || 'connection problem'}. The last change is only on this screen.`, true); return; }
+    setTplStatus('Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+  });
+  return tplSaveChain;
+}
+function leaveTemplateEditorState() {
+  editingTemplate = null;
+  programSettingsForSteps = null;
+  try { const u = new URL(location.href); if (u.searchParams.has('editTemplate')) { u.searchParams.delete('editTemplate'); history.replaceState(null, '', u); } } catch {}
+}
+function syncTemplateEditorChrome() {
+  const on = builderMode === 'tpl' && !!editingTemplate;
+  document.getElementById('tplBar').style.display = on ? 'flex' : 'none';
+  if (on) document.getElementById('tplBarName').textContent = editingTemplate.name || 'Loading…';
+  ['tplFlowBtn', 'tplPageBtn', 'tplStudentViewBtn'].forEach(id => { document.getElementById(id).style.display = on ? '' : 'none'; });
+  // Nothing that clears, regenerates, re-saves-as or applies the program.
+  ['resetFlowBtn', 'aiGenerateBtn', 'applyProtocolBtn', 'saveTemplateBtn', 'deleteProtocolBtn'].forEach(id => { document.getElementById(id).style.display = canEdit && !on ? '' : 'none'; });
+  if (!on) setTplStatus('');
+}
+async function exitTemplateEditor() {
+  await tplSaveChain;
+  await setProtocolMode('flow', true); // back to the normal Flow Builder
+}
+function setupTemplateEditor() {
+  const preview = async () => {
+    if (!editingTemplate) return;
+    await tplSaveChain;
+    showProgramView({ templateId: editingTemplate.id, btnId: 'tplStudentViewBtn' });
+  };
+  document.getElementById('tplPreviewBtn').onclick = preview;
+  document.getElementById('tplStudentViewBtn').onclick = preview;
+  document.getElementById('tplBumpsBtn').onclick = openBumpsEditor;
+  document.getElementById('tplSettingsBtn').onclick = () => document.getElementById('protocolSettingsBtn').click();
+  document.getElementById('tplExitBtn').onclick = exitTemplateEditor;
+  const add = (id, fields) => { document.getElementById(id).onclick = () => { closeModal('chooseTypeModal'); openStepEditor(null, fields()); }; };
+  add('chooseSection', () => ({ type: 'section', title: '' }));
+  add('chooseTimer', () => ({ type: 'timer', title: '', rounds: 5, workSeconds: 60, restSeconds: 30 }));
+  add('chooseCta', () => ({ type: 'cta', problem: '', agitate: '', solve: '', buttonText: '', url: '', srcTag: '' }));
+  add('chooseYoutube', () => ({ type: 'youtube', youtubeId: '', title: '', intro: '' }));
+}
+
+// One form per step type. Only these fields are written -- anything else on
+// a step (parentId, isBranchRoot, name, moveLabelManual, unknown keys) stays.
+// An array entry is a row of small fields side by side.
+const TEXT_FORMAT_HELP = 'A short ALL-CAPS first line becomes a label (e.g. "THE TEST" then the text under it). A blank line starts a new part. Lines starting with "- " become bullets.';
+const STEP_FORMS = {
+  section: [{ key: 'title', label: 'Section title', req: true }],
+  day: [[{ key: 'dayNumber', label: 'Day number', kind: 'number', req: true, min: 1 }], { key: 'title', label: 'Day title' }, { key: 'category', label: 'Category', help: 'Small tag on the day, e.g. Shape, Balance, Strength.' }],
+  video: [{ key: 'moveLabel', label: 'Label shown above the clip' }, { key: 'driveFileId', label: 'Drive file id', req: true }, { key: 'sound', label: 'Plays with sound (a talking video, not a silent looping move clip)', kind: 'checkbox' }],
+  image: [{ key: 'driveFileId', label: 'Drive file id', req: true }, { key: 'caption', label: 'Caption / description' }],
+  text: [{ key: 'title', label: 'Title (optional)' }, { key: 'content', label: 'Text', kind: 'textarea', rows: 10, req: true, help: TEXT_FORMAT_HELP }],
+  timer: [{ key: 'title', label: 'Timer title' }, [{ key: 'rounds', label: 'Rounds', kind: 'number', req: true, min: 1 }, { key: 'workSeconds', label: 'Work (sec)', kind: 'number', req: true, min: 1 }, { key: 'restSeconds', label: 'Rest (sec)', kind: 'number', req: true, min: 0 }]],
+  cta: [{ key: 'problem', label: 'Problem', kind: 'textarea', rows: 3 }, { key: 'agitate', label: 'Agitate', kind: 'textarea', rows: 4 }, { key: 'solve', label: 'Solve', kind: 'textarea', rows: 3 },
+    { key: 'buttonText', label: 'Button text', req: true }, { key: 'url', label: 'Button link', help: "Used only when Drip settings has no button link (that one wins for every day's button)." },
+    { key: 'srcTag', label: 'src tag', help: 'Added to the link as ?src=, e.g. handstand-protocol-day7.' }],
+  youtube: [{ key: 'youtubeId', label: 'YouTube video (id or link)', req: true }, { key: 'title', label: 'Title' }, { key: 'intro', label: 'Intro', kind: 'textarea', rows: 3 }],
+};
+function youtubeIdFrom(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{6,20})/);
+  return m ? m[1] : s;
+}
+// step: the live step to edit, or null to add one built from newFields at
+// pendingStepTarget (the + that was clicked) once Save is pressed.
+function openStepEditor(step, newFields) {
+  const src = step || newFields;
+  const spec = STEP_FORMS[src.type];
+  const fieldsBox = document.getElementById('stepEditFields');
+  document.getElementById('stepEditTitle').textContent = `${step ? 'Edit' : 'Add'} ${STEP_TYPE_LABELS[src.type] || 'Step'}`;
+  document.getElementById('stepEditMsg').textContent = '';
+  if (!spec) {
+    fieldsBox.innerHTML = '<div class="pra-muted" style="font-size:.85rem">This step type has no form. Its fields are kept as they are.</div>';
+    document.getElementById('stepEditSaveBtn').onclick = () => closeModal('stepEditModal');
+    openModal('stepEditModal');
+    return;
+  }
+  const flat = spec.flat();
+  const fieldHtml = (f) => {
+    const id = 'sf_' + f.key;
+    if (f.kind === 'checkbox') return `<div class="step-form-field"><label class="step-form-check"><input type="checkbox" class="pra-toggle" id="${id}"/> ${escapeHtml(f.label)}</label></div>`;
+    const input = f.kind === 'textarea'
+      ? `<textarea class="pra-textarea" id="${id}" rows="${f.rows || 4}"></textarea>`
+      : `<input class="pra-input" id="${id}" ${f.kind === 'number' ? `type="number" step="1" ${f.min !== undefined ? `min="${f.min}"` : ''}` : 'type="text"'}/>`;
+    return `<div class="step-form-field"><label class="pra-label" for="${id}">${escapeHtml(f.label)}</label>${input}${f.help ? `<div class="step-form-help">${escapeHtml(f.help)}</div>` : ''}</div>`;
+  };
+  fieldsBox.innerHTML = spec.map(f => Array.isArray(f) ? `<div class="step-form-row">${f.map(fieldHtml).join('')}</div>` : fieldHtml(f)).join('');
+  // Values go in through the DOM (never through HTML attributes).
+  flat.forEach(f => {
+    const el = document.getElementById('sf_' + f.key);
+    let v = src[f.key];
+    if (src.type === 'video' && f.key === 'moveLabel') v = step ? videoStepLabel(step) : (v || '');
+    if (f.kind === 'checkbox') el.checked = !!v;
+    else el.value = v === undefined || v === null ? '' : String(v);
+  });
+  document.getElementById('stepEditSaveBtn').onclick = async () => {
+    const msg = document.getElementById('stepEditMsg');
+    const vals = {};
+    for (const f of flat) {
+      const el = document.getElementById('sf_' + f.key);
+      if (f.kind === 'checkbox') { vals[f.key] = el.checked; continue; }
+      let v = f.kind === 'textarea' ? el.value.replace(/\r/g, '').replace(/\s+$/, '') : el.value.trim();
+      if (f.kind === 'number') {
+        if (v === '') { if (f.req) { msg.textContent = `${f.label} is required.`; return; } vals[f.key] = undefined; continue; }
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < (f.min ?? 0) || n > 100000) { msg.textContent = `${f.label} must be a whole number${f.min ? ` of at least ${f.min}` : ''}.`; return; }
+        vals[f.key] = n; continue;
+      }
+      if (f.req && !v) { msg.textContent = `${f.label} is required.`; return; }
+      vals[f.key] = v;
+    }
+    if (src.type === 'youtube') {
+      vals.youtubeId = youtubeIdFrom(vals.youtubeId);
+      if (!/^[\w-]{6,20}$/.test(vals.youtubeId)) { msg.textContent = "That doesn't look like a YouTube video id or link."; return; }
+    }
+    if (src.type === 'cta' && vals.url && !/^https?:\/\//i.test(vals.url)) { msg.textContent = 'Button link must start with http:// or https://'; return; }
+    // Work out the changes before touching anything (so undo has the
+    // before-state): '' on a field the step never had isn't added; a
+    // checkbox only writes false over an existing true/false.
+    const changes = {};
+    for (const f of flat) {
+      const v = vals[f.key];
+      const had = Object.prototype.hasOwnProperty.call(src, f.key);
+      if (src.type === 'video' && f.key === 'moveLabel') {
+        if (step && v !== videoStepLabel(step)) { changes.moveLabel = v.replace(/\s+/g, ' ').slice(0, 80); changes.moveLabelManual = true; }
+        continue;
+      }
+      if (f.kind === 'checkbox') { if (v) changes[f.key] = true; else if (had) changes[f.key] = false; continue; }
+      if (v === undefined || (v === '' && !had)) continue;
+      changes[f.key] = v;
+    }
+    if (step) {
+      const live = steps.find(x => x.id === step.id);
+      if (!live) { closeModal('stepEditModal'); return; }
+      const changed = Object.keys(changes).some(k => live[k] !== changes[k]);
+      closeModal('stepEditModal');
+      if (!changed) return;
+      snapshotBeforeChange();
+      Object.assign(live, changes);
+      render();
+      await saveSteps();
+    } else {
+      const fields = { type: src.type };
+      Object.entries(changes).forEach(([k, v]) => { if (v !== '') fields[k] = v; });
+      closeModal('stepEditModal');
+      await commitNewStep(fields);
+    }
+  };
+  openModal('stepEditModal');
+}
+
+// Add-ons (template.bumps) and the goal line. Edited on a deep copy; every
+// field not on this form (unknown keys on a bump or a move) rides along.
+let bumpsDraft = null, goalDraft = '';
+const BUMP_MOVE_FIELDS = [['move', 'Move'], ['clip', 'Drive clip id'], ['how', 'How'], ['why', 'Why']];
+function bumpClipKey(m) { return !('clip' in m) && 'driveFileId' in m ? 'driveFileId' : 'clip'; }
+function readBumpsForm() {
+  document.querySelectorAll('#bumpsFields [data-bkey]').forEach(el => {
+    const b = bumpsDraft[el.dataset.bkey];
+    if (!b) return;
+    const target = el.dataset.mi !== undefined ? (b.moves || [])[Number(el.dataset.mi)] : b;
+    if (!target) return;
+    let key = el.dataset.field;
+    if (key === 'clip' && el.dataset.mi !== undefined) key = bumpClipKey(target);
+    const v = el.tagName === 'TEXTAREA' ? el.value.replace(/\r/g, '').trim() : el.value.trim();
+    if (v === '' && !(key in target)) return;
+    target[key] = v;
+  });
+}
+function renderBumpsForm() {
+  const box = document.getElementById('bumpsFields');
+  const keys = Object.keys(bumpsDraft);
+  box.innerHTML = `<div class="step-form-field"><label class="pra-label" for="bumpGoalInput">Goal (under the program title)</label><input class="pra-input" id="bumpGoalInput" type="text"/></div>`
+    + (keys.length ? keys.map(k => {
+      const b = bumpsDraft[k];
+      const moves = Array.isArray(b.moves) ? b.moves : [];
+      return `<div class="bump-card">
+        <div class="bump-card-key">Add-on: ${escapeHtml(k)}</div>
+        <div class="step-form-field"><label class="pra-label">Title</label><input class="pra-input" type="text" data-bkey="${escapeHtml(k)}" data-field="title"/></div>
+        <div class="step-form-field"><label class="pra-label">Intro</label><textarea class="pra-textarea" rows="2" data-bkey="${escapeHtml(k)}" data-field="intro"></textarea></div>
+        ${moves.map((m, i) => `<div class="bump-move">
+          <div class="bump-move-head"><span>Move ${i + 1}</span><button class="pra-btn pra-btn-ghost" type="button" data-remove-move="${escapeHtml(k)}" data-mi="${i}" style="padding:4px 10px;font-size:.7rem">Remove</button></div>
+          ${BUMP_MOVE_FIELDS.map(([f, label]) => `<div class="step-form-field"><label class="pra-label">${label}</label>${f === 'how' || f === 'why'
+            ? `<textarea class="pra-textarea" rows="2" data-bkey="${escapeHtml(k)}" data-mi="${i}" data-field="${f}"></textarea>`
+            : `<input class="pra-input" type="text" data-bkey="${escapeHtml(k)}" data-mi="${i}" data-field="${f}"/>`}</div>`).join('')}
+        </div>`).join('')}
+        <button class="pra-btn pra-btn-ghost" type="button" data-add-move="${escapeHtml(k)}" style="margin-top:10px;padding:6px 12px;font-size:.74rem">+ Add move</button>
+      </div>`;
+    }).join('') : '<div class="pra-muted" style="font-size:.85rem">This program has no add-ons.</div>');
+  document.getElementById('bumpGoalInput').value = goalDraft;
+  box.querySelectorAll('[data-bkey]').forEach(el => {
+    const b = bumpsDraft[el.dataset.bkey];
+    const target = el.dataset.mi !== undefined ? b.moves[Number(el.dataset.mi)] : b;
+    const key = el.dataset.field === 'clip' && el.dataset.mi !== undefined ? bumpClipKey(target) : el.dataset.field;
+    el.value = target[key] == null ? '' : String(target[key]);
+  });
+  box.querySelectorAll('[data-add-move]').forEach(btn => { btn.onclick = () => {
+    readBumpsForm(); stashGoal();
+    const b = bumpsDraft[btn.dataset.addMove];
+    b.moves = Array.isArray(b.moves) ? b.moves : [];
+    b.moves.push({ move: '', clip: '', how: '', why: '' });
+    renderBumpsForm();
+  }; });
+  box.querySelectorAll('[data-remove-move]').forEach(btn => { btn.onclick = () => {
+    readBumpsForm(); stashGoal();
+    bumpsDraft[btn.dataset.removeMove].moves.splice(Number(btn.dataset.mi), 1);
+    renderBumpsForm();
+  }; });
+}
+function stashGoal() { const el = document.getElementById('bumpGoalInput'); if (el) goalDraft = el.value; }
+function openBumpsEditor() {
+  const rec = editingTemplate?.record;
+  if (!rec) return;
+  bumpsDraft = JSON.parse(JSON.stringify(rec.bumps || {}));
+  goalDraft = rec.goal || '';
+  renderBumpsForm();
+  document.getElementById('bumpsMsg').textContent = '';
+  document.getElementById('bumpsSaveBtn').onclick = saveBumps;
+  openModal('bumpsModal');
+}
+async function saveBumps() {
+  const msg = document.getElementById('bumpsMsg');
+  const id = editingTemplate?.id;
+  if (!id) return;
+  readBumpsForm(); stashGoal();
+  const goal = String(goalDraft || '').trim();
+  const bumps = bumpsDraft;
+  for (const [k, b] of Object.entries(bumps)) {
+    if (!Array.isArray(b.moves)) continue;
+    // A move added and left blank is dropped; one with content needs a name.
+    b.moves = b.moves.filter(m => Object.entries(m).some(([key, v]) => v !== '' && v != null));
+    const unnamed = b.moves.findIndex(m => !String(m.move || '').trim());
+    if (unnamed >= 0) { msg.textContent = `${b.title || k}: move ${unnamed + 1} needs a name.`; return; }
+  }
+  msg.textContent = 'Saving…';
+  const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bumps, goal }),
+  }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) { msg.textContent = d.error || 'Could not save.'; return; }
+  if (editingTemplate?.id === id && editingTemplate.record) { editingTemplate.record.bumps = bumps; editingTemplate.record.goal = goal; }
+  closeModal('bumpsModal');
+  setTplStatus('Add-ons saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+  if (viewMode === 'program' && lastProgramViewOpt.templateId) showProgramView(lastProgramViewOpt);
 }
 
 init();
