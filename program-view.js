@@ -330,7 +330,9 @@
 
   // ── Interval timer ─────────────────────────────────────────────────────
   let audioCtx = null;
+  let timerSound = false; try { timerSound = localStorage.getItem('pvTimerSound') === '1'; } catch {}
   function beep(freq, dur, when = 0, vol = 0.25) {
+    if (!timerSound) return;
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -374,6 +376,7 @@
     }
     function loop() {
       if (!running) return;
+      if (!el.isConnected) { running = false; cancelAnimationFrame(raf); clearInterval(iv); unlockScreen(); allTimers.delete(api); return; }
       let ms = endsAt - Date.now();
       while (ms <= 0 && running) {
         idx++;
@@ -434,6 +437,10 @@
     }
     $('[data-act="toggle"]').onclick = () => (running ? pause() : start());
     $('[data-act="reset"]').onclick = reset;
+    const sb = document.createElement('button'); sb.type = 'button'; sb.className = $('[data-act="reset"]').className; sb.dataset.act = 'sound';
+    const paintSound = () => { sb.textContent = timerSound ? 'Sound on' : 'Sound off'; };
+    sb.onclick = () => { timerSound = !timerSound; try { localStorage.setItem('pvTimerSound', timerSound ? '1' : '0'); } catch {} document.querySelectorAll('[data-act="sound"]').forEach(b => { b.textContent = timerSound ? 'Sound on' : 'Sound off'; }); };
+    paintSound(); $('[data-act="reset"]').after(sb);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) { lockScreen(); loop(); } });
     paint(leftMs);
     return api;
