@@ -19,10 +19,11 @@
   const QUICK_ROLES = ['user', 'online', 'gym'];
 
   const css = `
-  .pp-kata-row { display: flex; justify-content: flex-end; margin: -2px 0 4px; width: 100%; }
-  .pp-kata-btn { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,155,255,0.08); border: 1px solid rgba(0,155,255,0.45); color: #fff; border-radius: 999px; padding: 3px 10px 3px 6px; font: 600 .7rem/1.2 var(--font-secondary, sans-serif); letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
-  .pp-kata-btn:hover { background: rgba(0,155,255,0.2); }
-  .pp-kata-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .pp-kata-thumb { position: relative; flex: 0 0 auto; width: 30px; height: 20px; border-radius: 4px; overflow: hidden; background: #000; border: 1px solid rgba(0,155,255,0.55); padding: 0; cursor: pointer; }
+  .pp-kata-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+  .pp-kata-thumb svg { position: absolute; inset: 0; margin: auto; width: 12px; height: 12px; filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+  .pp-kata-thumb:hover { border-color: #009bff; box-shadow: 0 0 0 1px #009bff; }
+  .pp-kata-spacer { flex: 0 0 auto; width: 30px; height: 20px; }
   .chip-val.pp-kata-open { cursor: pointer; }
   .pp-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 650; padding: 16px; box-sizing: border-box; }
   .pp-backdrop.show { display: flex; }
@@ -149,6 +150,8 @@
     const isSelf = !!(me && hasAccount && user.id === me.id);
     const staff = isStaff(me);
     const state = { user, isSelf, entries: [], archetype: { title: null, image: null, gender: null } };
+    // The Levels page renders hundreds of these at once (opts.preload) -- no kata thumbnails there.
+    state.noKatas = !!opts.preload;
 
     // header
     const av = q('.pp-avatar');
@@ -318,27 +321,32 @@
     body.innerHTML = `<div class="pp-col">${personality}</div>${programs}${addBtns}`;
     body.querySelectorAll('.pp-add-program').forEach(btn => btn.onclick = () => { state.entries.push({ program: btn.dataset.program, team: false, levels: {} }); renderBody(root, state, staff); });
     body.querySelectorAll('.chip-val.editable').forEach(el => el.addEventListener('click', () => editChip(root, state, staff, el)));
-    if (state.isSelf) addKataIcons(body, state, staff);
+    if (!state.noKatas && state.user.id && (state.isSelf || staff) && (state.isSelf || isClientRole(state.user.role))) addKataIcons(body, state, staff);
   }
 
-  // Only on your OWN profile: a kata icon under each level that has a kata
-  // video; it (and, for students, tapping the level itself) opens the kata
-  // in a lightbox.
-  const KATA_ICON = '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="#fff" stroke-width="1.6"/><path d="M10 9.2v5.6l4.8-2.8L10 9.2Z" fill="#009bff"/></svg>';
+  // Kata thumbnails: a tiny video thumbnail with a play button left of each
+  // element name that has a kata for that level -- on your OWN profile, and
+  // for coaches/admins on any student's. Opens the kata in a lightbox (for a
+  // student, tapping their own level does too).
+  const PLAY_SVG = '<svg viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5L3 1.5Z" fill="#009bff"/></svg>';
   function addKataIcons(body, state, staff, tries = 0) {
     if (!window.PRAKatas) { if (tries < 40) setTimeout(() => addKataIcons(body, state, staff, tries + 1), 150); return; }
     PRAKatas.get(state.user.id).then(data => {
       if (!body.isConnected) return;
+      const rows = [];
       body.querySelectorAll('.chip-val[data-cat]').forEach(el => {
         const cat = el.dataset.cat, e = state.entries[Number(el.dataset.idx)];
         if (!e || cat === 'TEAM') return;
         const level = cat === 'FOUNDATION' ? 0 : effectiveLevel(e, cat);
         const kata = (data.katas || []).find(k => k.cat === cat && k.level === level && k.video);
-        if (!kata) return;
-        const chip = el.closest('.pp-chip');
-        if (!chip || chip.nextElementSibling?.classList.contains('pp-kata-row')) return;
-        chip.insertAdjacentHTML('afterend', `<div class="pp-kata-row"><button type="button" class="pp-kata-btn" title="Watch your ${esc(kata.label)} kata">${KATA_ICON}<span>${esc(kata.label)} Kata</span></button></div>`);
-        chip.nextElementSibling.querySelector('button').onclick = () => PRAKatas.openLightbox(kata);
+        rows.push({ el, kata, chip: el.closest('.pp-chip') });
+      });
+      if (!rows.some(r => r.kata)) return;
+      rows.forEach(({ el, kata, chip }) => {
+        if (!chip || chip.querySelector('.pp-kata-thumb, .pp-kata-spacer')) return;
+        if (!kata) { chip.insertAdjacentHTML('afterbegin', '<span class="pp-kata-spacer"></span>'); return; }
+        chip.insertAdjacentHTML('afterbegin', `<button type="button" class="pp-kata-thumb" title="Watch ${esc(kata.label)} kata"><video muted playsinline preload="metadata" src="/api/chat/media/${encodeURIComponent(kata.video.driveFileId)}#t=0.5"></video>${PLAY_SVG}</button>`);
+        chip.querySelector('.pp-kata-thumb').onclick = (ev) => { ev.stopPropagation(); PRAKatas.openLightbox(kata); };
         if (!staff) { el.classList.add('pp-kata-open'); el.onclick = () => PRAKatas.openLightbox(kata); }
       });
     }).catch(() => {});
