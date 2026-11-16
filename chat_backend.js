@@ -1722,6 +1722,18 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   levelsCache = null; // next read should reflect the write immediately
 }
 
+// A new student (online/gym) starts at Foundation: give them a Levels sheet
+// row (GYM or ONLINE tab by role, Foundation blank = In Progress) unless
+// they're already on either tab. Called wherever someone becomes a student.
+async function ensureStudentLevelsRow(u) {
+  if (!u || !isClientRole(u.role) || !u.first || !u.last) return;
+  levelsCache = null;
+  const people = await fetchAllLevels();
+  if (findLevelsEntries(people, u.first, u.last).length) return;
+  await updateLevelsRow({ first: u.first, last: u.last, program: u.role === "gym" ? "Gym" : "Online", levels: {}, team: false });
+  console.log("[levels] added Foundation row for new student", u.first, u.last, u.role);
+}
+
 // Fixes a name typo/legal-name change right from the Levels tab or a chat
 // profile popup. Unlike updateLevelsRow (which overwrites a whole row's
 // levels/team from a full payload), this only ever touches the FIRST
@@ -4083,7 +4095,7 @@ export async function handleChatRequest(req, res, url) {
     target.role = role;
     writeJson(USERS_FILE, users);
     syncDefaultGroups();
-    syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
+    syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
   }
 
@@ -4148,7 +4160,7 @@ export async function handleChatRequest(req, res, url) {
         writeJson(USERS_FILE, users);
         if (target.role === "user") pullFromStaffOnlyChats(target.id, users);
         syncDefaultGroups();
-        syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
+        syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
         done.push(`App role: ${target.role}`);
       }
     }
@@ -4427,6 +4439,7 @@ export async function handleChatRequest(req, res, url) {
         // wouldn't show on the Strength Ninjas map. Add one now, TYPE
         // already set from their assigned role.
         upsertAppSheetRow({ first, last, email: newUser.email, phone, role }).catch(e => console.error("[APP sheet sync]", e.message));
+        ensureStudentLevelsRow(newUser).catch(e => console.error("[levels row]", e.message));
         // Admin creating someone else's account — no session cookie set here,
         // unlike signup. They'll get their own session when they log in.
         return sendJson(res, 200, { ok: true, user: publicUser(newUser) });
@@ -4449,7 +4462,7 @@ export async function handleChatRequest(req, res, url) {
       writeJson(USERS_FILE, users);
       if (!isStaff(target)) pullFromStaffOnlyChats(target.id, users);
       syncDefaultGroups();
-      syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message));
+      syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
     }
     // Correct a name/email/phone typo directly (e.g. "Muros" vs the real
