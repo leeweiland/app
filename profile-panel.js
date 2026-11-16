@@ -69,7 +69,19 @@
   .pp-team-box { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--pra-dim); border-radius: 4px; vertical-align: middle; }
   .pp-quota { display: inline-block; font-family: var(--font-secondary); font-size: .66rem; font-weight: 700; color: var(--pra-dim); background: rgba(255,255,255,0.06); border: 1px solid var(--pra-border); border-radius: 999px; padding: 1px 6px; white-space: nowrap; margin-left: 6px; vertical-align: middle; }
   .pp-msg { font-size: .78rem; margin-top: 8px; min-height: 1em; }
-  `;
+    /* Level rows must fit a phone: stripes shrink instead of pushing the row wider than the panel. */
+  .pp-col > .pp-chip, .pp-col > .pp-archetype { max-width: 100%; }
+  .pp-chip { min-width: 0; box-sizing: border-box; }
+  .pp-chip .cat.sized { min-width: 0; }
+  .pp-stripes { flex: 1 1 auto; min-width: 0; }
+  .pp-stripes i { flex: 0 1 10px; min-width: 2px; }
+  @media (max-width: 480px) {
+    .pp-backdrop { padding: 10px; }
+    .pp-box { padding: 18px 12px; }
+    .pp-chip { gap: 6px; padding: 5px 8px; }
+    .pp-stripes { margin-left: 4px; gap: 2px; }
+  }
+`;
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);
