@@ -1226,6 +1226,69 @@ async function fetchAllLevels() {
   levelsCache = { at: Date.now(), people };
   return people;
 }
+// ── Katas ────────────────────────────────────────────────────────────────
+// Kata videos live in Drive under "KATAS BY ELEMENT" (one subfolder per
+// element), each copy renamed "LEVEL <n> - <original name>". A student's
+// Katas page / profile kata icon shows the kata for each level they're at.
+const KATA_ROOT_FOLDER_ID = "1IpdnlRqiAcNAgJ5Vz7zN3zyEHJqsilnZ";
+const KATA_CATS = ["FOUNDATION", "HANDSTAND", "NINJA STRENGTH", "CIRQUE", "POWERMOVES", "FREERUN"];
+let kataLibraryCache = null; // { at, byKey: { "HANDSTAND|2": [file...] }, ids: Set }
+async function fetchKataLibrary(force) {
+  if (!force && kataLibraryCache && Date.now() - kataLibraryCache.at < 10 * 60 * 1000) return kataLibraryCache;
+  const accessToken = await getDriveAccessToken();
+  const H = { headers: { Authorization: `Bearer ${accessToken}` } };
+  const list = async (q) => {
+    const out = []; let pageToken = "";
+    do {
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=1000&fields=nextPageToken,files(id,name,modifiedTime,mimeType)${pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : ""}`, H);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || "Drive list failed");
+      out.push(...(d.files || [])); pageToken = d.nextPageToken || "";
+    } while (pageToken);
+    return out;
+  };
+  const folders = await list(`'${KATA_ROOT_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+  const byKey = {}; const ids = new Set();
+  for (const folder of folders) {
+    const cat = KATA_CATS.find(c => c === String(folder.name).trim().toUpperCase());
+    if (!cat) continue;
+    const files = await list(`'${folder.id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`);
+    for (const f of files) {
+      const m = String(f.name).match(/^LEVEL (\d+) - (.*)$/i);
+      if (!m) continue;
+      const rest = m[2].toUpperCase();
+      // One video represents each level: Lee's own demo first, then a
+      // plain "<ELEMENT> KATA LEVEL n" clip with no student name, then newest.
+      const score = (/\bLEE\b/.test(rest) ? 4 : 0) + (rest.startsWith(cat.split(" ")[0]) || rest.startsWith("FREE RUN") ? 3 : 0) + (/LEVEL TEST/.test(rest) ? 1 : 0) - (/OUTTAKE/.test(rest) ? 6 : 0);
+      const key = `${cat}|${Number(m[1])}`;
+      (byKey[key] = byKey[key] || []).push({ id: f.id, name: m[2], modifiedTime: f.modifiedTime, score });
+      ids.add(f.id);
+    }
+  }
+  Object.values(byKey).forEach(arr => arr.sort((a, b) => b.score - a.score || String(b.modifiedTime).localeCompare(String(a.modifiedTime))));
+  kataLibraryCache = { at: Date.now(), byKey, ids };
+  return kataLibraryCache;
+}
+// The levels a person is currently at, one kata per element: Foundation
+// (always), then each numbered element they've reached (an unrecorded
+// element reads as Level 1 once Foundation is done -- same rule as the
+// profile chips).
+async function katasForPerson(first, last) {
+  const [people, lib] = await Promise.all([fetchAllLevels(), fetchKataLibrary()]);
+  const entries = findLevelsEntries(people, first, last);
+  const checked = (v) => ["x", "yes"].includes(String(v || "").trim().toLowerCase());
+  const foundationDone = entries.some(e => checked(e.levels?.FOUNDATION));
+  const label = (c) => c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase());
+  const pick = (cat, level) => { const v = (lib.byKey[`${cat}|${level}`] || [])[0]; return v ? { driveFileId: v.id, name: v.name } : null; };
+  const katas = [{ cat: "FOUNDATION", level: 0, label: "Foundation", video: pick("FOUNDATION", 0) }];
+  for (const cat of KATA_CATS.slice(1)) {
+    const level = Math.max(0, ...entries.map(e => Number(e.levels?.[cat]) || 0)) || (foundationDone ? 1 : 0);
+    if (!level) continue;
+    katas.push({ cat, level, label: `${label(cat)} Level ${level}`, video: pick(cat, level) });
+  }
+  return { katas, hasLevels: entries.length > 0 };
+}
+
 function findLevelsEntries(people, first, last) {
   const f = String(first || "").trim().toLowerCase();
   const l = String(last || "").trim().toLowerCase();
@@ -4137,7 +4200,12 @@ export async function handleChatRequest(req, res, url) {
     const msg = MessagesDB.findMessageByDriveFileId(fileId);
     const allUsers = readJson(USERS_FILE, []);
     const isProfilePic = allUsers.some(u => u.profilePictureFileId === fileId);
-    if (!isProfilePic) {
+    // Kata library videos: any signed-in student or staff member.
+    let isKata = false;
+    if (!isProfilePic && (isClientRole(mediaUser.role) || isStaff(mediaUser))) {
+      try { isKata = (await fetchKataLibrary()).ids.has(fileId); } catch {}
+    }
+    if (!isProfilePic && !isKata) {
       if (msg) {
         const convos = readJson(CONVOS_FILE, []);
         const convo = convos.find(c => c.id === msg.conversationId);
@@ -5058,6 +5126,34 @@ export async function handleChatRequest(req, res, url) {
     // contact-profile popup, and profile.html's "My Levels" section. Levels
     // are visible to any signed-in viewer for anyone now; only the write
     // side (/api/chat/levels/update below) stays staff-only.
+    // Katas: the kata video for each level a person is at. Students see
+    // their own; coaches/admins can pick any student (?userId=).
+    if (p === "/api/chat/katas" && req.method === "GET") {
+      const targetId = url.searchParams.get("userId") || user.id;
+      if (targetId !== user.id && !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
+      const target = readJson(USERS_FILE, []).find(u => u.id === targetId);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      try {
+        const r = await katasForPerson(target.first, target.last);
+        return sendJson(res, 200, { user: { id: target.id, first: target.first, last: target.last }, ...r });
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+    // Coach/admin "Student Katas" dropdown: every app student.
+    if (p === "/api/chat/katas/students" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const students = readJson(USERS_FILE, []).filter(u => isClientRole(u.role))
+        .map(u => ({ id: u.id, first: u.first, last: u.last, role: u.role }))
+        .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
+      return sendJson(res, 200, { students });
+    }
+    if (p === "/api/chat/katas/refresh" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      await fetchKataLibrary(true);
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (p === "/api/chat/levels/lookup" && req.method === "GET") {
       const qFirst = url.searchParams.get("first");
       const qLast = url.searchParams.get("last");

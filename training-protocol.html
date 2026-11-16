@@ -8,6 +8,7 @@
 <script src="/chat-app/pra-badges.js"></script>
 <script src="/chat-app/video-speed.js"></script>
 <script src="/chat-app/profile-panel.js"></script>
+<script src="/chat-app/katas.js"></script>
 <style>
   body { margin: 0; }
   /* Capacitor's iOS build runs with ios.scrollEnabled:false (see
@@ -292,6 +293,8 @@
           <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Page</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
+          <button class="view-mode-btn" id="katasViewBtn" type="button">Katas</button>
+          <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
           <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
           <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Student Page</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
@@ -326,6 +329,12 @@
       </select>
     </div>
     <div class="protocol-page" id="protocolPage" style="display:none"></div>
+    <div class="protocol-page" id="katasPage" style="display:none">
+      <div id="katasStudentRow" style="display:none;justify-content:center">
+        <select class="pra-select" id="katasStudentSelect" style="max-width:320px"></select>
+      </div>
+      <div id="katasList"></div>
+    </div>
     </div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
   </div>
@@ -1294,6 +1303,8 @@ function applyViewModeDisplay() {
   const hasSteps = !!steps.length;
   document.getElementById('protocolCanvas').style.display = (hasSteps && viewMode === 'flow') ? 'block' : 'none';
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
+  document.getElementById('katasPage').style.display = viewMode === 'katas' ? 'flex' : 'none';
+  document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas') ? 'block' : 'none';
   // The day-select row also needs at least one <option value="day-id">
   // (see syncPageDaySelectOptions, called from renderPageView) — hidden
   // here regardless of that so it never flashes visible for a beat in
@@ -1315,6 +1326,7 @@ async function setProtocolMode(mode, builder) {
   const builderChanged = key !== builderMode;
   builderMode = key;
   viewMode = mode;
+  ['katasViewBtn', 'studentKatasBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
   editingBuilder = key !== 'false';
   activeId = key === 'program' ? programKey(editingProgram.id) : key === 'true' ? BUILDER_PROTOCOL_ID : targetUserId;
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
@@ -1379,7 +1391,47 @@ function setupMenuDragScroll(el) {
   el.addEventListener('pointerleave', end);
   el.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
 }
+// Katas tab: the kata video for each level the student is at (katas.js).
+// Students (and a coach on their own page) get "Katas"; coaches/admins get
+// "Student Katas" with a dropdown of every student.
+let katasStudentsLoaded = false;
+async function showKatas(which) {
+  viewMode = 'katas';
+  document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(which === 'students' ? 'studentKatasBtn' : 'katasViewBtn').classList.add('active');
+  applyViewModeDisplay();
+  const row = document.getElementById('katasStudentRow');
+  const sel = document.getElementById('katasStudentSelect');
+  row.style.display = which === 'students' ? 'flex' : 'none';
+  let userId = targetUserId;
+  if (which === 'students') {
+    if (!katasStudentsLoaded) {
+      const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
+      sel.innerHTML = '<option value="">Choose a student…</option>' + d.students.map(st => `<option value="${escapeHtml(st.id)}">${escapeHtml(st.first + ' ' + st.last)}</option>`).join('');
+      sel.onchange = () => showKatas('students');
+      katasStudentsLoaded = true;
+      if (targetUserId !== me.id && d.students.some(st => st.id === targetUserId)) sel.value = targetUserId;
+    }
+    userId = sel.value;
+    if (!userId) { document.getElementById('katasList').innerHTML = '<div class="kata-empty">Pick a student to see their katas.</div>'; return; }
+  }
+  const list = document.getElementById('katasList');
+  list.innerHTML = '<div class="kata-empty">Loading katas…</div>';
+  try {
+    const data = await PRAKatas.get(userId);
+    if (viewMode !== 'katas') return;
+    PRAKatas.renderList(list, data);
+  } catch (e) {
+    list.innerHTML = `<div class="kata-empty">${escapeHtml(e.message || 'Could not load katas')}</div>`;
+  }
+}
 function setupViewModeToggle() {
+  const ownKatas = !canEdit || targetUserId === me.id;
+  document.getElementById('katasViewBtn').style.display = ownKatas ? '' : 'none';
+  document.getElementById('katasViewBtn').onclick = () => showKatas('own');
+  document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
+  if (params.get('view') === 'katas') setTimeout(() => showKatas(ownKatas ? 'own' : 'students'), 0);
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, btn.dataset.builder === 'program' ? 'program' : btn.dataset.builder === 'true');
@@ -1424,7 +1476,8 @@ function render() {
 
   if (!steps.length) {
     emptyHint.style.display = 'block';
-    document.getElementById('viewModeToggle').style.display = canEdit ? '' : 'none';
+    // Students still need the menu for Katas even with no protocol yet.
+    document.getElementById('viewModeToggle').style.display = '';
     applyViewModeDisplay();
     return;
   }
