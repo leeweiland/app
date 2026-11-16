@@ -90,6 +90,7 @@
   .pv-bump-move h4 { margin: 10px 0 4px; font-size: .92rem; }
   .pv-bump-move p { margin: 0 0 4px; font-size: .84rem; font-weight: 400; line-height: 1.5; color: #d6d6dc; }
   .pv-bump-move p.why { color: var(--pra-dim); }
+  .pv-bump-img { display: block; width: 100%; border-radius: 10px; margin-top: 8px; }
   .pv-empty { text-align: center; color: var(--pra-dim); padding: 40px 10px; font-size: .9rem; }
   /* Interval timer */
   .pv-timer { border: 1px solid var(--pra-border); border-radius: 16px; padding: 14px 14px 16px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,0.035), transparent 70%); text-align: center; }
@@ -282,7 +283,7 @@
         ${staff && !opts.preview ? `<div class="pv-chips"><span class="pv-chip ${b.owned ? 'on' : 'off'}">${b.owned ? 'Owned by student' : 'Not owned by student'}</span></div>` : ''}</div><span class="pv-caret">▾</span></summary>
         <div class="pv-body">${b.intro ? `<div class="pv-bump-intro">${esc(b.intro)}</div>` : ''}
         ${(b.moves || []).map(m => `<div class="pv-bump-move">${m.clip || m.driveFileId ? `<video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>` : ''}
-          <h4>${esc(m.move || '')}</h4>${m.how ? `<p>${esc(m.how)}</p>` : ''}${m.why ? `<p class="why">${esc(m.why)}</p>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
+          <h4>${esc(m.move || '')}</h4>${m.how ? `<p>${esc(m.how)}</p>` : ''}${m.why ? `<p class="why">${esc(m.why)}</p>` : ''}${m.image ? `<img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">
