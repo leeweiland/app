@@ -339,10 +339,14 @@
         </div>
       </div>`;
     }).join('');
+    // A student (online/gym, so they have a student group) with nothing on
+    // the Levels sheet yet is at Foundation -- show that row (and its kata).
+    const foundationOnly = !state.entries.length && isClientRole(state.user.role)
+      ? `<div class="pp-program"><div class="pp-col"><div class="pp-chip"><span class="cat sized"><span>Foundation</span></span>${stripes(0)}<span class="chip-val" data-idx="-1" data-cat="FOUNDATION" style="color:#fff">In Progress</span></div></div></div>` : '';
     const missing = staff ? ['Gym', 'Online'].filter(p => !state.entries.some(e => e.program === p)) : [];
     const addBtns = missing.map(p => `<button class="pra-btn pra-btn-ghost pp-add-program" data-program="${p}" style="width:100%;margin-bottom:8px;font-size:.8rem">+ Add ${p} Levels</button>`).join('');
     const body = root.querySelector('.pp-body');
-    body.innerHTML = `<div class="pp-col">${personality}</div>${programs}${addBtns}`;
+    body.innerHTML = `<div class="pp-col">${personality}</div>${programs}${foundationOnly}${addBtns}`;
     body.querySelectorAll('.pp-add-program').forEach(btn => btn.onclick = () => { state.entries.push({ program: btn.dataset.program, team: false, levels: {} }); renderBody(root, state, staff); });
     body.querySelectorAll('.chip-val.editable').forEach(el => el.addEventListener('click', () => editChip(root, state, staff, el)));
     if (!state.noKatas && state.user.id && (state.isSelf || staff) && (state.isSelf || isClientRole(state.user.role))) addKataIcons(body, state, staff);
@@ -360,7 +364,7 @@
       const rows = [];
       body.querySelectorAll('.chip-val[data-cat]').forEach(el => {
         const cat = el.dataset.cat, e = state.entries[Number(el.dataset.idx)];
-        if (!e || cat === 'TEAM') return;
+        if (cat === 'TEAM' || (!e && cat !== 'FOUNDATION')) return;
         const level = cat === 'FOUNDATION' ? 0 : effectiveLevel(e, cat);
         const kata = (data.katas || []).find(k => k.cat === cat && k.level === level && k.video);
         rows.push({ el, kata, chip: el.closest('.pp-chip') });
