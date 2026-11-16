@@ -70,7 +70,14 @@ createServer(async (req, res) => {
   // cookie-carrying) Capacitor app flashed the login screen before landing
   // on chat.html. Deciding here means the right page is the FIRST thing
   // that ever paints.
-  const rootPage = pathname === "/" ? (getSessionUser(req) ? "chat.html" : "login.html") : null;
+  const rootUser = pathname === "/" ? getSessionUser(req) : null;
+  // Handstand Protocol trainees land on their protocol, not the chat.
+  if (rootUser?.role === "trainee") {
+    res.writeHead(302, { Location: `/chat-app/training-protocol.html?userId=${encodeURIComponent(rootUser.id)}` });
+    res.end();
+    return;
+  }
+  const rootPage = pathname === "/" ? (rootUser ? "chat.html" : "login.html") : null;
   let filePath = join(__dirname, rootPage || pathname);
   if (!existsSync(filePath)) {
     res.writeHead(404); res.end("Not found"); return;

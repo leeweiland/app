@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteS
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
-import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } from "crypto";
 import { request as httpsRequest } from "https";
 import { execFileSync, execFile } from "child_process";
 import { Readable } from "stream";
@@ -763,6 +763,7 @@ function roleToSheetType(role) {
   if (role === "admin2") return "Admin 2";
   if (role === "coach") return "Coach";
   if (role === "online" || role === "gym") return "Student";
+  if (role === "trainee") return "Trainee";
   return "User";
 }
 
@@ -2367,6 +2368,7 @@ async function checkPhysiqueCheckinReminders() {
   let changed = false;
   for (const user of users) {
     if (user.archived) continue;
+    if (isTrainee(user)) continue; // no Physique Builder for trainees
     // Opt-out, not opt-in -- default on for everyone unless an admin has
     // explicitly turned it off for this user.
     if (user.physiqueCheckinNotifsEnabled === false) continue;
@@ -3147,6 +3149,173 @@ function pullFromStaffOnlyChats(userId, users) {
 }
 export function isClientRole(role) { return role === "online" || role === "gym"; }
 
+// ── Trainees (Powerbatics Handstand Protocol buyers) ─────────────────────
+// A $17 course buyer: sees only their protocol and one "<First Last> Group"
+// with Lee + Alexis -- never a student (no levels, katas, students panel,
+// physique reminders, directory, default protocol or welcome message).
+export function isTrainee(user) { return user?.role === "trainee"; }
+const HANDSTAND_TEMPLATE_NAME = "Powerbatics Handstand Protocol";
+const TRAINEE_GROUP_OWNER_EMAIL = "lee@pacificrimathletics.com";
+const HC_BUMP_KEYS = ["wrist", "shoulder", "hips"];
+// Lee (by email) + Alexis (first name), active admins only; resolved at run
+// time so no ids are hardcoded. Falls back to every admin if neither exists.
+function traineeGroupStaffIds(users) {
+  const admins = users.filter(u => !u.archived && isAdmin(u));
+  const lee = admins.find(u => (u.email || "").trim().toLowerCase() === TRAINEE_GROUP_OWNER_EMAIL);
+  const alexis = admins.filter(u => String(u.first || "").trim().toLowerCase() === "alexis");
+  const ids = [lee, ...alexis].filter(Boolean).map(u => u.id);
+  return ids.length ? Array.from(new Set(ids)) : admins.map(u => u.id);
+}
+function normalizeBumps(list) {
+  const alias = { wrists: "wrist", shoulders: "shoulder", hip: "hips" };
+  return Array.from(new Set((Array.isArray(list) ? list : [list]).map(b => String(b || "").trim().toLowerCase()).map(b => alias[b] || b).filter(b => HC_BUMP_KEYS.includes(b))));
+}
+
+// Program templates (e.g. the Handstand Protocol) carry protocol-level
+// settings on the template record itself (template.settings) -- read live
+// every time, so a change in Protocol Settings reaches every enrolled user.
+const PROGRAM_SETTINGS_DEFAULTS = { dripEnabled: true, waitAmount: 1, waitUnit: "days", lockedText: "Unlocks in {time}", ctaUrl: "" };
+const DRIP_UNIT_MS = { minutes: 60000, hours: 3600000, days: 86400000 };
+function programSettings(template) {
+  const s = { ...PROGRAM_SETTINGS_DEFAULTS, ...(template?.settings || {}) };
+  s.dripEnabled = s.dripEnabled !== false;
+  s.waitAmount = Math.max(0, Number(s.waitAmount) || 0) || 1;
+  if (!DRIP_UNIT_MS[s.waitUnit]) s.waitUnit = "days";
+  s.lockedText = String(s.lockedText || PROGRAM_SETTINGS_DEFAULTS.lockedText);
+  s.ctaUrl = String(s.ctaUrl || "");
+  return s;
+}
+function sanitizeProgramSettings(input, current) {
+  const next = { ...programSettings({ settings: current }) };
+  if (!input || typeof input !== "object") return next;
+  if (input.dripEnabled !== undefined) next.dripEnabled = !!input.dripEnabled;
+  if (input.waitAmount !== undefined) { const n = Number(input.waitAmount); if (Number.isFinite(n) && n > 0 && n <= 10000) next.waitAmount = n; }
+  if (input.waitUnit !== undefined && DRIP_UNIT_MS[input.waitUnit]) next.waitUnit = input.waitUnit;
+  if (input.lockedText !== undefined) next.lockedText = String(input.lockedText).slice(0, 200) || PROGRAM_SETTINGS_DEFAULTS.lockedText;
+  if (input.ctaUrl !== undefined) {
+    const u = String(input.ctaUrl).trim();
+    if (u && !/^https?:\/\//i.test(u)) throw new Error("CTA link must start with http:// or https://");
+    next.ctaUrl = u.slice(0, 500);
+  }
+  return next;
+}
+// A user's enrollments (programs[] on their TRAINING_PROTOCOLS_FILE record,
+// separate from their own steps so an online student's custom protocol is
+// never overwritten by a course they also bought).
+function findProgramTemplate(templates, enr) {
+  if (!enr) return null;
+  return (enr.templateId && templates.find(t => t.id === enr.templateId))
+    || templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === String(enr.templateName || "").trim().toLowerCase())
+    || null;
+}
+function findHandstandTemplate(templates) {
+  return templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()) || null;
+}
+// Same flattening as training-protocol.html's linearStepOrder: a day's whole
+// below-chain finishes before the next day (its right neighbor) starts.
+function linearProtocolSteps(list) {
+  const kids = new Map();
+  list.forEach(s => { const k = s.parentId || null; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(s); });
+  const primary = n => (kids.get(n.id) || []).find(k => !k.isBranchRoot) || null;
+  const below = n => (kids.get(n.id) || []).find(k => k.isBranchRoot) || null;
+  const isLeaf = n => !primary(n) && !below(n);
+  const out = [], seen = new Set();
+  const visit = (n) => {
+    if (seen.has(n.id)) return;
+    seen.add(n.id); out.push(n);
+    const next = primary(n), b = below(n), nextLeaf = next && isLeaf(next);
+    if (nextLeaf) visit(next);
+    if (b) visit(b);
+    if (next && !nextLeaf) visit(next);
+  };
+  (kids.get(null) || []).forEach(visit);
+  return out;
+}
+// Splits a program template into intro sections (everything before Day 1,
+// headed by "section" steps) and days, with each day's drip state.
+function buildProgramView(template, enr, { staffView, ownedBumps, now = Date.now() }) {
+  const settings = programSettings(template);
+  const order = linearProtocolSteps(template.steps || []).filter(s => s.type !== "placeholder");
+  const sections = [], days = [];
+  let cur = null;
+  for (const s of order) {
+    if (s.type === "day") { cur = { dayNumber: Number(s.dayNumber) || days.length + 1, title: s.title || "", category: s.category || "", steps: [] }; days.push(cur); continue; }
+    if (s.type === "section") { cur = { title: s.title || s.content || "", steps: [] }; sections.push(cur); continue; }
+    if (!cur) { cur = { title: "", steps: [] }; sections.push(cur); }
+    cur.steps.push(s);
+  }
+  const startMs = Date.parse(enr?.startedAt || "") || now;
+  const waitMs = settings.waitAmount * DRIP_UNIT_MS[settings.waitUnit];
+  days.forEach(d => {
+    d.unlocksAt = new Date(startMs + (d.dayNumber - 1) * waitMs).toISOString();
+    d.unlocked = !settings.dripEnabled || !enr || startMs + (d.dayNumber - 1) * waitMs <= now;
+  });
+  const unlockedCount = days.filter(d => d.unlocked).length;
+  let visibleDays = days;
+  if (!staffView) {
+    const firstLocked = days.find(d => !d.unlocked);
+    visibleDays = days.filter(d => d.unlocked);
+    // The next day shows as a locked card (title + countdown, no content);
+    // anything after it isn't sent at all.
+    if (firstLocked) visibleDays.push({ dayNumber: firstLocked.dayNumber, title: firstLocked.title, category: firstLocked.category, unlocked: false, unlocksAt: firstLocked.unlocksAt, steps: [] });
+  }
+  const owned = new Set(ownedBumps || []);
+  const bumps = Object.entries(template.bumps || {})
+    .filter(([key]) => staffView || owned.has(key))
+    .map(([key, b]) => ({ key, title: b.title || key, intro: b.intro || "", moves: b.moves || [], owned: owned.has(key) }));
+  return {
+    templateId: template.id, name: template.name, goal: template.goal || "",
+    startedAt: enr?.startedAt || null, settings, staffView: !!staffView,
+    totalDays: days.length, unlockedCount, sections, days: visibleDays, bumps, now: new Date(now).toISOString(),
+  };
+}
+// Whether a user's program enrollments make this Drive file theirs to
+// stream: any step of an enrolled template, or a move in a bump they own.
+function programOwnsFile(userId, userRecord, fileId, ownedBumps) {
+  const programs = userRecord?.programs || [];
+  if (!programs.length) return false;
+  const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+  const owned = new Set(ownedBumps || []);
+  return programs.some(enr => {
+    const t = findProgramTemplate(templates, enr);
+    if (!t) return false;
+    if ((t.steps || []).some(s => s.driveFileId === fileId)) return true;
+    return Object.entries(t.bumps || {}).some(([key, b]) => owned.has(key) && (b.moves || []).some(m => m.clip === fileId || m.driveFileId === fileId));
+  });
+}
+// x-pra-app-key, compared in constant time (hashing first equalizes lengths).
+function bridgeKeyOk(req) {
+  const key = process.env.PRA_APP_BRIDGE_KEY;
+  const given = req.headers["x-pra-app-key"];
+  if (!key || typeof given !== "string" || !given) return false;
+  const a = createHash("sha256").update(given).digest(), b = createHash("sha256").update(key).digest();
+  return timingSafeEqual(a, b);
+}
+// Idempotent: adds a Handstand Protocol enrollment (startedAt = now) unless
+// one exists; an existing one keeps its startedAt. Works before the template
+// is installed (matched by name later). Returns the enrollment.
+function enrollInHandstand(userId, source) {
+  const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+  const template = findHandstandTemplate(templates);
+  const all = readJson(TRAINING_PROTOCOLS_FILE, {});
+  const rec = all[userId] || {};
+  const programs = Array.isArray(rec.programs) ? rec.programs : [];
+  const nameKey = HANDSTAND_TEMPLATE_NAME.toLowerCase();
+  let enr = programs.find(e => (template && e.templateId === template.id) || String(e.templateName || "").toLowerCase() === nameKey);
+  let changed = false;
+  if (!enr) {
+    const now = new Date().toISOString();
+    enr = { templateId: template?.id || null, templateName: HANDSTAND_TEMPLATE_NAME, startedAt: now, assignedAt: now, source: source || null };
+    programs.push(enr);
+    changed = true;
+  } else {
+    if (!enr.startedAt) { enr.startedAt = new Date().toISOString(); changed = true; }
+    if (!enr.templateId && template) { enr.templateId = template.id; changed = true; }
+  }
+  if (changed) { all[userId] = { ...rec, programs }; writeJson(TRAINING_PROTOCOLS_FILE, all); }
+  return { enrollment: enr, templateInstalled: !!template };
+}
+
 // ── CRM bridge for the Students panel ───────────────────────────────────
 const CRM_BASE_URL = process.env.CRM_BASE_URL || "https://crm-app-production-eb8f.up.railway.app";
 function crmFetch(path, opts = {}) {
@@ -3378,11 +3547,15 @@ function syncDefaultGroups() {
       }
     }
   }
+  const traineeStaff = traineeGroupStaffIds(users);
   active.forEach(u => {
     // Plain "user" accounts (a free/unpaid signup) get no group at all —
     // only actually becoming an online/gym client creates one, including
     // every admin/admin2/coach.
     if (isClientRole(u.role)) ensurePersonalGroup(u, "student", [...adminIds, ...coachIds]);
+    // Handstand Protocol trainee: their own group with Lee + Alexis only.
+    // Left as-is (frozen) if they later become a student or user.
+    else if (isTrainee(u)) ensurePersonalGroup(u, "trainee", traineeStaff);
     // Made a plain "user" again: pulled from their own coaching group (staff
     // keep it and its history). Going back to online/gym re-adds them above.
     else if (u.role === "user") {
@@ -3392,6 +3565,9 @@ function syncDefaultGroups() {
   });
   writeJson(CONVOS_FILE, convos);
 
+  // The welcome message and the auto-applied student protocol are for
+  // online/gym students only -- a trainee group starts empty.
+  newlyCreatedGroups.splice(0, newlyCreatedGroups.length, ...newlyCreatedGroups.filter(g => g.convo.autoGroupType === "student"));
   if (newlyCreatedGroups.length) {
     const cfg = getConfig();
     if (cfg.welcomeMessageEnabled && cfg.welcomeMessageText) {
@@ -3461,6 +3637,8 @@ function syncDefaultGroups() {
 // unaffected either direction.
 
 function canCreateDm(creator, otherUser) {
+  // Trainees only ever talk in their own group.
+  if (isTrainee(creator)) return false;
   const creatorIsClient = !isStaff(creator);
   const otherIsClient = !isStaff(otherUser);
   if (creatorIsClient) return isAdmin(otherUser);
@@ -3799,6 +3977,72 @@ export async function handleChatRequest(req, res, url) {
   // Signed-out Gym booking page -- checked before anything that needs a session.
   if (await handlePublicGymRequest(req, res, url)) return true;
   if (await handlePublicLevelsRequest(req, res, url)) return true;
+
+  // ─── CRM bridge: Handstand Protocol buyers ───────────────────────────────
+  // Key-auth (x-pra-app-key = PRA_APP_BRIDGE_KEY), no session. POST creates
+  // or upgrades the account and enrolls it; GET ?email= reports status.
+  // Never overwrites an existing password; never sends email/SMS.
+  if (p === "/api/bridge/trainee") {
+    if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
+    if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
+    const users = readJson(USERS_FILE, []);
+    const findByEmail = (email) => users.find(u => String(u.email || "").trim().toLowerCase() === email);
+    if (req.method === "GET") {
+      const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
+      if (!email) return sendJson(res, 400, { error: "email is required" });
+      const u = findByEmail(email);
+      if (!u) return sendJson(res, 200, { exists: false });
+      const rec = readJson(TRAINING_PROTOCOLS_FILE, {})[u.id];
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const ht = findHandstandTemplate(templates);
+      const enr = (rec?.programs || []).find(e => (ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase());
+      const template = findProgramTemplate(templates, enr);
+      const view = enr && template ? buildProgramView(template, enr, { staffView: true, ownedBumps: u.hcBumps }) : null;
+      return sendJson(res, 200, {
+        exists: true, userId: u.id, role: u.role, archived: !!u.archived, bumps: u.hcBumps || [],
+        enrolled: !!enr, startedAt: enr?.startedAt || null, templateInstalled: !!template,
+        currentDay: view ? view.unlockedCount : null, totalDays: view ? view.totalDays : null,
+        groupId: readJson(CONVOS_FILE, []).find(c => c.autoGroupType === "trainee" && c.autoGroupUserId === u.id)?.id || null,
+      });
+    }
+    if (req.method === "POST") {
+      const body = await readJsonBody(req);
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return sendJson(res, 400, { error: "A valid email is required" });
+      const source = String(body.source || "").slice(0, 200) || null;
+      const bumps = normalizeBumps(body.bumps);
+      let u = findByEmail(email);
+      let created = false;
+      if (!u) {
+        // A checkout without a name still gets an account (named after the email).
+        const first = String(body.first || "").trim() || email.split("@")[0], last = String(body.last || "").trim();
+        const password = String(body.password || "");
+        if (!password) return sendJson(res, 400, { error: "password is required to create an account" });
+        const { salt, hash } = hashPassword(password);
+        const now = new Date().toISOString();
+        u = {
+          id: randomUUID(), first, last, email, phone: String(body.phone || "").trim(),
+          passwordSalt: salt, passwordHash: hash, role: "trainee",
+          profilePictureFileId: null, ip: null, geo: null, createdAt: now,
+          // Same durable record the signup route keeps; the course checkout
+          // carries the Terms agreement for this account.
+          termsAcceptedAt: now, createdVia: "crm-bridge", hcSource: source,
+        };
+        users.push(u);
+        created = true;
+      } else if (u.role === "user") {
+        u.role = "trainee"; // staff/online/gym keep their role
+      }
+      if (!u.phone && body.phone) u.phone = String(body.phone).trim();
+      u.hcBumps = Array.from(new Set([...(u.hcBumps || []), ...bumps]));
+      writeJson(USERS_FILE, users);
+      const { enrollment, templateInstalled } = enrollInHandstand(u.id, source);
+      if (isTrainee(u)) syncDefaultGroups();
+      console.log(`[bridge trainee] ${created ? "created" : "updated"} ${u.id} role=${u.role} bumps=${u.hcBumps.join(",") || "-"}`);
+      return sendJson(res, 200, { userId: u.id, created, passwordSet: created, role: u.role, bumps: u.hcBumps, startedAt: enrollment.startedAt, templateInstalled });
+    }
+    return sendJson(res, 405, { error: "GET or POST" });
+  }
 
   // ─── Auth ───────────────────────────────────────────────────────────────
   if (req.method === "POST" && p === "/api/auth/signup") {
@@ -4238,7 +4482,10 @@ export async function handleChatRequest(req, res, url) {
         // send (the first copy can land in a chat they're not part of).
         const inAnyChat = () => MessagesDB.findMessagesByDriveFileId(fileId)
           .some(mm => convos.find(c => c.id === mm.conversationId)?.participantIds.includes(mediaUser.id));
-        if (!publicMove && !(convo && convo.participantIds.includes(mediaUser.id)) && !inAnyChat()) { res.writeHead(403); res.end(); return true; }
+        // A program clip can also have been posted in some chat (e.g. an
+        // "Ask a Question" about it) -- an enrolled user still owns it.
+        const inOwnProgram = () => programOwnsFile(mediaUser.id, readJson(TRAINING_PROTOCOLS_FILE, {})[mediaUser.id], fileId, mediaUser.hcBumps);
+        if (!publicMove && !(convo && convo.participantIds.includes(mediaUser.id)) && !inAnyChat() && !inOwnProgram()) { res.writeHead(403); res.end(); return true; }
       } else {
         // Not a chat-message attachment — check whether it's a training-protocol
         // step's video/image (these are never posted as chat messages, so the
@@ -4258,7 +4505,10 @@ export async function handleChatRequest(req, res, url) {
         // Checking against the REQUESTING user's own protocol fixes it:
         // every student who actually has this fileId in their own steps is
         // allowed, not just one.
-        const ownsIt = (allProtocols[mediaUser.id]?.steps || []).some(s => s.driveFileId === fileId);
+        // ...or a step/bump clip of a program they're enrolled in (Handstand
+        // Protocol steps are read live from the template, never copied).
+        const ownsIt = (allProtocols[mediaUser.id]?.steps || []).some(s => s.driveFileId === fileId)
+          || (!isStaff(mediaUser) && programOwnsFile(mediaUser.id, allProtocols[mediaUser.id], fileId, mediaUser.hcBumps));
         if (!ownsIt && !isStaff(mediaUser)) {
           // Doesn't own it and isn't staff -- still distinguish "this
           // belongs to someone else's protocol" (403) from "not attached
@@ -4405,6 +4655,20 @@ export async function handleChatRequest(req, res, url) {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
 
+    // Trainees get their protocol and their own chats -- nothing else
+    // (levels, katas, map, favorites, moves, physique, intake...).
+    if (isTrainee(user)) {
+      const own = encodeURIComponent(user.id);
+      const allowed = p === "/api/chat/conversations" || p.startsWith("/api/chat/conversations/")
+        || p === "/api/chat/contacts" || p.startsWith("/api/chat/me/")
+        || p === `/api/chat/training-protocol/${own}` || p === "/api/chat/training-protocol/video-error"
+        || p === `/api/chat/protocol-program/${own}`
+        || p.startsWith("/api/chat/profile/")
+        || ["/api/chat/push-subscribe", "/api/chat/push-subscribe-native", "/api/chat/vapid-public-key", "/api/chat/active-conversation",
+          "/api/chat/block", "/api/chat/unblock", "/api/chat/blocked", "/api/chat/report", "/api/chat/gifs"].includes(p);
+      if (!allowed) return sendJson(res, 403, { error: "Not part of the Handstand Protocol" });
+    }
+
     // ─── Admin ────────────────────────────────────────────────────────────
     if (p === "/api/admin/users") {
       if (req.method === "GET") {
@@ -4417,7 +4681,7 @@ export async function handleChatRequest(req, res, url) {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
         const { first, last, email, phone, password, role } = await readJsonBody(req);
         if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
-        if (["user", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
+        if (["user", "trainee", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'trainee', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
         const users = readJson(USERS_FILE, []);
         const dupReason = findDuplicateUserReason(users, { email, phone, first, last });
         if (dupReason) return sendJson(res, 409, { error: dupReason });
@@ -4433,6 +4697,7 @@ export async function handleChatRequest(req, res, url) {
         };
         users.push(newUser);
         writeJson(USERS_FILE, users);
+        if (isTrainee(newUser)) enrollInHandstand(newUser.id, "admin-panel");
         syncDefaultGroups();
         // Someone created straight from Admin Panel never went through
         // signup, so they'd otherwise have no App sheet row at all and
@@ -4449,7 +4714,7 @@ export async function handleChatRequest(req, res, url) {
     if (roleMatch && req.method === "POST") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const { role } = await readJsonBody(req);
-      if (["user", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
+      if (["user", "trainee", "online", "gym", "coach", "admin", "admin2"].indexOf(role) === -1) return sendJson(res, 400, { error: "role must be 'user', 'trainee', 'online', 'gym', 'coach', 'admin', or 'admin2'" });
       const users = readJson(USERS_FILE, []);
       const target = users.find(u => u.id === roleMatch[1]);
       if (!target) return sendJson(res, 404, { error: "User not found" });
@@ -4461,6 +4726,7 @@ export async function handleChatRequest(req, res, url) {
       target.role = role;
       writeJson(USERS_FILE, users);
       if (!isStaff(target)) pullFromStaffOnlyChats(target.id, users);
+      if (isTrainee(target)) enrollInHandstand(target.id, "admin-panel");
       syncDefaultGroups();
       syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
       return sendJson(res, 200, { ok: true, user: publicUser(target) });
@@ -4763,7 +5029,13 @@ export async function handleChatRequest(req, res, url) {
       // (see openContactProfile() in chat.html) — the shared auto-group
       // (syncDefaultGroups) plus whatever an admin starts with them
       // directly remain the only real conversations a client ever has.
-      const users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
+      let users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
+      // Trainees get an empty directory; nobody but staff
+      // sees trainees in the directory.
+      // (Their group already lists Lee + Alexis; directory rows would offer
+      // DMs a trainee can't start.)
+      if (isTrainee(user)) users = [];
+      else if (!isStaff(user)) users = users.filter(u => !isTrainee(u));
       // Staff also get each student's renewal alert (see renewalForStudent) so a student's own
       // row -- often with no conversation yet -- is flagged like their coaching group.
       let renewalEligibility = null;
@@ -5271,6 +5543,35 @@ export async function handleChatRequest(req, res, url) {
     // routes) get silently swallowed here first (matching "search-videos"
     // etc. as if it were a user id) and never reach their real handlers
     // further down, which is why the video picker always came back empty.
+    // ─── Program view (dripped course, e.g. the Handstand Protocol) ───────
+    // The enrolled user (or staff) gets the template's live content split
+    // into intro sections + days. Students only receive unlocked days plus
+    // the next locked day's title/unlock time -- later days never leave the
+    // server. Staff get everything with each day's drip state. Staff can
+    // also preview a template directly (no enrollment, nothing locked).
+    const programTemplatePreview = p.match(/^\/api\/chat\/protocol-program\/template\/([^/]+)$/);
+    if (programTemplatePreview && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const template = readJson(PROTOCOL_TEMPLATES_FILE, []).find(t => t.id === programTemplatePreview[1]);
+      if (!template) return sendJson(res, 404, { error: "Template not found" });
+      return sendJson(res, 200, { program: buildProgramView(template, null, { staffView: true, ownedBumps: [] }) });
+    }
+    const programMatch = p.match(/^\/api\/chat\/protocol-program\/([^/]+)$/);
+    if (programMatch && req.method === "GET") {
+      const targetUserId = programMatch[1];
+      if (targetUserId !== user.id && !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
+      const target = readJson(USERS_FILE, []).find(u => u.id === targetUserId);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const programs = readJson(TRAINING_PROTOCOLS_FILE, {})[targetUserId]?.programs || [];
+      const wanted = url.searchParams.get("templateId");
+      const enr = (wanted && programs.find(e => findProgramTemplate(templates, e)?.id === wanted)) || programs.find(e => findProgramTemplate(templates, e)) || null;
+      const template = findProgramTemplate(templates, enr);
+      if (!template) return sendJson(res, 404, { error: programs.length ? "This program isn't installed yet" : "Not enrolled in a program" });
+      const staffView = isStaff(user) && user.id !== targetUserId;
+      return sendJson(res, 200, { program: buildProgramView(template, enr, { staffView, ownedBumps: target.hcBumps || [] }), ownedBumps: target.hcBumps || [] });
+    }
+
     const TRAINING_PROTOCOL_RESERVED_SUBPATHS = ["upload-image", "upload-video", "search-videos", "video-folders", "label-video", "ai-generate", "apply", "default-protocol", "video-error"];
     const protocolMatch = p.match(/^\/api\/chat\/training-protocol\/([^/]+)$/);
     if (protocolMatch && !TRAINING_PROTOCOL_RESERVED_SUBPATHS.includes(protocolMatch[1])) {
@@ -5300,6 +5601,16 @@ export async function handleChatRequest(req, res, url) {
           // like the sync "not working" even though it just ran that one
           // time already.
           templateId: all[targetUserId]?.templateId || null,
+          // Enrolled programs (e.g. the Handstand Protocol) -- shown by
+          // training-protocol.html's program view, steps read live from the
+          // template via /api/chat/protocol-program/:userId.
+          programs: (() => {
+            const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+            return (all[targetUserId]?.programs || []).map(e => {
+              const t = findProgramTemplate(templates, e);
+              return { templateId: t?.id || e.templateId || null, name: t?.name || e.templateName || "", startedAt: e.startedAt || null, installed: !!t };
+            });
+          })(),
         });
       }
       if (req.method === "POST") {
@@ -6010,6 +6321,8 @@ export async function handleChatRequest(req, res, url) {
       };
       const list = templates
         .map(t => ({ id: t.id, name: t.name, createdAt: t.createdAt, stepCount: t.steps.length,
+          // Program templates (drip settings live on the template itself).
+          ...(t.settings || t.kind === "program" ? { isProgram: true, settings: programSettings(t) } : {}),
           ...(wantStudent ? { studentName: t.studentName || "", pageTitle: t.pageTitle || "", sourceUrl: t.sourceUrl || "",
             days: t.steps.filter(s => s.type === "day").length, videos: t.steps.filter(s => s.type === "video").length,
             accountId: accounts.get(nameKey(t.studentName)) || null,
@@ -6053,16 +6366,24 @@ export async function handleChatRequest(req, res, url) {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
       // Also takes `steps`: a template opened in the Flow Builder saves its
       // edits back here (saveSteps in training-protocol.html).
-      const { name, steps } = await readJsonBody(req);
-      if (name === undefined && !(Array.isArray(steps) && steps.length)) return sendJson(res, 400, { error: "Name or steps required" });
+      // ...and `settings`: a program template's drip/CTA settings (Protocol
+      // Settings modal), merged over the current ones.
+      const { name, steps, settings } = await readJsonBody(req);
+      if (name === undefined && !(Array.isArray(steps) && steps.length) && settings === undefined) return sendJson(res, 400, { error: "Name, steps or settings required" });
       if (name !== undefined && !String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
       const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
       const template = templates.find(t => t.id === protocolTemplateMatch[1]);
       if (!template) return sendJson(res, 404, { error: "Template not found" });
       if (name !== undefined) template.name = name.trim();
       if (Array.isArray(steps) && steps.length) { template.steps = steps; template.updatedAt = new Date().toISOString(); }
+      if (settings !== undefined) {
+        try { template.settings = sanitizeProgramSettings(settings, template.settings); }
+        catch (e) { return sendJson(res, 400, { error: e.message }); }
+        template.settingsUpdatedAt = new Date().toISOString();
+        template.settingsUpdatedBy = user.id;
+      }
       writeJson(PROTOCOL_TEMPLATES_FILE, templates);
-      return sendJson(res, 200, { ok: true });
+      return sendJson(res, 200, { ok: true, ...(settings !== undefined ? { settings: programSettings(template) } : {}) });
     }
 
     // ─── Push subscribe ────────────────────────────────────────────────
@@ -6276,7 +6597,7 @@ export async function handleChatRequest(req, res, url) {
     }
 
     if (p === "/api/chat/conversations" && req.method === "GET") {
-      ensureSelfConvo(user);
+      if (!isTrainee(user)) ensureSelfConvo(user);
       const blockedUserIds = new Set(readJson(BLOCKS_FILE, []).filter(b => b.blockerId === user.id).map(b => b.blockedId));
       const convos = readJson(CONVOS_FILE, []).filter(c => c.participantIds.includes(user.id))
         .filter(c => c.type !== "dm" || !c.participantIds.some(id => blockedUserIds.has(id)));
