@@ -80,6 +80,10 @@
   .pv-side { display: flex; flex-direction: column; gap: 10px; }
   .pv-side-title { padding: 0 2px; }
   .pv-bump .pv-head { padding: 12px 14px; }
+  .pv-addons { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding-top: 18px; border-top: 2px solid ${NEON}; }
+  .pv-addons-title { font-family: var(--font-secondary); font-size: .8rem; letter-spacing: .22em; text-transform: uppercase; color: ${NEON}; text-align: center; }
+  .pv-bump { border: 1px solid rgba(212,255,0,0.45); border-left: 4px solid ${NEON}; }
+  .pv-addon-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: ${NEON}; color: #000; font-family: var(--font-secondary); font-size: .58rem; letter-spacing: .14em; font-weight: 700; }
   .pv-bump-intro { font-size: .84rem; font-weight: 400; color: var(--pra-dim); line-height: 1.5; }
   .pv-bump-move { border-top: 1px solid var(--pra-border); padding-top: 12px; }
   .pv-bump-move video { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #000; border-radius: 10px; }
@@ -273,12 +277,12 @@
         Add-ons owned: <b>${(data.ownedBumps || []).length ? esc(data.ownedBumps.join(', ')) : 'none'}</b>.`;
     }
     const bumps = pr.bumps || [];
-    const side = bumps.length ? `<aside class="pv-side"><div class="pv-label pv-side-title">${staff ? 'Add-ons' : 'Your add-ons'}</div>
-      ${bumps.map(b => `<details class="pv-block pv-bump"><summary class="pv-head"><div class="pv-head-text"><div class="pv-head-title">${esc(b.title)}</div>
+    const side = bumps.length ? `<section class="pv-addons"><div class="pv-addons-title">${staff ? 'Add-ons' : 'Your add-ons'}</div>
+      ${bumps.map(b => `<details class="pv-block pv-bump"><summary class="pv-head"><div class="pv-head-text"><div class="pv-head-title">${esc(b.title)}</div><div class="pv-chips"><span class="pv-addon-chip">ADD-ON</span></div>
         ${staff && !opts.preview ? `<div class="pv-chips"><span class="pv-chip ${b.owned ? 'on' : 'off'}">${b.owned ? 'Owned by student' : 'Not owned by student'}</span></div>` : ''}</div><span class="pv-caret">▾</span></summary>
         <div class="pv-body">${b.intro ? `<div class="pv-bump-intro">${esc(b.intro)}</div>` : ''}
         ${(b.moves || []).map(m => `<div class="pv-bump-move">${m.clip || m.driveFileId ? `<video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>` : ''}
-          <h4>${esc(m.move || '')}</h4>${m.how ? `<p>${esc(m.how)}</p>` : ''}${m.why ? `<p class="why">${esc(m.why)}</p>` : ''}</div>`).join('')}</div></details>`).join('')}</aside>` : '';
+          <h4>${esc(m.move || '')}</h4>${m.how ? `<p>${esc(m.how)}</p>` : ''}${m.why ? `<p class="why">${esc(m.why)}</p>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">
@@ -289,14 +293,14 @@
         ${opts.onOpenChat ? `<button type="button" class="pv-chat-btn" data-open-chat>${CHAT_SVG}${esc(opts.chatLabel || 'Open your group chat')}</button>` : ''}
       </div>
       ${note ? `<div class="pv-note">${note}</div>` : ''}
-      <div class="pv-layout${side ? ' has-side' : ''}">
+      <div class="pv-layout">
         <div class="pv-main">
           ${(pr.sections || []).filter(s => s.steps.length).map(sectionBlock).join('')}
           ${lockedFirst.map(dayBlock).join('')}
           ${openDays.map(dayBlock).join('')}
           ${!pr.days.length ? '<div class="pv-empty">No days yet.</div>' : ''}
+          ${side}
         </div>
-        ${side}
       </div>
     </div>`;
 
