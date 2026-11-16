@@ -70,6 +70,22 @@
     a.blur();
   }, { passive: true });
 
+  // The show-password eye: tapping it used to pull focus off the password
+  // box (keyboard dropped mid-zoom and the page got stuck zoomed in). Keep
+  // the box focused so the keyboard just stays put.
+  document.querySelectorAll('.pw-toggle').forEach((btn) => {
+    let hadFocus = false;
+    btn.addEventListener('pointerdown', () => {
+      hadFocus = document.activeElement === document.getElementById(btn.dataset.target);
+    });
+    btn.addEventListener('mousedown', (e) => { if (hadFocus) e.preventDefault(); });
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      if (hadFocus && input && document.activeElement !== input) input.focus();
+      hadFocus = false;
+    });
+  });
+
   // Return/Go jumps to the next box; on the last one it submits as usual
   // and the keyboard closes.
   document.addEventListener('keydown', (e) => {
