@@ -1418,7 +1418,7 @@ async function showKatas(which) {
   const list = document.getElementById('katasList');
   list.innerHTML = '<div class="kata-empty">Loading katas…</div>';
   try {
-    const data = await PRAKatas.get(userId);
+    const data = await PRAKatas.get(userId, true);
     if (viewMode !== 'katas') return;
     PRAKatas.renderList(list, data);
   } catch (e) {

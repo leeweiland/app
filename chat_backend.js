@@ -1279,7 +1279,9 @@ async function fetchKataLibrary(force) {
 // element reads as Level 1 once Foundation is done -- same rule as the
 // profile chips).
 async function katasForPerson(first, last) {
-  const [people, lib] = await Promise.all([fetchAllLevels(), fetchKataLibrary()]);
+  // Always re-read the folders here so adding/renaming/removing a video in
+  // Drive shows up the next time a Katas page or profile opens.
+  const [people, lib] = await Promise.all([fetchAllLevels(), fetchKataLibrary(true)]);
   const entries = findLevelsEntries(people, first, last);
   const checked = (v) => ["x", "yes"].includes(String(v || "").trim().toLowerCase());
   const foundationDone = entries.some(e => checked(e.levels?.FOUNDATION));

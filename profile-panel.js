@@ -355,7 +355,7 @@
   const PLAY_SVG = '<svg viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5L3 1.5Z" fill="#009bff"/></svg>';
   function addKataIcons(body, state, staff, tries = 0) {
     if (!window.PRAKatas) { if (tries < 40) setTimeout(() => addKataIcons(body, state, staff, tries + 1), 150); return; }
-    PRAKatas.get(state.user.id).then(data => {
+    PRAKatas.get(state.user.id, true).then(data => {
       if (!body.isConnected) return;
       const rows = [];
       body.querySelectorAll('.chip-val[data-cat]').forEach(el => {
