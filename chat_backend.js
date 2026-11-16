@@ -1254,8 +1254,13 @@ async function fetchKataLibrary(force) {
     if (!cat) continue;
     const files = await list(`'${folder.id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`);
     for (const f of files) {
-      const m = String(f.name).match(/^LEVEL (\d+) - (.*)$/i);
+      if (!/^video\//.test(f.mimeType || "") && !/\.(mp4|mov|m4v|webm)$/i.test(f.name)) continue;
+      // "LEVEL 3 - name" (how the copies were labeled), else "LEVEL 3"
+      // anywhere in the name; anything in FOUNDATION is its one level (0).
+      let m = String(f.name).match(/^LEVEL (\d+) - (.*)$/i);
+      if (!m) { const n = String(f.name).match(/\b(?:LEVEL|LVL)\s*(\d{1,2})\b/i); m = n ? [null, n[1], f.name] : (cat === "FOUNDATION" ? [null, "0", f.name] : null); }
       if (!m) continue;
+      if (cat === "FOUNDATION") m[1] = "0";
       const rest = m[2].toUpperCase();
       // One video represents each level: Lee's own demo first, then a
       // plain "<ELEMENT> KATA LEVEL n" clip with no student name, then newest.
