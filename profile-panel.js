@@ -19,6 +19,9 @@
   const QUICK_ROLES = ['user', 'online', 'gym'];
 
   const css = `
+  .pp-ctp { align-items: center; gap: 6px; margin: 0 auto 10px; color: #009bff; font: 600 .74rem/1.2 var(--font-secondary, sans-serif); letter-spacing: .04em; text-transform: uppercase; text-decoration: none; }
+  .pp-ctp:hover { text-decoration: underline; }
+  .pp-ctp svg { width: 16px; height: 16px; flex-shrink: 0; }
   .pp-kata-thumb { position: relative; flex: 0 0 auto; width: 30px; height: 20px; border-radius: 4px; overflow: hidden; background: #000; border: 1px solid rgba(0,155,255,0.55); padding: 0; cursor: pointer; }
   .pp-kata-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
   .pp-kata-thumb svg { position: absolute; inset: 0; margin: auto; width: 12px; height: 12px; filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
@@ -127,6 +130,7 @@
       </div>
       <div class="pp-name-row"><div class="pra-h2 pp-name"></div><button type="button" class="pp-name-edit-btn" title="Rename" style="display:none">✎</button></div>
       <div class="pp-role" style="margin-bottom:8px"></div>
+      <a class="pp-ctp" style="display:none"></a>
       <div class="pra-muted pp-location"></div>
       <div class="pp-badges"></div>
       <div class="btn-row pp-actions"></div>
@@ -166,6 +170,14 @@
     editBtn.style.display = staff && hasAccount ? '' : 'none';
     editBtn.onclick = () => startNameEdit(root, state, opts);
     q('.pp-role').innerHTML = roleBadgeHtml(user);
+    // Custom Training Protocol link: on your own profile, and for coaches/admins on a student's.
+    const ctp = q('.pp-ctp');
+    const showCtp = hasAccount && ((isSelf && user.role !== 'user') || (staff && isClientRole(user.role)));
+    ctp.style.display = showCtp ? 'inline-flex' : 'none';
+    if (showCtp) {
+      ctp.href = '/chat-app/training-protocol.html?userId=' + encodeURIComponent(user.id);
+      ctp.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="3.5" width="15" height="17" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg><span>Custom Training Protocol</span>';
+    }
     // opts.onHeaderClick: photo + name open something (the Levels page opens
     // the full panel with the moves feed).
     [q('.pp-avatar'), q('.pp-name')].forEach(el => {

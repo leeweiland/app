@@ -84,6 +84,7 @@
     lb.addEventListener('click', (e) => { if (e.target === lb) closeLightbox(); });
     lb.querySelector('.kata-lb-close').onclick = () => closeLightbox();
     document.body.appendChild(lb);
+    const lv = lb.querySelector('video'); try { lv.play().catch(() => {}); } catch {}
     if (window.PRABack) PRABack.push('kata', () => closeLightbox(true));
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lb) closeLightbox(); });
