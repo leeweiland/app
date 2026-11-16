@@ -1234,7 +1234,7 @@ const KATA_ROOT_FOLDER_ID = "1IpdnlRqiAcNAgJ5Vz7zN3zyEHJqsilnZ";
 const KATA_CATS = ["FOUNDATION", "HANDSTAND", "NINJA STRENGTH", "CIRQUE", "POWERMOVES", "FREERUN"];
 let kataLibraryCache = null; // { at, byKey: { "HANDSTAND|2": [file...] }, ids: Set }
 async function fetchKataLibrary(force) {
-  if (!force && kataLibraryCache && Date.now() - kataLibraryCache.at < 10 * 60 * 1000) return kataLibraryCache;
+  if (!force && kataLibraryCache && Date.now() - kataLibraryCache.at < 60 * 1000) return kataLibraryCache;
   const accessToken = await getDriveAccessToken();
   const H = { headers: { Authorization: `Bearer ${accessToken}` } };
   const list = async (q) => {
