@@ -9,6 +9,7 @@
 <script src="/chat-app/video-speed.js"></script>
 <script src="/chat-app/profile-panel.js"></script>
 <script src="/chat-app/katas.js"></script>
+<script src="/chat-app/program-view.js"></script>
 <style>
   body { margin: 0; }
   /* Capacitor's iOS build runs with ios.scrollEnabled:false (see
@@ -200,6 +201,10 @@
   .protocol-lock .t { font-family: var(--font-secondary); font-size: 1.05rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
   .protocol-lock .s { font-size: .85rem; color: #d6d6dc; max-width: 320px; line-height: 1.4; }
 
+  /* Handstand Protocol trainee: just their program -- no view menu,
+     undo/redo, title editor or badges. */
+  .trainee-mode #viewModeToggle, .trainee-mode .protocol-head-controls-left, .trainee-mode #protocolTitleInput, .trainee-mode #clientBadges, .trainee-mode #pageDaySelectRow { display: none !important; }
+
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
   /* display:flex column + the search-results div being the one flexible,
@@ -293,6 +298,7 @@
           <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Page</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
+          <button class="view-mode-btn" id="programViewBtn" type="button" style="display:none">Handstand Protocol</button>
           <button class="view-mode-btn" id="katasViewBtn" type="button">Katas</button>
           <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
           <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
@@ -329,6 +335,8 @@
       </select>
     </div>
     <div class="protocol-page" id="protocolPage" style="display:none"></div>
+    <!-- Dripped program (Handstand Protocol) -- see program-view.js -->
+    <div id="programView" style="display:none"></div>
     <div class="protocol-page" id="katasPage" style="display:none">
       <div id="katasStudentRow" style="display:none;justify-content:center">
         <select class="pra-select" id="katasStudentSelect" style="max-width:320px"></select>
@@ -399,6 +407,34 @@
   <div class="modal-backdrop" id="videoFoldersModal">
     <div class="pra-panel modal-box" style="max-width:600px;overflow-y:auto">
       <div class="pra-h2" style="margin-bottom:6px">Protocol Settings</div>
+      <!-- Drip programs (e.g. the Handstand Protocol): stored on the template
+           (template.settings) and read live for every enrolled student. -->
+      <div id="dripSettingsSection" style="display:none;margin-bottom:18px">
+        <div class="pra-h2" style="margin:4px 0 6px;font-size:1.05rem">Drip Programs</div>
+        <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">How a program's days unlock for each student, counted from the day they started. Changes apply to everyone already enrolled.</div>
+        <select class="pra-select" id="dripTemplateSelect" style="margin-bottom:12px"></select>
+        <label style="display:flex;align-items:center;gap:10px;font-size:.86rem;margin-bottom:12px;cursor:pointer">
+          <input type="checkbox" class="pra-toggle" id="dripEnabledToggle"/> Drip days (unlock one day at a time)
+        </label>
+        <div id="dripWaitRow" style="display:flex;align-items:center;gap:8px;font-size:.86rem;margin-bottom:12px;flex-wrap:wrap">
+          <span>Unlock the next day every</span>
+          <input class="pra-input" id="dripWaitAmount" type="number" min="1" step="1" style="width:80px"/>
+          <select class="pra-select" id="dripWaitUnit" style="width:auto">
+            <option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option>
+          </select>
+        </div>
+        <label class="pra-label" for="dripLockedText" style="display:block;margin-bottom:4px">Locked day text</label>
+        <input class="pra-input" id="dripLockedText" placeholder="Unlocks in {time}" style="margin-bottom:4px"/>
+        <div class="pra-muted" style="font-size:.72rem;margin-bottom:12px">{time} becomes a live countdown, like 23h 12m.</div>
+        <label class="pra-label" for="dripCtaUrl" style="display:block;margin-bottom:4px">Button link (every day's button)</label>
+        <input class="pra-input" id="dripCtaUrl" placeholder="https://www.pacificrimathletics.com/online" style="margin-bottom:4px"/>
+        <div class="pra-muted" style="font-size:.72rem;margin-bottom:10px">Each day's button adds its own ?src= tag (e.g. handstand-protocol-day7).</div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="pra-btn" id="dripSaveBtn" type="button">Save drip settings</button>
+          <span class="pra-muted" id="dripSaveMsg" style="font-size:.78rem"></span>
+        </div>
+      </div>
+      <div id="adminProtocolSettings">
       <div class="pra-h2" style="margin:4px 0 6px;font-size:1.05rem">Move Video Folders</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:14px">Adding a video to a step searches these Google Drive folders, including every folder inside them.</div>
       <div id="videoFoldersList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
@@ -411,9 +447,10 @@
       <textarea class="pra-textarea" id="protocolAiPromptInput" rows="9" style="width:100%;font-size:.82rem"></textarea>
       <button class="pra-btn pra-btn-ghost" id="protocolAiPromptResetBtn" type="button" style="margin-top:6px;font-size:.72rem;padding:6px 10px">Reset to default</button>
       <div class="pra-muted" id="videoFoldersMsg" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+      </div>
       <div style="display:flex;gap:10px;margin-top:10px">
         <button class="pra-btn" id="videoFoldersSaveBtn" style="flex:1">Save</button>
-        <button class="pra-btn pra-btn-ghost" onclick="closeModal('videoFoldersModal')">Cancel</button>
+        <button class="pra-btn pra-btn-ghost" onclick="closeModal('videoFoldersModal')">Close</button>
       </div>
     </div>
   </div>
@@ -669,13 +706,20 @@ function renderVideoFolders() {
     b.onclick = () => { videoFolders.splice(Number(b.dataset.remove), 1); renderVideoFolders(); };
   });
 }
-function setupVideoFolders() {
+// Coaches see only the Drip Programs section; admins also get folders + AI prompt.
+function setupVideoFolders(isAdminUser) {
   const btn = document.getElementById('protocolSettingsBtn');
   const msg = () => document.getElementById('videoFoldersMsg');
   btn.style.display = '';
+  btn.title = isAdminUser ? 'Protocol settings: drip programs, video folders, AI prompt' : 'Protocol settings: drip programs';
+  document.getElementById('adminProtocolSettings').style.display = isAdminUser ? '' : 'none';
+  document.getElementById('videoFoldersSaveBtn').style.display = isAdminUser ? '' : 'none';
+  setupDripSettings();
   btn.onclick = async () => {
-    msg().textContent = 'Loading…';
     openModal('videoFoldersModal');
+    loadDripSettings();
+    if (!isAdminUser) return;
+    msg().textContent = 'Loading…';
     const r = await fetch('/api/chat/training-protocol/video-folders');
     const d = r.ok ? await r.json() : {};
     videoFolders = d.folders || [];
@@ -709,6 +753,115 @@ function setupVideoFolders() {
     msg().textContent = videoFolders.some(f => f.ok === false) ? 'Saved. One or more folders could not be opened -- check the link and sharing.' : 'Saved.';
   };
 }
+// ── Drip program settings (template.settings, PATCH protocol-templates/:id) ──
+let dripTemplates = [];
+async function loadDripSettings() {
+  const sec = document.getElementById('dripSettingsSection');
+  const r = await fetch('/api/chat/protocol-templates').catch(() => null);
+  const d = r && r.ok ? await r.json() : { templates: [] };
+  dripTemplates = (d.templates || []).filter(t => t.isProgram);
+  sec.style.display = dripTemplates.length ? '' : 'none';
+  if (!dripTemplates.length) return;
+  const sel = document.getElementById('dripTemplateSelect');
+  const has = (id) => id && dripTemplates.some(t => t.id === id);
+  const pick = has(currentProgramTemplateId) ? currentProgramTemplateId : has(loadedTemplateId) ? loadedTemplateId : dripTemplates[0].id;
+  sel.innerHTML = dripTemplates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+  sel.value = pick;
+  sel.style.display = dripTemplates.length > 1 ? '' : 'none';
+  fillDripForm();
+}
+function fillDripForm() {
+  const t = dripTemplates.find(x => x.id === document.getElementById('dripTemplateSelect').value);
+  if (!t) return;
+  const st = t.settings || {};
+  document.getElementById('dripEnabledToggle').checked = st.dripEnabled !== false;
+  document.getElementById('dripWaitAmount').value = st.waitAmount || 1;
+  document.getElementById('dripWaitUnit').value = st.waitUnit || 'days';
+  document.getElementById('dripLockedText').value = st.lockedText || 'Unlocks in {time}';
+  document.getElementById('dripCtaUrl').value = st.ctaUrl || '';
+  document.getElementById('dripSaveMsg').textContent = '';
+  syncDripWaitRow();
+}
+function syncDripWaitRow() {
+  const on = document.getElementById('dripEnabledToggle').checked;
+  const row = document.getElementById('dripWaitRow');
+  row.style.opacity = on ? '' : '.4';
+  row.querySelectorAll('input,select').forEach(el => { el.disabled = !on; });
+}
+function setupDripSettings() {
+  document.getElementById('dripTemplateSelect').onchange = fillDripForm;
+  document.getElementById('dripEnabledToggle').onchange = syncDripWaitRow;
+  document.getElementById('dripSaveBtn').onclick = async () => {
+    const id = document.getElementById('dripTemplateSelect').value;
+    const msgEl = document.getElementById('dripSaveMsg');
+    const settings = {
+      dripEnabled: document.getElementById('dripEnabledToggle').checked,
+      waitAmount: Number(document.getElementById('dripWaitAmount').value) || 1,
+      waitUnit: document.getElementById('dripWaitUnit').value,
+      lockedText: document.getElementById('dripLockedText').value.trim() || 'Unlocks in {time}',
+      ctaUrl: document.getElementById('dripCtaUrl').value.trim(),
+    };
+    msgEl.textContent = 'Saving…';
+    const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok) { msgEl.textContent = d.error || 'Could not save.'; return; }
+    const t = dripTemplates.find(x => x.id === id);
+    if (t) t.settings = d.settings || settings;
+    msgEl.textContent = 'Saved.';
+    if (viewMode === 'program') showProgramView();
+  };
+}
+
+// ── Program view (dripped course from a template, program-view.js) ──────
+// enrolledPrograms comes from the protocol GET; the content itself from
+// /api/chat/protocol-program/:userId (students only receive unlocked days).
+let enrolledPrograms = [], programSteps = [], currentProgramTemplateId = null;
+let programSettingsForSteps = null; // CTA link for program steps shown in Flow/Page
+const programPreviewTemplateId = params.get('programTemplate');
+function dayNumberOfStep(s) {
+  let cur = s, guard = 0;
+  while (cur && guard++ < 1000) {
+    if (cur.type === 'day') return cur.dayNumber;
+    cur = cur.parentId ? steps.find(x => x.id === cur.parentId) : null;
+  }
+  return '';
+}
+function openGroupChat() {
+  location.href = resolvedConvoId ? '/chat-app/chat.html?convo=' + encodeURIComponent(resolvedConvoId) : '/chat-app/chat.html';
+}
+async function showProgramView() {
+  viewMode = 'program';
+  document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('programViewBtn').classList.add('active');
+  applyViewModeDisplay();
+  const box = document.getElementById('programView');
+  if (!box.firstChild) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
+  const preview = !!(programPreviewTemplateId && canEdit);
+  const wanted = params.get('program') || enrolledPrograms[0]?.templateId || '';
+  const url = preview
+    ? '/api/chat/protocol-program/template/' + encodeURIComponent(programPreviewTemplateId)
+    : '/api/chat/protocol-program/' + encodeURIComponent(targetUserId) + (wanted ? '?templateId=' + encodeURIComponent(wanted) : '');
+  const r = await fetch(url).catch(() => null);
+  const data = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) { box.innerHTML = `<div class="pra-muted" style="text-align:center;padding:40px 0">${escapeHtml(data.error || 'Could not load this program.')}</div>`; return; }
+  if (viewMode !== 'program') return;
+  const pr = data.program;
+  programSteps = [...pr.sections.flatMap(x => x.steps), ...pr.days.flatMap(x => x.steps)];
+  currentProgramTemplateId = pr.templateId;
+  const isSelf = me && me.id === targetUserId;
+  PRAProgram.render(box, data, {
+    preview,
+    canAsk: isSelf && !canEdit,
+    observeVideo: (v) => { stepVideoLazyObserver.observe(v); reportVideoError(v); },
+    onAsk: (id) => openAskQuestionModal(id),
+    onOpenChat: isSelf && !preview ? openGroupChat : null,
+    chatLabel: me.role === 'trainee' ? 'Questions? Message Lee & Alexis' : 'Open your group chat',
+    onUnlock: () => showProgramView(),
+  });
+}
+
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 // Click the dark overlay itself (not anything inside the panel) to close
 // whichever modal it belongs to — e.currentTarget is always the backdrop
@@ -733,7 +886,8 @@ async function init() {
   const client = uRes.ok ? (await uRes.json()).user : null;
   clientLabel = client ? `${client.first} ${client.last}` : 'Unknown client';
   document.getElementById('clientName').textContent = clientLabel;
-  if (client) PRABadges.mount(document.getElementById('clientBadges'), client.id || targetUserId);
+  if (client && me.role !== 'trainee') PRABadges.mount(document.getElementById('clientBadges'), client.id || targetUserId);
+  if (me.role === 'trainee') document.body.classList.add('trainee-mode');
   // Name opens their profile panel (the same one used everywhere).
   if (client) {
     const nameEl = document.getElementById('clientName');
@@ -756,7 +910,7 @@ async function init() {
     });
   }
   document.getElementById('templateAddForm').style.display = (me.role === 'admin' || me.role === 'admin2') ? '' : 'none';
-  if (me.role === 'admin' || me.role === 'admin2') setupVideoFolders();
+  if (canEdit) setupVideoFolders(me.role === 'admin' || me.role === 'admin2');
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('resetFlowBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('deleteProtocolBtn').style.display = canEdit ? '' : 'none';
@@ -792,6 +946,20 @@ async function init() {
   titleInput.addEventListener('input', fitProtocolTitle);
   window.addEventListener('resize', fitProtocolTitle);
   await loadSteps();
+  // A dripped program (Handstand Protocol): its own view, the default when
+  // the person has no custom protocol of their own (always for a trainee).
+  if (programPreviewTemplateId && canEdit) {
+    const b = document.getElementById('programViewBtn');
+    b.style.display = ''; b.textContent = 'Program Preview'; b.onclick = () => showProgramView();
+    await showProgramView();
+  } else if (enrolledPrograms.length) {
+    const b = document.getElementById('programViewBtn');
+    b.style.display = '';
+    b.textContent = String(enrolledPrograms[0].name || 'Program').replace(/^Powerbatics\s+/i, '');
+    b.onclick = () => showProgramView();
+    if (params.get('program') || !steps.length || me.role === 'trainee') await showProgramView();
+  }
+  if (me.role === 'trainee') document.getElementById('backBtn').textContent = 'Group Chat';
   if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
   // On a phone the menu scrolls -- start with the current view in sight.
   { const el = document.getElementById('viewModeToggle'), act = el.querySelector('.view-mode-btn.active');
@@ -938,6 +1106,7 @@ async function loadSteps() {
   lastAiPrompt = d.lastAiPrompt || '';
   protocolName = d.protocolName || '';
   loadedTemplateId = d.templateId || null;
+  if (activeId === targetUserId) enrolledPrograms = (d.programs || []).filter(x => x.installed);
   updateProtocolTitleHint();
   render();
 }
@@ -1162,9 +1331,11 @@ function renderPageView() {
 
   container.innerHTML = visible.map(s => {
     if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}</div>`;
+    if (s.type === 'section') return `<div class="page-day-heading">${escapeHtml(s.title || s.content || '')}</div>`;
     return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
   }).join('');
   container.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
+  PRAProgram.mountTimers(container);
 }
 
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
@@ -1304,7 +1475,9 @@ function applyViewModeDisplay() {
   document.getElementById('protocolCanvas').style.display = (hasSteps && viewMode === 'flow') ? 'block' : 'none';
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
   document.getElementById('katasPage').style.display = viewMode === 'katas' ? 'flex' : 'none';
-  document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas') ? 'block' : 'none';
+  document.getElementById('programView').style.display = viewMode === 'program' ? 'block' : 'none';
+  if (viewMode !== 'program') document.getElementById('programViewBtn').classList.remove('active');
+  document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas' && viewMode !== 'program') ? 'block' : 'none';
   // The day-select row also needs at least one <option value="day-id">
   // (see syncPageDaySelectOptions, called from renderPageView) — hidden
   // here regardless of that so it never flashes visible for a beat in
@@ -1976,7 +2149,7 @@ function openAskQuestionModal(stepId) {
 }
 
 async function submitAskQuestion() {
-  const step = steps.find(s => s.id === askQuestionStepId);
+  const step = steps.find(s => s.id === askQuestionStepId) || programSteps.find(s => s.id === askQuestionStepId);
   const question = document.getElementById('askQuestionInput').value.trim();
   const status = document.getElementById('askQuestionStatus');
   if (!step) { status.textContent = 'That step no longer exists.'; return; }
@@ -2055,6 +2228,11 @@ function renderStepContent(s, { autoplay = true } = {}) {
   }
   if (s.type === 'day') {
     return `<div class="step-day-badge">Day ${s.dayNumber}</div>`;
+  }
+  // Program step types (timer / cta / youtube / section) -- program-view.js.
+  // The Flow canvas (autoplay false) gets the compact card.
+  if (['timer', 'cta', 'youtube', 'section'].includes(s.type)) {
+    return PRAProgram.stepHtml(s, { compact: !autoplay, settings: programSettingsForSteps, dayNumber: dayNumberOfStep(s) });
   }
   return `<div class="step-text">${escapeHtml(s.content || '')}</div>`;
 }
@@ -2437,6 +2615,7 @@ async function renderProtocolTemplateList() {
         <div class="template-item-title">${escapeHtml(t.name)}</div>
         <div class="template-item-text">${t.stepCount} step${t.stepCount === 1 ? '' : 's'} · ${new Date(t.createdAt).toLocaleDateString()}</div>
       </div>
+      ${t.isProgram ? '<button class="sp-preview" title="See it the way a student does, every day unlocked" style="flex-shrink:0;padding:7px 10px;border-radius:999px;border:1px solid var(--pra-border);background:transparent;color:var(--pra-dim);font-weight:800;font-size:.7rem;cursor:pointer">PREVIEW</button>' : ''}
       ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
       ${SP_DELETE_BTN}
@@ -2446,6 +2625,8 @@ async function renderProtocolTemplateList() {
     const id = row.dataset.id;
     const t = templates.find(x => x.id === id);
     row.style.cursor = 'default';
+    const prev = row.querySelector('.sp-preview');
+    if (prev) prev.onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(id); };
     row.querySelector('.sp-edit').onclick = () => openInFlowBuilder(t, 'loadProtocolTemplateModal');
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t, 'loadProtocolTemplateModal');
     row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderProtocolTemplateList());

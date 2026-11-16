@@ -2035,6 +2035,7 @@ function roleBadgeHtml(u) {
   if (u?.role === 'online') return '<span class="role-tag role-tag-online">Online</span>';
   if (u?.role === 'gym') return '<span class="role-tag role-tag-gym">Gym</span>';
   if (u?.role === 'user') return '<span class="role-tag role-tag-user">User</span>';
+  if (u?.role === 'trainee') return '<span class="role-tag role-tag-user">Handstand</span>';
   return '';
 }
 // "Renew by <end date>" (server sends `renewal` to coaches/admins only).

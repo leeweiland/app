@@ -596,6 +596,7 @@
         <label class="pra-label">Role</label>
         <select class="pra-select" id="newUserRole">
           <option value="user">User</option>
+          <option value="trainee">Trainee (Handstand Protocol)</option>
           <option value="online">Online</option>
           <option value="gym">Gym</option>
           <option value="coach">Coach</option>
@@ -1154,6 +1155,7 @@ function renderUsers() {
       <td>
         <select class="role-select" data-id="${u.id}">
           <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+          <option value="trainee" ${u.role === 'trainee' ? 'selected' : ''}>Trainee (Handstand)</option>
           <option value="online" ${u.role === 'online' ? 'selected' : ''}>Online</option>
           <option value="gym" ${u.role === 'gym' ? 'selected' : ''}>Gym</option>
           <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>

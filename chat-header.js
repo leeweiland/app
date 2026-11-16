@@ -318,12 +318,12 @@ window.PRABack = (function () {
   };
 
   const ICONS = [
-    { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat' },
+    { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat', trainee: true },
     { href: '/chat-app/chat.html?gymCapture=1', icon: ICON_SVG.gymCapture, title: 'Gym Capture', staffOnly: true },
-    { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol' },
+    { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol', trainee: true },
     { href: '/chat-app/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
     { href: '/chat-app/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
-    { href: '/chat-app/profile.html', icon: ICON_SVG.profile, title: 'My profile' },
+    { href: '/chat-app/profile.html', icon: ICON_SVG.profile, title: 'My profile', trainee: true },
   ];
 
   // Second, bottom-anchored bar for the newer content sections — kept
@@ -499,7 +499,10 @@ window.PRABack = (function () {
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPhoneSteps(); });
     }
 
+    // Handstand Protocol trainees: chat, their protocol and profile only.
+    const isTrainee = myRole === 'trainee';
     ICONS.forEach(item => {
+      if (isTrainee && !item.trainee) return;
       if (item.adminOnly && !isAdmin) return;
       if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       // Always their own protocol, not a fixed page — skip until we know
@@ -618,6 +621,7 @@ window.PRABack = (function () {
     const bottomRightGroup = document.createElement('div');
     bottomRightGroup.className = 'cah-bottom-group';
     BOTTOM_ICONS.forEach(item => {
+      if (isTrainee) return; // none of the bottom-bar sections are part of the course
       // Apply for Training is only relevant to a plain "user" who hasn't
       // signed up for anything yet — hidden for students (already enrolled),
       // coaches, and admins.

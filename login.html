@@ -156,9 +156,12 @@ document.getElementById('profilePicInput').addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
-function redirectAfterAuth() {
+// Handstand Protocol trainees land on their protocol page (their only
+// screen besides their group chat), unless sent somewhere specific.
+function redirectAfterAuth(user) {
   const params = new URLSearchParams(location.search);
-  location.href = params.get('next') || '/chat-app/chat.html';
+  const home = user?.role === 'trainee' ? '/chat-app/training-protocol.html?userId=' + encodeURIComponent(user.id) : '/chat-app/chat.html';
+  location.href = params.get('next') || home;
 }
 
 loginForm.addEventListener('submit', async (e) => {
@@ -169,7 +172,7 @@ loginForm.addEventListener('submit', async (e) => {
   const r = await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
   const d = await r.json();
   if (!r.ok) { errMsg.textContent = d.error || 'Login failed'; return; }
-  redirectAfterAuth();
+  redirectAfterAuth(d.user);
 });
 
 signupForm.addEventListener('submit', async (e) => {
@@ -191,7 +194,7 @@ signupForm.addEventListener('submit', async (e) => {
 });
 
 // Already logged in? skip straight to chat.
-fetch('/api/auth/me').then(r => r.ok ? redirectAfterAuth() : null).catch(() => {});
+fetch('/api/auth/me').then(r => r.ok ? r.json().then(d => redirectAfterAuth(d.user)) : null).catch(() => {});
 
 const EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_CLOSED = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 10.6a3 3 0 0 0 4.24 4.24"/><path d="M6.6 6.7C3.9 8.4 1 12 1 12s4 7 11 7c2.1 0 3.9-.6 5.4-1.4"/><path d="M17.9 17.9C20.4 16.2 23 12 23 12s-1.6-2.8-4.4-4.8"/><path d="M9.5 4.6C10.3 4.2 11.1 4 12 4c7 0 11 7 11 7"/></svg>';
