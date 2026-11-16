@@ -82,6 +82,7 @@
   .pv-bump .pv-head { padding: 12px 14px; }
   .pv-bump-intro { font-size: .84rem; font-weight: 400; color: var(--pra-dim); line-height: 1.5; }
   .pv-bump-move { border-top: 1px solid var(--pra-border); padding-top: 12px; }
+  .pv-bump-move video { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #000; border-radius: 10px; }
   .pv-bump-move h4 { margin: 10px 0 4px; font-size: .92rem; }
   .pv-bump-move p { margin: 0 0 4px; font-size: .84rem; font-weight: 400; line-height: 1.5; color: #d6d6dc; }
   .pv-bump-move p.why { color: var(--pra-dim); }
@@ -209,7 +210,7 @@
     if (s.type === 'video') {
       const label = s.moveLabel || s.name || '';
       return `<div class="pv-step">${label || askBtn ? `<div class="pv-step-label"><span class="pv-label">${esc(label)}</span>${askBtn}</div>` : ''}
-        <video data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video></div>`;
+        ${s.sound ? `<video data-sound data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls preload="metadata" playsinline></video>` : `<video data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>`}</div>`;
     }
     if (s.type === 'image') {
       return `<div class="pv-step">${askBtn ? `<div class="pv-step-label"><span></span>${askBtn}</div>` : ''}<img loading="lazy" src="/api/chat/media/${encodeURIComponent(s.driveFileId)}" alt="${esc(s.alt || s.caption || '')}"/></div>`;
@@ -299,6 +300,7 @@
     </div>`;
 
     container.querySelectorAll('video[data-src]').forEach(v => (opts.observeVideo ? opts.observeVideo(v) : (v.src = v.dataset.src)));
+    container.querySelectorAll('video:not([data-sound])').forEach(v => { v.muted = true; v.addEventListener('volumechange', () => { if (!v.muted) v.muted = true; }); });
     container.querySelectorAll('[data-ask]').forEach(b => { b.onclick = () => opts.onAsk && opts.onAsk(b.dataset.ask); });
     const chatBtn = container.querySelector('[data-open-chat]');
     if (chatBtn) chatBtn.onclick = () => opts.onOpenChat();
