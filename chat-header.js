@@ -499,7 +499,11 @@ window.PRABack = (function () {
     };
     render();
     document.body.appendChild(box);
-    const place = () => { box.style.top = ((headerBar && headerBar.getBoundingClientRect().bottom) || 0) + 8 + 'px'; };
+    // Below the header -- and below a page's own fixed bar under it (the Admin Panel's tabs).
+    const place = () => {
+      const under = [headerBar, document.getElementById('adminTabBar')].filter(Boolean).map(el => el.getBoundingClientRect().bottom);
+      box.style.top = (under.length ? Math.max(...under) : 0) + 8 + 'px';
+    };
     place();
     window.addEventListener('resize', place);
     if (window.ResizeObserver && headerBar) new ResizeObserver(place).observe(headerBar);
