@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>Programs Editor — PRA Chat</title>
+<link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<style>
+  /* Same scroll setup as admin-panel.html: html/body pinned, .pra-root
+     scrolls itself (iOS native page scroll is disabled app-wide). */
+  html { height: 100%; overflow: hidden; }
+  body { margin: 0; position: fixed; inset: 0; height: 100%; height: 100dvh; height: var(--app-vh, 100dvh); overflow: hidden; }
+  .pra-root { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: auto; scrollbar-color: #8a8a99 rgba(255,255,255,0.08); }
+
+  :root {
+    --pe-video: #009bff; --pe-image: #00e0c6; --pe-text: #c9c9d1; --pe-timer: #ffb84d;
+    --pe-cta: #d4ff00; --pe-yt: #ff5a5a; --pe-section: #b48cff; --pe-day: #009bff; --pe-danger: #ff4d5e; --pe-ok: #22c55e;
+  }
+  .pe-wrap { max-width: 1120px; margin: 0 auto; padding: 26px 20px 150px; }
+  .pe-top { margin-bottom: 18px; }
+  .pe-top h1 { font-size: 1.7rem; margin: 0; letter-spacing: .01em; }
+  .pe-top .pe-sub { margin-top: 4px; font-size: .88rem; font-weight: 400; color: var(--pra-dim); }
+  .pe-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .pe-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .pe-ico { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: middle; }
+  .pe-ico-lg { width: 20px; height: 20px; }
+
+  /* ── Program list ── */
+  .pe-side { padding: 14px; }
+  .pe-side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .pe-list { display: flex; flex-direction: column; gap: 6px; }
+  .pe-prog { all: unset; box-sizing: border-box; cursor: pointer; display: block; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent; }
+  .pe-prog:hover { background: rgba(255,255,255,0.03); border-color: var(--pra-border); }
+  .pe-prog.active { background: var(--pra-blue-dim); border-color: rgba(0,155,255,0.5); }
+  .pe-prog-name { display: block; font-size: .9rem; line-height: 1.3; overflow-wrap: anywhere; }
+  .pe-prog-meta { display: block; margin-top: 2px; font-size: .74rem; font-weight: 400; color: var(--pra-dim); }
+  .pe-prog-select { display: none; }
+  .pe-btn-sm { padding: 8px 12px; font-size: .78rem; border-radius: 9px; display: inline-flex; align-items: center; gap: 6px; }
+  .pe-btn-sm .pe-ico { width: 14px; height: 14px; }
+
+  /* ── Panels ── */
+  .pe-panel { padding: 18px; }
+  .pe-panel-head { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; }
+  .pe-panel-head .pe-h { font-size: 1.02rem; flex: 1; min-width: 0; }
+  .pe-panel-head .pe-hint { font-size: .78rem; font-weight: 400; color: var(--pra-dim); }
+  .pe-chev { transition: transform .15s; color: var(--pra-dim); }
+  .pe-open > .pe-panel-head .pe-chev, .blk.open > .blk-head .pe-chev, .bump.open > .bump-head .pe-chev { transform: rotate(90deg); }
+  .pe-panel-body { margin-top: 16px; }
+  .pe-name { font-size: 1.35rem; font-weight: 700; padding: 10px 12px; }
+  .pe-head-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+  .pe-head-row > .pe-field { flex: 1 1 280px; margin: 0; }
+  .pe-head-meta { margin-top: 10px; font-size: .78rem; font-weight: 400; color: var(--pra-dim); }
+  .pe-notice { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,184,77,0.5); background: rgba(255,184,77,0.07); color: #ffd79a; font-size: .82rem; font-weight: 400; line-height: 1.45; }
+  .pe-notice + .pe-notice { margin-top: 8px; }
+
+  /* ── Form fields ── */
+  .pe-field { display: block; margin-bottom: 12px; min-width: 0; }
+  .pe-field > .pra-label { display: block; margin-bottom: 5px; }
+  .pe-field-hint { margin-top: 4px; font-size: .74rem; font-weight: 400; color: var(--pra-dim); line-height: 1.4; }
+  .pe-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .pe-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; }
+  .pe-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pe-inline .pra-input { width: auto; }
+  .pe-switch { display: flex; align-items: center; gap: 10px; font-size: .88rem; cursor: pointer; margin-bottom: 12px; min-height: 30px; }
+  .pra-toggle { appearance: none; -webkit-appearance: none; position: relative; width: 38px; height: 22px; flex-shrink: 0; background: var(--pra-border); border-radius: 11px; cursor: pointer; transition: background .15s; margin: 0; }
+  .pra-toggle::before { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .pra-toggle:checked { background: var(--pra-blue); }
+  .pra-toggle:checked::before { transform: translateX(16px); }
+  .pe-sub-box { border: 1px solid var(--pra-border); border-radius: 12px; padding: 14px; margin-top: 6px; background: rgba(255,255,255,0.015); }
+  .pe-sub-title { display: flex; align-items: center; gap: 8px; font-size: .9rem; margin-bottom: 12px; }
+  .pra-textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
+  .pe-invalid { border-color: var(--pe-danger) !important; }
+
+  /* ── Content: blocks (sections / days) ── */
+  .pe-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .pe-group-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; }
+  .pe-group-label:first-of-type { margin-top: 4px; }
+  .pe-blocks { display: flex; flex-direction: column; gap: 10px; min-height: 8px; }
+  .pe-empty { padding: 14px; border: 1px dashed var(--pra-border); border-radius: 12px; color: var(--pra-dim); font-size: .84rem; font-weight: 400; text-align: center; }
+  .blk { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; border-left: 3px solid var(--pe-day); min-width: 0; }
+  .blk.is-section { border-left-color: var(--pe-section); }
+  .blk.has-error { border-color: var(--pe-danger); }
+  .blk-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 4px; min-width: 0; }
+  .pe-handle { all: unset; box-sizing: border-box; flex: none; width: 34px; height: 44px; display: flex; align-items: center; justify-content: center; color: #5f5f6b; cursor: grab; touch-action: none; border-radius: 8px; }
+  .pe-handle:hover { color: var(--pra-white); background: rgba(255,255,255,0.04); }
+  .pe-handle:active { cursor: grabbing; }
+  .blk-toggle { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 2px; }
+  .blk-badge { flex: none; font-family: var(--font-secondary); font-weight: 400; font-size: .7rem; letter-spacing: .1em; padding: 4px 8px; border-radius: 6px; background: rgba(0,155,255,0.14); color: #7cc8ff; white-space: nowrap; }
+  .is-section .blk-badge { background: rgba(180,140,255,0.14); color: #cdb6ff; }
+  .blk-titles { min-width: 0; flex: 1; }
+  .blk-title { display: block; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .blk-title.untitled { color: var(--pra-dim); font-style: italic; font-weight: 400; }
+  .blk-meta { display: block; font-size: .74rem; font-weight: 400; color: var(--pra-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pe-icon-btn { all: unset; box-sizing: border-box; flex: none; width: 38px; height: 38px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: var(--pra-dim); cursor: pointer; }
+  .pe-icon-btn:hover { color: var(--pra-white); background: rgba(255,255,255,0.05); }
+  .pe-icon-btn.danger:hover { color: var(--pe-danger); background: rgba(255,77,94,0.08); }
+  .blk-body { padding: 4px 14px 14px; border-top: 1px solid var(--pra-border); }
+  .blk-fields { padding-top: 12px; }
+  .pe-items { display: flex; flex-direction: column; gap: 8px; min-height: 52px; padding: 8px; margin: 0 -8px; border-radius: 12px; }
+  .pe-items:empty::before { content: 'No items yet. Add one below or drag one here.'; display: block; padding: 14px; text-align: center; border: 1px dashed var(--pra-border); border-radius: 10px; font-size: .8rem; font-weight: 400; color: var(--pra-dim); }
+  .pe-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+  .pe-add .pra-label { margin-right: 4px; }
+  .pe-chip { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--pra-border); font-size: .78rem; color: #d6d6dc; background: rgba(255,255,255,0.02); }
+  .pe-chip:hover { border-color: var(--pra-blue); color: #fff; }
+  .pe-chip .pe-ico { width: 14px; height: 14px; }
+
+  /* ── Items ── */
+  .it { background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 12px; min-width: 0; }
+  .it.open { border-color: rgba(0,155,255,0.55); box-shadow: 0 0 0 3px var(--pra-blue-dim); }
+  .it.has-error { border-color: var(--pe-danger); }
+  .it-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 2px; min-width: 0; }
+  .it-main { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 2px; }
+  .it-type { flex: none; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.04); }
+  .t-video { color: var(--pe-video); } .t-image { color: var(--pe-image); } .t-text { color: var(--pe-text); }
+  .t-timer { color: var(--pe-timer); } .t-cta { color: var(--pe-cta); } .t-youtube { color: var(--pe-yt); }
+  .t-section { color: var(--pe-section); } .t-day { color: var(--pe-day); } .t-other { color: var(--pra-dim); }
+  .it-thumb { flex: none; width: 54px; height: 40px; border-radius: 7px; object-fit: cover; background: #000; border: 1px solid var(--pra-border); display: block; }
+  .it-text { min-width: 0; flex: 1; }
+  .it-label { display: block; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it-label.untitled { color: var(--pra-dim); font-weight: 400; font-style: italic; }
+  .it-kind { display: block; font-size: .7rem; font-weight: 400; color: var(--pra-dim); margin-top: 2px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it-form { padding: 6px 14px 14px; border-top: 1px solid var(--pra-border); }
+  .it-form .pe-field:first-child { margin-top: 10px; }
+  .it-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--pra-border); }
+  .it-foot .pe-inline { gap: 6px; }
+  .it-foot .pra-select { width: auto; max-width: 100%; min-width: 0; padding: 8px 30px 8px 10px; font-size: .82rem; }
+  .pe-preview-media { display: block; width: 100%; max-width: 360px; max-height: 240px; object-fit: contain; background: #000; border-radius: 10px; border: 1px solid var(--pra-border); margin-bottom: 10px; }
+  .pe-clip-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pe-clip-row .pra-input { flex: 1 1 200px; width: auto; min-width: 0; }
+  .pe-json { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, Consolas, monospace; font-size: .74rem; font-weight: 400; color: var(--pra-dim); background: rgba(255,255,255,0.02); border: 1px solid var(--pra-border); border-radius: 8px; padding: 10px; max-height: 220px; overflow: auto; }
+
+  /* Drag states (SortableJS) */
+  .pe-ghost { opacity: .35; }
+  .pe-chosen { box-shadow: 0 0 0 2px var(--pra-blue), 0 10px 30px rgba(0,0,0,0.5); }
+  .pe-drag { opacity: .95 !important; }
+  .sortable-fallback { box-shadow: 0 0 0 2px var(--pra-blue), 0 12px 30px rgba(0,0,0,0.6) !important; }
+
+  /* ── Add-ons ── */
+  .bump { background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-left: 3px solid var(--pe-cta); border-radius: 14px; margin-bottom: 10px; min-width: 0; }
+  .bump-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 4px; min-width: 0; }
+  .bump-body { padding: 4px 14px 14px; border-top: 1px solid var(--pra-border); }
+  .bump-key { flex: none; font-family: var(--font-secondary); font-weight: 400; font-size: .68rem; letter-spacing: .08em; padding: 3px 7px; border-radius: 6px; background: rgba(212,255,0,0.1); color: #e3ff66; }
+  .pe-moves { display: flex; flex-direction: column; gap: 8px; min-height: 20px; margin-bottom: 10px; }
+
+  /* ── Save bar ── */
+  .pe-savebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 450; display: flex; justify-content: center; padding: 10px 12px; pointer-events: none; }
+  .pe-savebar[hidden] { display: none; }
+  .pe-savebar-in { pointer-events: auto; width: min(1080px, 100%); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 14px; background: rgba(16,16,20,0.94); border: 1px solid var(--pra-border); box-shadow: 0 10px 30px rgba(0,0,0,0.55); backdrop-filter: blur(8px); }
+  .pe-savebar.dirty .pe-savebar-in { border-color: rgba(0,155,255,0.6); }
+  .pe-savebar.error .pe-savebar-in { border-color: var(--pe-danger); }
+  .pe-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--pe-ok); }
+  .pe-savebar.dirty .pe-dot { background: var(--pra-blue); box-shadow: 0 0 10px var(--pra-blue-glow); }
+  .pe-savebar.error .pe-dot { background: var(--pe-danger); }
+  .pe-save-msg { flex: 1; min-width: 0; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pe-savebar.error .pe-save-msg { white-space: normal; color: #ff9aa5; }
+  .pe-savebar .pra-btn { padding: 10px 18px; }
+
+  /* ── Modals ── */
+  .pe-modal { position: fixed; inset: 0; z-index: 1200; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(5,5,8,0.78); backdrop-filter: blur(3px); }
+  .pe-modal.show { display: flex; }
+  .pe-modal-box { width: min(560px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; background: var(--pra-panel); border: 1px solid var(--pra-border); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); font-family: var(--font-primary); color: #fff; font-weight: 700; }
+  .pe-modal-box.wide { width: min(860px, 100%); }
+  .pe-modal-head { display: flex; align-items: center; gap: 10px; padding: 16px 16px 12px 18px; }
+  .pe-modal-head h3 { margin: 0; flex: 1; font-size: 1.05rem; }
+  .pe-modal-body { padding: 0 18px 16px; overflow-y: auto; min-height: 0; }
+  .pe-modal-body p { margin: 0 0 12px; font-weight: 400; font-size: .9rem; line-height: 1.5; color: #d6d6dc; }
+  .pe-modal-body ul { margin: 0 0 12px; padding-left: 18px; font-weight: 400; font-size: .86rem; line-height: 1.5; color: #ffb3bb; }
+  .pe-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--pra-border); flex-wrap: wrap; }
+  .pe-modal-foot .danger { background: var(--pe-danger); }
+  .pe-modal .pra-input { box-sizing: border-box; }
+  .pe-vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .pe-vcard { all: unset; box-sizing: border-box; cursor: pointer; border: 1px solid var(--pra-border); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.02); display: flex; flex-direction: column; min-width: 0; }
+  .pe-vcard:hover { border-color: var(--pra-blue); }
+  .pe-vcard video { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #000; display: block; pointer-events: none; }
+  .pe-vcard span { padding: 7px 8px; font-size: .74rem; font-weight: 400; line-height: 1.3; overflow-wrap: anywhere; }
+  .pe-or { display: flex; align-items: center; gap: 10px; margin: 16px 0 10px; color: var(--pra-dim); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; font-family: var(--font-secondary); font-weight: 400; }
+  .pe-or::before, .pe-or::after { content: ''; flex: 1; height: 1px; background: var(--pra-border); }
+  .pe-modal-x { all: unset; box-sizing: border-box; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--pra-border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff; }
+  .pe-modal-x:hover { border-color: var(--pra-blue); }
+
+  .pe-state { padding: 48px 20px; text-align: center; color: var(--pra-dim); font-weight: 400; }
+
+  /* ── Phone: one column, bigger targets, no sideways scroll ── */
+  @container pra-app (max-width: 760px) {
+    .pe-wrap { padding: 16px 12px 150px; }
+    .pe-top h1 { font-size: 1.35rem; }
+    .pe-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .pe-list { display: none; }
+    .pe-prog-select { display: block; }
+    .pe-side { padding: 12px; }
+    .pe-panel { padding: 14px; }
+    .pe-grid2, .pe-grid3 { grid-template-columns: minmax(0, 1fr); }
+    .pra-input, .pra-textarea, .pra-select { font-size: 16px; } /* no iOS zoom on focus */
+    .pe-name { font-size: 1.15rem; }
+    .it-row .pe-row-actions { display: none; }
+    .it-thumb { width: 46px; height: 36px; }
+    .blk-body { padding: 4px 10px 12px; }
+    .it-form { padding: 6px 10px 12px; }
+    .pe-savebar { padding: 8px; }
+    .pe-savebar-in { padding: 8px 8px 8px 12px; gap: 8px; }
+    .pe-savebar .pra-btn { padding: 10px 14px; }
+    .pe-vgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="pra-root">
+  <div class="pra-bg"></div>
+  <script src="/nav.js"></script>
+  <script src="/chat-app/chat-header.js"></script>
+  <div class="pe-wrap">
+    <div class="pe-top">
+      <h1>Programs</h1>
+      <div class="pe-sub">Programs people buy on their own (Handstand Protocol and others). Days unlock on the drip schedule below.</div>
+    </div>
+    <div id="peGate" class="pe-state">Loading…</div>
+    <div class="pe-layout" id="peLayout" hidden>
+      <aside class="pra-panel pe-side" id="peSide"></aside>
+      <main class="pe-main" id="peMain"></main>
+    </div>
+  </div>
+
+  <div class="pe-savebar" id="peSaveBar" hidden>
+    <div class="pe-savebar-in">
+      <span class="pe-dot"></span>
+      <span class="pe-save-msg" id="peSaveMsg">All changes saved</span>
+      <button type="button" class="pra-btn pra-btn-ghost" id="peDiscardBtn">Discard</button>
+      <button type="button" class="pra-btn" id="peSaveBtn">Save</button>
+    </div>
+  </div>
+
+  <!-- Generic dialog (confirm / prompt / errors) -->
+  <div class="pe-modal" id="peDialog" role="dialog" aria-modal="true">
+    <div class="pe-modal-box">
+      <div class="pe-modal-head"><h3 id="peDialogTitle"></h3></div>
+      <div class="pe-modal-body" id="peDialogBody"></div>
+      <div class="pe-modal-foot">
+        <button type="button" class="pra-btn pra-btn-ghost" id="peDialogCancel">Cancel</button>
+        <button type="button" class="pra-btn" id="peDialogOk">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video library picker -->
+  <div class="pe-modal" id="peVideoModal" role="dialog" aria-modal="true">
+    <div class="pe-modal-box wide">
+      <div class="pe-modal-head">
+        <h3>Choose a video</h3>
+        <button type="button" class="pe-modal-x" id="peVideoClose" aria-label="Close"></button>
+      </div>
+      <div class="pe-modal-body">
+        <input class="pra-input" id="peVideoSearch" type="search" placeholder="Search the video library by name" autocomplete="off"/>
+        <div id="peVideoResults"></div>
+        <div style="text-align:center;margin-top:12px"><button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" id="peVideoMore" hidden>Load more</button></div>
+        <div class="pe-or">or paste a Google Drive link</div>
+        <div class="pe-clip-row">
+          <input class="pra-input" id="peVideoPaste" placeholder="https://drive.google.com/file/d/… or the file id" autocomplete="off"/>
+          <button type="button" class="pra-btn pe-btn-sm" id="peVideoPasteUse">Use this video</button>
+        </div>
+        <div class="pe-field-hint" id="peVideoPasteMsg"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// Programs Editor — pure data logic. Everything between the CORE markers is
+// DOM-free so it can be exercised from Node (round-trip check against the
+// live Handstand Protocol); keep it that way.
+// ════════════════════════════════════════════════════════════════════════
+// ==PE-CORE-START==
+// Same flattening as chat_backend.js linearProtocolSteps (and
+// training-protocol.html's linearStepOrder) -- the order students see.
+function linearProtocolSteps(list) {
+  const kids = new Map();
+  list.forEach(s => { const k = s.parentId || null; if (!kids.has(k)) kids.set(k, []); kids.get(k).push(s); });
+  const primary = n => (kids.get(n.id) || []).find(k => !k.isBranchRoot) || null;
+  const below = n => (kids.get(n.id) || []).find(k => k.isBranchRoot) || null;
+  const isLeaf = n => !primary(n) && !below(n);
+  const out = [], seen = new Set();
+  const visit = (n) => {
+    if (seen.has(n.id)) return;
+    seen.add(n.id); out.push(n);
+    const next = primary(n), b = below(n), nextLeaf = next && isLeaf(next);
+    if (nextLeaf) visit(next);
+    if (b) visit(b);
+    if (next && !nextLeaf) visit(next);
+  };
+  (kids.get(null) || []).forEach(visit);
+  return out;
+}
+function peClone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+
+// Flat parentId steps -> { sections: [{step, items}], days: [{step, items}],
+// orphans, warnings }. Grouping follows the student order exactly (same as
+// buildProgramView): a "section"/"day" step opens a block, everything after
+// it until the next header belongs to it. Step objects are deep copies with
+// every field kept (unknown ones included).
+function parseProgramSteps(steps, newId) {
+  const list = (Array.isArray(steps) ? steps : []).filter(s => s && typeof s === 'object' && typeof s.id === 'string' && s.id);
+  const order = linearProtocolSteps(list);
+  const reached = new Set(order.map(s => s.id));
+  const sections = [], days = [], warnings = [];
+  let cur = null, sawDay = false, movedSection = false;
+  for (const raw of order) {
+    const s = peClone(raw);
+    if (s.type === 'day') { cur = { step: s, items: [] }; days.push(cur); sawDay = true; continue; }
+    if (s.type === 'section') { cur = { step: s, items: [] }; sections.push(cur); if (sawDay) movedSection = true; continue; }
+    if (!cur) {
+      cur = { step: { id: newId(), parentId: null, isBranchRoot: false, type: 'section', title: '' }, items: [] };
+      sections.push(cur);
+      warnings.push('Some steps came before any section or day. They are shown in an untitled intro section (students already see them that way).');
+    }
+    cur.items.push(s);
+  }
+  if (movedSection) warnings.push('An intro section sat between days. Intro sections always show before the days, so it is listed with the intro here.');
+  if (days.some((d, i) => Number(d.step.dayNumber) !== i + 1)) warnings.push('Day numbers were out of order. They will be renumbered 1 to ' + days.length + ' when you save.');
+  const orphans = list.filter(s => !reached.has(s.id)).map(peClone);
+  if (orphans.length) warnings.push(orphans.length + ' step(s) are not linked into the program (students never see them). They are kept as they are.');
+  const dropped = (Array.isArray(steps) ? steps.length : 0) - list.length;
+  if (dropped > 0) warnings.push(dropped + ' step(s) have no id and will be removed when you save.');
+  return { sections, days, orphans, warnings };
+}
+
+// Blocks -> flat parentId steps in the canonical program shape:
+//   headers chain to each other as NON-branch children (first one is the
+//   root), a header's items chain below it as branch children.
+// One special case: an empty LAST header would be a leaf, and
+// linearProtocolSteps visits a leaf neighbor before the current block's
+// items -- so it hangs off the previous block's last item instead.
+// The result is checked with linearProtocolSteps before it's returned.
+function serializeProgramSteps(sections, days, orphans) {
+  const blocks = [...sections, ...days];
+  const build = (withOrphans) => {
+    const out = [], expected = [];
+    let prev = null;
+    blocks.forEach((b, bi) => {
+      const h = { ...b.step };
+      const di = days.indexOf(b);
+      if (h.type === 'day' && di >= 0 && Number(h.dayNumber) !== di + 1) h.dayNumber = di + 1;
+      const isLast = bi === blocks.length - 1;
+      if (!prev) h.parentId = null;
+      else if (isLast && !b.items.length && prev.items.length) h.parentId = prev.items[prev.items.length - 1].id;
+      else h.parentId = prev.step.id;
+      h.isBranchRoot = false;
+      out.push(h); expected.push(h.id);
+      let parent = h.id;
+      b.items.forEach(it => {
+        const s = { ...it, parentId: parent, isBranchRoot: true };
+        out.push(s); expected.push(s.id);
+        parent = s.id;
+      });
+      prev = b;
+    });
+    if (withOrphans) (orphans || []).forEach(o => out.push(peClone(o)));
+    return { out, expected };
+  };
+  const check = ({ out, expected }) => {
+    const ids = out.map(s => s.id);
+    if (ids.some(id => typeof id !== 'string' || !id)) return 'A step is missing its id.';
+    if (new Set(ids).size !== ids.length) return 'Two steps share the same id.';
+    const got = linearProtocolSteps(out).map(s => s.id);
+    if (got.length !== expected.length || got.some((id, i) => id !== expected[i])) return 'Order check failed.';
+    return null;
+  };
+  let res = build(true), err = check(res), droppedOrphans = 0;
+  if (err && orphans && orphans.length) {
+    const res2 = build(false), err2 = check(res2);
+    if (!err2) { res = res2; err = null; droppedOrphans = orphans.length; }
+  }
+  if (err) throw new Error('Could not build the program safely: ' + err + ' Nothing was saved.');
+  return { steps: res.out, droppedOrphans };
+}
+
+function validateProgram(sections, days) {
+  const errors = [];
+  if (!sections.length && !days.length) errors.push({ msg: 'Add at least one day or section before saving.' });
+  const blocks = [
+    ...sections.map((b, i) => ({ b, label: 'Intro "' + (b.step.title || 'Untitled') + '"' })),
+    ...days.map((b, i) => ({ b, label: 'Day ' + (i + 1) })),
+  ];
+  for (const { b, label } of blocks) {
+    b.items.forEach((s, j) => {
+      const where = label + ', item ' + (j + 1);
+      if ((s.type === 'video' || s.type === 'image') && !String(s.driveFileId || '').trim()) errors.push({ id: s.id, block: b.step.id, msg: where + ': the ' + s.type + ' has no Drive file.' });
+      if (s.type === 'youtube' && !String(s.youtubeId || '').trim()) errors.push({ id: s.id, block: b.step.id, msg: where + ': the YouTube item has no video link.' });
+      if (s.type === 'timer' && !(Number(s.rounds) >= 1 && Number(s.workSeconds) >= 1)) errors.push({ id: s.id, block: b.step.id, msg: where + ': the timer needs at least 1 round and 1 work second.' });
+      if (s.type === 'text' && !String(s.content || '').trim() && !String(s.title || '').trim()) errors.push({ id: s.id, block: b.step.id, msg: where + ': the text item is empty.' });
+      if (s.type === 'cta' && !String(s.problem || s.agitate || s.solve || '').trim()) errors.push({ id: s.id, block: b.step.id, msg: where + ': the button card has no text.' });
+    });
+  }
+  return errors;
+}
+
+function bumpsToList(bumps) {
+  const obj = bumps && typeof bumps === 'object' && !Array.isArray(bumps) ? bumps : {};
+  return Object.entries(obj).map(([key, b]) => ({ key, data: peClone(b && typeof b === 'object' ? b : {}) }));
+}
+function listToBumps(list) {
+  const out = {};
+  list.forEach(e => { out[e.key] = e.data; });
+  return out;
+}
+// Google Drive share link / open?id= / uc?id= / bare id -> file id.
+function parseDriveId(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  let m = s.match(/\/d\/([A-Za-z0-9_-]{10,})/) || s.match(/[?&]id=([A-Za-z0-9_-]{10,})/) || s.match(/\/api\/chat\/media\/([A-Za-z0-9_-]{10,})/);
+  if (m) return m[1];
+  if (/^[A-Za-z0-9_-]{10,}$/.test(s)) return s;
+  return '';
+}
+// Any YouTube URL (watch, youtu.be, shorts, embed, live) or a bare id -> id.
+function parseYouTubeId(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  let m = s.match(/youtu\.be\/([A-Za-z0-9_-]{11})/) || s.match(/[?&]v=([A-Za-z0-9_-]{11})/) || s.match(/\/(?:shorts|embed|live|v)\/([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : '';
+}
+function moveLabelFromName(name) {
+  return String(name || '').replace(/\.(mp4|mov|m4v|webm|avi|mkv)$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+function firstLine(s, n) {
+  const line = String(s || '').replace(/\r/g, '').split('\n').map(x => x.trim()).find(Boolean) || '';
+  return line.length > n ? line.slice(0, n - 1) + '…' : line;
+}
+function itemLabel(s) {
+  switch (s.type) {
+    case 'video': return s.moveLabel || moveLabelFromName(s.name) || '';
+    case 'image': return s.caption || s.alt || s.name || '';
+    case 'text': {
+      if (s.title) return s.title;
+      // "HOW\nLie on your back…" -> "HOW: Lie on your back…" (same label rule as program-view.js)
+      const lines = String(s.content || '').replace(/\r/g, '').split('\n').map(x => x.trim()).filter(Boolean);
+      if (lines.length > 1 && lines[0].length <= 40 && /^[A-Z0-9][A-Z0-9 '&+\-–—:,.()/!?]*$/.test(lines[0])) return firstLine(lines[0].replace(/:$/, '') + ': ' + lines[1], 90);
+      return firstLine(s.content, 90);
+    }
+    case 'timer': {
+      const spec = (Number(s.rounds) || 0) + ' rounds ' + (Number(s.workSeconds) || 0) + 's/' + (Number(s.restSeconds) || 0) + 's';
+      return s.title ? s.title + ' · ' + spec : spec;
+    }
+    case 'cta': return firstLine(s.problem || s.agitate || s.solve, 90);
+    case 'youtube': return s.title || s.youtubeId || '';
+    default: return s.title || firstLine(s.content, 90) || '';
+  }
+}
+// ==PE-CORE-END==
+</script>
+
+<script>
+(function () {
+  'use strict';
+  // ── Icons (inline SVG, currentColor) ──────────────────────────────────
+  const sv = (d, extra = '') => `<svg class="pe-ico ${extra}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const I = {
+    grip: sv('<circle cx="9" cy="6" r="1.2" fill="currentColor"/><circle cx="15" cy="6" r="1.2" fill="currentColor"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/><circle cx="9" cy="18" r="1.2" fill="currentColor"/><circle cx="15" cy="18" r="1.2" fill="currentColor"/>'),
+    chev: sv('<path d="M9 6l6 6-6 6"/>', 'pe-chev'),
+    video: sv('<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'),
+    image: sv('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/>'),
+    text: sv('<path d="M5 6h14M5 11h14M5 16h9"/>'),
+    timer: sv('<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>'),
+    cta: sv('<rect x="3" y="7" width="18" height="10" rx="5"/><path d="M10 12h5M13 10l2 2-2 2"/>'),
+    youtube: sv('<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor"/>'),
+    section: sv('<path d="M6 3h12v18l-6-4-6 4z"/>'),
+    day: sv('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+    other: sv('<circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16h.01"/>'),
+    plus: sv('<path d="M12 5v14M5 12h14"/>'),
+    copy: sv('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
+    trash: sv('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>'),
+    eye: sv('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    gear: sv('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+    puzzle: sv('<path d="M10 3h4v3a2 2 0 1 0 4 0V3h3v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/>'),
+    list: sv('<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>'),
+    up: sv('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+    down: sv('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+    close: sv('<path d="M6 6l12 12M18 6L6 18"/>'),
+    phone: sv('<rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M10.5 18.5h3"/>'),
+    expand: sv('<path d="M7 10l5 5 5-5"/>'),
+    collapse: sv('<path d="M7 14l5-5 5 5"/>'),
+  };
+  const TYPE_NAMES = { video: 'Video', image: 'Image', text: 'Text', timer: 'Timer', cta: 'Button', youtube: 'YouTube', section: 'Intro section', day: 'Day' };
+  const typeIcon = t => I[t] || I.other;
+  const typeClass = t => 't-' + (I[t] && TYPE_NAMES[t] ? t : 'other');
+
+  const APP_BUTTON_DEFAULTS = {
+    enabled: true, heading: 'Get the app',
+    iosLabel: 'iPhone', iosUrl: 'https://apps.apple.com/us/app/pacific-rim-athletics-app/id6799860403',
+    androidLabel: 'Android', androidUrl: 'https://groups.google.com/g/pra-app-android',
+    desktopLabel: 'Desktop', desktopUrl: 'https://www.pacificrimathletics.com/chat',
+  };
+  const SETTINGS_DEFAULTS = { dripEnabled: true, waitAmount: 1, waitUnit: 'days', lockedText: 'Unlocks in {time}', ctaUrl: '' };
+  const KNOWN_BUMP_KEYS = ['wrist', 'shoulder', 'hips'];
+
+  const $ = (sel, el = document) => el.querySelector(sel);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const newId = () => {
+    try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch {}
+    const b = new Uint8Array(16); crypto.getRandomValues(b); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+    const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
+  const media = id => '/api/chat/media/' + encodeURIComponent(id);
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  // Stable keys for objects without ids (add-ons, moves).
+  const keyOf = new WeakMap(); let keySeq = 0;
+  const uid = (o) => { if (!keyOf.has(o)) keyOf.set(o, 'k' + (++keySeq)); return keyOf.get(o); };
+
+  // ── State ──────────────────────────────────────────────────────────────
+  const S = {
+    me: null, list: [], id: null, tpl: null,
+    name: '', goal: '', settings: null, sections: [], days: [], orphans: [], bumps: [], warnings: [],
+    dirty: false, saving: false, stamp: '',
+    openBlocks: new Set(), openItem: null, openBump: null, openMove: null,
+    settingsOpen: false, addonsOpen: false, errorIds: new Set(),
+  };
+  const params = new URLSearchParams(location.search);
+  let sortables = [];
+
+  // ── Dialog ────────────────────────────────────────────────────────────
+  let dialogResolve = null;
+  function dialog({ title, body = '', html = false, input = null, okText = 'OK', cancelText = 'Cancel', danger = false, noCancel = false }) {
+    if (dialogResolve) dialogResolve(null);
+    const m = $('#peDialog');
+    $('#peDialogTitle').textContent = title;
+    const b = $('#peDialogBody');
+    b.innerHTML = (html ? body : (body ? `<p>${esc(body)}</p>` : '')) +
+      (input ? `<label class="pe-field"><span class="pra-label">${esc(input.label || '')}</span><input class="pra-input" id="peDialogInput" value="${esc(input.value || '')}" placeholder="${esc(input.placeholder || '')}" autocomplete="off" ${input.maxlength ? `maxlength="${input.maxlength}"` : ''}/>${input.hint ? `<div class="pe-field-hint">${esc(input.hint)}</div>` : ''}</label>` : '');
+    const ok = $('#peDialogOk'), cancel = $('#peDialogCancel');
+    ok.textContent = okText; ok.classList.toggle('danger', !!danger);
+    cancel.textContent = cancelText; cancel.hidden = !!noCancel;
+    m.classList.add('show');
+    const inp = $('#peDialogInput');
+    setTimeout(() => (inp || ok).focus(), 30);
+    return new Promise(resolve => {
+      dialogResolve = (v) => { dialogResolve = null; m.classList.remove('show'); resolve(v); };
+    });
+  }
+  $('#peDialogOk').addEventListener('click', () => { if (!dialogResolve) return; const inp = $('#peDialogInput'); dialogResolve(inp ? inp.value : true); });
+  $('#peDialogCancel').addEventListener('click', () => dialogResolve && dialogResolve(null));
+  $('#peDialog').addEventListener('click', (e) => { if (e.target === e.currentTarget && dialogResolve) dialogResolve(null); });
+  $('#peDialog').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'peDialogInput') { e.preventDefault(); $('#peDialogOk').click(); }
+  });
+
+  // ── Lazy media thumbnails ──────────────────────────────────────────────
+  const thumbObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      const el = en.target; thumbObserver.unobserve(el);
+      if (el.dataset.src) { el.src = el.dataset.src; el.removeAttribute('data-src'); }
+    });
+  }, { rootMargin: '200px' }) : null;
+  function observeThumbs(root) {
+    root.querySelectorAll('[data-src]').forEach(el => {
+      if (thumbObserver) thumbObserver.observe(el); else { el.src = el.dataset.src; el.removeAttribute('data-src'); }
+    });
+  }
+  const videoThumb = (id, cls = 'it-thumb') => id ? `<video class="${cls}" data-src="${esc(media(id))}#t=0.5" muted preload="metadata" playsinline disablepictureinpicture></video>` : '';
+  const imageThumb = (id, cls = 'it-thumb') => id ? `<img class="${cls}" data-src="${esc(media(id))}" alt="" loading="lazy"/>` : '';
+
+  // ── Lookups ───────────────────────────────────────────────────────────
+  const allBlocks = () => [...S.sections, ...S.days];
+  function findBlock(id) {
+    let i = S.sections.findIndex(b => b.step.id === id);
+    if (i >= 0) return { block: S.sections[i], kind: 'section', index: i, list: S.sections };
+    i = S.days.findIndex(b => b.step.id === id);
+    if (i >= 0) return { block: S.days[i], kind: 'day', index: i, list: S.days };
+    return null;
+  }
+  function findItem(id) {
+    for (const block of allBlocks()) {
+      const index = block.items.findIndex(s => s.id === id);
+      if (index >= 0) return { block, index, item: block.items[index] };
+    }
+    return null;
+  }
+  function findBump(k) { return S.bumps.find(e => uid(e) === k) || null; }
+  function findMove(k) {
+    for (const e of S.bumps) {
+      const moves = e.data.moves || [];
+      const index = moves.findIndex(m => uid(m) === k);
+      if (index >= 0) return { bump: e, index, move: moves[index] };
+    }
+    return null;
+  }
+  function blockLabel(b) {
+    const f = findBlock(b.step.id);
+    if (!f) return '';
+    return f.kind === 'day' ? 'Day ' + (f.index + 1) + (b.step.title ? ': ' + b.step.title : '') : 'Intro: ' + (b.step.title || 'Untitled');
+  }
+  function renumberDays() { S.days.forEach((d, i) => { if (Number(d.step.dayNumber) !== i + 1) d.step.dayNumber = i + 1; }); }
+
+  // ── Dirty / save bar ──────────────────────────────────────────────────
+  function setBar(state, msg) {
+    const bar = $('#peSaveBar');
+    bar.hidden = !S.id;
+    bar.classList.toggle('dirty', state === 'dirty');
+    bar.classList.toggle('error', state === 'error');
+    $('#peSaveMsg').textContent = msg;
+    $('#peSaveBtn').disabled = S.saving || (!S.dirty && state !== 'error');
+    $('#peDiscardBtn').disabled = S.saving || !S.dirty;
+    $('#peSaveBtn').textContent = S.saving ? 'Saving…' : 'Save';
+  }
+  function markDirty() {
+    S.dirty = true;
+    setBar('dirty', 'Unsaved changes');
+  }
+  function placeSaveBar() {
+    const bb = document.getElementById('chat-app-bottom-bar');
+    const h = bb ? bb.getBoundingClientRect().height : 0;
+    $('#peSaveBar').style.bottom = h + 'px';
+  }
+  window.addEventListener('resize', placeSaveBar);
+  window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  // ── Field builders ────────────────────────────────────────────────────
+  // data-tgt: meta | set | ab | item:<id> | hdr:<id> | bump:<uid> | move:<uid>
+  // data-f: field name, data-k: kind (num | bool | drive | yt | keep)
+  const fText = (tgt, f, label, val, o = {}) => `<label class="pe-field"><span class="pra-label">${esc(label)}</span><input class="pra-input${o.cls ? ' ' + o.cls : ''}" data-tgt="${esc(tgt)}" data-f="${esc(f)}"${o.k ? ` data-k="${o.k}"` : ''} value="${esc(val == null ? '' : val)}"${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}${o.max ? ` maxlength="${o.max}"` : ''}${o.type ? ` type="${o.type}"` : ''}${o.im ? ` inputmode="${o.im}"` : ''} autocomplete="off"/>${o.hint ? `<div class="pe-field-hint">${o.hint}</div>` : ''}</label>`;
+  const fArea = (tgt, f, label, val, o = {}) => `<label class="pe-field"><span class="pra-label">${esc(label)}</span><textarea class="pra-textarea" data-tgt="${esc(tgt)}" data-f="${esc(f)}" rows="${o.rows || 3}"${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>${esc(val == null ? '' : val)}</textarea>${o.hint ? `<div class="pe-field-hint">${o.hint}</div>` : ''}</label>`;
+  const fNum = (tgt, f, label, val, o = {}) => fText(tgt, f, label, val, { ...o, k: 'num', type: 'number', im: 'numeric' });
+  const fToggle = (tgt, f, label, on) => `<label class="pe-switch"><input type="checkbox" class="pra-toggle" data-tgt="${esc(tgt)}" data-f="${esc(f)}" data-k="bool"${on ? ' checked' : ''}/> <span>${esc(label)}</span></label>`;
+
+  function resolveTarget(tgt) {
+    if (tgt === 'meta') return S;
+    if (tgt === 'set') return S.settings;
+    if (tgt === 'ab') return S.settings.appButtons;
+    const [kind, id] = [tgt.slice(0, tgt.indexOf(':')), tgt.slice(tgt.indexOf(':') + 1)];
+    if (kind === 'item') { const f = findItem(id); return f && f.item; }
+    if (kind === 'hdr') { const f = findBlock(id); return f && f.block.step; }
+    if (kind === 'bump') { const e = findBump(id); return e && e.data; }
+    if (kind === 'move') { const f = findMove(id); return f && f.move; }
+    return null;
+  }
+
+  // ── Rendering: program list ───────────────────────────────────────────
+  function renderSide() {
+    const el = $('#peSide');
+    const progs = S.list;
+    el.innerHTML = `<div class="pe-side-head"><span class="pra-label">Programs</span><button type="button" class="pra-btn pe-btn-sm" data-act="newProgram">${I.plus}New program</button></div>
+      <div class="pe-list">${progs.length ? progs.map(p => `<button type="button" class="pe-prog${p.id === S.id ? ' active' : ''}" data-act="pick" data-id="${esc(p.id)}"><span class="pe-prog-name">${esc(p.name)}</span><span class="pe-prog-meta">${p.stepCount || 0} steps</span></button>`).join('') : '<div class="pra-muted" style="font-size:.84rem;font-weight:400">No programs yet.</div>'}</div>
+      <select class="pra-select pe-prog-select" id="peProgSelect" aria-label="Program">
+        <option value="">${progs.length ? 'Choose a program…' : 'No programs yet'}</option>
+        ${progs.map(p => `<option value="${esc(p.id)}"${p.id === S.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+      </select>`;
+  }
+
+  // ── Rendering: editor ─────────────────────────────────────────────────
+  function renderMain() {
+    const main = $('#peMain');
+    if (!S.id || !S.tpl) {
+      main.innerHTML = `<div class="pra-panel pe-state">${S.list.length ? 'Pick a program to edit, or create a new one.' : 'Create your first program with New program.'}</div>`;
+      setBar('ok', '');
+      return;
+    }
+    main.innerHTML = `<div id="peNotices"></div><section class="pra-panel pe-panel" id="peHead"></section><section class="pra-panel pe-panel" id="peSettings"></section><section class="pra-panel pe-panel" id="peContent"></section><section class="pra-panel pe-panel" id="peAddons"></section>`;
+    renderNotices(); renderHead(); renderSettings(); renderContent(); renderAddons();
+  }
+  function renderNotices() {
+    const n = [];
+    if (S.tpl && S.tpl.kind !== 'program') n.push('This template is not marked as a program on the server' + (S.tpl.kind ? ' (kind: ' + S.tpl.kind + ')' : '') + '. It can still be edited here.');
+    S.warnings.forEach(w => n.push(w));
+    if (typeof Sortable === 'undefined') n.push('Drag and drop could not load (SortableJS). You can still reorder with the arrows and "Move to" inside each item.');
+    $('#peNotices').innerHTML = n.map(t => `<div class="pe-notice">${esc(t)}</div>`).join('');
+  }
+  function renderHead() {
+    const t = S.tpl;
+    const items = allBlocks().reduce((a, b) => a + b.items.length, 0);
+    const when = t.updatedAt || t.createdAt;
+    $('#peHead').innerHTML = `
+      <label class="pe-field" style="margin:0"><span class="pra-label">Program name</span><input class="pra-input pe-name" data-tgt="meta" data-f="name" value="${esc(S.name)}" maxlength="120" autocomplete="off"/></label>
+      <div class="pe-head-row">
+        ${fText('meta', 'goal', 'Goal', S.goal, { ph: 'A proper 1-minute wall handstand on Day 21', max: 300 })}
+        <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="preview" style="min-height:44px">${I.eye}Preview as student</button>
+      </div>
+      <div class="pe-head-meta">${S.sections.length} intro section${S.sections.length === 1 ? '' : 's'} · ${S.days.length} day${S.days.length === 1 ? '' : 's'} · ${items} items · ${S.bumps.length} add-on${S.bumps.length === 1 ? '' : 's'}${when ? ' · last saved ' + esc(new Date(when).toLocaleString()) : ''}</div>`;
+  }
+  function refreshHeadMeta() { if ($('#peHead')) { const a = document.activeElement; const keep = a && $('#peHead').contains(a) ? a : null; if (!keep) renderHead(); } }
+
+  function settingsSummary() {
+    const s = S.settings, ab = s.appButtons;
+    return (s.dripEnabled ? 'New day every ' + s.waitAmount + ' ' + (Number(s.waitAmount) === 1 ? s.waitUnit.replace(/s$/, '') : s.waitUnit) : 'Every day open at once') + (s.ctaUrl ? ' · button link set' : ' · no button link') + (ab.enabled ? ' · app buttons on' : ' · app buttons off');
+  }
+  function renderSettings() {
+    const s = S.settings, ab = s.appButtons;
+    const open = S.settingsOpen;
+    const summary = settingsSummary();
+    const el = $('#peSettings');
+    el.classList.toggle('pe-open', open);
+    el.innerHTML = `<button type="button" class="pe-panel-head" data-act="toggleSettings" aria-expanded="${open}">${I.chev}<span class="t-day">${I.gear}</span><span class="pe-h">Settings<br><span class="pe-hint">${esc(summary)}</span></span></button>
+      ${open ? `<div class="pe-panel-body">
+        ${fToggle('set', 'dripEnabled', 'Drip days (each day unlocks on a schedule)', s.dripEnabled)}
+        <div class="pe-field"><span class="pra-label">Unlock a new day every</span>
+          <div class="pe-inline">
+            <input class="pra-input" style="width:110px" type="number" min="1" max="10000" inputmode="numeric" data-tgt="set" data-f="waitAmount" data-k="num" value="${esc(s.waitAmount)}"/>
+            <select class="pra-select" style="width:150px" data-tgt="set" data-f="waitUnit">
+              ${['minutes', 'hours', 'days'].map(u => `<option value="${u}"${s.waitUnit === u ? ' selected' : ''}>${u}</option>`).join('')}
+            </select>
+          </div>
+          <div class="pe-field-hint">Day 1 opens when they start. Use minutes to test the drip quickly.</div>
+        </div>
+        ${fText('set', 'lockedText', 'Locked day text', s.lockedText, { max: 200, ph: 'Unlocks in {time}', hint: '<b>{time}</b> becomes the countdown.' })}
+        ${fText('set', 'ctaUrl', 'Button link (CTA)', s.ctaUrl, { max: 500, ph: 'https://www.pacificrimathletics.com/online?src=…', type: 'url', hint: 'Every Button item in this program links here. Must start with https://' })}
+        <div class="pe-sub-box">
+          <div class="pe-sub-title"><span class="t-day">${I.phone}</span>App buttons</div>
+          ${fToggle('ab', 'enabled', 'Show "get the app" buttons (web only, hidden inside the app)', ab.enabled)}
+          ${fText('ab', 'heading', 'Heading', ab.heading, { max: 60, ph: 'Get the app' })}
+          <div class="pe-grid2">
+            ${fText('ab', 'iosLabel', 'iPhone label', ab.iosLabel, { max: 60 })}
+            ${fText('ab', 'iosUrl', 'iPhone link', ab.iosUrl, { max: 500, type: 'url' })}
+            ${fText('ab', 'androidLabel', 'Android label', ab.androidLabel, { max: 60 })}
+            ${fText('ab', 'androidUrl', 'Android link', ab.androidUrl, { max: 500, type: 'url' })}
+            ${fText('ab', 'desktopLabel', 'Desktop label', ab.desktopLabel, { max: 60 })}
+            ${fText('ab', 'desktopUrl', 'Desktop link', ab.desktopUrl, { max: 500, type: 'url' })}
+          </div>
+          <div class="pe-field-hint">Leave a link empty to hide that button.</div>
+        </div>
+      </div>` : ''}`;
+  }
+
+  function blockHtml(b, kind, index) {
+    const id = b.step.id;
+    const open = S.openBlocks.has(id);
+    const isDay = kind === 'day';
+    const title = b.step.title || '';
+    const err = b.items.some(s => S.errorIds.has(s.id));
+    const meta = [isDay && b.step.category ? b.step.category : '', b.items.length + ' item' + (b.items.length === 1 ? '' : 's')].filter(Boolean).join(' · ');
+    return `<div class="blk${isDay ? '' : ' is-section'}${open ? ' open' : ''}${err ? ' has-error' : ''}" data-blk="${esc(id)}">
+      <div class="blk-head">
+        <span class="pe-handle blk-handle" title="Drag to reorder" aria-label="Drag to reorder">${I.grip}</span>
+        <button type="button" class="blk-toggle" data-act="toggleBlk" data-id="${esc(id)}" aria-expanded="${open}">
+          <span class="blk-badge">${isDay ? 'DAY ' + (index + 1) : 'INTRO'}</span>
+          <span class="blk-titles"><span class="blk-title${title ? '' : ' untitled'}">${esc(title || 'Untitled')}</span><span class="blk-meta">${esc(meta)}</span></span>
+          ${I.chev}
+        </button>
+        <button type="button" class="pe-icon-btn danger" data-act="delBlk" data-id="${esc(id)}" title="Delete ${isDay ? 'day' : 'section'}" aria-label="Delete ${isDay ? 'day' : 'section'}">${I.trash}</button>
+      </div>
+      ${open ? `<div class="blk-body">
+        <div class="blk-fields ${isDay ? 'pe-grid2' : ''}">
+          ${fText('hdr:' + id, 'title', isDay ? 'Day title' : 'Section title', title, { max: 120, ph: isDay ? 'Hollow Body Hold' : 'Start here' })}
+          ${isDay ? fText('hdr:' + id, 'category', 'Category', b.step.category, { max: 60, ph: 'Shape, Hands, Hips…' }) : ''}
+        </div>
+        <div class="pe-items" data-items-of="${esc(id)}">${b.items.map(itemHtml).join('')}</div>
+        <div class="pe-add"><span class="pra-label">Add</span>
+          ${['video', 'image', 'text', 'timer', 'cta', 'youtube'].map(t => `<button type="button" class="pe-chip" data-act="addItem" data-blk="${esc(id)}" data-type="${t}"><span class="${typeClass(t)}">${typeIcon(t)}</span>${TYPE_NAMES[t]}</button>`).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
+  }
+
+  function itemSummaryHtml(s) {
+    const label = itemLabel(s);
+    const thumb = s.type === 'video' ? videoThumb(s.driveFileId) : s.type === 'image' ? imageThumb(s.driveFileId) : '';
+    let kind = TYPE_NAMES[s.type] || (s.type ? s.type : 'Step');
+    if (s.type === 'video' && s.sound) kind += ' · with sound';
+    if (s.type === 'text' && s.title && s.content) kind += ' · ' + firstLine(s.content, 60);
+    if (s.type === 'cta' && s.buttonText) kind += ' · "' + s.buttonText + '"';
+    return `<span class="it-type ${typeClass(s.type)}">${typeIcon(s.type)}</span>${thumb}<span class="it-text"><span class="it-label${label ? '' : ' untitled'}">${esc(label || 'Empty ' + (TYPE_NAMES[s.type] || 'step').toLowerCase())}</span><span class="it-kind">${esc(kind)}</span></span>`;
+  }
+  function itemHtml(s) {
+    const open = S.openItem === s.id;
+    return `<div class="it${open ? ' open' : ''}${S.errorIds.has(s.id) ? ' has-error' : ''}" data-item="${esc(s.id)}">
+      <div class="it-row">
+        <span class="pe-handle it-handle" title="Drag to reorder or move to another day" aria-label="Drag">${I.grip}</span>
+        <button type="button" class="it-main" data-act="toggleItem" data-id="${esc(s.id)}" aria-expanded="${open}">${itemSummaryHtml(s)}</button>
+        <span class="pe-row-actions">
+          <button type="button" class="pe-icon-btn" data-act="dupItem" data-id="${esc(s.id)}" title="Duplicate" aria-label="Duplicate">${I.copy}</button>
+          <button type="button" class="pe-icon-btn danger" data-act="delItem" data-id="${esc(s.id)}" title="Delete" aria-label="Delete">${I.trash}</button>
+        </span>
+      </div>
+      ${open ? `<div class="it-form">${itemFormHtml(s)}</div>` : ''}
+    </div>`;
+  }
+
+  function itemFormHtml(s) {
+    const t = 'item:' + s.id;
+    let body = '';
+    switch (s.type) {
+      case 'video':
+        body = `${s.driveFileId ? `<video class="pe-preview-media" data-src="${esc(media(s.driveFileId))}#t=0.5" controls muted preload="metadata" playsinline></video>` : ''}
+          <div class="pe-field"><span class="pra-label">Clip</span><div class="pe-clip-row">
+            <input class="pra-input" data-tgt="${t}" data-f="driveFileId" data-k="drive" value="${esc(s.driveFileId || '')}" placeholder="Drive link or file id" autocomplete="off"/>
+            <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="pickClip" data-id="${esc(s.id)}">${I.video}Library</button>
+          </div>${s.name ? `<div class="pe-field-hint">File: ${esc(s.name)}</div>` : ''}</div>
+          ${fText(t, 'moveLabel', 'Label shown above the clip', s.moveLabel, { max: 80, ph: moveLabelFromName(s.name) || 'Move name' })}
+          ${fToggle(t, 'sound', 'Plays with sound (a talking video, not a looping demo)', !!s.sound)}`;
+        break;
+      case 'image':
+        body = `${s.driveFileId ? `<img class="pe-preview-media" data-src="${esc(media(s.driveFileId))}" alt=""/>` : ''}
+          ${fText(t, 'driveFileId', 'Image (Drive link or file id)', s.driveFileId, { k: 'drive', ph: 'https://drive.google.com/file/d/…' })}
+          <div class="pe-grid2">${fText(t, 'caption', 'Caption', s.caption, { max: 120 })}${fText(t, 'alt', 'Alt text', s.alt, { max: 200 })}</div>`;
+        break;
+      case 'text':
+        body = `${fText(t, 'title', 'Title (optional)', s.title, { max: 120 })}
+          ${fArea(t, 'content', 'Text', s.content, { rows: 6, hint: 'A short ALL-CAPS first line becomes a label. Lines starting with "- " become a bullet list. Blank line = new paragraph.' })}`;
+        break;
+      case 'timer':
+        body = `${fText(t, 'title', 'Title (optional)', s.title, { max: 120 })}
+          <div class="pe-grid3">${fNum(t, 'rounds', 'Rounds', s.rounds)}${fNum(t, 'workSeconds', 'Work (seconds)', s.workSeconds)}${fNum(t, 'restSeconds', 'Rest (seconds)', s.restSeconds)}</div>`;
+        break;
+      case 'cta':
+        body = `${fArea(t, 'problem', 'Problem', s.problem, { rows: 2 })}
+          ${fArea(t, 'agitate', 'Agitate', s.agitate, { rows: 3 })}
+          ${fArea(t, 'solve', 'Solve (shown bold)', s.solve, { rows: 2 })}
+          <div class="pe-grid2">${fText(t, 'buttonText', 'Button text', s.buttonText, { max: 80, ph: 'Learn more' })}${fText(t, 'srcTag', 'Tracking tag (src=)', s.srcTag, { max: 80, ph: 'program-day3' })}</div>
+          <div class="pe-field-hint" style="margin-top:-6px;margin-bottom:12px">Links to the Button link in Settings${S.settings.ctaUrl ? '' : ' (not set yet)'}.${s.url ? ' This item also has its own fallback link, used only if Settings has none: ' + esc(s.url) : ''}</div>`;
+        break;
+      case 'youtube':
+        body = `${s.youtubeId ? `<img class="pe-preview-media" src="https://i.ytimg.com/vi/${esc(encodeURIComponent(s.youtubeId))}/hqdefault.jpg" alt=""/>` : ''}
+          ${fText(t, 'youtubeId', 'YouTube link or id', s.youtubeId, { k: 'yt', ph: 'https://www.youtube.com/watch?v=…' })}
+          ${fText(t, 'title', 'Title', s.title, { max: 120 })}
+          ${fArea(t, 'intro', 'Intro text', s.intro, { rows: 3 })}`;
+        break;
+      default:
+        body = `<p class="pra-muted" style="font-weight:400;font-size:.84rem;margin:12px 0 8px">This step type ("${esc(s.type || 'unknown')}") can't be edited here. It's kept exactly as it is; you can still move or delete it.</p><div class="pe-json">${esc(JSON.stringify(s, null, 2))}</div>`;
+    }
+    const blocks = allBlocks();
+    const cur = findItem(s.id);
+    const moveOpts = blocks.map(b => `<option value="${esc(b.step.id)}"${cur && cur.block === b ? ' selected' : ''}>${esc(blockLabel(b))}</option>`).join('');
+    return body + `<div class="it-foot">
+        <div class="pe-inline">
+          <button type="button" class="pe-icon-btn" data-act="itemUp" data-id="${esc(s.id)}" title="Move up" aria-label="Move up">${I.up}</button>
+          <button type="button" class="pe-icon-btn" data-act="itemDown" data-id="${esc(s.id)}" title="Move down" aria-label="Move down">${I.down}</button>
+          <select class="pra-select" data-act-change="moveTo" data-id="${esc(s.id)}" aria-label="Move to">${moveOpts}</select>
+        </div>
+        <div class="pe-inline">
+          <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="dupItem" data-id="${esc(s.id)}">${I.copy}Duplicate</button>
+          <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="delItem" data-id="${esc(s.id)}" style="color:var(--pe-danger)">${I.trash}Delete</button>
+        </div>
+      </div>`;
+  }
+
+  function renderContent() {
+    const el = $('#peContent');
+    if (!el) return;
+    el.innerHTML = `<div class="pe-toolbar">
+        <div class="pe-h" style="font-size:1.02rem;display:flex;align-items:center;gap:8px"><span class="t-day">${I.list}</span>Content</div>
+        <div class="pe-inline">
+          <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="expandAll">${I.expand}Open all</button>
+          <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="collapseAll">${I.collapse}Close all</button>
+        </div>
+      </div>
+      <div class="pe-group-label"><span class="pra-label">Intro sections · shown before Day 1</span><button type="button" class="pra-btn pra-btn-outline pe-btn-sm" data-act="addSection">${I.plus}Add section</button></div>
+      <div class="pe-blocks" id="peSecList">${S.sections.map((b, i) => blockHtml(b, 'section', i)).join('')}</div>
+      ${S.sections.length ? '' : '<div class="pe-empty">No intro sections. Optional: a welcome, a diagnostic, how the program works.</div>'}
+      <div class="pe-group-label"><span class="pra-label">Days · renumber automatically</span><button type="button" class="pra-btn pe-btn-sm" data-act="addDay">${I.plus}Add day</button></div>
+      <div class="pe-blocks" id="peDayList">${S.days.map((b, i) => blockHtml(b, 'day', i)).join('')}</div>
+      ${S.days.length ? '' : '<div class="pe-empty">No days yet. Add Day 1.</div>'}`;
+    observeThumbs(el);
+    initContentSortables();
+  }
+
+  function moveHtml(m, bumpKey) {
+    const k = uid(m);
+    const open = S.openMove === k;
+    const t = 'move:' + k;
+    return `<div class="it${open ? ' open' : ''}" data-move="${k}">
+      <div class="it-row">
+        <span class="pe-handle move-handle" title="Drag to reorder" aria-label="Drag">${I.grip}</span>
+        <button type="button" class="it-main" data-act="toggleMove" data-id="${k}" aria-expanded="${open}">
+          <span class="it-type t-video">${I.video}</span>${videoThumb(m.clip || m.driveFileId)}
+          <span class="it-text"><span class="it-label${m.move ? '' : ' untitled'}">${esc(m.move || 'Unnamed move')}</span><span class="it-kind">${esc(firstLine(m.how, 70) || 'Add-on move')}</span></span>
+        </button>
+        <span class="pe-row-actions"><button type="button" class="pe-icon-btn danger" data-act="delMove" data-id="${k}" title="Delete move" aria-label="Delete move">${I.trash}</button></span>
+      </div>
+      ${open ? `<div class="it-form">
+        ${fText(t, 'move', 'Move', m.move, { max: 120 })}
+        ${(m.clip || m.driveFileId) ? `<video class="pe-preview-media" data-src="${esc(media(m.clip || m.driveFileId))}#t=0.5" controls muted preload="metadata" playsinline></video>` : ''}
+        <div class="pe-field"><span class="pra-label">Clip</span><div class="pe-clip-row">
+          <input class="pra-input" data-tgt="${t}" data-f="clip" data-k="drive" value="${esc(m.clip || '')}" placeholder="Drive link or file id" autocomplete="off"/>
+          <button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="pickMoveClip" data-id="${k}">${I.video}Library</button>
+        </div></div>
+        ${fArea(t, 'how', 'How', m.how, { rows: 3 })}
+        ${fArea(t, 'why', 'Why', m.why, { rows: 2 })}
+        ${m.image ? `<img class="pe-preview-media" data-src="${esc(media(m.image))}" alt=""/>` : ''}
+        ${fText(t, 'image', 'Image (Drive link or file id)', m.image, { k: 'drive', ph: 'Optional anatomy image' })}
+        <div class="it-foot"><span></span><button type="button" class="pra-btn pra-btn-ghost pe-btn-sm" data-act="delMove" data-id="${k}" style="color:var(--pe-danger)">${I.trash}Delete move</button></div>
+      </div>` : ''}
+    </div>`;
+  }
+  function renderAddons() {
+    const el = $('#peAddons');
+    if (!el) return;
+    const open = S.addonsOpen;
+    el.classList.toggle('pe-open', open);
+    el.innerHTML = `<button type="button" class="pe-panel-head" data-act="toggleAddons" aria-expanded="${open}">${I.chev}<span class="t-cta">${I.puzzle}</span><span class="pe-h">Add-ons<br><span class="pe-hint">${S.bumps.length ? esc(S.bumps.map(e => e.data.title || e.key).join(' · ')) : 'None'}</span></span></button>
+      ${open ? `<div class="pe-panel-body">
+        <div id="peBumpList">${S.bumps.map(e => {
+          const k = uid(e), bo = S.openBump === k, moves = e.data.moves || [];
+          return `<div class="bump${bo ? ' open' : ''}" data-bump="${k}">
+            <div class="bump-head">
+              <span class="pe-handle bump-handle" title="Drag to reorder" aria-label="Drag">${I.grip}</span>
+              <button type="button" class="blk-toggle" data-act="toggleBump" data-id="${k}" aria-expanded="${bo}">
+                <span class="bump-key">${esc(e.key)}</span>
+                <span class="blk-titles"><span class="blk-title${e.data.title ? '' : ' untitled'}">${esc(e.data.title || 'Untitled add-on')}</span><span class="blk-meta">${moves.length} move${moves.length === 1 ? '' : 's'}</span></span>
+                ${I.chev}
+              </button>
+              <button type="button" class="pe-icon-btn danger" data-act="delBump" data-id="${k}" title="Delete add-on" aria-label="Delete add-on">${I.trash}</button>
+            </div>
+            ${bo ? `<div class="bump-body"><div class="blk-fields">
+              ${fText('bump:' + k, 'title', 'Title', e.data.title, { max: 120 })}
+              ${fArea('bump:' + k, 'intro', 'Intro', e.data.intro, { rows: 2 })}
+              ${KNOWN_BUMP_KEYS.includes(e.key) ? '' : `<div class="pe-notice" style="margin-bottom:12px">Key "${esc(e.key)}": purchases currently only grant the wrist, shoulder and hips add-ons, so nobody gets this one until the backend knows its key.</div>`}
+              </div>
+              <div class="pe-moves" data-moves-of="${k}">${moves.map(m => moveHtml(m, e.key)).join('')}</div>
+              <button type="button" class="pra-btn pra-btn-outline pe-btn-sm" data-act="addMove" data-id="${k}">${I.plus}Add move</button>
+            </div>` : ''}
+          </div>`;
+        }).join('')}</div>
+        <button type="button" class="pra-btn pe-btn-sm" data-act="addBump">${I.plus}Add add-on</button>
+      </div>` : ''}`;
+    observeThumbs(el);
+    initAddonSortables();
+  }
+
+  // ── Drag & drop (SortableJS; mouse + touch) ───────────────────────────
+  const SORT_OPTS = {
+    animation: 150, forceFallback: true, fallbackTolerance: 4, fallbackOnBody: false,
+    ghostClass: 'pe-ghost', chosenClass: 'pe-chosen', dragClass: 'pe-drag',
+    scroll: true, bubbleScroll: true, scrollSensitivity: 90, scrollSpeed: 16, emptyInsertThreshold: 24,
+  };
+  function destroySortables(scope) {
+    sortables = sortables.filter(s => { if (s.scope === scope) { try { s.inst.destroy(); } catch {} return false; } return true; });
+  }
+  function initContentSortables() {
+    destroySortables('content');
+    if (typeof Sortable === 'undefined') return;
+    const mk = (el, opts) => sortables.push({ scope: 'content', inst: Sortable.create(el, { ...SORT_OPTS, ...opts }) });
+    const sec = $('#peSecList'), day = $('#peDayList');
+    if (sec) mk(sec, { group: 'pe-sections', handle: '.blk-handle', draggable: '.blk', onEnd: syncBlocksFromDom });
+    if (day) mk(day, { group: 'pe-days', handle: '.blk-handle', draggable: '.blk', onEnd: syncBlocksFromDom });
+    document.querySelectorAll('#peContent .pe-items').forEach(el => mk(el, { group: 'pe-items', handle: '.it-handle', draggable: '.it', onEnd: syncItemsFromDom }));
+  }
+  function initAddonSortables() {
+    destroySortables('addons');
+    if (typeof Sortable === 'undefined') return;
+    const mk = (el, opts) => sortables.push({ scope: 'addons', inst: Sortable.create(el, { ...SORT_OPTS, ...opts }) });
+    const list = $('#peBumpList');
+    if (list) mk(list, { handle: '.bump-handle', draggable: '.bump', onEnd: syncBumpsFromDom });
+    document.querySelectorAll('#peAddons .pe-moves').forEach(el => mk(el, { group: 'pe-moves', handle: '.move-handle', draggable: '.it', onEnd: syncMovesFromDom }));
+  }
+  function syncBlocksFromDom(ev) {
+    if (ev && ev.oldIndex === ev.newIndex && ev.from === ev.to) return;
+    const order = (sel, list) => [...document.querySelectorAll(sel + ' > .blk')].map(n => list.find(b => b.step.id === n.dataset.blk)).filter(Boolean);
+    const sec = order('#peSecList', S.sections), day = order('#peDayList', S.days);
+    if (sec.length === S.sections.length) S.sections = sec;
+    if (day.length === S.days.length) S.days = day;
+    renumberDays(); markDirty();
+    setTimeout(() => { renderContent(); refreshHeadMeta(); }, 0);
+  }
+  function syncItemsFromDom(ev) {
+    if (ev && ev.oldIndex === ev.newIndex && ev.from === ev.to) return;
+    const byId = new Map();
+    allBlocks().forEach(b => b.items.forEach(s => byId.set(s.id, s)));
+    const total = byId.size;
+    const next = new Map();
+    document.querySelectorAll('#peContent .pe-items').forEach(el => {
+      next.set(el.dataset.itemsOf, [...el.children].filter(n => n.dataset.item).map(n => byId.get(n.dataset.item)).filter(Boolean));
+    });
+    // Collapsed blocks have no list in the DOM: they keep their items.
+    const proposed = allBlocks().map(b => next.has(b.step.id) ? next.get(b.step.id) : b.items);
+    const count = proposed.reduce((a, l) => a + l.length, 0);
+    if (count !== total) { renderContent(); return; } // safety: never lose or duplicate an item
+    allBlocks().forEach((b, i) => { b.items = proposed[i]; });
+    markDirty();
+    setTimeout(renderContent, 0);
+  }
+  function syncBumpsFromDom() {
+    const order = [...document.querySelectorAll('#peBumpList > .bump')].map(n => findBump(n.dataset.bump)).filter(Boolean);
+    if (order.length === S.bumps.length) S.bumps = order;
+    markDirty();
+    setTimeout(renderAddons, 0);
+  }
+  function syncMovesFromDom(ev) {
+    if (ev && ev.oldIndex === ev.newIndex && ev.from === ev.to) return;
+    const all = new Map(); S.bumps.forEach(e => (e.data.moves || []).forEach(m => all.set(uid(m), m)));
+    const total = all.size;
+    const next = new Map();
+    document.querySelectorAll('#peAddons .pe-moves').forEach(el => next.set(el.dataset.movesOf, [...el.children].map(n => all.get(n.dataset.move)).filter(Boolean)));
+    const proposed = S.bumps.map(e => next.has(uid(e)) ? next.get(uid(e)) : (e.data.moves || []));
+    if (proposed.reduce((a, l) => a + l.length, 0) !== total) { renderAddons(); return; }
+    S.bumps.forEach((e, i) => { if (e.data.moves || proposed[i].length) e.data.moves = proposed[i]; });
+    markDirty();
+    setTimeout(renderAddons, 0);
+  }
+
+  // ── Video picker ──────────────────────────────────────────────────────
+  let pickCb = null, vQuery = '', vToken = null, vSeq = 0, vTimer = null;
+  function openVideoPicker(cb) {
+    pickCb = cb;
+    $('#peVideoModal').classList.add('show');
+    $('#peVideoPaste').value = ''; $('#peVideoPasteMsg').textContent = '';
+    const inp = $('#peVideoSearch');
+    const last = lsGet('peVideoQuery') || '';
+    inp.value = last;
+    searchVideos(last, false);
+    setTimeout(() => inp.focus(), 40);
+  }
+  function closeVideoPicker() {
+    $('#peVideoModal').classList.remove('show');
+    $('#peVideoResults').querySelectorAll('video').forEach(v => { v.removeAttribute('src'); try { v.load(); } catch {} });
+    pickCb = null;
+  }
+  async function searchVideos(q, more) {
+    const box = $('#peVideoResults'), moreBtn = $('#peVideoMore');
+    const seq = ++vSeq;
+    if (!more) { vQuery = q; vToken = null; box.innerHTML = '<div class="pra-muted" style="font-weight:400;font-size:.85rem;margin-top:12px">Searching…</div>'; moreBtn.hidden = true; }
+    else { moreBtn.disabled = true; moreBtn.textContent = 'Loading…'; }
+    let d = {};
+    try {
+      const r = await fetch('/api/chat/training-protocol/search-videos?q=' + encodeURIComponent(vQuery) + (more && vToken ? '&pageToken=' + encodeURIComponent(vToken) : ''));
+      d = await r.json().catch(() => ({}));
+      if (!r.ok) d = { error: d.error || ('Search failed (' + r.status + ')') };
+    } catch (e) { d = { error: 'Could not reach the server.' }; }
+    if (seq !== vSeq) return;
+    moreBtn.disabled = false; moreBtn.textContent = 'Load more';
+    if (d.error) { if (!more) box.innerHTML = `<div class="pe-notice" style="margin-top:12px">${esc(d.error)}</div>`; return; }
+    if (d.needsConfig) { box.innerHTML = '<div class="pe-notice" style="margin-top:12px">No video library folder is set. Set the Training Protocol Videos folder in Admin Settings, or paste a Drive link below.</div>'; return; }
+    const files = d.files || [];
+    vToken = d.nextPageToken || null;
+    const cards = files.map(f => `<button type="button" class="pe-vcard" data-vid="${esc(f.id)}" data-name="${esc(f.name || '')}">${videoThumb(f.id, '')}<span>${esc(f.name || f.id)}</span></button>`).join('');
+    if (!more) box.innerHTML = files.length ? `<div class="pe-vgrid">${cards}</div>` : '<div class="pra-muted" style="font-weight:400;font-size:.85rem;margin-top:12px">No videos found.</div>';
+    else { const g = box.querySelector('.pe-vgrid'); if (g) g.insertAdjacentHTML('beforeend', cards); }
+    observeThumbs(box);
+    moreBtn.hidden = !vToken;
+  }
+  $('#peVideoClose').innerHTML = I.close;
+  $('#peVideoClose').addEventListener('click', closeVideoPicker);
+  $('#peVideoModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeVideoPicker(); });
+  $('#peVideoSearch').addEventListener('input', (e) => {
+    clearTimeout(vTimer);
+    const q = e.target.value.trim();
+    vTimer = setTimeout(() => { lsSet('peVideoQuery', q); searchVideos(q, false); }, 350);
+  });
+  $('#peVideoMore').addEventListener('click', () => searchVideos(vQuery, true));
+  $('#peVideoResults').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-vid]');
+    if (!c || !pickCb) return;
+    const cb = pickCb; closeVideoPicker();
+    cb(c.dataset.vid, c.dataset.name || '');
+  });
+  function usePasted() {
+    const id = parseDriveId($('#peVideoPaste').value);
+    if (!id) { $('#peVideoPasteMsg').textContent = 'That doesn\'t look like a Google Drive link or file id.'; return; }
+    const cb = pickCb; closeVideoPicker();
+    if (cb) cb(id, '');
+  }
+  $('#peVideoPasteUse').addEventListener('click', usePasted);
+  $('#peVideoPaste').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); usePasted(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if ($('#peVideoModal').classList.contains('show')) closeVideoPicker();
+      else if (dialogResolve) dialogResolve(null);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && S.id) { e.preventDefault(); save(); }
+  });
+
+  // ── Actions ───────────────────────────────────────────────────────────
+  function focusFirstField(sel) {
+    setTimeout(() => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const f = el.querySelector('.it-form input:not([type=checkbox]), .it-form textarea, .blk-fields input');
+      if (f) try { f.focus({ preventScroll: true }); } catch {}
+    }, 40);
+  }
+  function insertItem(blockId, item, afterIndex) {
+    const f = findBlock(blockId);
+    if (!f) return;
+    if (afterIndex == null) f.block.items.push(item); else f.block.items.splice(afterIndex + 1, 0, item);
+    S.openBlocks.add(blockId);
+    S.openItem = item.id;
+    markDirty(); renderContent(); refreshHeadMeta();
+    focusFirstField(`[data-item="${CSS.escape(item.id)}"]`);
+  }
+  async function addItem(blockId, type) {
+    const base = { id: newId(), type };
+    if (type === 'video') {
+      openVideoPicker((fileId, name) => {
+        const it = { ...base, driveFileId: fileId };
+        if (name) { it.name = name; it.moveLabel = moveLabelFromName(name); }
+        insertItem(blockId, it);
+      });
+      return;
+    }
+    if (type === 'image') {
+      const v = await dialog({ title: 'Add an image', input: { label: 'Google Drive link or file id', placeholder: 'https://drive.google.com/file/d/…' }, okText: 'Add image' });
+      if (v == null) return;
+      const id = parseDriveId(v);
+      if (!id) { await dialog({ title: 'Not a Drive link', body: 'That doesn\'t look like a Google Drive link or file id.', noCancel: true }); return; }
+      insertItem(blockId, { ...base, driveFileId: id });
+      return;
+    }
+    if (type === 'youtube') {
+      const v = await dialog({ title: 'Add a YouTube video', input: { label: 'YouTube link or video id', placeholder: 'https://www.youtube.com/watch?v=…' }, okText: 'Add video' });
+      if (v == null) return;
+      const id = parseYouTubeId(v);
+      if (!id) { await dialog({ title: 'Not a YouTube link', body: 'Paste a full YouTube link (watch, youtu.be, shorts) or the 11-character video id.', noCancel: true }); return; }
+      insertItem(blockId, { ...base, youtubeId: id, title: '' });
+      return;
+    }
+    if (type === 'text') return insertItem(blockId, { ...base, content: '' });
+    if (type === 'timer') return insertItem(blockId, { ...base, rounds: 3, workSeconds: 30, restSeconds: 15 });
+    if (type === 'cta') return insertItem(blockId, { ...base, problem: '', agitate: '', solve: '', buttonText: 'Learn more' });
+  }
+  async function deleteBlock(id) {
+    const f = findBlock(id);
+    if (!f) return;
+    const n = f.block.items.length;
+    const name = f.kind === 'day' ? 'Day ' + (f.index + 1) + (f.block.step.title ? ' (' + f.block.step.title + ')' : '') : 'the intro section "' + (f.block.step.title || 'Untitled') + '"';
+    const ok = await dialog({ title: 'Delete ' + (f.kind === 'day' ? 'day' : 'section') + '?', body: 'Delete ' + name + (n ? ' and its ' + n + ' item' + (n === 1 ? '' : 's') : '') + '? Nothing changes for students until you save.' + (f.kind === 'day' ? ' Later days move up one number.' : ''), okText: 'Delete', danger: true });
+    if (!ok) return;
+    f.list.splice(f.index, 1);
+    S.openBlocks.delete(id);
+    renumberDays(); markDirty(); renderContent(); refreshHeadMeta();
+  }
+  async function deleteItem(id) {
+    const f = findItem(id);
+    if (!f) return;
+    const ok = await dialog({ title: 'Delete item?', body: 'Delete this ' + (TYPE_NAMES[f.item.type] || 'step').toLowerCase() + (itemLabel(f.item) ? ' ("' + firstLine(itemLabel(f.item), 60) + '")' : '') + '?', okText: 'Delete', danger: true });
+    if (!ok) return;
+    const g = findItem(id); if (!g) return;
+    g.block.items.splice(g.index, 1);
+    if (S.openItem === id) S.openItem = null;
+    markDirty(); renderContent(); refreshHeadMeta();
+  }
+  function duplicateItem(id) {
+    const f = findItem(id);
+    if (!f) return;
+    const copy = peClone(f.item); copy.id = newId();
+    insertItem(f.block.step.id, copy, f.index);
+  }
+  function nudgeItem(id, dir) {
+    const f = findItem(id);
+    if (!f) return;
+    const blocks = allBlocks();
+    const bi = blocks.indexOf(f.block);
+    const j = f.index + dir;
+    if (j >= 0 && j < f.block.items.length) {
+      f.block.items.splice(f.index, 1); f.block.items.splice(j, 0, f.item);
+    } else {
+      // Past the edge: hop into the neighboring block.
+      const nb = blocks[bi + dir];
+      if (!nb) return;
+      f.block.items.splice(f.index, 1);
+      if (dir < 0) nb.items.push(f.item); else nb.items.unshift(f.item);
+      S.openBlocks.add(nb.step.id);
+    }
+    markDirty(); renderContent();
+    focusFirstField(`[data-item="${CSS.escape(id)}"]`);
+  }
+  function moveItemTo(id, blockId) {
+    const f = findItem(id), t = findBlock(blockId);
+    if (!f || !t || f.block === t.block) return;
+    f.block.items.splice(f.index, 1);
+    t.block.items.push(f.item);
+    S.openBlocks.add(blockId);
+    markDirty(); renderContent(); refreshHeadMeta();
+    focusFirstField(`[data-item="${CSS.escape(id)}"]`);
+  }
+  function addBlock(kind) {
+    const step = kind === 'day'
+      ? { id: newId(), parentId: null, isBranchRoot: false, type: 'day', dayNumber: S.days.length + 1, title: '', category: '' }
+      : { id: newId(), parentId: null, isBranchRoot: false, type: 'section', title: '' };
+    (kind === 'day' ? S.days : S.sections).push({ step, items: [] });
+    S.openBlocks.add(step.id);
+    markDirty(); renderContent(); refreshHeadMeta();
+    focusFirstField(`[data-blk="${CSS.escape(step.id)}"]`);
+  }
+  async function addBump() {
+    if (S.bumps.length >= 30) { await dialog({ title: 'Too many add-ons', body: 'A program can have up to 30 add-ons.', noCancel: true }); return; }
+    const free = KNOWN_BUMP_KEYS.filter(k => !S.bumps.some(e => e.key === k));
+    const v = await dialog({ title: 'New add-on', input: { label: 'Key', placeholder: free[0] || 'e.g. lower-back', value: free[0] || '', maxlength: 40, hint: 'A short id purchases use to grant it. Purchases currently grant wrist, shoulder and hips. The key can\'t be changed later.' }, okText: 'Add' });
+    if (v == null) return;
+    const key = String(v).trim().toLowerCase().replace(/\s+/g, '-');
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(key)) { await dialog({ title: 'Invalid key', body: 'Use lowercase letters, numbers, - or _.', noCancel: true }); return; }
+    if (S.bumps.some(e => e.key === key)) { await dialog({ title: 'Already exists', body: 'There is already an add-on with the key "' + key + '".', noCancel: true }); return; }
+    const e = { key, data: { title: '', intro: '', moves: [] } };
+    S.bumps.push(e); S.openBump = uid(e); S.addonsOpen = true;
+    markDirty(); renderAddons(); refreshHeadMeta();
+  }
+  async function delBump(k) {
+    const e = findBump(k); if (!e) return;
+    const ok = await dialog({ title: 'Delete add-on?', body: 'Delete "' + (e.data.title || e.key) + '" and its ' + ((e.data.moves || []).length) + ' moves? People who bought it lose it from their program once you save.', okText: 'Delete', danger: true });
+    if (!ok) return;
+    S.bumps = S.bumps.filter(x => x !== e);
+    markDirty(); renderAddons(); refreshHeadMeta();
+  }
+  function addMove(k) {
+    const e = findBump(k); if (!e) return;
+    if (!Array.isArray(e.data.moves)) e.data.moves = [];
+    if (e.data.moves.length >= 100) return;
+    const m = { move: '', clip: '', how: '', why: '' };
+    e.data.moves.push(m); S.openMove = uid(m);
+    markDirty(); renderAddons();
+    focusFirstField(`[data-move="${uid(m)}"]`);
+  }
+  async function delMove(k) {
+    const f = findMove(k); if (!f) return;
+    const ok = await dialog({ title: 'Delete move?', body: 'Delete "' + (f.move.move || 'this move') + '"?', okText: 'Delete', danger: true });
+    if (!ok) return;
+    const g = findMove(k); if (!g) return;
+    g.bump.data.moves.splice(g.index, 1);
+    markDirty(); renderAddons();
+  }
+
+  function previewUrl() { return '/chat-app/training-protocol.html?userId=' + encodeURIComponent(S.me.id) + '&programTemplate=' + encodeURIComponent(S.id); }
+  async function preview() {
+    if (!S.dirty) { window.open(previewUrl(), '_blank', 'noopener'); return; }
+    const ok = await dialog({ title: 'Save before previewing?', body: 'The preview shows the last saved version. Save your changes first?', okText: 'Save and preview', cancelText: 'Preview saved version' });
+    const w = window.open('about:blank', '_blank');
+    if (ok) {
+      const saved = await save();
+      if (!saved) { if (w) w.close(); return; }
+    }
+    if (w) w.location.href = previewUrl(); else window.open(previewUrl(), '_blank');
+  }
+
+  // Delegated clicks for the editor.
+  $('#peMain').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b || !$('#peMain').contains(b)) return;
+    const id = b.dataset.id;
+    switch (b.dataset.act) {
+      case 'toggleSettings': S.settingsOpen = !S.settingsOpen; renderSettings(); break;
+      case 'toggleAddons': S.addonsOpen = !S.addonsOpen; renderAddons(); break;
+      case 'toggleBlk': if (S.openBlocks.has(id)) S.openBlocks.delete(id); else S.openBlocks.add(id); renderContent(); break;
+      case 'expandAll': allBlocks().forEach(x => S.openBlocks.add(x.step.id)); renderContent(); break;
+      case 'collapseAll': S.openBlocks.clear(); S.openItem = null; renderContent(); break;
+      case 'addDay': addBlock('day'); break;
+      case 'addSection': addBlock('section'); break;
+      case 'delBlk': deleteBlock(id); break;
+      case 'addItem': addItem(b.dataset.blk, b.dataset.type); break;
+      case 'toggleItem': S.openItem = S.openItem === id ? null : id; renderContent(); if (S.openItem) focusFirstField(`[data-item="${CSS.escape(id)}"]`); break;
+      case 'dupItem': duplicateItem(id); break;
+      case 'delItem': deleteItem(id); break;
+      case 'itemUp': nudgeItem(id, -1); break;
+      case 'itemDown': nudgeItem(id, 1); break;
+      case 'pickClip': openVideoPicker((fileId, name) => {
+        const f = findItem(id); if (!f) return;
+        f.item.driveFileId = fileId;
+        if (name) { f.item.name = name; if (!f.item.moveLabelManual || !f.item.moveLabel) f.item.moveLabel = moveLabelFromName(name); }
+        markDirty(); renderContent();
+      }); break;
+      case 'addBump': addBump(); break;
+      case 'delBump': delBump(id); break;
+      case 'toggleBump': S.openBump = S.openBump === id ? null : id; renderAddons(); break;
+      case 'addMove': addMove(id); break;
+      case 'toggleMove': S.openMove = S.openMove === id ? null : id; renderAddons(); break;
+      case 'delMove': delMove(id); break;
+      case 'pickMoveClip': openVideoPicker((fileId, name) => {
+        const f = findMove(id); if (!f) return;
+        f.move.clip = fileId;
+        if (!f.move.move && name) f.move.move = moveLabelFromName(name);
+        markDirty(); renderAddons();
+      }); break;
+      case 'preview': preview(); break;
+    }
+  });
+
+  // Field edits: update the model in place (no re-render, so focus stays).
+  function onField(e) {
+    const el = e.target;
+    if (el.dataset.actChange === 'moveTo') { if (e.type === 'change') moveItemTo(el.dataset.id, el.value); return; }
+    const tgt = el.dataset.tgt, f = el.dataset.f;
+    if (!tgt || !f) return;
+    if (el.tagName === 'SELECT' && e.type === 'input') return; // handled on change
+    const obj = resolveTarget(tgt);
+    if (!obj) return;
+    const kind = el.dataset.k;
+    const isMeta = tgt === 'meta', isSettings = tgt === 'set' || tgt === 'ab';
+    let v;
+    if (kind === 'bool') v = el.checked;
+    else if (kind === 'num') { v = el.value === '' ? '' : Number(el.value); if (v !== '' && !Number.isFinite(v)) return; }
+    else if (kind === 'drive') { const raw = el.value.trim(); v = parseDriveId(raw); el.classList.toggle('pe-invalid', !!raw && !v); if (raw && !v) return; }
+    else if (kind === 'yt') { const raw = el.value.trim(); v = parseYouTubeId(raw); el.classList.toggle('pe-invalid', !!raw && !v); if (raw && !v) return; }
+    else v = el.value;
+    if (isMeta) S[f] = v;
+    else if (isSettings) obj[f] = v; // settings keep '' (an empty app-button link hides that button)
+    else if (v === '' || v === false) delete obj[f]; // step / add-on fields: no empty keys left behind
+    else obj[f] = v;
+    if (f === 'moveLabel' && tgt.startsWith('item:') && v) obj.moveLabelManual = true;
+    if (tgt === 'set' && f === 'ctaUrl') el.classList.toggle('pe-invalid', !!v && !/^https?:\/\//i.test(v));
+    if (tgt === 'ab' && /Url$/.test(f)) el.classList.toggle('pe-invalid', !!v && !/^https?:\/\//i.test(v));
+    markDirty();
+    // Refresh just the summary line of what changed.
+    if (tgt.startsWith('item:')) {
+      const card = document.querySelector(`[data-item="${CSS.escape(tgt.slice(5))}"] > .it-row > .it-main`);
+      if (card) { card.innerHTML = itemSummaryHtml(obj); observeThumbs(card); }
+      S.errorIds.delete(tgt.slice(5));
+    } else if (tgt.startsWith('hdr:')) {
+      const id = tgt.slice(4), f2 = findBlock(id);
+      const head = document.querySelector(`[data-blk="${CSS.escape(id)}"] > .blk-head`);
+      if (head && f2) {
+        const tt = head.querySelector('.blk-title'); tt.textContent = f2.block.step.title || 'Untitled'; tt.classList.toggle('untitled', !f2.block.step.title);
+        head.querySelector('.blk-meta').textContent = [f2.kind === 'day' && f2.block.step.category ? f2.block.step.category : '', f2.block.items.length + ' item' + (f2.block.items.length === 1 ? '' : 's')].filter(Boolean).join(' · ');
+      }
+    } else if (tgt.startsWith('bump:')) {
+      const head = document.querySelector(`[data-bump="${tgt.slice(5)}"] > .bump-head .blk-title`);
+      if (head) { head.textContent = obj.title || 'Untitled add-on'; head.classList.toggle('untitled', !obj.title); }
+    } else if (tgt.startsWith('move:')) {
+      const card = document.querySelector(`[data-move="${tgt.slice(5)}"] > .it-row .it-label`);
+      if (card) { card.textContent = obj.move || 'Unnamed move'; card.classList.toggle('untitled', !obj.move); }
+    } else if (isSettings) {
+      const hint = document.querySelector('#peSettings .pe-panel-head .pe-hint');
+      if (hint) hint.textContent = settingsSummary();
+    }
+  }
+  $('#peMain').addEventListener('input', onField);
+  $('#peMain').addEventListener('change', onField);
+
+  // Program list clicks / select.
+  $('#peSide').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'newProgram') newProgram();
+    if (b.dataset.act === 'pick') pickProgram(b.dataset.id);
+  });
+  $('#peSide').addEventListener('change', (e) => {
+    if (e.target.id === 'peProgSelect' && e.target.value) pickProgram(e.target.value);
+  });
+
+  // ── Server ────────────────────────────────────────────────────────────
+  async function api(path, opts = {}) {
+    let r, d = {};
+    try {
+      r = await fetch(path, { credentials: 'same-origin', ...opts, headers: { ...(opts.body ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+      d = await r.json().catch(() => ({}));
+    } catch (e) { return { ok: false, status: 0, data: { error: 'Could not reach the server. Check your connection and try again.' } }; }
+    return { ok: r.ok, status: r.status, data: d };
+  }
+  const stampOf = (t) => [t.updatedAt || '', t.settingsUpdatedAt || '', (t.steps || []).length, t.name || ''].join('|');
+  function settingsFrom(t) {
+    const s = { ...SETTINGS_DEFAULTS, ...peClone((t && t.settings) || {}) };
+    s.dripEnabled = s.dripEnabled !== false;
+    s.appButtons = { ...APP_BUTTON_DEFAULTS, ...((t && t.settings && t.settings.appButtons) || {}) };
+    s.appButtons.enabled = s.appButtons.enabled !== false;
+    return s;
+  }
+
+  async function loadList() {
+    const r = await api('/api/chat/protocol-templates');
+    if (!r.ok) throw new Error(r.data.error || 'Could not load programs.');
+    S.list = (r.data.templates || []).filter(t => t.isProgram || t.kind === 'program');
+  }
+  async function loadTemplate(id) {
+    const r = await api('/api/chat/protocol-templates/' + encodeURIComponent(id));
+    if (!r.ok) throw new Error(r.data.error || 'Could not load that program.');
+    const t = r.data.template;
+    const parsed = parseProgramSteps(t.steps || [], newId);
+    Object.assign(S, {
+      id: t.id, tpl: t, name: t.name || '', goal: t.goal || '', settings: settingsFrom(t),
+      sections: parsed.sections, days: parsed.days, orphans: parsed.orphans, warnings: parsed.warnings,
+      bumps: bumpsToList(t.bumps), dirty: false, stamp: stampOf(t),
+      openItem: null, openBump: null, openMove: null, errorIds: new Set(),
+    });
+    S.openBlocks = new Set();
+    if (!S.list.some(p => p.id === t.id)) S.list.push({ id: t.id, name: t.name, stepCount: (t.steps || []).length, kind: t.kind });
+    const u = new URL(location.href); u.searchParams.set('id', t.id); history.replaceState(null, '', u.toString());
+    lsSet('peLastProgram', t.id);
+  }
+  async function pickProgram(id) {
+    if (id === S.id) return;
+    if (S.dirty) {
+      const ok = await dialog({ title: 'Discard unsaved changes?', body: 'You have unsaved changes in "' + (S.name || 'this program') + '". Switch anyway and lose them?', okText: 'Discard and switch', danger: true });
+      if (!ok) { renderSide(); return; }
+    }
+    $('#peMain').innerHTML = '<div class="pra-panel pe-state">Loading…</div>';
+    try { await loadTemplate(id); }
+    catch (e) { S.id = null; S.tpl = null; $('#peMain').innerHTML = `<div class="pra-panel pe-state">${esc(e.message)}</div>`; renderSide(); setBar('ok', ''); return; }
+    renderSide(); renderMain(); setBar('ok', 'All changes saved'); placeSaveBar();
+  }
+  async function newProgram() {
+    if (S.dirty) {
+      const ok = await dialog({ title: 'Discard unsaved changes?', body: 'You have unsaved changes. Create a new program and lose them?', okText: 'Discard', danger: true });
+      if (!ok) return;
+    }
+    const name = await dialog({ title: 'New program', input: { label: 'Name', placeholder: 'Powerbatics Splits Protocol', maxlength: 120 }, okText: 'Create' });
+    if (name == null) return;
+    if (!name.trim()) { await dialog({ title: 'Name needed', body: 'Give the program a name.', noCancel: true }); return; }
+    const day1 = { id: newId(), parentId: null, isBranchRoot: false, type: 'day', dayNumber: 1, title: '', category: '' };
+    const r = await api('/api/chat/protocol-templates', { method: 'POST', body: JSON.stringify({ name: name.trim(), steps: [day1], kind: 'program' }) });
+    if (!r.ok || !r.data.template) { await dialog({ title: 'Could not create the program', body: r.data.error || ('Server error (' + r.status + ').'), noCancel: true }); return; }
+    const id = r.data.template.id;
+    // Older servers ignore kind:"program" on create; settings on the record
+    // is what makes the list treat it as a program either way.
+    const fresh = await api('/api/chat/protocol-templates/' + encodeURIComponent(id));
+    if (fresh.ok && fresh.data.template && !fresh.data.template.settings) {
+      await api('/api/chat/protocol-templates/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ settings: { ...SETTINGS_DEFAULTS, appButtons: { ...APP_BUTTON_DEFAULTS } } }) });
+    }
+    S.dirty = false;
+    try { await loadList(); } catch {}
+    S.id = null;
+    await pickProgram(id);
+    S.openBlocks.add(day1.id); renderContent();
+  }
+
+  async function save() {
+    if (!S.id || S.saving) return false;
+    // 1. Validate.
+    const errs = validateProgram(S.sections, S.days);
+    if (!S.name.trim()) errs.unshift({ msg: 'The program needs a name.' });
+    const s = S.settings;
+    if (s.ctaUrl && !/^https?:\/\//i.test(s.ctaUrl.trim())) errs.push({ msg: 'Settings: the Button link must start with https://' });
+    if (!(Number(s.waitAmount) > 0 && Number(s.waitAmount) <= 10000)) errs.push({ msg: 'Settings: unlock interval must be between 1 and 10000.' });
+    ['iosUrl', 'androidUrl', 'desktopUrl'].forEach(k => { const u = String(s.appButtons[k] || '').trim(); if (u && !/^https?:\/\//i.test(u)) errs.push({ msg: 'App buttons: links must start with https:// (' + k.replace('Url', '') + ')' }); });
+    S.bumps.forEach(e => { if ((e.data.moves || []).length > 100) errs.push({ msg: 'Add-on "' + e.key + '" has more than 100 moves.' }); });
+    S.errorIds = new Set(errs.filter(x => x.id).map(x => x.id));
+    if (errs.length) {
+      errs.forEach(x => { if (x.block) S.openBlocks.add(x.block); });
+      renderContent();
+      setBar('error', errs.length + ' thing' + (errs.length === 1 ? '' : 's') + ' to fix before saving');
+      await dialog({ title: 'Fix these before saving', html: true, body: '<ul>' + errs.slice(0, 20).map(x => `<li>${esc(x.msg)}</li>`).join('') + (errs.length > 20 ? `<li>…and ${errs.length - 20} more</li>` : '') + '</ul>', noCancel: true });
+      return false;
+    }
+    // 2. Serialize (checked against linearProtocolSteps inside).
+    let built;
+    try { renumberDays(); built = serializeProgramSteps(S.sections, S.days, S.orphans); }
+    catch (e) { setBar('error', e.message); await dialog({ title: 'Not saved', body: e.message, noCancel: true }); return false; }
+
+    S.saving = true; setBar('dirty', 'Saving…');
+    try {
+      // 3. Changed somewhere else since it was loaded (Flow Builder, a script)?
+      const cur = await api('/api/chat/protocol-templates/' + encodeURIComponent(S.id));
+      if (!cur.ok) throw new Error(cur.data.error || 'Could not check the saved version (' + cur.status + ').');
+      if (stampOf(cur.data.template) !== S.stamp) {
+        S.saving = false; setBar('dirty', 'Unsaved changes');
+        const ok = await dialog({ title: 'Changed somewhere else', body: 'This program was saved from somewhere else after you opened it (another tab, the Flow Builder or a script). Saving now replaces those changes with yours.', okText: 'Save anyway', danger: true });
+        if (!ok) return false;
+        S.saving = true; setBar('dirty', 'Saving…');
+      }
+      // 4. Save.
+      const settings = { ...S.settings, waitAmount: Number(S.settings.waitAmount), ctaUrl: String(S.settings.ctaUrl || '').trim(), appButtons: { ...S.settings.appButtons } };
+      const body = { name: S.name.trim(), goal: S.goal.trim(), settings, bumps: listToBumps(S.bumps), steps: built.steps };
+      const r = await api('/api/chat/protocol-templates/' + encodeURIComponent(S.id), { method: 'PATCH', body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(r.data.error || 'Save failed (server error ' + r.status + ').');
+      // 5. Refresh the stamp + record from what's actually stored now.
+      const after = await api('/api/chat/protocol-templates/' + encodeURIComponent(S.id));
+      const notes = [];
+      if (after.ok && after.data.template) {
+        const t = after.data.template;
+        S.tpl = t; S.stamp = stampOf(t);
+        if (t.settings) S.settings = settingsFrom(t);
+        if (!(t.settings && t.settings.appButtons)) notes.push('the server did not keep the App buttons settings');
+      }
+      if (built.droppedOrphans) { notes.push(built.droppedOrphans + ' unlinked step(s) were removed'); S.orphans = []; }
+      const li = S.list.find(p => p.id === S.id);
+      if (li) { li.name = S.name.trim(); li.stepCount = built.steps.length; }
+      S.saving = false; S.dirty = false; S.errorIds = new Set();
+      renderSide(); renderHead(); renderSettings();
+      setBar('ok', 'Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + (notes.length ? ' (' + notes.join('; ') + ')' : ''));
+      return true;
+    } catch (e) {
+      S.saving = false;
+      setBar('error', 'Not saved: ' + e.message);
+      return false;
+    }
+  }
+  $('#peSaveBtn').addEventListener('click', () => save());
+  $('#peDiscardBtn').addEventListener('click', async () => {
+    if (!S.dirty) return;
+    const ok = await dialog({ title: 'Discard changes?', body: 'Throw away everything since the last save and reload the saved version?', okText: 'Discard', danger: true });
+    if (!ok) return;
+    const id = S.id; S.dirty = false; S.id = null;
+    await pickProgram(id);
+  });
+
+  // ── Boot ──────────────────────────────────────────────────────────────
+  async function boot() {
+    const gate = $('#peGate');
+    const me = await api('/api/auth/me');
+    const user = me.ok && me.data && me.data.user;
+    if (!user) { gate.textContent = me.status === 401 ? 'Please log in.' : 'Could not load your account.'; return; }
+    if (user.role !== 'admin' && user.role !== 'admin2') { gate.textContent = 'Admins only.'; return; }
+    S.me = user;
+    try { await loadList(); }
+    catch (e) { gate.textContent = e.message; return; }
+    gate.hidden = true;
+    $('#peLayout').hidden = false;
+    const want = params.get('id') || (S.list.length === 1 ? S.list[0].id : '') || (S.list.some(p => p.id === lsGet('peLastProgram')) ? lsGet('peLastProgram') : '');
+    renderSide();
+    if (want) await pickProgram(want); else renderMain();
+    placeSaveBar();
+    setTimeout(placeSaveBar, 400);
+    const bb = document.getElementById('chat-app-bottom-bar');
+    if (bb && 'ResizeObserver' in window) new ResizeObserver(placeSaveBar).observe(bb);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+</body>
+</html>
