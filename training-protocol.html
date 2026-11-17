@@ -641,6 +641,7 @@
       <div class="pra-h2" style="margin-bottom:6px">Saved Protocols</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">Edit opens it in the Flow Builder; Apply puts it on the one you have open.</div>
       <button class="pra-btn pra-btn-ghost" id="newBlankProtocolBtn" style="width:100%;margin-bottom:10px;flex-shrink:0">+ New blank protocol in the Flow Builder</button>
+      <input class="pra-input" id="protocolTemplateSearch" placeholder="Search saved protocols..." autocomplete="off" style="margin-bottom:8px;flex-shrink:0"/>
       <div id="protocolTemplateResults" class="modal-scroll-body"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('loadProtocolTemplateModal')">Cancel</button>
     </div>
@@ -2867,6 +2868,7 @@ async function openLowTicketFolder() {
   wrap.className = 'sp-modal';
   wrap.innerHTML = `<div class="sp-box"><h3 style="margin-bottom:4px">Low-ticket programs</h3><div class="pra-muted" style="font-size:.8rem;margin-bottom:12px">Programs people buy on their own. Edit opens the Programs Editor.</div>
     <a class="pra-btn pra-btn-ghost" href="/chat-app/programs-editor.html" target="_blank" rel="noopener" style="display:block;text-align:center;margin-bottom:10px;text-decoration:none">+ New program</a>
+    <input class="pra-input lt-search" placeholder="Search programs..." autocomplete="off" style="width:100%;margin-bottom:8px"/>
     <div class="lt-list"><div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div></div>
     <button type="button" class="pra-btn pra-btn-ghost lt-close" style="width:100%;margin-top:12px">Close</button></div>`;
   document.body.appendChild(wrap);
@@ -2875,32 +2877,42 @@ async function openLowTicketFolder() {
   wrap.querySelector('.lt-close').onclick = close;
   const d = await fetch('/api/chat/protocol-templates').then(r => r.ok ? r.json() : { templates: [] }).catch(() => ({ templates: [] }));
   const programs = (d.templates || []).filter(t => t.isProgram);
-  const list = wrap.querySelector('.lt-list');
-  list.innerHTML = programs.length ? programs.map(t => `
+  const list = wrap.querySelector('.lt-list'), search = wrap.querySelector('.lt-search');
+  const draw = () => {
+  const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = programs.filter(t => words.every(w => String(t.name || '').toLowerCase().includes(w)));
+  list.innerHTML = shown.length ? shown.map(t => `
     <div class="template-item" data-id="${escapeHtml(t.id)}" style="cursor:default">
       <div class="template-item-body"><div class="template-item-title">${escapeHtml(t.name)}</div>
         <div class="template-item-text">${t.days ?? ''}${t.days != null ? ' days · ' : ''}${t.stepCount} steps</div></div>
-      <button class="sp-preview" type="button" title="See it the way a buyer does, every day unlocked" style="flex-shrink:0;padding:7px 10px;border-radius:999px;border:1px solid var(--pra-border);background:transparent;color:var(--pra-dim);font-weight:800;font-size:.7rem;cursor:pointer">PREVIEW</button>
       <a class="pra-btn" href="/chat-app/programs-editor.html?id=${encodeURIComponent(t.id)}" target="_blank" rel="noopener" style="flex-shrink:0;text-decoration:none;padding:7px 14px;font-size:.74rem">EDIT</a>
-    </div>`).join('') : '<div class="pra-muted" style="padding:8px;font-size:.82rem">No programs yet.</div>';
-  list.querySelectorAll('.sp-preview').forEach(b => b.onclick = () => {
-    location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(b.closest('.template-item').dataset.id);
-  });
+    </div>`).join('') : `<div class="pra-muted" style="padding:8px;font-size:.82rem">${programs.length ? 'No match.' : 'No programs yet.'}</div>`;
+  };
+  search.oninput = draw;
+  draw();
+  search.focus();
 }
-async function renderProtocolTemplateList() {
+let savedProtocolList = [];
+async function renderProtocolTemplateList(filterOnly) {
   const list = document.getElementById('protocolTemplateResults');
-  list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div>';
-  const r = await fetch('/api/chat/protocol-templates');
-  if (!r.ok) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Could not load templates.</div>'; return; }
-  const templates = ((await r.json()).templates || []).filter(t => !t.isProgram); // programs live in their own folder
-  if (!templates.length) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">No saved templates yet.</div>'; return; }
+  const search = document.getElementById('protocolTemplateSearch');
+  if (!filterOnly) {
+    search.value = '';
+    search.oninput = () => renderProtocolTemplateList(true);
+    list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div>';
+    const r = await fetch('/api/chat/protocol-templates');
+    if (!r.ok) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Could not load templates.</div>'; return; }
+    savedProtocolList = ((await r.json()).templates || []).filter(t => !t.isProgram); // programs live in their own folder
+  }
+  const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+  const templates = savedProtocolList.filter(t => words.every(w => String(t.name || '').toLowerCase().includes(w)));
+  if (!templates.length) { list.innerHTML = `<div class="pra-muted" style="padding:8px;font-size:.82rem">${savedProtocolList.length ? 'No match.' : 'No saved templates yet.'}</div>`; return; }
   list.innerHTML = templates.map(t => `
     <div class="template-item" data-id="${t.id}">
       <div class="template-item-body">
         <div class="template-item-title">${escapeHtml(t.name)}</div>
         <div class="template-item-text">${t.stepCount} step${t.stepCount === 1 ? '' : 's'} · ${new Date(t.createdAt).toLocaleDateString()}</div>
       </div>
-      ${t.isProgram ? '<button class="sp-preview" title="See it the way a student does, every day unlocked" style="flex-shrink:0;padding:7px 10px;border-radius:999px;border:1px solid var(--pra-border);background:transparent;color:var(--pra-dim);font-weight:800;font-size:.7rem;cursor:pointer">PREVIEW</button>' : ''}
       ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
       ${SP_DELETE_BTN}
@@ -2910,8 +2922,6 @@ async function renderProtocolTemplateList() {
     const id = row.dataset.id;
     const t = templates.find(x => x.id === id);
     row.style.cursor = 'default';
-    const prev = row.querySelector('.sp-preview');
-    if (prev) prev.onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(id); };
     row.querySelector('.sp-edit').onclick = () => openInFlowBuilder(t, 'loadProtocolTemplateModal');
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t, 'loadProtocolTemplateModal');
     row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderProtocolTemplateList());
