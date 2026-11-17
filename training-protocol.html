@@ -366,6 +366,7 @@
           <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
           <button class="icon-btn" id="loadTemplateBtn" title="Saved protocols (edit in the Flow Builder, or apply)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
           <button class="icon-btn" id="studentProtocolsBtn" title="Student custom protocols (built from their old custom pages)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke="#fff" stroke-width="1.6"/><circle cx="9" cy="10" r="2" stroke="#009bff" stroke-width="1.5"/><path d="M5.8 16.5c.5-1.8 1.7-2.8 3.2-2.8s2.7 1 3.2 2.8" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/><path d="M14 9.5h3.5M14 13h3.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn" id="lowTicketFolderBtn" title="Low-ticket programs (Handstand Protocol...)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10.2l1.1 2.3 2.5.3-1.8 1.7.5 2.5-2.3-1.2-2.3 1.2.5-2.5-1.8-1.7 2.5-.3 1.1-2.3Z" fill="#d4ff00"/></svg></button>
           <button class="icon-btn" id="deleteProtocolBtn" title="Delete this protocol" style="display:none;color:#ff5c5c"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         </div>
       </div>
@@ -1016,6 +1017,8 @@ async function init() {
   document.getElementById('aiGenerateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('resetFlowBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('deleteProtocolBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('lowTicketFolderBtn').style.display = canEdit ? '' : 'none';
+  document.getElementById('lowTicketFolderBtn').onclick = () => openLowTicketFolder();
   document.getElementById('saveTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('loadTemplateBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentProtocolsBtn').style.display = canEdit ? '' : 'none';
@@ -2857,12 +2860,39 @@ async function loadProtocolTemplateOntoPage(t, modalId, confirmed) {
   closeModal(modalId);
 }
 
+// Low-ticket programs (Handstand Protocol...) -- their own folder, separate
+// from Saved Protocols. Edit opens the Programs Editor.
+async function openLowTicketFolder() {
+  const wrap = document.createElement('div');
+  wrap.className = 'sp-modal';
+  wrap.innerHTML = `<div class="sp-box"><h3 style="margin-bottom:4px">Low-ticket programs</h3><div class="pra-muted" style="font-size:.8rem;margin-bottom:12px">Programs people buy on their own. Edit opens the Programs Editor.</div>
+    <a class="pra-btn pra-btn-ghost" href="/chat-app/programs-editor.html" target="_blank" rel="noopener" style="display:block;text-align:center;margin-bottom:10px;text-decoration:none">+ New program</a>
+    <div class="lt-list"><div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div></div>
+    <button type="button" class="pra-btn pra-btn-ghost lt-close" style="width:100%;margin-top:12px">Close</button></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.onclick = e => { if (e.target === wrap) close(); };
+  wrap.querySelector('.lt-close').onclick = close;
+  const d = await fetch('/api/chat/protocol-templates').then(r => r.ok ? r.json() : { templates: [] }).catch(() => ({ templates: [] }));
+  const programs = (d.templates || []).filter(t => t.isProgram);
+  const list = wrap.querySelector('.lt-list');
+  list.innerHTML = programs.length ? programs.map(t => `
+    <div class="template-item" data-id="${escapeHtml(t.id)}" style="cursor:default">
+      <div class="template-item-body"><div class="template-item-title">${escapeHtml(t.name)}</div>
+        <div class="template-item-text">${t.days ?? ''}${t.days != null ? ' days · ' : ''}${t.stepCount} steps</div></div>
+      <button class="sp-preview" type="button" title="See it the way a buyer does, every day unlocked" style="flex-shrink:0;padding:7px 10px;border-radius:999px;border:1px solid var(--pra-border);background:transparent;color:var(--pra-dim);font-weight:800;font-size:.7rem;cursor:pointer">PREVIEW</button>
+      <a class="pra-btn" href="/chat-app/programs-editor.html?id=${encodeURIComponent(t.id)}" target="_blank" rel="noopener" style="flex-shrink:0;text-decoration:none;padding:7px 14px;font-size:.74rem">EDIT</a>
+    </div>`).join('') : '<div class="pra-muted" style="padding:8px;font-size:.82rem">No programs yet.</div>';
+  list.querySelectorAll('.sp-preview').forEach(b => b.onclick = () => {
+    location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(b.closest('.template-item').dataset.id);
+  });
+}
 async function renderProtocolTemplateList() {
   const list = document.getElementById('protocolTemplateResults');
   list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div>';
   const r = await fetch('/api/chat/protocol-templates');
   if (!r.ok) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">Could not load templates.</div>'; return; }
-  const { templates } = await r.json();
+  const templates = ((await r.json()).templates || []).filter(t => !t.isProgram); // programs live in their own folder
   if (!templates.length) { list.innerHTML = '<div class="pra-muted" style="padding:8px;font-size:.82rem">No saved templates yet.</div>'; return; }
   list.innerHTML = templates.map(t => `
     <div class="template-item" data-id="${t.id}">

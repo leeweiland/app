@@ -1825,7 +1825,7 @@ window.addEventListener('pageshow', () => {
     const s = state.settings, c = state.counts, sh = state.sheets, dp = state.defaultProtocol;
     const staffOpts = state.staff.map(u => `<option value="${esc(u.id)}" ${s.renewalMessageSenderId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
     const num = (key, val, w = 70) => `<input class="pra-input" type="number" data-num="${key}" value="${esc(val)}" style="width:${w}px"/>`;
-    const roleNames = { user: 'User', trainee: 'Trainee', online: 'Online', gym: 'Gym' };
+    const roleNames = { user: 'User', trainee: 'Trainee', online: 'Online', gym: 'Gym', coach: 'Coach' };
     const accessTable = `<div class="um-access-wrap"><table class="um-access"><thead><tr><th></th>${state.accessRoles.map(r => `<th>${roleNames[r] || r}</th>`).join('')}</tr></thead><tbody>${
       state.accessFeatures.map(f => `<tr><td><div class="um-name" style="font-size:.8rem">${esc(f.label)}</div><div class="um-desc">${esc(f.desc)}</div></td>${state.accessRoles.map(r => `<td><input type="checkbox" class="pra-toggle" data-access="${r}.${f.key}" ${s.access?.[r]?.[f.key] ? 'checked' : ''}/></td>`).join('')}</tr>`).join('')
     }</tbody></table></div>`;
@@ -1878,7 +1878,7 @@ window.addEventListener('pageshow', () => {
           ['kept up to date automatically.', 'TYPE is left for you to set by hand.']))}
 
       ${card(6, '6. Access by Role',
-        `<p class="um-what">What each kind of account can open. Coaches and admins always have everything. A switched-off section disappears from their menu and shows "Locked" if they open it.</p>${accessTable}${savedMsg('umAccessMsg')}`)}
+        `<p class="um-what">What each kind of account can open, coaches included. Admins always have everything. A switched-off section disappears from their menu and shows "Locked" if they open it.</p>${accessTable}${savedMsg('umAccessMsg')}`)}
 
       ${card(7, '7. Upgrading &amp; Downgrading',
         row('Make Online / Make Gym', 'Gives them everything switched on for Online/Gym under Access by Role. The first time, New Student Setup runs. Coaches can do it from a profile; the Students panel does it and updates the CRM too.', info) +

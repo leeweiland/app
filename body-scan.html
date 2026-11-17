@@ -1971,7 +1971,7 @@ function syncPhysiqueLock() {
   const existing = panel.querySelector('.physique-lock');
   // Access by Role (User Management): locked when Physique Builder is off for their role.
   const acc = window.PRA_ACCESS;
-  const locked = !!me && !viewingUserId && !['coach', 'admin', 'admin2'].includes(me.role) && (acc ? acc.physique === false : me.role === 'user');
+  const locked = !!me && !viewingUserId && !['admin', 'admin2'].includes(me.role) && (acc ? acc.physique === false : me.role === 'user');
   if (!locked) { existing?.remove(); return; }
   if (existing) return;
   const lock = document.createElement('div');

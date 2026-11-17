@@ -1799,12 +1799,13 @@ export const ACCESS_FEATURES = [
   { key: "shop", label: "Shop", desc: "The clothing shop" },
   { key: "retreats", label: "Retreats", desc: "Retreats page" },
 ];
-export const ACCESS_ROLES = ["user", "trainee", "online", "gym"];
+export const ACCESS_ROLES = ["user", "trainee", "online", "gym", "coach"];
 const ACCESS_DEFAULTS = {
   user: { chat: true, protocol: false, physique: false, katas: false, videos: true, levels: true, map: true, quiz: true, shop: true, retreats: true },
   trainee: { chat: true, protocol: true, physique: false, katas: false, videos: false, levels: false, map: false, quiz: false, shop: false, retreats: false },
   online: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
   gym: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
+  coach: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
 };
 function mergeAccessDefaults(a) {
   const out = {};
@@ -1819,7 +1820,8 @@ function mergeAccessDefaults(a) {
 }
 export function accessFor(user) {
   if (!user) return {};
-  if (isStaff(user)) return Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true]));
+  // Admins always see everything; coaches follow their own column.
+  if (isAdmin(user)) return Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true]));
   const a = getConfig().access || mergeAccessDefaults(null);
   return { ...(a[user.role] || a.user) };
 }
@@ -6010,7 +6012,7 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/katas" && req.method === "GET") {
       const targetId = url.searchParams.get("userId") || user.id;
       if (targetId !== user.id && !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
-      if (!accessFor(user).katas) return sendJson(res, 200, { katas: [], hasLevels: false, locked: true });
+      if (targetId === user.id && !accessFor(user).katas) return sendJson(res, 200, { katas: [], hasLevels: false, locked: true });
       const target = readJson(USERS_FILE, []).find(u => u.id === targetId);
       if (!target) return sendJson(res, 404, { error: "User not found" });
       try {
