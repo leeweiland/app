@@ -1978,11 +1978,12 @@ function wireBumpEditing(box) {
         vid.insertAdjacentHTML('afterbegin', X_BTN('Remove this video'));
         vid.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); const m = moves()[mi]; if (m) { delete m.clip; delete m.driveFileId; } bumpsChanged(); };
       }
-      const img = mv.querySelector('.pv-bump-imgwrap');
-      if (img) {
+      // Each picture (handstand picture, anatomy picture) removes only itself.
+      mv.querySelectorAll('.pv-bump-imgwrap[data-img-field]').forEach(img => {
+        const f = img.dataset.imgField;
         img.insertAdjacentHTML('afterbegin', X_BTN('Remove this picture'));
-        img.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); const m = moves()[mi]; if (m) delete m.image; bumpsChanged(); };
-      }
+        img.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); const m = moves()[mi]; if (m) delete m[f]; bumpsChanged(); };
+      });
     });
     const body = block.querySelector('.pv-body');
     if (body) {
