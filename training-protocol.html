@@ -233,10 +233,20 @@
   .protocol-lock svg { width: 46px; height: 46px; }
   .protocol-lock .t { font-family: var(--font-secondary); font-size: 1.05rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
   .protocol-lock .s { font-size: .85rem; color: #d6d6dc; max-width: 320px; line-height: 1.4; }
+  /* A view this account can't use: blurred, with a lock on top. */
+  #protocolBody { position: relative; }
+  .view-locked-blur { filter: blur(7px); pointer-events: none; user-select: none; }
+  #lockedSample { display: none; max-width: 640px; margin: 16px auto 0; flex-direction: column; gap: 16px; }
+  #lockedSample .ls-card { border: 1px solid var(--pra-border); border-radius: 14px; background: var(--pra-panel); padding: 14px; }
+  #lockedSample .ls-bar { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); margin-bottom: 10px; }
+  #lockedSample .ls-vid { aspect-ratio: 16/9; border-radius: 10px; background: linear-gradient(135deg, #1b2a3a, #0e1a14); margin-bottom: 10px; }
+  #viewLock { display: none; }
+  #viewLock.on { display: flex; }
+  #viewLock .pra-btn { margin-top: 6px; text-decoration: none; }
 
   /* Handstand Protocol trainee: just their program -- no view menu,
      undo/redo, title editor or badges. */
-  .trainee-mode #viewModeToggle, .trainee-mode .protocol-head-controls-left, .trainee-mode #protocolTitleInput, .trainee-mode #clientBadges, .trainee-mode #pageDaySelectRow { display: none !important; }
+  .trainee-mode .protocol-head-controls-left, .trainee-mode #protocolTitleInput, .trainee-mode #clientBadges, .trainee-mode #pageDaySelectRow { display: none !important; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .modal-backdrop.show { display: flex; }
@@ -412,6 +422,12 @@
     </div>
 
     <div class="protocol-body" id="protocolBody">
+    <div id="lockedSample" aria-hidden="true">
+      <div class="ls-card"><div class="ls-bar" style="width:40%"></div><div class="ls-vid"></div><div class="ls-bar" style="width:90%"></div><div class="ls-bar" style="width:70%"></div></div>
+      <div class="ls-card"><div class="ls-bar" style="width:35%"></div><div class="ls-vid"></div><div class="ls-bar" style="width:80%"></div></div>
+      <div class="ls-card"><div class="ls-bar" style="width:50%"></div><div class="ls-bar" style="width:95%"></div><div class="ls-bar" style="width:60%"></div></div>
+    </div>
+    <div class="protocol-lock" id="viewLock"></div>
     <div class="empty-hint" id="emptyHint" style="display:none">
       No steps yet.
       <div style="margin-top:14px"><button class="pra-btn" id="addFirstStepBtn" style="display:none">+ Add First Step</button></div>
@@ -1167,8 +1183,11 @@ async function init() {
   syncCoachMenu();
   // Locked when Protocol is switched off for this role (User Management > Access by Role).
   const myAccess = window.PRA_ACCESS || (await fetch('/api/auth/me').then(r => r.json()).then(d => d.access).catch(() => null));
-  if (targetUserId === me.id && myAccess && myAccess.protocol === false && !canEdit) showProtocolLock();
-  if (myAccess && myAccess.katas === false && !canEdit) document.getElementById('katasViewBtn').style.display = 'none';
+  viewAccess = myAccess;
+  if (!canEdit && targetUserId === me.id) {
+    ['flowViewBtn', 'pageViewBtn', 'katasViewBtn'].forEach(id => { document.getElementById(id).style.display = ''; });
+  }
+  syncViewLock();
   // On a phone the menu scrolls -- start with the current view in sight.
   { const el = document.getElementById('viewModeToggle'), act = el.querySelector('.view-mode-btn.active');
     if (act && el.scrollWidth > el.clientWidth) { const e = el.getBoundingClientRect(), r = act.getBoundingClientRect(); el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2; } }
@@ -1997,6 +2016,38 @@ function applyViewModeDisplay() {
   // flow view or on an empty protocol.
   document.getElementById('pageDaySelectRow').style.display =
     (hasSteps && viewMode === 'page' && document.getElementById('pageDaySelect').options.length > 1) ? 'flex' : 'none';
+  syncViewLock();
+}
+// A User or Trainee can see every view button, but Flow / Page / Katas they
+// don't have (User Management > Access by Role; Trainees never have their own
+// protocol) open blurred with a lock on top.
+let viewAccess = null;
+function isViewLocked(view) {
+  if (canEdit || !me || targetUserId !== me.id) return false;
+  const acc = viewAccess || window.PRA_ACCESS || {};
+  if (view === 'katas') return acc.katas === false;
+  if (view === 'flow' || view === 'page') return me.role === 'trainee' || acc.protocol === false;
+  return false;
+}
+function syncViewLock() {
+  const lock = document.getElementById('viewLock');
+  if (!lock) return;
+  const locked = isViewLocked(viewMode);
+  const views = { flow: 'protocolCanvas', page: 'protocolPage', katas: 'katasPage' };
+  Object.values(views).forEach(id => document.getElementById(id).classList.toggle('view-locked-blur', locked));
+  const hasContent = viewMode === 'katas' ? false : !!steps.length;
+  const sample = document.getElementById('lockedSample');
+  sample.style.display = locked && !hasContent ? 'flex' : 'none';
+  sample.classList.toggle('view-locked-blur', locked);
+  if (locked) document.getElementById('emptyHint').style.display = 'none';
+  lock.classList.toggle('on', locked);
+  if (!locked) return;
+  const katas = viewMode === 'katas';
+  const cta = (typeof programSettingsForSteps !== 'undefined' && programSettingsForSteps?.ctaUrl) || 'https://www.pacificrimathletics.com/online';
+  lock.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="#fff" stroke-width="1.7"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <div class="t">${katas ? 'Katas' : 'Custom Training Protocol'}</div>
+    <div class="s">${katas ? 'The kata for every level you reach, unlocked for current students.' : 'A training protocol built just for you by your coach, unlocked for current students.'}</div>
+    <a class="pra-btn" href="${escapeHtml(cta)}" target="_blank" rel="noopener">Become a student</a>`;
 }
 // mode: 'flow' | 'page'. builder: false = this student's own Your Flow/
 // Your Page (activeId = targetUserId); true = the shared Flow Builder/Page
@@ -3833,7 +3884,18 @@ function setupTemplateEditor() {
   document.getElementById('tplPreviewBtn').onclick = preview;
   document.getElementById('tplStudentViewBtn').onclick = preview;
   document.getElementById('tplBumpsBtn').onclick = openBumpsEditor;
-  document.getElementById('tplSettingsBtn').onclick = () => document.getElementById('protocolSettingsBtn').click();
+  document.getElementById('tplSettingsBtn').onclick = () => {
+    document.getElementById('protocolSettingsBtn').click();
+    const admin = document.getElementById('adminProtocolSettings'), save = document.getElementById('videoFoldersSaveBtn');
+    if (admin) admin.style.display = 'none';
+    if (save) save.style.display = 'none';
+  };
+  // The full Settings button shows everything again.
+  document.getElementById('protocolSettingsBtn').addEventListener('click', () => {
+    const admin = document.getElementById('adminProtocolSettings'), save = document.getElementById('videoFoldersSaveBtn');
+    if (admin) admin.style.display = '';
+    if (save) save.style.display = '';
+  }, true);
   document.getElementById('tplExitBtn').onclick = exitTemplateEditor;
   const add = (id, fields) => { document.getElementById(id).onclick = () => { closeModal('chooseTypeModal'); openStepEditor(null, fields()); }; };
   add('chooseSection', () => ({ type: 'section', title: '' }));

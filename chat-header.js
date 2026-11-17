@@ -617,7 +617,7 @@ window.PRABack = (function () {
       const f = featureFor(path);
       // The protocol page is only locked on your OWN protocol (staff open others').
       const ownProtocol = f !== 'protocol' || new URLSearchParams(location.search).get('userId') === myId;
-      if (f && myAccess && myAccess[f] === false && ownProtocol) showAccessLock();
+      if (f && f !== 'protocol' && myAccess && myAccess[f] === false && ownProtocol) showAccessLock();
     }
     if (renewalNotice) showRenewalNotice(renewalNotice);
     if (['coach', 'admin', 'admin2'].includes(myRole)) mountStaffAlerts(bar);
