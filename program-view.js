@@ -237,14 +237,14 @@
     const askBtn = ctx.canAsk && (s.type === 'video' || s.type === 'image') ? `<button type="button" class="pv-ask" data-ask="${esc(s.id)}">Ask a question</button>` : '';
     if (s.type === 'video') {
       const label = s.moveLabel || s.name || '';
-      return `<div class="pv-step">${label || askBtn ? `<div class="pv-step-label"><span class="pv-label">${esc(label)}</span>${askBtn}</div>` : ''}
+      return `<div class="pv-step" data-step-id="${esc(s.id)}">${label || askBtn ? `<div class="pv-step-label"><span class="pv-label">${esc(label)}</span>${askBtn}</div>` : ''}
         ${s.sound ? `<video data-sound data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls preload="metadata" playsinline></video>` : `<video data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>`}</div>`;
     }
     if (s.type === 'image') {
-      return `<div class="pv-step">${askBtn ? `<div class="pv-step-label"><span></span>${askBtn}</div>` : ''}<img loading="lazy" src="/api/chat/media/${encodeURIComponent(s.driveFileId)}" alt="${esc(s.alt || s.caption || '')}"/></div>`;
+      return `<div class="pv-step" data-step-id="${esc(s.id)}">${askBtn ? `<div class="pv-step-label"><span></span>${askBtn}</div>` : ''}<img loading="lazy" src="/api/chat/media/${encodeURIComponent(s.driveFileId)}" alt="${esc(s.alt || s.caption || '')}"/></div>`;
     }
-    if (s.type === 'text') return `<div class="pv-step">${textHtml(s.content, s.title)}</div>`;
-    if (['timer', 'cta', 'youtube'].includes(s.type)) return `<div class="pv-step">${stepHtml(s, { settings: ctx.settings, dayNumber: ctx.dayNumber })}</div>`;
+    if (s.type === 'text') return `<div class="pv-step" data-step-id="${esc(s.id)}">${textHtml(s.content, s.title)}</div>`;
+    if (['timer', 'cta', 'youtube'].includes(s.type)) return `<div class="pv-step" data-step-id="${esc(s.id)}">${stepHtml(s, { settings: ctx.settings, dayNumber: ctx.dayNumber })}</div>`;
     return '';
   }
 
@@ -275,13 +275,14 @@
       const body = d.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: d.dayNumber })).join('');
       return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}" ${isToday ? 'open' : ''}>
         <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
-        <div class="pv-body">${body}</div></details>`;
+        <div class="pv-body" data-day="${esc(d.dayNumber)}">${body}</div></details>`;
     };
     const sectionBlock = (sec, i) => {
       const open = staff ? false : newest <= 1;
       const body = sec.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: 0 })).join('');
+      const secIdx = i;
       return `<details class="pv-block" ${open ? 'open' : ''}><summary class="pv-head">${numBox(i + 1, 'START')}<div class="pv-head-text"><div class="pv-head-title">${esc(sec.title || 'Start here')}</div><div class="pv-chips"><span class="pv-chip">Watch before Day 1</span></div></div><span class="pv-caret">▾</span></summary>
-        <div class="pv-body">${body}</div></details>`;
+        <div class="pv-body" data-section="${secIdx}">${body}</div></details>`;
     };
 
     // Students: newest day on top, next locked day above it. Staff: in order.

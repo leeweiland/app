@@ -9,6 +9,7 @@
 <script src="/chat-app/video-speed.js"></script>
 <script src="/chat-app/profile-panel.js"></script>
 <script src="/chat-app/katas.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="/chat-app/program-view.js"></script>
 <style>
   body { margin: 0; }
@@ -67,6 +68,15 @@
   .protocol-controls-row > .protocol-head-controls-left { grid-area: left; }
   .protocol-controls-row > .protocol-head-controls-right { grid-area: right; }
   .view-mode-btn { white-space: nowrap; }
+  .sp-modal { font-family: var(--font-primary, sans-serif); color: var(--pra-white, #fff); }
+  .sp-modal .template-item-title { font-family: var(--font-primary, sans-serif); }
+  .page-group { display: flex; flex-direction: column; gap: 16px; }
+  .editable-card { position: relative; cursor: pointer; }
+  .editable-card:hover { outline: 1px solid rgba(0,155,255,0.45); outline-offset: 2px; border-radius: 12px; }
+  .inplace-drag { position: absolute; top: 8px; right: 8px; z-index: 3; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(0,0,0,.55); color: #cfd6dd; cursor: grab; touch-action: none; }
+  .inplace-drag:active { cursor: grabbing; }
+  .inplace-drag svg { width: 16px; height: 16px; }
+  .sortable-ghost { opacity: .35; }
   .sp-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
   .sp-box { width: 100%; max-width: 420px; background: #111116; border: 1px solid var(--pra-border); border-radius: 14px; padding: 16px; }
   .sp-box h3 { margin: 0 0 10px; font-size: 1rem; }
@@ -639,7 +649,7 @@
   <div class="modal-backdrop" id="loadProtocolTemplateModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:6px">Saved Protocols</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">Edit opens it in the Flow Builder; Apply puts it on the one you have open.</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:10px">Tap one to open it in the Flow Builder; Apply puts it on the one you have open.</div>
       <button class="pra-btn pra-btn-ghost" id="newBlankProtocolBtn" style="width:100%;margin-bottom:10px;flex-shrink:0">+ New blank protocol in the Flow Builder</button>
       <input class="pra-input" id="protocolTemplateSearch" placeholder="Search saved protocols..." autocomplete="off" style="margin-bottom:8px;flex-shrink:0"/>
       <div id="protocolTemplateResults" class="modal-scroll-body"></div>
@@ -964,6 +974,7 @@ async function showProgramView(opt = {}) {
     chatLabel: me.role === 'trainee' ? 'Questions? Message Lee & Alexis' : 'Open your group chat',
     onUnlock: () => showProgramView(opt),
   });
+  if (canEdit && preview) wireProgramViewEditing(box, pr.templateId);
 }
 
 function openModal(id) { document.getElementById(id).classList.add('show'); }
@@ -1486,14 +1497,111 @@ function renderPageView() {
     visible = [order[startIdx], ...afterStart.slice(0, endOffset)];
   }
 
-  container.innerHTML = visible.map(s => {
-    if (s.type === 'day') return `<div class="page-day-heading">Day ${s.dayNumber}${s.title ? `<div style="font-size:.95rem;color:#fff;margin-top:4px">${escapeHtml(s.title)}</div>` : ''}</div>`;
-    if (s.type === 'section') return `<div class="page-day-heading">${escapeHtml(s.title || s.content || '')}</div>`;
-    if (builderMode === 'tpl' && s.type === 'text') return `<div class="pra-panel page-step-card">${PRAProgram.textHtml(s.content, s.title)}</div>`;
-    return `<div class="pra-panel page-step-card">${renderStepContent(s)}</div>`;
-  }).join('');
+  // Coaches edit right here: drag a card's handle to move it (within a day or
+  // into another), tap a card to edit it. Cards are grouped under their day.
+  const chainIds = new Set();
+  if (canEdit) visible.filter(s => s.type === 'day' || s.type === 'section').forEach(h => chainBelow(h.id).forEach(c => chainIds.add(c.id)));
+  let html = '', open = false;
+  visible.forEach(s => {
+    if (s.type === 'day' || s.type === 'section') {
+      if (open) html += '</div>';
+      html += s.type === 'day'
+        ? `<div class="page-day-heading">Day ${s.dayNumber}${s.title ? `<div style="font-size:.95rem;color:#fff;margin-top:4px">${escapeHtml(s.title)}</div>` : ''}</div>`
+        : `<div class="page-day-heading">${escapeHtml(s.title || s.content || '')}</div>`;
+      html += `<div class="page-group" data-head="${escapeHtml(s.id)}">`; open = true;
+      return;
+    }
+    if (!open) { html += '<div class="page-group">'; open = true; }
+    const inner = builderMode === 'tpl' && s.type === 'text' ? PRAProgram.textHtml(s.content, s.title) : renderStepContent(s);
+    const drag = chainIds.has(s.id) ? DRAG_HANDLE_HTML : '';
+    html += `<div class="pra-panel page-step-card${canEdit ? ' editable-card' : ''}" data-step-id="${escapeHtml(s.id)}" data-chain="${chainIds.has(s.id) ? 1 : 0}">${drag}${inner}</div>`;
+  });
+  if (open) html += '</div>';
+  container.innerHTML = html;
   container.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
   PRAProgram.mountTimers(container);
+  if (canEdit) wireInPlaceEditing(container, '.page-group[data-head]', '.page-step-card', el => el.dataset.head, async () => { render(); await saveSteps(); });
+}
+
+// ── Editing in place (Page View + Low Ticket view) ─────────────────────
+const DRAG_HANDLE_HTML = '<span class="inplace-drag" title="Drag to move"><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="6" r="1.5" fill="currentColor"/><circle cx="15" cy="6" r="1.5" fill="currentColor"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><circle cx="9" cy="18" r="1.5" fill="currentColor"/><circle cx="15" cy="18" r="1.5" fill="currentColor"/></svg></span>';
+// A day's moves are a chain hanging below it (each one's "below" child is
+// the next). Notes attached to a move ride along with it.
+function chainBelow(headId) {
+  const out = [];
+  let cur = headId;
+  for (let guard = 0; guard < 500; guard++) {
+    const nx = steps.find(k => k.parentId === cur && k.isBranchRoot);
+    if (!nx || nx.type === 'day' || nx.type === 'section') break;
+    if (nx.type === 'placeholder') return []; // odd shape -- don't offer dragging here
+    out.push(nx); cur = nx.id;
+  }
+  return out;
+}
+function rechain(headId, ids) {
+  ids.forEach((id, i) => { const s = steps.find(x => x.id === id); if (s) { s.parentId = i ? ids[i - 1] : headId; s.isBranchRoot = true; } });
+}
+function editStepInPlace(s) {
+  if (!s || !canEdit) return;
+  if (builderMode === 'tpl') { openStepEditor(s); return; }
+  if (s.type !== 'text' && s.type !== 'video') return;
+  editingStepId = s.id;
+  document.getElementById('textStepInput').value = s.type === 'video' ? videoStepLabel(s) : (s.content || '');
+  openModal('textModal');
+}
+function wireInPlaceEditing(container, groupSel, cardSel, headOf, afterChange) {
+  container.querySelectorAll(cardSel + '[data-step-id]').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('video, a, button, input, textarea, .inplace-drag, .pv-ask, iframe')) return;
+      editStepInPlace(steps.find(x => x.id === card.dataset.stepId));
+    });
+  });
+  if (!window.Sortable) return;
+  container.querySelectorAll(groupSel).forEach(group => {
+    Sortable.create(group, {
+      group: 'inplace-' + container.id, handle: '.inplace-drag', draggable: cardSel + '[data-chain="1"]', animation: 150,
+      onEnd: async (ev) => {
+        if (ev.from === ev.to && ev.oldIndex === ev.newIndex) return;
+        snapshotBeforeChange();
+        for (const g of new Set([ev.from, ev.to])) {
+          const head = headOf(g);
+          if (!head) continue;
+          rechain(head, [...g.querySelectorAll(cardSel + '[data-chain="1"]')].map(c => c.dataset.stepId));
+        }
+        await afterChange();
+      },
+    });
+  });
+}
+// Low Ticket view for coaches: the program loads behind the view so its
+// moves can be dragged and edited right there (saved straight to the program).
+async function ensureProgramEditState(templateId) {
+  if (!canEdit || !templateId) return false;
+  if (builderMode === 'tpl' && editingTemplate?.id === templateId && steps.length) return true;
+  editingTemplate = { id: templateId, name: '', record: null };
+  builderMode = 'tpl';
+  await loadTemplateSteps();
+  return builderMode === 'tpl' && editingTemplate?.id === templateId;
+}
+async function wireProgramViewEditing(box, templateId) {
+  if (!(await ensureProgramEditState(templateId))) return;
+  const order = linearStepOrder(steps);
+  const sections = order.filter(s => s.type === 'section');
+  const headFor = (body) => body.dataset.day != null
+    ? steps.find(s => s.type === 'day' && String(s.dayNumber) === String(body.dataset.day))?.id
+    : sections[Number(body.dataset.section)]?.id;
+  box.querySelectorAll('.pv-body').forEach(body => {
+    const head = headFor(body);
+    if (!head) return;
+    body.dataset.head = head;
+    const chain = new Set(chainBelow(head).map(s => s.id));
+    body.querySelectorAll('.pv-step[data-step-id]').forEach(el => {
+      el.classList.add('editable-card');
+      el.dataset.chain = chain.has(el.dataset.stepId) ? '1' : '0';
+      if (chain.has(el.dataset.stepId)) el.insertAdjacentHTML('afterbegin', DRAG_HANDLE_HTML);
+    });
+  });
+  wireInPlaceEditing(box, '.pv-body[data-head]', '.pv-step', el => el.dataset.head, async () => { await saveSteps(); });
 }
 
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
@@ -2662,14 +2770,14 @@ async function renderStudentProtocolList(filterOnly) {
         <div class="template-item-title">${escapeHtml(t.studentName || t.name)}${t.accountId ? ' <span style="color:#009bff;font-weight:600;font-size:.72rem">&middot; in app</span>' : ''}</div>
         <div class="template-item-text">${t.days} day${t.days === 1 ? '' : 's'} &middot; ${t.videos} video${t.videos === 1 ? '' : 's'} &middot; ${escapeHtml(t.pageTitle || '')}</div>
       </div>
-      ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
       ${SP_DELETE_BTN}
     </div>
   `).join('');
   list.querySelectorAll('.template-item').forEach(row => {
     const t = rows.find(x => x.id === row.dataset.id);
-    row.querySelector('.sp-edit').onclick = () => editStudentProtocol(t);
+    row.style.cursor = 'pointer';
+    row.onclick = (e) => { if (e.target.closest('button, a')) return; editStudentProtocol(t); };
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t);
     row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderStudentProtocolList());
   });
@@ -2866,7 +2974,7 @@ async function loadProtocolTemplateOntoPage(t, modalId, confirmed) {
 async function openLowTicketFolder() {
   const wrap = document.createElement('div');
   wrap.className = 'sp-modal';
-  wrap.innerHTML = `<div class="sp-box"><h3 style="margin-bottom:4px">Low-ticket programs</h3><div class="pra-muted" style="font-size:.8rem;margin-bottom:12px">Programs people buy on their own. Edit opens the Programs Editor.</div>
+  wrap.innerHTML = `<div class="sp-box"><h3 style="margin-bottom:4px">Low-ticket programs</h3><div class="pra-muted" style="font-size:.8rem;margin-bottom:12px">Programs people buy on their own. Tap one to open it here &mdash; drag and tap to edit it right in the view.</div>
     <a class="pra-btn pra-btn-ghost" href="/chat-app/programs-editor.html" target="_blank" rel="noopener" style="display:block;text-align:center;margin-bottom:10px;text-decoration:none">+ New program</a>
     <input class="pra-input lt-search" placeholder="Search programs..." autocomplete="off" style="width:100%;margin-bottom:8px"/>
     <div class="lt-list"><div class="pra-muted" style="padding:8px;font-size:.82rem">Loading…</div></div>
@@ -2882,11 +2990,14 @@ async function openLowTicketFolder() {
   const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = programs.filter(t => words.every(w => String(t.name || '').toLowerCase().includes(w)));
   list.innerHTML = shown.length ? shown.map(t => `
-    <div class="template-item" data-id="${escapeHtml(t.id)}" style="cursor:default">
+    <div class="template-item" data-id="${escapeHtml(t.id)}" style="cursor:pointer">
       <div class="template-item-body"><div class="template-item-title">${escapeHtml(t.name)}</div>
         <div class="template-item-text">${t.days ?? ''}${t.days != null ? ' days · ' : ''}${t.stepCount} steps</div></div>
-      <a class="pra-btn" href="/chat-app/programs-editor.html?id=${encodeURIComponent(t.id)}" target="_blank" rel="noopener" style="flex-shrink:0;text-decoration:none;padding:7px 14px;font-size:.74rem">EDIT</a>
     </div>`).join('') : `<div class="pra-muted" style="padding:8px;font-size:.82rem">${programs.length ? 'No match.' : 'No programs yet.'}</div>`;
+  };
+  list.onclick = (e) => {
+    const row = e.target.closest('.template-item');
+    if (row) location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(row.dataset.id);
   };
   search.oninput = draw;
   draw();
@@ -2913,7 +3024,6 @@ async function renderProtocolTemplateList(filterOnly) {
         <div class="template-item-title">${escapeHtml(t.name)}</div>
         <div class="template-item-text">${t.stepCount} step${t.stepCount === 1 ? '' : 's'} · ${new Date(t.createdAt).toLocaleDateString()}</div>
       </div>
-      ${SP_EDIT_BTN}
       ${SP_APPLY_BTN}
       ${SP_DELETE_BTN}
     </div>
@@ -2922,7 +3032,8 @@ async function renderProtocolTemplateList(filterOnly) {
     const id = row.dataset.id;
     const t = templates.find(x => x.id === id);
     row.style.cursor = 'default';
-    row.querySelector('.sp-edit').onclick = () => openInFlowBuilder(t, 'loadProtocolTemplateModal');
+    row.style.cursor = 'pointer';
+    row.onclick = (e) => { if (e.target.closest('button, a')) return; openInFlowBuilder(t, 'loadProtocolTemplateModal'); };
     row.querySelector('.sp-apply').onclick = () => confirmApplyStudentProtocol(t, 'loadProtocolTemplateModal');
     row.querySelector('.template-delete-btn').onclick = () => deleteSavedProtocol(t, () => renderProtocolTemplateList());
   });
@@ -3355,6 +3466,7 @@ function saveTemplateSteps() {
     if (editingTemplate?.id !== id) return;
     if (!r || !r.ok) { setTplStatus(`Not saved: ${d.error || 'connection problem'}. The last change is only on this screen.`, true); return; }
     setTplStatus('Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+    if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt);
   });
   return tplSaveChain;
 }
