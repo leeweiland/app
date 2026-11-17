@@ -1969,7 +1969,9 @@ function drawLineChart(svgEl, points, { getY, fmtY = (v) => Math.round(v) }) {
 function syncPhysiqueLock() {
   const panel = document.getElementById('hubPanelPhysique');
   const existing = panel.querySelector('.physique-lock');
-  const locked = !!me && me.role === 'user' && !viewingUserId;
+  // Access by Role (User Management): locked when Physique Builder is off for their role.
+  const acc = window.PRA_ACCESS;
+  const locked = !!me && !viewingUserId && !['coach', 'admin', 'admin2'].includes(me.role) && (acc ? acc.physique === false : me.role === 'user');
   if (!locked) { existing?.remove(); return; }
   if (existing) return;
   const lock = document.createElement('div');

@@ -136,7 +136,9 @@ tabLogin.onclick = () => { tabLogin.classList.add('active'); tabSignup.classList
 tabSignup.onclick = () => { tabSignup.classList.add('active'); tabLogin.classList.remove('active'); showForm(signupForm); };
 // Sign-up can be switched off in Admin Panel > User Management.
 fetch('/api/auth/signup-status').then(r => r.ok ? r.json() : null).then(d => {
-  if (!d || d.enabled !== false) return;
+  if (!d) return;
+  if (d.forgotPassword === false) { const fl = document.getElementById('forgotLink'); if (fl) fl.style.display = 'none'; }
+  if (d.enabled !== false) return;
   tabSignup.style.display = 'none';
   if (tabSignup.classList.contains('active')) tabLogin.click();
 }).catch(() => {});

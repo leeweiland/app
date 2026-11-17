@@ -81,6 +81,24 @@ const APP_SHEET_TAB = "APP";
 // separate tabs of one spreadsheet since gym and online are run as
 // separate rosters. Combined client-side into one searchable list.
 const LEVELS_SHEET_ID = "1N3HCeHkt6ELLonZ2u2RbV-8x43UM9VWvGaNVNvGZIA0";
+// The spreadsheets are settings now (Admin Panel > User Management); these
+// constants are only the defaults.
+function extractSheetId(v) {
+  const t = String(v || "").trim();
+  const m = t.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : (/^[a-zA-Z0-9_-]{20,}$/.test(t) ? t : "");
+}
+function appSheetId() { return extractSheetId(getConfig().appSheetId) || APP_SHEET_ID; }
+function appSheetTab() { return String(getConfig().appSheetTab || "").trim() || APP_SHEET_TAB; }
+function levelsSheetId() { return extractSheetId(getConfig().levelsSheetId) || LEVELS_SHEET_ID; }
+function crosscheckTabs() {
+  const c = getConfig();
+  return {
+    online: String(c.crosscheckOnlineTab || "").trim() || "ONLINE BUYERS",
+    gym: String(c.crosscheckGymTab || "").trim() || "GYM BUYERS",
+    blacklist: String(c.crosscheckBlacklistTab || "").trim() || "BLACKLIST ONLINE & GYM",
+  };
+}
 const LEVELS_CATEGORIES = ["FOUNDATION", "NINJA STRENGTH", "HANDSTAND", "POWERMOVES", "FREERUN", "CIRQUE"];
 
 // Railway rebuilds the container from a fresh git checkout on every deploy —
@@ -405,6 +423,24 @@ export function getConfig() {
   if (!cfg.renewalMessageDaysBefore) cfg.renewalMessageDaysBefore = 14;
   if (!cfg.renewalMessageText) cfg.renewalMessageText = DEFAULT_RENEWAL_MESSAGE;
   if (cfg.renewalMessageSenderId === undefined) cfg.renewalMessageSenderId = "";
+  if (!cfg.loginSessionDays) cfg.loginSessionDays = 30;
+  if (!cfg.resetLinkMinutes) cfg.resetLinkMinutes = 60;
+  if (!cfg.minPasswordLength) cfg.minPasswordLength = 8;
+  if (cfg.forgotPasswordEnabled === undefined) cfg.forgotPasswordEnabled = true;
+  if (cfg.studentGroupEnabled === undefined) cfg.studentGroupEnabled = true;
+  if (cfg.appSheetTypeEnabled === undefined) cfg.appSheetTypeEnabled = true;
+  if (cfg.appSheetId === undefined) cfg.appSheetId = "";
+  if (cfg.appSheetTab === undefined) cfg.appSheetTab = "";
+  if (cfg.levelsSheetId === undefined) cfg.levelsSheetId = "";
+  if (cfg.crosscheckOnlineTab === undefined) cfg.crosscheckOnlineTab = "";
+  if (cfg.crosscheckGymTab === undefined) cfg.crosscheckGymTab = "";
+  if (cfg.crosscheckBlacklistTab === undefined) cfg.crosscheckBlacklistTab = "";
+  if (cfg.crmFinishedSync === undefined) cfg.crmFinishedSync = true;
+  if (cfg.crmBlacklistArchive === undefined) cfg.crmBlacklistArchive = true;
+  if (cfg.renewalPillsStaff === undefined) cfg.renewalPillsStaff = true;
+  if (cfg.renewalStudentNotice === undefined) cfg.renewalStudentNotice = false;
+  if (!cfg.renewalStudentText) cfg.renewalStudentText = "Your training wraps up on {{endDate}}. Message your coach to keep going.";
+  cfg.access = mergeAccessDefaults(cfg.access);
   if (cfg.physiqueMontageFolderId === undefined) cfg.physiqueMontageFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
@@ -478,7 +514,8 @@ function getCookie(req, name) {
 function createSession(userId) {
   const sessions = readJson(SESSIONS_FILE, {});
   const token = randomBytes(32).toString("hex");
-  sessions[token] = { userId, expiresAt: Date.now() + 30 * 24 * 3600 * 1000 };
+  const days = Math.max(1, Number(getConfig().loginSessionDays) || 30);
+  sessions[token] = { userId, expiresAt: Date.now() + days * 24 * 3600 * 1000 };
   writeJson(SESSIONS_FILE, sessions);
   return token;
 }
@@ -501,7 +538,8 @@ export function getSessionUser(req) {
   return found;
 }
 function setSessionCookie(res, token) {
-  res.setHeader("Set-Cookie", `pra_session=${token}; HttpOnly; Path=/; Max-Age=${30 * 24 * 3600}; SameSite=Lax`);
+  const days = Math.max(1, Number(getConfig().loginSessionDays) || 30);
+  res.setHeader("Set-Cookie", `pra_session=${token}; HttpOnly; Path=/; Max-Age=${days * 24 * 3600}; SameSite=Lax`);
 }
 
 // Physique Builder's coach/admin "view any student" search -- READ-ONLY
@@ -792,9 +830,9 @@ function roleToSheetType(role) {
 // TYPE for the business to set by hand same as always.
 async function upsertAppSheetRow({ first, last, email, phone, ip, location, role }) {
   const accessToken = await getGoogleAccessToken();
-  const range = `'${APP_SHEET_TAB}'!A:F`;
+  const range = `'${appSheetTab()}'!A:F`;
   const getRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
@@ -806,7 +844,7 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location, role
   if (rowIndex > 0) {
     const sheetRow = rowIndex + 1; // 1-indexed
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A${sheetRow}:F${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!A${sheetRow}:F${sheetRow}`)}?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -815,7 +853,7 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location, role
     );
     if (type) {
       await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
         {
           method: "PUT",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -828,7 +866,7 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location, role
     // (TYPE) filled in if a role was given — matches the column layout
     // updatePersonalityColumn() uses for its own append below.
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -844,10 +882,11 @@ async function upsertAppSheetRow({ first, last, email, phone, ip, location, role
 // role change. This only ever touches column J, and only writes A-F (via a
 // full-row append) for the fallback case where the person has no row yet.
 async function syncAppSheetRole(targetUser) {
+  if (getConfig().appSheetTypeEnabled === false) return;
   const accessToken = await getGoogleAccessToken();
-  const range = `'${APP_SHEET_TAB}'!A:F`;
+  const range = `'${appSheetTab()}'!A:F`;
   const getRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
@@ -858,7 +897,7 @@ async function syncAppSheetRole(targetUser) {
   if (rowIndex > 0) {
     const sheetRow = rowIndex + 1;
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!J${sheetRow}`)}?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -867,7 +906,7 @@ async function syncAppSheetRole(targetUser) {
     );
   } else {
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!A1:J1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -882,9 +921,9 @@ async function syncAppSheetRole(targetUser) {
 // the email has no existing row.
 export async function updatePersonalityColumn(email, mbti, standard, archetype, gender, first, last) {
   const accessToken = await getGoogleAccessToken();
-  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const range = `'${appSheetTab()}'!A:K`;
   const getRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
@@ -895,7 +934,7 @@ export async function updatePersonalityColumn(email, mbti, standard, archetype, 
     const sheetRow = rowIndex + 1;
     // Write archetype columns G:I (skip J=TYPE), then gender in K separately
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!G${sheetRow}:I${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!G${sheetRow}:I${sheetRow}`)}?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -904,7 +943,7 @@ export async function updatePersonalityColumn(email, mbti, standard, archetype, 
     );
     if (gender) {
       await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!K${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!K${sheetRow}`)}?valueInputOption=USER_ENTERED`,
         {
           method: "PUT",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -915,7 +954,7 @@ export async function updatePersonalityColumn(email, mbti, standard, archetype, 
   } else {
     // New row: A B C D E F G H I J(TYPE blank) K
     await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${APP_SHEET_TAB}'!A1:K1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${appSheetTab()}'!A1:K1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -1029,9 +1068,9 @@ function buildArchetypeImageMaps() {
 async function fetchUsersMapPoints() {
   const accessToken = await getGoogleAccessToken();
   // Read through column K: MBTI (G), 16P (H), PRA PERSONA (I), TYPE (J), GENDER (K)
-  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const range = `'${appSheetTab()}'!A:K`;
   const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const data = await r.json();
@@ -1119,9 +1158,9 @@ async function fetchUserProfileCard(targetUser) {
   const levelsPeople = await fetchAllLevels().catch(() => []);
   card.levels = findLevelsEntries(levelsPeople, targetUser.first, targetUser.last);
   const accessToken = await getGoogleAccessToken();
-  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const range = `'${appSheetTab()}'!A:K`;
   const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const data = await r.json();
@@ -1162,9 +1201,9 @@ async function fetchUserProfileCard(targetUser) {
 async function enrichLevelsPeople(people) {
   const localUsers = readJson(USERS_FILE, []);
   const accessToken = await getGoogleAccessToken();
-  const range = `'${APP_SHEET_TAB}'!A:K`;
+  const range = `'${appSheetTab()}'!A:K`;
   const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const data = await r.json();
@@ -1209,7 +1248,7 @@ async function fetchLevelsTab(tabName, program) {
   const accessToken = await getGoogleAccessToken();
   const range = `'${tabName}'!A1:J`;
   const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const d = await r.json();
@@ -1371,16 +1410,16 @@ async function fetchStudentEligibilityUncached() {
   const accessToken = await getGoogleAccessToken();
   async function fetchTab(tabName, range) {
     const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${tabName}'!${range}`)}`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${tabName}'!${range}`)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const d = await r.json();
     return (d.values || []).slice(1); // drop header row
   }
   const [blacklistRows, onlineRows, gymRows] = await Promise.all([
-    fetchTab(STUDENT_BLACKLIST_TAB, "A1:B"),
-    fetchTab(ONLINE_SHEET_TAB, "A1:G"),
-    fetchTab(GYM_SHEET_TAB, "A1:G"),
+    fetchTab(crosscheckTabs().blacklist, "A1:B"),
+    fetchTab(crosscheckTabs().online, "A1:G"),
+    fetchTab(crosscheckTabs().gym, "A1:G"),
   ]);
   const blacklisted = new Set(blacklistRows.filter(([first, last]) => first || last).map(([first, last]) => nameKey(first, last)));
   function toEligibleSet(rows) {
@@ -1440,8 +1479,8 @@ async function setKickoffSheetStatus({ email, phone, first, last }, status) {
   const ph = String(phone || "").replace(/\D/g, "").slice(-10);
   const nk = (first || last) ? nameKey(first, last) : null;
   const data = [];
-  for (const [tab, emailIdx, phoneIdx] of [[ONLINE_SHEET_TAB, 6, 5], [GYM_SHEET_TAB, 5, 6]]) {
-    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values/${encodeURIComponent(`'${tab}'!A1:G`)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  for (const [tab, emailIdx, phoneIdx] of [[crosscheckTabs().online, 6, 5], [crosscheckTabs().gym, 5, 6]]) {
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values/${encodeURIComponent(`'${tab}'!A1:G`)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     const rows = ((await r.json()).values || []);
     const hits = (test) => rows.map((row, i) => i > 0 && test(row) ? i : -1).filter(i => i > 0);
     // Families share an email/phone (a parent's), so when the name is known
@@ -1455,7 +1494,7 @@ async function setKickoffSheetStatus({ email, phone, first, last }, status) {
       .forEach(i => data.push({ range: `'${tab}'!E${i + 1}`, values: [[status]] }));
   }
   if (!data.length) return 0;
-  const w = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${APP_SHEET_ID}/values:batchUpdate`, {
+  const w = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSheetId()}/values:batchUpdate`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
@@ -1524,6 +1563,7 @@ function renewalForConvo(convo, users, viewer, eligibility) {
 }
 function renewalForStudent(student, viewer, eligibility) {
   if (!eligibility || !isStaff(viewer) || !isClientRole(student.role)) return null;
+  if (getConfig().renewalPillsStaff === false) return null;
   const key = nameKey(student.first, student.last);
   const primary = student.role === "gym" ? eligibility.endDates.gym : eligibility.endDates.online;
   const other = student.role === "gym" ? eligibility.endDates.online : eligibility.endDates.gym;
@@ -1691,7 +1731,7 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   const accessToken = await getGoogleAccessToken();
   const range = `'${tabName}'!A1:J`;
   const getRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
@@ -1727,12 +1767,12 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   if (rowIndex > 0) {
     const sheetRow = rowIndex + 1;
     writeRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(`'${tabName}'!A${sheetRow}:${colLetter(width - 1)}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(`'${tabName}'!A${sheetRow}:${colLetter(width - 1)}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
       { method: "PUT", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ values: [newRow] }) }
     );
   } else {
     writeRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(`'${tabName}'!A1:${colLetter(width - 1)}1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(`'${tabName}'!A1:${colLetter(width - 1)}1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
       { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ values: [newRow] }) }
     );
   }
@@ -1741,6 +1781,62 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
     throw new Error(`Could not save to the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
   }
   levelsCache = null; // next read should reflect the write immediately
+}
+
+// ── Access by role (User Management > Access) ───────────────────────────
+// What each kind of account can open. Staff (coach/admin) always get
+// everything. Defaults match how the app behaved before these switches.
+export const ACCESS_FEATURES = [
+  { key: "chat", label: "Chat", desc: "Their group chat with the coaches" },
+  { key: "protocol", label: "Custom Training Protocol", desc: "Their own protocol (Flow / Page)" },
+  { key: "physique", label: "Physique Builder", desc: "Body scans, photos, food log" },
+  { key: "katas", label: "Katas", desc: "Katas tab + kata thumbnails on their profile" },
+  { key: "videos", label: "Training Videos", desc: "The Powerbatics video library" },
+  { key: "levels", label: "Levels", desc: "The Levels board" },
+  { key: "map", label: "Strength Ninjas map", desc: "The map of members" },
+  { key: "quiz", label: "Personality Quiz", desc: "Training Personality Quiz" },
+  { key: "shop", label: "Shop", desc: "The clothing shop" },
+  { key: "retreats", label: "Retreats", desc: "Retreats page" },
+];
+export const ACCESS_ROLES = ["user", "trainee", "online", "gym"];
+const ACCESS_DEFAULTS = {
+  user: { chat: true, protocol: false, physique: false, katas: false, videos: true, levels: true, map: true, quiz: true, shop: true, retreats: true },
+  trainee: { chat: true, protocol: true, physique: false, katas: false, videos: false, levels: false, map: false, quiz: false, shop: false, retreats: false },
+  online: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
+  gym: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
+};
+function mergeAccessDefaults(a) {
+  const out = {};
+  for (const role of ACCESS_ROLES) {
+    out[role] = {};
+    for (const f of ACCESS_FEATURES) {
+      const v = a?.[role]?.[f.key];
+      out[role][f.key] = typeof v === "boolean" ? v : ACCESS_DEFAULTS[role][f.key];
+    }
+  }
+  return out;
+}
+export function accessFor(user) {
+  if (!user) return {};
+  if (isStaff(user)) return Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true]));
+  const a = getConfig().access || mergeAccessDefaults(null);
+  return { ...(a[user.role] || a.user) };
+}
+// The student-facing renewal notice (if switched on) for /api/auth/me.
+async function myRenewalNotice(user) {
+  const cfg = getConfig();
+  if (!cfg.renewalStudentNotice || !isClientRole(user.role)) return null;
+  try {
+    const eligibility = await fetchStudentEligibility();
+    const key = nameKey(user.first, user.last);
+    const primary = user.role === "gym" ? eligibility.endDates.gym : eligibility.endDates.online;
+    const other = user.role === "gym" ? eligibility.endDates.online : eligibility.endDates.gym;
+    const endMs = primary.get(key) ?? other.get(key);
+    const level = renewalLevelFor(endMs);
+    if (!level) return null;
+    const endDate = new Date(endMs).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
+    return { level: level === 2 ? "pink" : "orange", endDate, text: fillTemplate(cfg.renewalStudentText, { firstName: user.first, lastName: user.last, endDate }) };
+  } catch { return null; }
 }
 
 // ── Staff alerts (the red banner coaches/admins see) ─────────────────────
@@ -1913,7 +2009,7 @@ async function renameLevelsRows({ first, last, newFirst, newLast }) {
   for (const tabName of ["GYM", "ONLINE"]) {
     const range = `'${tabName}'!A1:J`;
     const getRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const getData = await getRes.json();
@@ -1929,7 +2025,7 @@ async function renameLevelsRows({ first, last, newFirst, newLast }) {
     if (rowIndex <= 0) continue; // not on this tab — nothing to rename here
     const sheetRow = rowIndex + 1;
     const writeRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values:batchUpdate`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values:batchUpdate`,
       {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -1960,7 +2056,7 @@ async function findLevelsRowByName(tabName, first, last) {
   const accessToken = await getGoogleAccessToken();
   const range = `'${tabName}'!A1:J`;
   const getRes = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${LEVELS_SHEET_ID}/values/${encodeURIComponent(range)}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const getData = await getRes.json();
@@ -3794,6 +3890,8 @@ function syncDefaultGroups() {
     const desired = Array.from(new Set([person.id, ...staffIds]));
     const name = `${titleCase(person.first)} ${titleCase(person.last)} Group`;
     let convo = convos.find(c => c.autoGroupType === autoType && c.autoGroupUserId === person.id);
+    // User Management can switch off creating NEW student groups (existing ones stay).
+    if (!convo && autoType === "student" && getConfig().studentGroupEnabled === false) return;
     if (!convo) {
       convo = { id: randomUUID(), type: "group", name, participantIds: desired, autoGroupType: autoType, autoGroupUserId: person.id, createdBy: null, createdAt: new Date().toISOString() };
       convos.push(convo);
@@ -4258,6 +4356,39 @@ export async function handleChatRequest(req, res, url) {
   // Key-auth (x-pra-app-key = PRA_APP_BRIDGE_KEY), no session. POST creates
   // or upgrades the account and enrolls it; GET ?email= reports status.
   // Never overwrites an existing password; never sends email/SMS.
+  // CRM status changes (crm-app contacts PATCH / flows): FINISHED makes an
+  // Online/Gym student a plain User; BLACKLIST archives the account. Each is
+  // switchable in User Management.
+  if (p === "/api/bridge/student-status" && req.method === "POST") {
+    const key = req.headers["x-pra-app-key"];
+    if (!process.env.PRA_APP_BRIDGE_KEY || key !== process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 401, { error: "Bad key" });
+    const { email, phone, status } = await readJsonBody(req);
+    const cfg = getConfig();
+    const users = readJson(USERS_FILE, []);
+    const em = String(email || "").trim().toLowerCase();
+    const ph = String(phone || "").replace(/\D/g, "").slice(-10);
+    const u = users.find(x => em && String(x.email || "").trim().toLowerCase() === em)
+      || users.find(x => ph.length === 10 && String(x.phone || "").replace(/\D/g, "").slice(-10) === ph);
+    if (!u) return sendJson(res, 200, { ok: true, matched: false });
+    const st = String(status || "").toUpperCase();
+    let action = "none";
+    if (st === "FINISHED" && cfg.crmFinishedSync !== false && isClientRole(u.role)) {
+      u.role = "user"; action = "made-user";
+      writeJson(USERS_FILE, users);
+      pullFromStaffOnlyChats(u.id, users);
+      syncDefaultGroups();
+      syncAppSheetRole(u).catch(e => console.error("[APP sheet role sync]", e.message));
+    } else if (st === "BLACKLIST" && cfg.crmBlacklistArchive !== false && ["user", "online", "gym", "trainee"].includes(u.role) && !u.archived) {
+      u.archived = true; action = "archived";
+      writeJson(USERS_FILE, users);
+      const sessions = readJson(SESSIONS_FILE, {});
+      Object.keys(sessions).forEach(t => { if (sessions[t].userId === u.id) delete sessions[t]; });
+      writeJson(SESSIONS_FILE, sessions);
+      syncDefaultGroups();
+    }
+    console.log(`[bridge student-status] ${u.first} ${u.last} ${st} -> ${action}`);
+    return sendJson(res, 200, { ok: true, matched: true, action });
+  }
   if (p === "/api/bridge/trainee/revoke") {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
@@ -4333,7 +4464,8 @@ export async function handleChatRequest(req, res, url) {
   // ─── Auth ───────────────────────────────────────────────────────────────
   // Public: login.html hides its Sign Up tab when sign-up is switched off.
   if (req.method === "GET" && p === "/api/auth/signup-status") {
-    return sendJson(res, 200, { enabled: getConfig().signupEnabled !== false });
+    const c = getConfig();
+    return sendJson(res, 200, { enabled: c.signupEnabled !== false, forgotPassword: c.forgotPasswordEnabled !== false, minPasswordLength: Number(c.minPasswordLength) || 8 });
   }
   if (req.method === "POST" && p === "/api/auth/signup" && getConfig().signupEnabled === false && readJson(USERS_FILE, []).length) {
     return sendJson(res, 403, { error: "Sign up is closed right now. Contact Pacific Rim Athletics to get access." });
@@ -4381,6 +4513,8 @@ export async function handleChatRequest(req, res, url) {
 
     const { first, last, email, phone, password, agreedToTerms } = fields;
     if (!first || !last || !email || !password) return sendJson(res, 400, { error: "first, last, email, password are required" });
+    { const minLen = Math.max(4, Number(getConfig().minPasswordLength) || 8);
+      if (String(password).length < minLen) return sendJson(res, 400, { error: `Password must be at least ${minLen} characters` }); }
     // Guideline 1.2 requires agreement to no-tolerance terms BEFORE an
     // account is created — enforced server-side too since the checkbox
     // itself is just client-side HTML that a direct API call would skip.
@@ -4423,6 +4557,7 @@ export async function handleChatRequest(req, res, url) {
   }
 
   if (req.method === "POST" && p === "/api/auth/forgot-password") {
+    if (getConfig().forgotPasswordEnabled === false) return sendJson(res, 403, { error: "Password reset is turned off -- contact Pacific Rim Athletics." });
     const { email } = await readJsonBody(req);
     const users = readJson(USERS_FILE, []);
     // Trimmed: phone keyboards/autofill often append a trailing space, which
@@ -4435,7 +4570,7 @@ export async function handleChatRequest(req, res, url) {
     if (user) {
       const resets = readJson(RESETS_FILE, {});
       const token = randomBytes(32).toString("hex");
-      resets[token] = { userId: user.id, expiresAt: Date.now() + 60 * 60 * 1000 };
+      resets[token] = { userId: user.id, expiresAt: Date.now() + Math.max(5, Number(getConfig().resetLinkMinutes) || 60) * 60 * 1000 };
       writeJson(RESETS_FILE, resets);
       const host = req.headers.host || "localhost:3456";
       const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
@@ -4448,8 +4583,9 @@ export async function handleChatRequest(req, res, url) {
 
   if (req.method === "POST" && p === "/api/auth/reset-password") {
     const { token, newPassword } = await readJsonBody(req);
-    if (!token || !newPassword || newPassword.length < 8) {
-      return sendJson(res, 400, { error: "A valid token and a password of at least 8 characters are required" });
+    const minLen = Math.max(4, Number(getConfig().minPasswordLength) || 8);
+    if (!token || !newPassword || newPassword.length < minLen) {
+      return sendJson(res, 400, { error: `A valid token and a password of at least ${minLen} characters are required` });
     }
     const resets = readJson(RESETS_FILE, {});
     const entry = resets[token];
@@ -4515,7 +4651,7 @@ export async function handleChatRequest(req, res, url) {
   if (req.method === "GET" && p === "/api/auth/me") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
-    return sendJson(res, 200, { user: publicUser(user) });
+    return sendJson(res, 200, { user: publicUser(user), access: accessFor(user), renewalNotice: await myRenewalNotice(user) });
   }
 
   if (req.method === "POST" && p === "/api/auth/update-profile") {
@@ -4959,7 +5095,12 @@ export async function handleChatRequest(req, res, url) {
         || p.startsWith("/api/chat/profile/")
         || ["/api/chat/push-subscribe", "/api/chat/push-subscribe-native", "/api/chat/vapid-public-key", "/api/chat/active-conversation",
           "/api/chat/block", "/api/chat/unblock", "/api/chat/blocked", "/api/chat/report", "/api/chat/gifs"].includes(p);
-      if (!allowed) return sendJson(res, 403, { error: "Not part of the Handstand Protocol" });
+      // Anything switched on for Trainees in User Management > Access.
+      const acc = accessFor(user);
+      const byAccess = (acc.katas && p.startsWith("/api/chat/katas")) || (acc.levels && p.startsWith("/api/chat/levels"))
+        || (acc.map && p.startsWith("/api/chat/users-map")) || (acc.videos && (p.startsWith("/api/chat/moves") || p.startsWith("/api/chat/badges")))
+        || (acc.physique && (p.startsWith("/api/chat/body") || p.startsWith("/api/chat/food") || p.startsWith("/api/chat/progress")));
+      if (!allowed && !byAccess) return sendJson(res, 403, { error: "Not part of the Handstand Protocol" });
     }
 
     // ─── Admin ────────────────────────────────────────────────────────────
@@ -5196,24 +5337,30 @@ export async function handleChatRequest(req, res, url) {
     // ── User Management tab (admin panel) ───────────────────────────────
     if (p === "/api/admin/user-management") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-      const KEYS = ["signupEnabled", "studentCrosscheckEnabled", "autoBuildProtocolEnabled", "levelsRowOnNewStudent", "staffAlertsEnabled",
-        "defaultProtocolEnabled", "welcomeMessageEnabled", "welcomeMessageText", "movesPublicDefault",
-        "renewalMessageEnabled", "renewalMessageDaysBefore", "renewalMessageText", "renewalMessageSenderId",
-        "traineeWelcomeEnabled", "traineeWelcomeText", "traineeRefundArchive"];
+      const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentGroupEnabled", "autoBuildProtocolEnabled",
+        "levelsRowOnNewStudent", "appSheetTypeEnabled", "staffAlertsEnabled", "defaultProtocolEnabled", "welcomeMessageEnabled", "movesPublicDefault",
+        "renewalMessageEnabled", "renewalPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
+        "traineeWelcomeEnabled", "traineeRefundArchive"];
+      const NUM_KEYS = { loginSessionDays: [1, 365, 30], resetLinkMinutes: [5, 1440, 60], minPasswordLength: [4, 64, 8], renewalMessageDaysBefore: [1, 90, 14] };
+      const STR_KEYS = ["welcomeMessageText", "renewalMessageText", "renewalMessageSenderId", "renewalStudentText", "traineeWelcomeText",
+        "appSheetId", "appSheetTab", "levelsSheetId", "crosscheckOnlineTab", "crosscheckGymTab", "crosscheckBlacklistTab"];
       if (req.method === "POST") {
         const body = await readJsonBody(req);
         const cfg = getConfig();
-        for (const k of KEYS) {
-          if (body[k] === undefined) continue;
-          if (k === "renewalMessageDaysBefore") cfg[k] = Math.max(1, Math.min(90, Number(body[k]) || 14));
-          else if (typeof cfg[k] === "boolean" || /Enabled$|Default$|Student$/.test(k)) cfg[k] = !!body[k];
-          else cfg[k] = String(body[k]);
-        }
+        for (const k of BOOL_KEYS) if (body[k] !== undefined) cfg[k] = !!body[k];
+        for (const [k, [lo, hi, def]] of Object.entries(NUM_KEYS)) if (body[k] !== undefined) cfg[k] = Math.max(lo, Math.min(hi, Number(body[k]) || def));
+        for (const k of STR_KEYS) if (body[k] !== undefined) cfg[k] = String(body[k]);
+        if (body.access && typeof body.access === "object") cfg.access = mergeAccessDefaults({ ...cfg.access, ...Object.fromEntries(Object.entries(body.access).map(([r, v]) => [r, { ...(cfg.access?.[r] || {}), ...v }])) });
         writeJson(CONFIG_FILE, cfg);
+        // Sheet changes take effect on the next read, not after a 10-minute cache.
+        if (["appSheetId", "appSheetTab", "levelsSheetId", "crosscheckOnlineTab", "crosscheckGymTab", "crosscheckBlacklistTab"].some(k => body[k] !== undefined)) {
+          levelsCache = null; studentEligibilityCache = null;
+        }
       }
       const cfg = getConfig();
       const users = readJson(USERS_FILE, []);
-      const settings = Object.fromEntries(KEYS.map(k => [k, cfg[k]]));
+      const settings = Object.fromEntries([...BOOL_KEYS, ...Object.keys(NUM_KEYS), ...STR_KEYS].map(k => [k, cfg[k]]));
+      settings.access = cfg.access;
       const staff = users.filter(u => isStaff(u) && !u.archived).map(u => ({ id: u.id, name: `${u.first} ${u.last}`, role: u.role }));
       const counts = {
         online: users.filter(u => u.role === "online" && !u.archived).length,
@@ -5222,7 +5369,30 @@ export async function handleChatRequest(req, res, url) {
         trainees: users.filter(u => u.role === "trainee" && !u.archived).length,
         archived: users.filter(u => u.archived).length,
       };
-      return sendJson(res, 200, { settings, staff, counts, defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE, defaultTraineeWelcome: DEFAULT_TRAINEE_WELCOME });
+      const draft = readJson(TRAINING_PROTOCOLS_FILE, {})[BUILDER_PROTOCOL_ID];
+      const defaultProtocol = { name: draft?.protocolName || "(unnamed draft)", steps: (draft?.steps || []).length, videos: (draft?.steps || []).filter(x => x.type === "video").length, days: (draft?.steps || []).filter(x => x.type === "day").length };
+      const sheets = {
+        app: { id: appSheetId(), tab: appSheetTab(), isDefault: !extractSheetId(cfg.appSheetId) },
+        levels: { id: levelsSheetId(), isDefault: !extractSheetId(cfg.levelsSheetId) },
+        crosscheck: crosscheckTabs(),
+      };
+      return sendJson(res, 200, { settings, staff, counts, defaultProtocol, sheets, accessFeatures: ACCESS_FEATURES, accessRoles: ACCESS_ROLES,
+        defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE, defaultTraineeWelcome: DEFAULT_TRAINEE_WELCOME });
+    }
+    // Spreadsheet name + tab links, so settings show "1. EMAIL LISTS > GYM" not an id.
+    if (p === "/api/admin/sheet-info" && req.method === "GET") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const id = extractSheetId(url.searchParams.get("id"));
+      if (!id) return sendJson(res, 400, { error: "Not a Google Sheet link" });
+      try {
+        const accessToken = await getGoogleAccessToken();
+        const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=properties.title,sheets.properties(title,sheetId)`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const d = await r.json();
+        if (!r.ok) return sendJson(res, 200, { id, ok: false, error: d.error?.message || "Can't open that sheet" });
+        return sendJson(res, 200, { id, ok: true, title: d.properties?.title || id, url: `https://docs.google.com/spreadsheets/d/${id}/edit`, tabs: (d.sheets || []).map(x => ({ title: x.properties.title, gid: x.properties.sheetId })) });
+      } catch (e) {
+        return sendJson(res, 200, { id, ok: false, error: e.message });
+      }
     }
     // Run auto-build by hand for one student (from a banner/User Management).
     if (p === "/api/admin/auto-build-protocol" && req.method === "POST") {
@@ -5785,6 +5955,7 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/katas" && req.method === "GET") {
       const targetId = url.searchParams.get("userId") || user.id;
       if (targetId !== user.id && !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
+      if (!accessFor(user).katas) return sendJson(res, 200, { katas: [], hasLevels: false, locked: true });
       const target = readJson(USERS_FILE, []).find(u => u.id === targetId);
       if (!target) return sendJson(res, 404, { error: "User not found" });
       try {

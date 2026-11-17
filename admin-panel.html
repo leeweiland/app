@@ -203,6 +203,22 @@
   .um-sub .pra-input, .um-sub .pra-select { max-width: 260px; }
   .um-saved { font-size: .72rem; color: #22c55e; min-height: 1em; margin-left: 6px; }
   .um-alert { border-left: 3px solid #ff4d4d; background: rgba(255,77,77,0.06); padding: 8px 10px; border-radius: 6px; margin-top: 6px; font-size: .78rem; }
+
+  .um-onoff { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: .74rem; color: var(--pra-dim); }
+  .um-onoff b { color: #cfd6dd; font-weight: 700; }
+  .um-inline { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--pra-dim); white-space: nowrap; }
+  .um-sheet { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .8rem; margin: 4px 0; }
+  .um-sheet-label { color: var(--pra-dim); }
+  .um-sheet-name a, .um-desc a { color: #009bff; text-decoration: none; }
+  .um-sheet-name a:hover, .um-desc a:hover { text-decoration: underline; }
+  .um-tabs { color: var(--pra-dim); }
+  .um-sheet-edit { width: 100%; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .um-link-btn { background: none; border: none; color: var(--pra-dim); font-size: .72rem; text-decoration: underline; cursor: pointer; padding: 0; }
+  .um-access-wrap { overflow-x: auto; }
+  .um-access { width: 100%; border-collapse: collapse; }
+  .um-access th { font-family: var(--font-secondary); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pra-dim); padding: 6px 8px; text-align: center; }
+  .um-access td { padding: 8px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; vertical-align: middle; }
+  .um-access td:first-child { text-align: left; }
 </style>
 </head>
 <body>
@@ -367,6 +383,7 @@
         <textarea class="pra-input" id="callSummaryPrompt" rows="5" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
       </div>
 
+      <div style="display:none"><!-- moved to User Management > New Student Setup -->
       <div class="pra-h2" style="margin:28px 0 6px">New Student Welcome Message</div>
       <div class="field">
         <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -382,6 +399,7 @@
         <button class="pra-btn pra-btn-ghost" id="backfillWelcomeBtn" type="button">Send To Every Group With No Messages Yet</button>
         <div class="pra-muted" style="font-size:.74rem;margin-top:6px">One-time catch-up for groups that existed before this feature (or were otherwise never sent one) — skips any group that already has at least one message, so it's always safe to click again later.</div>
         <div class="save-msg" id="backfillWelcomeMsg"></div>
+      </div>
       </div>
 
       <div class="pra-h2" style="margin:28px 0 6px">Daily Coach Check-in</div>
@@ -1763,81 +1781,140 @@ window.addEventListener('pageshow', () => {
 })();
 
 // ── User Management tab ──────────────────────────────────────────────────
+// Every switch saves the moment it's flipped (config file on the server) --
+// nothing here redeploys or restarts the app.
 (function () {
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let state = null;
+  const CHEV = '<svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const toggle = (key, on) => `<input type="checkbox" class="pra-toggle" data-um="${key}" ${on ? 'checked' : ''}/>`;
-  const always = '<span class="um-always">Always on</span>';
-  const row = (name, desc, control, extra = '') => `<div class="um-row"><div class="um-txt"><div class="um-name">${name}</div><div class="um-desc">${desc}</div>${extra}</div><div>${control}</div></div>`;
+  const info = '<span class="um-always">Info</span>';
+  // onOff: [what ON does, what OFF does] -- shown under the description.
+  const row = (name, desc, control, extra = '', onOff = null) => `<div class="um-row"><div class="um-txt"><div class="um-name">${name}</div><div class="um-desc">${desc}</div>${onOff ? `<div class="um-onoff"><span><b>On:</b> ${onOff[0]}</span><span><b>Off:</b> ${onOff[1]}</span></div>` : ''}${extra}</div><div>${control}</div></div>`;
+  const card = (k, title, body) => `<details class="um-card" data-k="${k}"><summary><h3>${title}</h3><span class="um-count"></span>${CHEV}</summary><div class="um-card-body">${body}</div></details>`;
+  const savedMsg = (id) => `<span class="um-saved" id="${id}"></span>`;
+  const flash = (id, ok = true, text = 'Saved') => { const m = document.getElementById(id); if (!m) return; m.style.color = ok ? '' : '#ff8a8a'; m.textContent = ok ? text : 'Could not save'; setTimeout(() => { m.textContent = ''; }, 2500); };
+
+  // A spreadsheet setting: shows the sheet's real name (and the tabs used) as
+  // links, with Change to point it at a different sheet.
+  function sheetField(slot, label, settingKey, currentId, tabs) {
+    return `<div class="um-sheet" data-slot="${slot}" data-id="${esc(currentId)}" data-tabs="${esc(JSON.stringify(tabs || []))}">
+      <span class="um-sheet-label">${label}</span>
+      <span class="um-sheet-name">Loading sheet name…</span>
+      <button type="button" class="um-link-btn" data-change="${slot}">Change</button>
+      <div class="um-sheet-edit" style="display:none"><input class="pra-input" placeholder="Paste the Google Sheet link" data-sheet-input="${settingKey}" style="max-width:420px"/><button type="button" class="pra-btn" data-sheet-save="${settingKey}" style="font-size:.74rem;padding:7px 12px">Save</button>${savedMsg('umSheetMsg-' + slot)}</div>
+    </div>`;
+  }
+  async function fillSheetNames() {
+    for (const el of document.querySelectorAll('#umBody .um-sheet')) {
+      const id = el.dataset.id, tabs = JSON.parse(el.dataset.tabs || '[]');
+      const nameEl = el.querySelector('.um-sheet-name');
+      const d = await fetch('/api/admin/sheet-info?id=' + encodeURIComponent(id)).then(r => r.json()).catch(() => null);
+      if (!d || !d.ok) { nameEl.innerHTML = `<span style="color:#ff8a8a">Can't open this sheet${d?.error ? ' (' + esc(d.error) + ')' : ''}</span>`; continue; }
+      const tabLinks = tabs.map(t => {
+        const found = d.tabs.find(x => x.title.trim().toLowerCase() === String(t).trim().toLowerCase());
+        return found ? `<a href="${d.url}#gid=${found.gid}" target="_blank" rel="noopener">${esc(found.title)}</a>` : `<span style="color:#ff8a8a" title="No tab with this name in the sheet">${esc(t)} (missing)</span>`;
+      }).join(', ');
+      nameEl.innerHTML = `<a href="${d.url}" target="_blank" rel="noopener">${esc(d.title)}</a>${tabLinks ? ` <span class="um-tabs">&rsaquo; ${tabLinks}</span>` : ''}`;
+    }
+  }
 
   function render() {
-    const s = state.settings, c = state.counts;
+    const s = state.settings, c = state.counts, sh = state.sheets, dp = state.defaultProtocol;
     const staffOpts = state.staff.map(u => `<option value="${esc(u.id)}" ${s.renewalMessageSenderId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+    const num = (key, val, w = 70) => `<input class="pra-input" type="number" data-num="${key}" value="${esc(val)}" style="width:${w}px"/>`;
+    const roleNames = { user: 'User', trainee: 'Trainee', online: 'Online', gym: 'Gym' };
+    const accessTable = `<div class="um-access-wrap"><table class="um-access"><thead><tr><th></th>${state.accessRoles.map(r => `<th>${roleNames[r] || r}</th>`).join('')}</tr></thead><tbody>${
+      state.accessFeatures.map(f => `<tr><td><div class="um-name" style="font-size:.8rem">${esc(f.label)}</div><div class="um-desc">${esc(f.desc)}</div></td>${state.accessRoles.map(r => `<td><input type="checkbox" class="pra-toggle" data-access="${r}.${f.key}" ${s.access?.[r]?.[f.key] ? 'checked' : ''}/></td>`).join('')}</tr>`).join('')
+    }</tbody></table></div>`;
+
     document.getElementById('umBody').innerHTML = `
-      <div class="um-what" style="margin-bottom:14px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
+      <div class="um-what" style="margin-bottom:6px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
+      <div class="um-what" style="margin-bottom:14px">Every switch here takes effect the moment you flip it. Nothing redeploys or restarts the app.</div>
 
-      <details class="um-card" data-k="1"><summary><h3>1. Sign Up</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Public sign-up', 'Anyone can create an account from the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> (no student features) until a coach makes them Online or Gym. Turn off to hide the Sign Up tab and refuse new sign-ups; you can still add people with <b>+ Add User</b> in Users &amp; Roles.', toggle('signupEnabled', s.signupEnabled))}
-      </div></details>
+      ${card(1, '1. Sign Up', row('Public sign-up', 'The Sign Up tab on the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> until a coach makes them Online or Gym.', toggle('signupEnabled', s.signupEnabled), '',
+        ['anyone can create an account.', 'the Sign Up tab disappears and new sign-ups are refused. You can still add people with + Add User in Users &amp; Roles.']))}
 
-      <details class="um-card" data-k="2"><summary><h3>2. Log In &amp; Passwords</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Email + password', 'People log in with their email and password and stay logged in on that device. <b>Forgot password</b> emails them a reset link. An archived account is logged out everywhere and can\'t log back in.', always)}
-      </div></details>
+      ${card(2, '2. Log In &amp; Passwords',
+        row('Stay logged in', 'How long a login lasts on a device before they have to log in again.', `<div class="um-inline">${num('loginSessionDays', s.loginSessionDays)} days</div>`, savedMsg('umMsg-loginSessionDays')) +
+        row('Minimum password length', 'Applies to sign-up, password resets, and passwords you set in Users &amp; Roles.', `<div class="um-inline">${num('minPasswordLength', s.minPasswordLength)} characters</div>`, savedMsg('umMsg-minPasswordLength')) +
+        row('Forgot password', 'The "Forgot password?" link on the login screen. It emails a reset link to the address on their account.', toggle('forgotPasswordEnabled', s.forgotPasswordEnabled),
+          `<div class="um-sub">Reset links work for ${num('resetLinkMinutes', s.resetLinkMinutes)} minutes ${savedMsg('umMsg-resetLinkMinutes')}</div>`,
+          ['people can reset their own password by email.', 'the link is hidden; only an admin can set a new password (Users &amp; Roles).']) +
+        row('Archived accounts', 'An archived account is logged out everywhere at once and can\'t log back in.', info))}
 
-      <details class="um-card" data-k="3"><summary><h3>3. Student Crosscheck</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Auto-upgrade from the sales sheets', 'When on, a plain User whose name is on the ONLINE BUYERS or GYM BUYERS sheet is made Online or Gym automatically (Gym wins if both), unless they\'re on the BLACKLIST tab. Off since Nov 12 &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled))}
-      </div></details>
+      ${card(3, '3. Student Crosscheck',
+        row('Auto-upgrade from the sales sheets', 'Compares plain Users against the buyers tabs below. You switched this off on Nov 12 because the CRM and sheets weren\'t reliable enough to grant access on their own &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
+          ['a plain User whose name is on the Online or Gym buyers tab becomes Online or Gym automatically (Gym wins if both), unless they\'re on the blacklist tab.', 'nobody is upgraded automatically.']) +
+        `<div class="um-row" style="display:block"><div class="um-name">Sheets used</div><div class="um-desc" style="margin-bottom:8px">The same tabs also give the renewal dates (End Date, column D) and the names in the Students panel.</div>
+          ${sheetField('app-cross', 'Sheet:', 'appSheetId', sh.app.id, [sh.crosscheck.online, sh.crosscheck.gym, sh.crosscheck.blacklist])}
+          <div class="um-sub">Online buyers tab <input class="pra-input" data-str="crosscheckOnlineTab" value="${esc(sh.crosscheck.online)}" style="max-width:200px"/> Gym buyers tab <input class="pra-input" data-str="crosscheckGymTab" value="${esc(sh.crosscheck.gym)}" style="max-width:200px"/> Blacklist tab <input class="pra-input" data-str="crosscheckBlacklistTab" value="${esc(sh.crosscheck.blacklist)}" style="max-width:220px"/> ${savedMsg('umMsg-crosscheckTabs')}</div>
+        </div>`)}
 
-      <details class="um-card" data-k="4"><summary><h3>4. New Student Setup</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        <p class="um-what">Runs once, the first time someone is made Online or Gym (when their student group is created). Renewals and people who already had a group are left alone.</p>
-        ${row('Student group', 'Creates their "&lt;Name&gt; Group" chat with every coach and admin in it.', always)}
-        ${row('Welcome message', 'Posts the welcome message into their new group from an admin.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled), `<div class="um-sub"><button class="pra-btn pra-btn-ghost" type="button" id="umEditWelcome" style="font-size:.74rem;padding:6px 12px">Edit the message</button></div>`)}
-        ${row('Default protocol', 'Gives them the Flow Builder draft as their protocol to start, unless they already have a saved program of their own.', toggle('defaultProtocolEnabled', s.defaultProtocolEnabled))}
-        ${row('Auto-build their program', 'Finds their page on custom.pacificrimathletics.com (title has their first and last name, not DONOTUSE; a "NEW" page wins) and builds their protocol from it, videos and instructions included. <b>It only replaces the default or an empty protocol &mdash; a protocol a coach has already worked on is left alone.</b> If no page is found or some videos aren\'t in Drive, coaches and admins get a red banner.', toggle('autoBuildProtocolEnabled', s.autoBuildProtocolEnabled),
-          `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`)}
-        ${row('Levels sheet row', 'Adds them to the Levels sheet (Gym or Online tab) at Foundation, unless they\'re already on it, so their levels and katas show right away.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent))}
-        ${row('APP sheet type', 'Sets their TYPE on the APP sheet to Student so they show as a student on the Strength Ninjas map.', always)}
-      </div></details>
+      ${card(4, '4. Profiles, Levels &amp; Katas',
+        `<div class="um-row" style="display:block"><div class="um-name">Levels sheet</div><div class="um-desc" style="margin-bottom:8px">Everyone's levels, matched to app accounts by first + last name (Gym tab for gym students, Online tab for online).</div>${sheetField('levels', 'Sheet:', 'levelsSheetId', sh.levels.id, ['GYM', 'ONLINE'])}</div>` +
+        row('Moves on profiles', 'A student\'s moves history (videos they\'ve posted) on their profile.', toggle('movesPublicDefault', s.movesPublicDefault), '',
+          ['shown by default; a student can still turn theirs off.', 'hidden by default; a student can still turn theirs on.']) +
+        row('Katas', 'Each student sees the kata for the level they\'re at (Katas tab + thumbnails on their profile), from the <a href="https://drive.google.com/drive/folders/1IpdnlRqiAcNAgJ5Vz7zN3zyEHJqsilnZ" target="_blank" rel="noopener">KATAS BY ELEMENT</a> Drive folder. Who can see them is under Access by Role.', info))}
 
-      <details class="um-card" data-k="5"><summary><h3>5. Upgrading &amp; Downgrading</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Make Online / Make Gym', 'Gives them student access: their group, Custom Training Protocol, Physique Builder, Katas and Levels. The first time, New Student Setup (above) runs. Coaches can do this from a profile; the Students panel does it and updates the CRM too.', always)}
-        ${row('Make User / Mark Finished', 'Takes student features away: their protocol locks and the Physique tab locks. They\'re taken out of staff-only chats; their group and history are kept. From the Students panel this also sets them FINISHED in the CRM.', always)}
-      </div></details>
+      ${card(5, '5. New Student Setup',
+        `<p class="um-what">Runs once, the first time someone is made Online or Gym. Renewals and people who already had a group are left alone.</p>` +
+        row('Student group', 'Their "&lt;Name&gt; Group" chat with every coach and admin.', toggle('studentGroupEnabled', s.studentGroupEnabled), '',
+          ['a new student gets their group right away (the welcome message and auto-build below run when it\'s created).', 'no group is created for new students, so the welcome message and auto-build don\'t run either. Existing groups stay.']) +
+        row('Welcome message', 'Posted into their new group from an admin. Use {{firstName}} and {{lastName}}.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled),
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umWelcomeText" rows="6" style="width:100%;max-width:none">${esc(s.welcomeMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umWelcomeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg')}</div>`,
+          ['posted automatically.', 'nothing is posted.']) +
+        row('Default protocol', `What a new student starts with if they don't have a saved program. Right now it's <b style="color:#fff">${esc(dp.name)}</b> (${dp.days} day${dp.days === 1 ? '' : 's'}, ${dp.videos} videos, ${dp.steps} steps). <a href="/chat-app/training-protocol.html?userId=${esc(window.__umMeId || '')}" target="_blank" rel="noopener">Edit it in the Flow Builder</a>.`, toggle('defaultProtocolEnabled', s.defaultProtocolEnabled), '',
+          ['they start with the draft above.', 'they start with an empty protocol until a coach or auto-build fills it.']) +
+        row('Auto-build their program', 'Finds their page on custom.pacificrimathletics.com (title has their first and last name, not DONOTUSE; a "NEW" page wins) and builds their protocol from it, videos and instructions included. <b>It only replaces the default or an empty protocol &mdash; a protocol a coach has already worked on is left alone.</b> No page found or videos missing &rarr; the red banner.', toggle('autoBuildProtocolEnabled', s.autoBuildProtocolEnabled),
+          `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`,
+          ['built automatically for each new student.', 'new students keep the default; you can still run it by hand here.']) +
+        row('Levels sheet row', 'Adds them to the Levels sheet above (Gym or Online tab) at Foundation, unless they\'re already on it.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent), '',
+          ['added automatically, so their levels and katas show right away.', 'not added; a coach adds them when setting their first level.']) +
+        row('APP sheet type', 'Writes their account type (Student, User, Trainee, Coach, Admin) into the TYPE column of the APP sheet whenever their role changes. The map colors people by it.', toggle('appSheetTypeEnabled', s.appSheetTypeEnabled),
+          sheetField('app', 'Sheet:', 'appSheetId', sh.app.id, [sh.app.tab]),
+          ['kept up to date automatically.', 'TYPE is left for you to set by hand.']))}
 
-      <details class="um-card" data-k="6"><summary><h3>6. Archive &amp; Blacklist</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Archive', 'Hides the account and logs them out everywhere; they can\'t log in. Their chats and history stay. Unarchive to bring them back.', always)}
-        ${row('Blacklist', 'From the Students panel: archives the app account, logs them out, and sets them BLACKLIST in the CRM so they\'re skipped by sales automations.', always)}
-      </div></details>
+      ${card(6, '6. Access by Role',
+        `<p class="um-what">What each kind of account can open. Coaches and admins always have everything. A switched-off section disappears from their menu and shows "Locked" if they open it.</p>${accessTable}${savedMsg('umAccessMsg')}`)}
 
-      <details class="um-card" data-k="7"><summary><h3>7. Renewals</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Renewal pills', 'Coaches and admins see an orange pill on a student whose end date (kickoff sheet) is within 2 months, pink within 1 month. Only staff see these.', always)}
-        ${row('Renewal message', 'Once, inside the window below, posts this into the student\'s group (10am-1pm Alaska). Use {{firstName}}, {{lastName}} and {{endDate}}. The first day it\'s on, everyone already inside the window gets it.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
-          `<div class="um-sub">Send <input class="pra-input" id="umRenewDays" type="number" min="1" max="90" value="${esc(s.renewalMessageDaysBefore)}" style="width:70px"/> days before their end date, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
-           <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button><span class="um-saved" id="umRenewMsg"></span></div>`)}
-      </div></details>
+      ${card(7, '7. Upgrading &amp; Downgrading',
+        row('Make Online / Make Gym', 'Gives them everything switched on for Online/Gym under Access by Role. The first time, New Student Setup runs. Coaches can do it from a profile; the Students panel does it and updates the CRM too.', info) +
+        row('Mark Finished (= Make User)', '"Mark Finished" (profile) and "Make User" (Students panel, Users &amp; Roles) are the same thing: they become a plain User. They lose what\'s switched off for Users under Access by Role (by default: Custom Training Protocol, Physique Builder, Katas). They\'re taken out of staff-only chats; their group and history are kept. From the Students panel it also sets them FINISHED in the CRM.', info) +
+        row('FINISHED in the CRM', 'When a contact\'s status is set to FINISHED in the CRM (by hand or by a flow).', toggle('crmFinishedSync', s.crmFinishedSync), '',
+          ['their app account becomes a plain User automatically.', 'the app isn\'t changed; mark them finished here too.']))}
 
-      <details class="um-card" data-k="8"><summary><h3>8. Profiles, Levels &amp; Katas</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Moves on profiles', 'Shows a student\'s moves history on their profile by default. A student who turns theirs off stays private.', toggle('movesPublicDefault', s.movesPublicDefault))}
-        ${row('Levels &amp; katas', 'Levels come from the Levels sheet, matched by first + last name. Each student sees the kata for the level they\'re at (Katas tab and the thumbnails on their profile), from the KATAS BY ELEMENT Drive folders; coaches and admins see every student\'s.', always)}
-      </div></details>
+      ${card(8, '8. Archive &amp; Blacklist',
+        row('Archive', 'Hides the account, logs them out everywhere, and they can\'t log back in. Chats and history are kept. Unarchive (Users &amp; Roles) brings them back.', info) +
+        row('BLACKLIST in the CRM', 'When a contact\'s status is set to BLACKLIST in the CRM (or Blacklist in the Students panel).', toggle('crmBlacklistArchive', s.crmBlacklistArchive), '',
+          ['their app account is archived automatically.', 'the app account is left alone.']))}
 
-      <details class="um-card" data-k="9"><summary><h3>9. Problems Banner</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
-        ${row('Red banner for coaches &amp; admins', 'Shows at the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet (so their levels won\'t show). Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>')}
-      </div></details>
+      ${card(9, '9. Renewals',
+        `<div class="um-row" style="display:block"><div class="um-desc">End dates come from the buyers tabs in Student Crosscheck (column D; the latest one wins, so adding a renewal row clears it).</div></div>` +
+        row('Renewal pills for coaches', 'An orange pill on a student whose end date is within 2 months, pink within 1 month, on their chat and profile.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
+          ['coaches and admins see the pills.', 'no pills.']) +
+        row('Renewal notice for students', 'The student sees their own orange/pink notice at the top of the app with this text. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" data-str="renewalStudentText" rows="2" style="width:100%;max-width:none">${esc(s.renewalStudentText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" data-str-save="renewalStudentText" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save text</button>${savedMsg('umMsg-renewalStudentText')}</div>`,
+          ['students inside the 2-month window see it.', 'students never see it.']) +
+        row('Renewal message', 'Posted once into the student\'s group (10am-1pm Alaska), inside the window below. Use {{firstName}}, {{lastName}} and {{endDate}}. The first day it\'s on, everyone already inside the window gets it.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
+          `<div class="um-sub">Send ${num('renewalMessageDaysBefore', s.renewalMessageDaysBefore)} days before their end date, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
+           <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umRenewMsg')}</div>`,
+          ['each student gets it once per end date.', 'nothing is sent.']))}
 
-      <details class="um-card" data-k="10"><summary><h3>10. Trainees (Handstand Protocol)</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
+      ${card(10, '10. Problems Banner',
+        row('Red banner for coaches &amp; admins', 'At the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet. Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>',
+          ['shown to coaches and admins.', 'hidden (problems are still listed here).']))}
+
+      ${card(11, '11. Trainees (Handstand Protocol)', `
         <p class="um-what">A <b>Trainee</b> bought the Handstand Protocol (the low-ticket product) but isn't a full student yet. In the CRM they're LOW TICKET; everything the CRM does for them is on its Products tab.</p>
-        ${row('Account from checkout', 'When someone pays, the CRM creates their app account as a Trainee (or upgrades a plain User; students and staff keep their role), sets their password, enrolls them in the Handstand Protocol plus any add-ons, and emails the login. They land on their protocol, not the chat. They see a <b>Trainee</b> tag; staff see it too.', always)}
-        ${row('Trainee group', 'Their own "&lt;Name&gt; Group" with Lee and Alexis only (no coaches).', always)}
+        ${row('Account from checkout', 'When someone pays, the CRM creates their app account as a Trainee (or upgrades a plain User; students and staff keep their role), sets their password, enrolls them in the Handstand Protocol plus any add-ons, and emails the login. They land on their protocol, not the chat.', info)}
         ${row('Welcome message', 'Posts this into a new Trainee group from Lee. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled),
-          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button><span class="um-saved" id="umTraineeMsg"></span></div>`)}
-        ${row('Refund', 'Right-click (or long-press) a person in Users &amp; Roles &rarr; Refund. It refunds the full amount in PayPal through the CRM, logs it on their CRM contact, runs the CRM\'s "Product is refunded" flow (off the buyers list, emails and texts stop), and removes the Handstand Protocol and add-ons from their account. Refunds done in the CRM or in PayPal do the same here.', always)}
-        ${row('Archive Trainees on refund', 'A refunded Trainee is archived so they can\'t log in. Students and staff who bought it just lose the protocol.', toggle('traineeRefundArchive', s.traineeRefundArchive))}
-        ${row('Make Online / Make Gym', 'Turns a Trainee into a full student; New Student Setup (above) runs. Their Trainee group is kept as it is.', always)}
-      </div></details>
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umTraineeMsg')}</div>`)}
+        ${row('Archive Trainees on refund', 'A refunded Trainee is archived so they can\'t log in. Students and staff who bought it just lose the protocol.', toggle('traineeRefundArchive', s.traineeRefundArchive))}`)}
     `;
     wire();
     setupAccordions();
+    fillSheetNames();
     loadAlerts();
     loadStudents();
   }
@@ -1855,17 +1932,18 @@ window.addEventListener('pageshow', () => {
     });
     updateCounts();
   }
-  // "2 of 3 on" next to each section title, so you can see at a glance without opening it.
+  // "2 of 3 on" next to each section title.
   function updateCounts() {
     document.querySelectorAll('#umBody details.um-card').forEach(d => {
-      const t = d.querySelectorAll('[data-um]'), on = [...t].filter(x => x.checked).length;
+      const t = d.querySelectorAll('[data-um], [data-access]'), on = [...t].filter(x => x.checked).length;
       d.querySelector('.um-count').textContent = t.length ? `${on} of ${t.length} on` : 'Info';
     });
   }
   async function save(patch) {
     const r = await fetch('/api/admin/user-management', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
-    if (!r.ok) { alert('Could not save -- try again.'); return false; }
-    state = await r.json();
+    if (!r.ok) return false;
+    const d = await r.json();
+    state = { ...state, ...d };
     return true;
   }
 
@@ -1874,25 +1952,76 @@ window.addEventListener('pageshow', () => {
       el.onchange = async () => {
         const key = el.dataset.um;
         const ok = await save({ [key]: el.checked });
-        if (!ok) { el.checked = !el.checked; return; }
-        // Keep the other tabs' copies of the same switch in step.
+        if (!ok) { el.checked = !el.checked; alert('Could not save -- try again.'); return; }
         updateCounts();
+        // Keep hidden copies elsewhere in the panel in step (their own saves send them too).
         const twin = document.getElementById(key);
         if (twin && twin !== el && twin.type === 'checkbox') twin.checked = el.checked;
       };
     });
-    document.getElementById('umEditWelcome').onclick = () => document.querySelector('.admin-tab[data-section="automatedMessagesSection"]').click();
+    document.querySelectorAll('#umBody [data-access]').forEach(el => {
+      el.onchange = async () => {
+        const [role, key] = el.dataset.access.split('.');
+        const ok = await save({ access: { [role]: { [key]: el.checked } } });
+        if (!ok) { el.checked = !el.checked; flash('umAccessMsg', false); return; }
+        updateCounts(); flash('umAccessMsg');
+      };
+    });
+    document.querySelectorAll('#umBody [data-num]').forEach(el => {
+      el.onchange = async () => {
+        const key = el.dataset.num;
+        const ok = await save({ [key]: el.value });
+        el.value = state.settings[key];
+        flash('umMsg-' + key, ok);
+      };
+    });
+    // Crosscheck tab names save together.
+    document.querySelectorAll('#umBody [data-str^="crosscheck"]').forEach(el => {
+      el.onchange = async () => {
+        const ok = await save({ [el.dataset.str]: el.value.trim() });
+        flash('umMsg-crosscheckTabs', ok);
+        if (ok) { state.sheets = state.sheets || {}; render(); }
+      };
+    });
+    document.querySelectorAll('#umBody [data-str-save]').forEach(btn => {
+      btn.onclick = async () => {
+        const key = btn.dataset.strSave;
+        const val = document.querySelector(`#umBody [data-str="${key}"]`).value;
+        flash('umMsg-' + key, await save({ [key]: val }));
+      };
+    });
+    document.querySelectorAll('#umBody [data-change]').forEach(btn => {
+      btn.onclick = () => { const ed = btn.parentElement.querySelector('.um-sheet-edit'); ed.style.display = ed.style.display === 'none' ? 'flex' : 'none'; };
+    });
+    document.querySelectorAll('#umBody [data-sheet-save]').forEach(btn => {
+      btn.onclick = async () => {
+        const key = btn.dataset.sheetSave;
+        const input = btn.parentElement.querySelector('[data-sheet-input]');
+        const v = input.value.trim();
+        if (!v) return;
+        const check = await fetch('/api/admin/sheet-info?id=' + encodeURIComponent(v)).then(r => r.json()).catch(() => null);
+        const slot = btn.closest('.um-sheet').dataset.slot;
+        if (!check || !check.ok) { flash('umSheetMsg-' + slot, false); alert(check?.error || 'That link isn\'t a Google Sheet the app can open.'); return; }
+        if (!confirm(`Switch to "${check.title}"? The app starts reading it right away.`)) return;
+        const ok = await save({ [key]: v });
+        if (ok) render();
+      };
+    });
+    document.getElementById('umWelcomeSave').onclick = async () => {
+      const text = document.getElementById('umWelcomeText').value;
+      const ok = await save({ welcomeMessageText: text });
+      const hidden = document.getElementById('welcomeMessageText'); if (hidden) hidden.value = text;
+      flash('umWelcomeMsg', ok);
+    };
     const saveRenew = async () => {
-      const ok = await save({ renewalMessageDaysBefore: document.getElementById('umRenewDays').value, renewalMessageSenderId: document.getElementById('umRenewSender').value, renewalMessageText: document.getElementById('umRenewText').value });
-      const m = document.getElementById('umRenewMsg'); m.textContent = ok ? 'Saved' : ''; setTimeout(() => { m.textContent = ''; }, 2000);
+      const ok = await save({ renewalMessageSenderId: document.getElementById('umRenewSender').value, renewalMessageText: document.getElementById('umRenewText').value });
+      flash('umRenewMsg', ok);
     };
     document.getElementById('umRenewSave').onclick = saveRenew;
-    document.getElementById('umTraineeSave').onclick = async () => {
-      const ok = await save({ traineeWelcomeText: document.getElementById('umTraineeText').value });
-      const m = document.getElementById('umTraineeMsg'); m.textContent = ok ? 'Saved' : ''; setTimeout(() => { m.textContent = ''; }, 2000);
-    };
-    document.getElementById('umRenewDays').onchange = saveRenew;
     document.getElementById('umRenewSender').onchange = saveRenew;
+    document.getElementById('umTraineeSave').onclick = async () => {
+      flash('umTraineeMsg', await save({ traineeWelcomeText: document.getElementById('umTraineeText').value }));
+    };
     document.getElementById('umBuildBtn').onclick = async () => {
       const id = document.getElementById('umBuildUser').value, msg = document.getElementById('umBuildMsg');
       if (!id) return;
@@ -1919,8 +2048,9 @@ window.addEventListener('pageshow', () => {
   }
 
   window.loadUserManagement = async function () {
-    const r = await fetch('/api/admin/user-management');
+    const [r, me] = await Promise.all([fetch('/api/admin/user-management'), fetch('/api/auth/me').then(x => x.ok ? x.json() : null).catch(() => null)]);
     if (!r.ok) { document.getElementById('umBody').textContent = 'Admins only.'; return; }
+    window.__umMeId = me?.user?.id || '';
     state = await r.json();
     render();
   };

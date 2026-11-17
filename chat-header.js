@@ -509,6 +509,38 @@ window.PRABack = (function () {
     if (window.ResizeObserver && headerBar) new ResizeObserver(place).observe(headerBar);
   }
 
+  // A section this account can't open (User Management > Access by Role).
+  function showAccessLock() {
+    if (document.getElementById('pra-access-lock')) return;
+    const st = document.createElement('style');
+    st.textContent = `#pra-access-lock { position: fixed; inset: 0; z-index: 480; display: flex; align-items: center; justify-content: center; background: rgba(5,5,8,.86); backdrop-filter: blur(4px); padding: 24px; text-align: center; color: #fff; font-family: var(--font-primary, sans-serif); }
+      #pra-access-lock .box { max-width: 340px; } #pra-access-lock svg { width: 46px; height: 46px; margin-bottom: 10px; }
+      #pra-access-lock .t { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; } #pra-access-lock .s { color: #9aa3ad; font-size: .9rem; line-height: 1.5; margin-bottom: 16px; }
+      #pra-access-lock a { display: inline-block; padding: 10px 18px; border-radius: 9px; background: #009bff; color: #fff; text-decoration: none; font-weight: 700; font-size: .85rem; }`;
+    document.head.appendChild(st);
+    const el = document.createElement('div');
+    el.id = 'pra-access-lock';
+    el.innerHTML = `<div class="box"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="#fff" stroke-width="1.7"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <div class="t">Locked</div><div class="s">This part of the app is for current students.</div><a href="/chat-app/chat.html">Back to chat</a></div>`;
+    document.body.appendChild(el);
+  }
+  // Student's own renewal notice (User Management > Renewals), orange or pink.
+  function showRenewalNotice(n) {
+    if (document.getElementById('pra-renewal-notice')) return;
+    let dismissed = null; try { dismissed = sessionStorage.getItem('pra-renewal-dismissed'); } catch {}
+    if (dismissed === n.endDate) return;
+    const color = n.level === 'pink' ? '#ff4fa3' : '#ff9d2e';
+    const el = document.createElement('div');
+    el.id = 'pra-renewal-notice';
+    el.style.cssText = `position:fixed;left:50%;transform:translateX(-50%);z-index:498;width:min(520px,calc(100vw - 24px));display:flex;align-items:center;gap:10px;background:rgba(16,16,20,.95);border:1px solid ${color};border-radius:10px;padding:8px 12px;color:#fff;font-size:.8rem;box-shadow:0 4px 18px rgba(0,0,0,.4)`;
+    el.innerHTML = `<span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0"></span><span style="flex:1"></span><button type="button" aria-label="Dismiss" style="background:none;border:none;color:#9aa3ad;font-size:18px;cursor:pointer;line-height:1">&times;</button>`;
+    el.children[1].textContent = n.text;
+    el.querySelector('button').onclick = () => { el.remove(); try { sessionStorage.setItem('pra-renewal-dismissed', n.endDate); } catch {} };
+    document.body.appendChild(el);
+    const place = () => { const h = document.getElementById('chat-app-header'); el.style.top = ((h && h.getBoundingClientRect().bottom) || 0) + 8 + 'px'; };
+    place(); window.addEventListener('resize', place); setTimeout(place, 400);
+  }
+
   async function build() {
     injectStyles();
     setupKeyboardInsetTracking();
@@ -543,11 +575,25 @@ window.PRABack = (function () {
     icons.className = 'cah-icons';
     bar.appendChild(icons);
 
-    let isAdmin = false, myId = null, myRole = null;
+    let isAdmin = false, myId = null, myRole = null, myAccess = null, renewalNotice = null;
     try {
       const r = await fetch('/api/auth/me');
-      if (r.ok) { const d = await r.json(); myRole = d.user?.role || null; isAdmin = myRole === 'admin'; myId = d.user?.id || null; }
+      if (r.ok) { const d = await r.json(); myRole = d.user?.role || null; isAdmin = myRole === 'admin'; myId = d.user?.id || null; myAccess = d.access || null; renewalNotice = d.renewalNotice || null; }
     } catch {}
+    // Admin Panel > User Management > Access by Role: hide what this account
+    // can't open, and lock the page if they open it anyway.
+    const FEATURE_BY_PATH = { '/chat-app/chat.html': 'chat', '/chat-app/training-protocol.html': 'protocol', '/chat-app/body-scan.html': 'physique',
+      '/chat-app/moves-dictionary.html': 'videos', '/chat-app/levels.html': 'levels', '/chat-app/users-map.html': 'map', '/chat-app/shop.html': 'shop', '/chat-app/retreats.html': 'retreats' };
+    const featureFor = (href) => href && href.startsWith('/personality-quiz/') ? 'quiz' : FEATURE_BY_PATH[(href || '').split('?')[0]];
+    const allowed = (href) => { const f = featureFor(href); return !myAccess || !f || myAccess[f] !== false; };
+    window.PRA_ACCESS = myAccess;
+    {
+      const f = featureFor(path);
+      // The protocol page is only locked on your OWN protocol (staff open others').
+      const ownProtocol = f !== 'protocol' || new URLSearchParams(location.search).get('userId') === myId;
+      if (f && myAccess && myAccess[f] === false && ownProtocol) showAccessLock();
+    }
+    if (renewalNotice) showRenewalNotice(renewalNotice);
     if (['coach', 'admin', 'admin2'].includes(myRole)) mountStaffAlerts(bar);
     if (myId) {
       syncPhoneSteps();
@@ -557,7 +603,8 @@ window.PRABack = (function () {
     // Handstand Protocol trainees: chat, their protocol and profile only.
     const isTrainee = myRole === 'trainee';
     ICONS.forEach(item => {
-      if (isTrainee && !item.trainee) return;
+      if (item.selfProtocol ? (myAccess && myAccess.protocol === false) : !allowed(item.href)) return;
+      if (isTrainee && !item.trainee && !(myAccess && featureFor(item.href) && myAccess[featureFor(item.href)])) return;
       if (item.adminOnly && !isAdmin) return;
       if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       // Always their own protocol, not a fixed page — skip until we know
@@ -676,7 +723,8 @@ window.PRABack = (function () {
     const bottomRightGroup = document.createElement('div');
     bottomRightGroup.className = 'cah-bottom-group';
     BOTTOM_ICONS.forEach(item => {
-      if (isTrainee) return; // none of the bottom-bar sections are part of the course
+      if (!item.external && !allowed(item.href)) return;
+      if (isTrainee && !(myAccess && featureFor(item.href) && myAccess[featureFor(item.href)])) return; // only what's switched on for Trainees
       // Apply for Training is only relevant to a plain "user" who hasn't
       // signed up for anything yet — hidden for students (already enrolled),
       // coaches, and admins.

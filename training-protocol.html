@@ -1046,7 +1046,10 @@ async function init() {
     if (params.get('program') || !steps.length || me.role === 'trainee') await showProgramView();
   }
   if (me.role === 'trainee') document.getElementById('backBtn').textContent = 'Group Chat';
-  if (me.role === 'user' && targetUserId === me.id) showProtocolLock();
+  // Locked when Protocol is switched off for this role (User Management > Access by Role).
+  const myAccess = window.PRA_ACCESS || (await fetch('/api/auth/me').then(r => r.json()).then(d => d.access).catch(() => null));
+  if (targetUserId === me.id && myAccess && myAccess.protocol === false && !canEdit) showProtocolLock();
+  if (myAccess && myAccess.katas === false && !canEdit) document.getElementById('katasViewBtn').style.display = 'none';
   // On a phone the menu scrolls -- start with the current view in sight.
   { const el = document.getElementById('viewModeToggle'), act = el.querySelector('.view-mode-btn.active');
     if (act && el.scrollWidth > el.clientWidth) { const e = el.getBoundingClientRect(), r = act.getBoundingClientRect(); el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2; } }
