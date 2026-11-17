@@ -717,6 +717,13 @@
   /* Above the lightbox (9999) -- a call is the one thing that should never
      get buried under anything else already open. */
   /* Video call button while a call is live in this thread: solid bright green. */
+  #notifPrompt { position: fixed; inset: 0; z-index: 3000; background: rgba(6,8,12,.94); display: flex; align-items: center; justify-content: center; padding: 24px; }
+  #notifPrompt .np-card { max-width: 360px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; color: #fff; }
+  #notifPrompt .np-t { font-size: 1.2rem; font-weight: 800; }
+  #notifPrompt .np-s { font-size: .9rem; color: #d6d6dc; line-height: 1.45; }
+  #notifPrompt .np-how { font-size: .82rem; color: #c3c9d1; line-height: 1.45; background: rgba(0,155,255,.1); border: 1px solid rgba(0,155,255,.4); border-radius: 10px; padding: 10px 12px; }
+  #notifPrompt .np-go { width: 100%; }
+  #notifPrompt .np-later { background: none; border: 0; color: #8b929c; font: inherit; font-size: .82rem; cursor: pointer; padding: 6px; }
   #startCallBtn.call-live { background: #22c55e; border-color: #22c55e; opacity: 1; box-shadow: 0 0 12px rgba(34,197,94,.7); }
   #startCallBtn.call-live svg * { stroke: #fff !important; }
   .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
@@ -7160,15 +7167,53 @@ function pushDebugToast(msg) {
   console.log('[push debug]', msg);
 }
 
+// Full-screen ask when notifications are off: that's how a coach's call
+// rings. Students only (coaches keep the small banner). "Not now" hides it
+// for a day; it also re-checks whenever the app comes back to the front,
+// so turning it on in Settings clears it straight away.
+const NOTIF_SNOOZE_KEY = 'pra_notif_prompt_snooze';
+function notifPromptSnoozed() { try { return Number(localStorage.getItem(NOTIF_SNOOZE_KEY) || 0) > Date.now(); } catch { return false; } }
+function hideNotifPrompt() { document.getElementById('notifPrompt')?.remove(); }
+function showNotifPrompt({ denied, onEnable }) {
+  if (isStaffMe() || notifPromptSnoozed() || document.getElementById('notifPrompt')) return;
+  const ios = window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === 'ios';
+  const native = window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform();
+  const how = !denied ? '' : native
+    ? (ios ? 'Tap <b>Open Settings</b> (or go to <b>Settings</b> &gt; <b>PRA</b>), then <b>Notifications</b>, and turn on <b>Allow Notifications</b>.' : 'Open your phone\'s <b>Settings</b> &gt; <b>Apps</b> &gt; <b>PRA</b> &gt; <b>Notifications</b> and turn them on.')
+    : 'Click the lock icon next to this page\'s address, set <b>Notifications</b> to <b>Allow</b>, then reload.';
+  const el = document.createElement('div');
+  el.id = 'notifPrompt';
+  el.innerHTML = `<div class="np-card">
+    <svg viewBox="0 0 24 24" fill="none" width="46" height="46"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15l1.5-2Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 20.5a2 2 0 0 0 4 0" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <div class="np-t">Turn on notifications</div>
+    <div class="np-s">This is how your coach's video calls ring your phone, and how you hear about new messages. With them off, calls can't reach you.</div>
+    ${how ? `<div class="np-how">${how}</div>` : ''}
+    ${!denied ? '<button type="button" class="pra-btn np-go">Turn on notifications</button>' : (native && ios ? '<button type="button" class="pra-btn np-go">Open Settings</button>' : '')}
+    <button type="button" class="np-later">Not now</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector('.np-later').onclick = () => { try { localStorage.setItem(NOTIF_SNOOZE_KEY, String(Date.now() + 24 * 3600 * 1000)); } catch {} hideNotifPrompt(); };
+  const go = el.querySelector('.np-go');
+  if (go) go.onclick = () => { if (denied) { location.href = 'app-settings:'; return; } hideNotifPrompt(); onEnable && onEnable(); };
+}
 async function setupNativePush() {
   if (!window.Capacitor || !Capacitor.isNativePlatform()) return false;
   const { PushNotifications } = Capacitor.Plugins;
   if (!PushNotifications) { pushDebugToast('PushNotifications plugin not found on this build'); return false; }
   try {
     let perm = await PushNotifications.checkPermissions();
-    if (perm.receive === 'prompt') perm = await PushNotifications.requestPermissions();
+    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') perm = await PushNotifications.requestPermissions();
     pushDebugToast('Permission: ' + perm.receive);
-    if (perm.receive !== 'granted') return true; // asked and declined — don't also fall back to the web flow
+    if (perm.receive !== 'granted') {
+      // Declined: ask them full screen, and pick it up the moment they turn it on in Settings.
+      showNotifPrompt({ denied: true });
+      const recheck = async () => {
+        if (document.visibilityState !== 'visible') return;
+        const p2 = await PushNotifications.checkPermissions().catch(() => null);
+        if (p2?.receive === 'granted') { document.removeEventListener('visibilitychange', recheck); hideNotifPrompt(); setupNativePush(); }
+      };
+      document.addEventListener('visibilitychange', recheck);
+      return true; // don't also fall back to the web flow
+    }
     PushNotifications.addListener('registration', (token) => {
       pushDebugToast('Registered, token len ' + (token.value?.length || 0) + ' — posting to server…');
       fetch('/api/chat/push-subscribe-native', {
@@ -7220,6 +7265,10 @@ async function setupPush() {
   // completely different project/origin, not this one.
   try { await navigator.serviceWorker.register('/chat-app/sw.js'); } catch (e) { console.warn('service worker registration failed', e); return; }
   if (Notification.permission === 'granted') { subscribePush(); return; }
+  if (!isStaffMe()) {
+    showNotifPrompt({ denied: Notification.permission === 'denied', onEnable: async () => { if (await Notification.requestPermission() === 'granted') subscribePush(); } });
+    return;
+  }
   if (Notification.permission === 'denied') return;
   const banner = document.getElementById('pushBanner');
   banner.style.display = 'block';

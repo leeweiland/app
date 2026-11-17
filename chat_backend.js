@@ -515,8 +515,8 @@ function getCookie(req, name) {
 function createSession(userId) {
   const sessions = readJson(SESSIONS_FILE, {});
   const token = randomBytes(32).toString("hex");
-  const days = Math.max(1, Number(getConfig().loginSessionDays) || 30);
-  sessions[token] = { userId, expiresAt: Date.now() + days * 24 * 3600 * 1000 };
+  // No expiry: a login lasts until they log out, reset their password or are blacklisted.
+  sessions[token] = { userId, expiresAt: null, createdAt: new Date().toISOString() };
   writeJson(SESSIONS_FILE, sessions);
   return token;
 }
@@ -530,7 +530,7 @@ export function getSessionUser(req) {
   if (!token) return null;
   const sessions = readJson(SESSIONS_FILE, {});
   const session = sessions[token];
-  if (!session || session.expiresAt < Date.now()) return null;
+  if (!session || (session.expiresAt && session.expiresAt < Date.now())) return null;
   const users = readJson(USERS_FILE, []);
   const found = users.find(u => u.id === session.userId) || null;
   // Archiving revokes access immediately, not just future logins — an
@@ -538,10 +538,22 @@ export function getSessionUser(req) {
   if (found?.archived) return null;
   return found;
 }
+// 400 days is the longest a browser keeps a cookie; /api/auth/me re-sends it
+// on every app open, so in practice it never runs out.
 function setSessionCookie(res, token) {
-  const days = Math.max(1, Number(getConfig().loginSessionDays) || 30);
-  res.setHeader("Set-Cookie", `pra_session=${token}; HttpOnly; Path=/; Max-Age=${days * 24 * 3600}; SameSite=Lax`);
+  res.setHeader("Set-Cookie", `pra_session=${token}; HttpOnly; Path=/; Max-Age=${400 * 24 * 3600}; SameSite=Lax`);
 }
+// One-time on boot: every login still alive stops expiring; dead ones are cleared out.
+try {
+  const sessions = readJson(SESSIONS_FILE, {});
+  let changed = false;
+  for (const [t, s] of Object.entries(sessions)) {
+    if (s.expiresAt == null) continue;
+    if (s.expiresAt < Date.now()) delete sessions[t]; else s.expiresAt = null;
+    changed = true;
+  }
+  if (changed) writeJson(SESSIONS_FILE, sessions);
+} catch (e) { console.error("[sessions] forever migration", e.message); }
 
 // Physique Builder's coach/admin "view any student" search -- READ-ONLY
 // endpoints (Profile/Fuel/Physique/Reports GETs) call this instead of
@@ -1863,6 +1875,21 @@ function clearStaffAlert(id) {
   const before = d.alerts.length;
   d.alerts = d.alerts.filter(a => a.id !== id);
   if (d.alerts.length !== before) writeJson(STAFF_ALERTS_FILE, d);
+}
+// Students with no device that takes notifications: a coach's call (and
+// every message) can't ring them. Goes away by itself once they allow it.
+function noPushAlerts() {
+  const withDevice = new Set(readJson(PUSH_FILE, []).map(s => s.userId));
+  const convos = readJson(CONVOS_FILE, []);
+  return readJson(USERS_FILE, []).filter(u => isClientRole(u.role) && !u.archived && !withDevice.has(u.id)).map(u => {
+    const g = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === u.id);
+    return {
+      id: "np:" + u.id, kind: "no-push", userId: u.id,
+      title: `${`${u.first || ""} ${u.last || ""}`.trim() || u.email}: calls won't ring their phone`,
+      detail: "Notifications aren't on for them on any phone, so calls and messages never reach them. Ask them to open the PRA app and allow notifications (the app now asks them too).",
+      link: g ? "/chat-app/chat.html?convo=" + encodeURIComponent(g.id) : null,
+    };
+  });
 }
 const normName = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
 async function nameMismatchAlerts() {
@@ -4683,6 +4710,7 @@ export async function handleChatRequest(req, res, url) {
   if (req.method === "GET" && p === "/api/auth/me") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    setSessionCookie(res, getCookie(req, "pra_session")); // keeps the login cookie from ever running out
     return sendJson(res, 200, { user: publicUser(user), access: accessFor(user), renewalNotice: await myRenewalNotice(user) });
   }
 
@@ -6045,6 +6073,7 @@ export async function handleChatRequest(req, res, url) {
       const d = readStaffAlerts();
       let all = [...d.alerts];
       try { all = all.concat(await nameMismatchAlerts()); } catch (e) { console.error("[staff alerts] name check", e.message); }
+      try { all = all.concat(noPushAlerts()); } catch (e) { console.error("[staff alerts] push check", e.message); }
       return sendJson(res, 200, { alerts: all.filter(a => !d.dismissed[a.id]) });
     }
     if (p === "/api/chat/staff-alerts/dismiss" && req.method === "POST") {

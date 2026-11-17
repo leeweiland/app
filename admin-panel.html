@@ -1838,7 +1838,7 @@ window.addEventListener('pageshow', () => {
         ['anyone can create an account.', 'the Sign Up tab disappears and new sign-ups are refused. You can still add people with + Add User in Users &amp; Roles.']))}
 
       ${card(2, '2. Log In &amp; Passwords',
-        row('Stay logged in', 'How long a login lasts on a device before they have to log in again.', `<div class="um-inline">${num('loginSessionDays', s.loginSessionDays)} days</div>`, savedMsg('umMsg-loginSessionDays')) +
+        row('Stay logged in', 'Forever, like YouTube. A login stays until they log out, their password is reset, or they\'re blacklisted.', '<div class="um-inline"><b>Always on</b></div>', '') +
         row('Minimum password length', 'Applies to sign-up, password resets, and passwords you set in Users &amp; Roles.', `<div class="um-inline">${num('minPasswordLength', s.minPasswordLength)} characters</div>`, savedMsg('umMsg-minPasswordLength')) +
         row('Forgot password', 'The "Forgot password?" link on the login screen. It emails a reset link to the address on their account.', toggle('forgotPasswordEnabled', s.forgotPasswordEnabled),
           `<div class="um-sub">Reset links work for ${num('resetLinkMinutes', s.resetLinkMinutes)} minutes ${savedMsg('umMsg-resetLinkMinutes')}</div>`,
