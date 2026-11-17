@@ -64,7 +64,12 @@
   .protocol-head-row > :last-child { justify-self: end; }
   /* View menu on its own row, icons underneath (Lee, 2026-11-17). */
   .protocol-controls-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 12px; }
-  .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: center; flex-wrap: wrap; justify-content: center; }
+  /* All the view buttons on ONE line, scrolling sideways when they don't fit
+     (swipe, mouse wheel, or drag) -- centered when they do (Lee, 2026-11-17). */
+  .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; flex-wrap: nowrap; justify-content: safe center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--pra-border) transparent; -webkit-overflow-scrolling: touch; padding: 2px 0 6px; cursor: grab; }
+  .protocol-controls-row > .view-mode-toggle .view-mode-btn { flex-shrink: 0; }
+  .view-mode-toggle::-webkit-scrollbar { height: 4px; }
+  .view-mode-toggle::-webkit-scrollbar-thumb { background: var(--pra-border); border-radius: 4px; }
   .protocol-controls-row > .protocol-head-controls-left { grid-area: left; }
   .protocol-controls-row > .protocol-head-controls-right { grid-area: right; }
   .view-mode-btn { white-space: nowrap; }
@@ -2028,6 +2033,12 @@ function setupMenuDragScroll(el) {
   el.addEventListener('pointerup', end);
   el.addEventListener('pointerleave', end);
   el.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  // A mouse wheel scrolls the row sideways when it overflows.
+  el.addEventListener('wheel', e => {
+    if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    el.scrollLeft += e.deltaY;
+  }, { passive: false });
 }
 // Katas tab: the kata video for each level the student is at (katas.js).
 // Students (and a coach on their own page) get "Katas"; coaches/admins get
