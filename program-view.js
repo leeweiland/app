@@ -122,18 +122,20 @@
   .pv-timer-controls { display: flex; justify-content: center; gap: 10px; }
   .pv-timer-controls button { min-width: 110px; }
   .pv-timer-done { font-size: .82rem; color: var(--pra-dim); margin-top: 8px; min-height: 1.2em; }
-  /* Floating timer: one small draggable timer for the whole program instead of one per day. */
-  .pv-ftimer { position: fixed; right: 12px; bottom: 86px; z-index: 900; width: 92px; padding: 6px 6px 6px; border-radius: 14px; border: 1px solid var(--pra-border); background: rgba(10,10,14,0.92); backdrop-filter: blur(6px); box-shadow: 0 8px 26px rgba(0,0,0,0.5); text-align: center; touch-action: none; user-select: none; cursor: grab; }
-  .pv-ftimer.dragging { cursor: grabbing; opacity: .9; }
-  .pv-ftimer .pv-timer-top, .pv-ftimer .pv-timer-phase, .pv-ftimer .pv-timer-done { display: none; }
-  .pv-ftimer .pv-timer-ring { width: 60px; margin: 0 auto 3px; }
-  .pv-ftimer .pv-timer-ring circle { stroke-width: 10; }
-  .pv-ftimer .pv-timer-clock { font-size: .92rem; line-height: 1; }
-  .pv-ftimer .pv-timer-round { font-size: .42rem; letter-spacing: .04em; margin-top: 1px; }
-  .pv-ftimer .pv-timer-controls { gap: 3px; flex-wrap: wrap; }
-  .pv-ftimer .pv-timer-controls button { min-width: 0; min-height: 0; height: auto; flex: 1 1 40%; padding: 3px 2px; font-size: .56rem; line-height: 1.2; border-radius: 7px; }
-  .pv-ftimer .pv-timer-controls button[data-act="sound"] { flex-basis: 100%; }
-  .pv-ftimer-spec { font-size: .44rem; color: var(--pra-dim); font-weight: 700; letter-spacing: .04em; margin-bottom: 4px; }
+  /* Floating timer (Lee, 2026-11-17): just a 60-second circle with play, reset and sound icons. No box. Draggable. */
+  .pv-ftimer { position: fixed; right: 12px; bottom: 90px; z-index: 900; width: 76px; text-align: center; touch-action: none; user-select: none; cursor: grab; filter: drop-shadow(0 2px 6px rgba(0,0,0,.75)); }
+  .pv-ftimer.dragging { cursor: grabbing; }
+  .pv-ft-ring { position: relative; width: 64px; height: 64px; margin: 0 auto; border-radius: 50%; background: rgba(0,0,0,.35); }
+  .pv-ft-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+  .pv-ft-ring circle { fill: none; stroke-width: 6; }
+  .pv-ft-ring .bg { stroke: rgba(255,255,255,.22); }
+  .pv-ft-ring .fg { stroke: ${NEON}; stroke-linecap: round; }
+  .pv-ft-clock { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-secondary); font-size: 1rem; color: #fff; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .pv-ft-icons { display: flex; justify-content: center; gap: 4px; margin-top: 4px; }
+  .pv-ft-icons button { width: 22px; height: 22px; padding: 0; border: 0; background: none; color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .pv-ft-icons button svg { width: 18px; height: 18px; }
+  .pv-ft-icons button[data-ft="play"] svg { width: 20px; height: 20px; color: ${NEON}; }
+  .pv-ft-icons button[data-ft="sound"].off { opacity: .55; }
   /* Compact versions inside the coach Flow canvas */
   .pv-compact { font-size: .8rem; line-height: 1.45; color: #d6d6dc; }
   .pv-compact b { color: #fff; }
@@ -290,8 +292,7 @@
         isToday ? '<span class="pv-chip today">Today</span>' : '',
         staff && !opts.preview ? (d.unlocked ? '<span class="pv-chip on">Unlocked</span>' : `<span class="pv-chip off">Opens ${esc(fmtWhen(d.unlocksAt))}</span>`) : ''].join('');
       const body = d.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: d.dayNumber })).join('');
-      const tmr = d.timer ? ` data-timer="${esc(JSON.stringify({ ...d.timer, day: d.dayNumber }))}"` : '';
-      return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}"${tmr} ${isToday ? 'open' : ''}>
+      return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}" ${isToday ? 'open' : ''}>
         <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
         <div class="pv-body" data-day="${esc(d.dayNumber)}">${body}</div></details>`;
     };
@@ -349,23 +350,10 @@
       </div>
     </div>`;
 
-    // Floating timer: today's day sets it; opening another day switches it (unless it's running).
+    // Floating 60-second timer, kept across re-renders so a running countdown survives.
     const pvRoot = container.querySelector('.pv');
-    const dayCfg = (el) => { try { return el && el.dataset.timer ? JSON.parse(el.dataset.timer) : null; } catch { return null; } };
-    const firstCfg = dayCfg(container.querySelector('details.pv-today-block[data-timer]') || container.querySelector('details[open][data-timer]') || container.querySelector('details[data-timer]'));
     if (keepTimer) pvRoot.appendChild(keepTimer);
-    else if (pr.days.length) pvRoot.appendChild(floatingTimer(firstCfg || (pr.settings && pr.settings.timer)));
-    if (!container._pvToggleBound) container._pvToggleBound = true, container.addEventListener('toggle', (e) => {
-      const det = e.target;
-      if (!det.open || !det.dataset || !det.dataset.timer) return;
-      const cur = container.querySelector('.pv-ftimer');
-      if (!cur || (cur._pvTimer && cur._pvTimer.isRunning())) return;
-      const cfg = dayCfg(det);
-      if (cur.dataset.cfg === JSON.stringify(cfg)) return;
-      const next = floatingTimer(cfg);
-      ['left', 'top', 'right', 'bottom'].forEach(k => { next.style[k] = cur.style[k]; });
-      cur.replaceWith(next);
-    }, true);
+    else if (pr.days.length) pvRoot.appendChild(floatingTimer());
     container.querySelectorAll('video[data-src]').forEach(v => (opts.observeVideo ? opts.observeVideo(v) : (v.src = v.dataset.src)));
     container.querySelectorAll('video:not([data-sound])').forEach(v => { v.muted = true; v.addEventListener('volumechange', () => { if (!v.muted) v.muted = true; }); });
     container.querySelectorAll('[data-ask]').forEach(b => { b.onclick = () => opts.onAsk && opts.onAsk(b.dataset.ask); });
@@ -513,18 +501,44 @@
     return api;
   }
 
-  // One small floating timer per program view. Rounds/work/rest come from the
-  // program's settings.timer ({ rounds, workSeconds, restSeconds }), default
-  // 5 x 60s with 30s rest. Drag it anywhere; its spot is remembered.
-  function floatingTimer(cfg) {
-    const t = cfg || {};
-    const rounds = Math.max(1, Number(t.rounds) || 5), work = Math.max(1, Number(t.workSeconds) || 60), rest = Math.max(0, Number(t.restSeconds ?? 30));
-    const wrap = document.createElement('div');
-    wrap.innerHTML = timerHtml({ rounds, workSeconds: work, restSeconds: rest });
-    const el = wrap.firstElementChild;
-    el.classList.add('pv-ftimer');
-    el.dataset.cfg = JSON.stringify(cfg || null);
-    el.querySelector('.pv-timer-ring').insertAdjacentHTML('afterend', `<div class="pv-ftimer-spec">${t.day ? `DAY ${t.day} · ` : ''}${rounds} × ${work}s${rest ? ` · ${rest}s rest` : ''}</div>`);
+  // The floating timer: one 60-second countdown. Play/pause, reset, sound. Drag it
+  // anywhere; its spot is remembered.
+  const FT_ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5.5" width="4" height="13" rx="1"/><rect x="13.5" y="5.5" width="4" height="13" rx="1"/></svg>',
+    reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>',
+    sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+    mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+  };
+  function floatingTimer() {
+    const SECS = 60, CIRC = 2 * Math.PI * 28;
+    const el = document.createElement('div');
+    el.className = 'pv-ftimer';
+    el.innerHTML = `<div class="pv-ft-ring"><svg viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="28"/><circle class="fg" cx="32" cy="32" r="28" stroke-dasharray="${CIRC.toFixed(2)}" stroke-dashoffset="0"/></svg><div class="pv-ft-clock">1:00</div></div>
+      <div class="pv-ft-icons"><button type="button" data-ft="reset" aria-label="Reset">${FT_ICON.reset}</button><button type="button" data-ft="play" aria-label="Start">${FT_ICON.play}</button><button type="button" data-ft="sound" aria-label="Sound">${FT_ICON.sound}</button></div>`;
+    const fg = el.querySelector('.fg'), clock = el.querySelector('.pv-ft-clock'), playBtn = el.querySelector('[data-ft="play"]'), soundBtn = el.querySelector('[data-ft="sound"]');
+    let left = SECS * 1000, endsAt = 0, running = false, iv = null, lastWhole = null, wake = null;
+    const paint = () => {
+      const secs = Math.ceil(left / 1000);
+      clock.textContent = `${Math.floor(secs / 60)}:${pad2(secs % 60)}`;
+      fg.setAttribute('stroke-dashoffset', String(CIRC * (1 - left / (SECS * 1000))));
+      playBtn.innerHTML = running ? FT_ICON.pause : FT_ICON.play;
+    };
+    const paintSound = () => { soundBtn.innerHTML = timerSound ? FT_ICON.sound : FT_ICON.mute; soundBtn.classList.toggle('off', !timerSound); };
+    const tick = () => {
+      left = Math.max(0, endsAt - Date.now());
+      const whole = Math.ceil(left / 1000);
+      if (whole !== lastWhole) { if (whole <= 3 && whole >= 1) beep(880, 0.09); lastWhole = whole; }
+      if (left <= 0) { stop(); beep(1320, 0.18); beep(1320, 0.18, 0.25); beep(1760, 0.5, 0.5); left = 0; }
+      paint();
+    };
+    const lock = async () => { try { if ('wakeLock' in navigator && !wake) wake = await navigator.wakeLock.request('screen'); } catch {} };
+    const unlock = () => { try { wake && wake.release(); } catch {} wake = null; };
+    function start() { if (left <= 0) left = SECS * 1000; running = true; endsAt = Date.now() + left; lastWhole = null; beep(880, 0.06, 0, 0.12); lock(); clearInterval(iv); iv = setInterval(tick, 200); paint(); }
+    function stop() { running = false; clearInterval(iv); unlock(); paint(); }
+    playBtn.onclick = () => { if (running) { left = Math.max(0, endsAt - Date.now()); stop(); } else start(); };
+    el.querySelector('[data-ft="reset"]').onclick = () => { stop(); left = SECS * 1000; paint(); };
+    soundBtn.onclick = () => { timerSound = !timerSound; try { localStorage.setItem('pvTimerSound', timerSound ? '1' : '0'); } catch {} paintSound(); };
     try { const p = JSON.parse(localStorage.getItem('pvFloatTimerPos') || 'null'); if (p && p.x >= 0 && p.y >= 0 && p.x < window.innerWidth - 40 && p.y < window.innerHeight - 40) Object.assign(el.style, { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' }); } catch {}
     let drag = null;
     el.addEventListener('pointerdown', (e) => {
@@ -544,7 +558,8 @@
       try { localStorage.setItem('pvFloatTimerPos', JSON.stringify({ x: parseInt(el.style.left, 10), y: parseInt(el.style.top, 10) })); } catch {}
     };
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-    el._pvTimer = createTimer(el);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) { lock(); tick(); } });
+    paint(); paintSound();
     return el;
   }
 
