@@ -2076,8 +2076,12 @@ function convoAvatarUser(convo) {
   // picture (and initials as its fallback) instead of the group name's
   // initial, same as syncDefaultGroups() (chat_backend.js) treats them.
   if (convo.autoGroupUserId) {
-    const student = convo.participants.find(p => p.id === convo.autoGroupUserId);
+    const student = convo.participants.find(p => p.id === convo.autoGroupUserId)
+      || (typeof contacts !== 'undefined' && Array.isArray(contacts) ? contacts.find(c => c.id === convo.autoGroupUserId) : null);
     if (student) return student;
+    // A finished student is taken out of their own group, leaving only staff
+    // in it -- it's still THEIR group, never a "coach" group (was red + Coach).
+    return { first: convo.name, last: '', role: 'user' };
   }
   const client = convo.participants.find(p => isClientRole(p.role));
   const plainUser = convo.participants.find(p => p.role === 'user');
