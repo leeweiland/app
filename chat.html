@@ -4590,7 +4590,8 @@ function appLinkTitle(clean) {
   return hit ? hit.title : null;
 }
 function linkifyUrls(escapedText) {
-  return escapedText.replace(/https?:\/\/[^\s<]+/g, (url) => {
+  if (window.PRALinkify) return window.PRALinkify(escapedText, { appTitle: appLinkTitle });
+  return escapedText.replace(/https?:\/\/[^\s<]+/gi, (url) => {
     // Trailing punctuation almost always belongs to the sentence, not the
     // URL itself ("check this out: https://x.com.") — keep it outside the link.
     const trailing = url.match(/[).,!?;:]+$/)?.[0] || '';

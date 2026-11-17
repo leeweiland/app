@@ -157,6 +157,7 @@
 
   // Plain text with light structure: a short ALL-CAPS line opens a labeled
   // paragraph, "• " / "- " lines become a bullet list.
+  const link = (h) => (window.PRALinkify ? window.PRALinkify(h) : h);
   function textHtml(content, title) {
     const paras = String(content || '').replace(/\r/g, '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
     const out = paras.map(p => {
@@ -165,8 +166,8 @@
       if (lines.length > 1 && lines[0].length <= 40 && /^[A-Z0-9][A-Z0-9 '&+\-–—:,.()/!?]*$/.test(lines[0])) label = lines.shift();
       const bullets = lines.every(l => /^\s*[•\-]\s+/.test(l));
       const body = bullets
-        ? '<ul>' + lines.map(l => `<li>${esc(l.replace(/^\s*[•\-]\s+/, ''))}</li>`).join('') + '</ul>'
-        : `<p>${lines.map(esc).join('<br>')}</p>`;
+        ? '<ul>' + lines.map(l => `<li>${link(esc(l.replace(/^\s*[•\-]\s+/, '')))}</li>`).join('') + '</ul>'
+        : `<p>${lines.map(l => link(esc(l))).join('<br>')}</p>`;
       return (label ? `<span class="pv-label">${esc(label)}</span>` : '') + body;
     }).join('');
     return `<div class="pv-text">${title ? `<div class="pv-text-title">${esc(title)}</div>` : ''}${out}</div>`;

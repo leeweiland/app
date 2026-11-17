@@ -2479,7 +2479,8 @@ function renderStepContent(s, { autoplay = true } = {}) {
   }
   // A program text step may have its own title (shown above the text).
   const textTitle = s.title ? `<div class="step-type">${escapeHtml(s.title)}</div>` : '';
-  return `${textTitle}<div class="step-text"${textTitle ? ' style="margin-top:0"' : ''}>${escapeHtml(s.content || '')}</div>`;
+  const textBody = window.PRALinkify ? window.PRALinkify(escapeHtml(s.content || '')) : escapeHtml(s.content || '');
+  return `${textTitle}<div class="step-text"${textTitle ? ' style="margin-top:0"' : ''}>${textBody}</div>`;
 }
 
 // Assigns every step a fresh id when applying a saved template — reusing

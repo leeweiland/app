@@ -14,6 +14,32 @@
 // closes it instead of leaving the app.
 //   PRABack.push(key, closeFn) -- an overlay opened
 //   PRABack.closed(key)        -- that overlay was closed by the UI itself
+// ── Links in text (chat bubbles, protocol/program text) ──────────────────
+// PRALinkify(escapedHtml, { appTitle }) turns every web address in ALREADY
+// ESCAPED text into a link: any capitalization of http(s)://, "www.",
+// bare domains like x.com or pacificrimathletics.com/chat, and emails.
+// Bare domains need a real ending (.com, .net, .io...) so "e.g." or
+// "video.mp4" stay plain text. Trailing punctuation stays outside the link.
+window.PRALinkify = (function () {
+  const TLDS = 'com|net|org|io|co|app|me|us|ca|uk|de|fr|es|it|nl|au|nz|info|biz|tv|ly|gg|ai|dev|xyz|edu|gov|mx|br|jp|ch|se|no|dk|fi|ie|be|at|pl|pt|in|link|site|online|store|shop|blog|page|live|fit|fitness|health|club|world|life|today|news|media|studio|video|social|community|academy|coach|training|email|tech|cloud|so|to|is|ws|am|fm|tt|yt|ig';
+  // email | any-case http(s):// | www. | bare domain with a real ending
+  const RE = new RegExp(String.raw`(^|[\s(>;\[])([a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}|https?:\/\/[^\s<]+|www\.[^\s<]+|(?:[a-z0-9-]+\.)+(?:${TLDS})(?::\d+)?(?:\/[^\s<]*)?(?=$|[\s<).,!?;:'"&\]]))`, 'gi');
+  return function (escaped, opts) {
+    return String(escaped || '').replace(RE, (all, pre, url) => {
+      let clean = url, trailing = '';
+      // A closing &quot; or punctuation belongs to the sentence, not the link.
+      const tm = clean.match(/((?:&quot;|&#39;|[).,!?;:\]])+)$/);
+      if (tm) { trailing = tm[1]; clean = clean.slice(0, -trailing.length); }
+      if (!clean) return all;
+      const isEmail = /^[^/]+@[^/]+\.[a-z]{2,}$/i.test(clean) && !/^https?:/i.test(clean);
+      const href = isEmail ? 'mailto:' + clean : (/^https?:\/\//i.test(clean) ? clean.replace(/^https?/i, m => m.toLowerCase()) : 'https://' + clean);
+      const title = !isEmail && opts && opts.appTitle ? opts.appTitle(href) : null;
+      if (title) return `${pre}<a href="${href}" class="bubble-link">${title}</a>${trailing}`;
+      return `${pre}<a href="${href}" target="_blank" rel="noopener noreferrer" class="bubble-link">${clean}</a>${trailing}`;
+    });
+  };
+})();
+
 window.PRABack = (function () {
   const stack = [];
   let skip = 0;
