@@ -265,7 +265,7 @@
      at once. */
   .video-results-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
   /* Video panel: bigger on desktop, up to 4 videos a row. */
-  .modal-box.video-panel { max-width: 1100px; width: 94vw; max-height: 88vh; }
+  .modal-box.video-panel { max-width: 1100px; width: 94vw; max-height: calc(100dvh - 130px); margin-top: 60px; }
   @media (min-width: 560px) { .video-panel .video-results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (min-width: 820px) { .video-panel .video-results-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (min-width: 1100px) { .video-panel .video-results-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -1035,6 +1035,13 @@ async function showProgramView(opt = {}) {
 }
 
 function openModal(id) {
+  if (id === 'textModal') {
+    // Same box adds a new text step or edits an existing one.
+    const st = editingStepId ? steps.find(x => x.id === editingStepId) : null;
+    const box = document.getElementById('textModal');
+    box.querySelector('.pra-h2').textContent = st ? (st.type === 'video' ? 'Move name' : 'Edit text') : 'Add Text';
+    document.getElementById('textStepSaveBtn').textContent = st ? 'Save' : 'Add Step';
+  }
   const card = pendingInlineCard;
   pendingInlineCard = null;
   if (card && card.isConnected && (id === 'textModal' || id === 'stepEditModal')) {
@@ -1045,6 +1052,12 @@ function openModal(id) {
     card.appendChild(box);
     card.closest('.step-node')?.classList.add('editing-inline');
     inlineMoved.push({ box, home, card });
+    // Cancel inside the card forgets which step was being edited (the popup's
+    // own backdrop listener can't see clicks once the box lives in the card).
+    if (id === 'textModal' && !box.dataset.inlineCancel) {
+      box.dataset.inlineCancel = '1';
+      box.addEventListener('click', (e) => { if (e.target.closest('.pra-btn-ghost')) editingStepId = null; });
+    }
     const f = box.querySelector('textarea, input'); if (f) setTimeout(() => f.focus(), 30);
     return;
   }
