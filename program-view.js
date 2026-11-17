@@ -74,11 +74,12 @@
   .pv-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
   .pv-yt-thumb { width: 100%; display: block; border-radius: 10px; }
   .pv-yt-title { font-weight: 700; font-size: 1.02rem; margin: 12px 0 4px; }
-  .pv-cta { border: 1px solid var(--pra-border); border-left: 3px solid ${NEON}; border-radius: 12px; padding: 16px 16px 18px; background: linear-gradient(180deg, rgba(212,255,0,0.035), rgba(255,255,255,0.01)); }
-  .pv-cta p { margin: 0 0 10px; font-size: .9rem; line-height: 1.6; font-weight: 400; color: #cfcfd6; }
-  .pv-cta p.pv-cta-solve { color: #fff; font-weight: 700; }
-  .pv-cta-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 11px 18px; border-radius: 10px; border: 1.5px solid ${NEON}; color: ${NEON}; text-decoration: none; font-weight: 700; font-size: .86rem; letter-spacing: .02em; transition: background .15s, color .15s, box-shadow .15s; }
-  .pv-cta-btn:hover { background: ${NEON}; color: #000; box-shadow: 0 0 18px rgba(212,255,0,0.35); }
+  /* Agitate + solve sit in the neon box; the button is solid neon with black text (Lee, 2026-11-17). */
+  .pv-cta { border: 1.5px solid ${NEON}; border-radius: 14px; padding: 16px 16px 18px; background: linear-gradient(180deg, rgba(212,255,0,0.10), rgba(212,255,0,0.03)); box-shadow: 0 0 22px rgba(212,255,0,0.12); }
+  .pv-cta p { margin: 0 0 10px; font-size: .92rem; line-height: 1.55; font-weight: 500; color: #fff; }
+  .pv-cta p.pv-cta-solve { color: ${NEON}; font-weight: 700; }
+  .pv-cta-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 12px 18px; border-radius: 10px; border: 0; background: ${NEON}; color: #000; text-decoration: none; font-weight: 800; font-size: .88rem; letter-spacing: .02em; transition: box-shadow .15s, transform .15s; }
+  .pv-cta-btn:hover { box-shadow: 0 0 20px rgba(212,255,0,0.45); transform: translateY(-1px); }
   .pv-locked { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; border: 1px dashed var(--pra-border); background: rgba(255,255,255,0.015); }
   .pv-locked .pv-num { opacity: .7; }
   .pv-lock-ico { width: 22px; height: 22px; flex-shrink: 0; color: var(--pra-dim); }
@@ -121,6 +122,18 @@
   .pv-timer-controls { display: flex; justify-content: center; gap: 10px; }
   .pv-timer-controls button { min-width: 110px; }
   .pv-timer-done { font-size: .82rem; color: var(--pra-dim); margin-top: 8px; min-height: 1.2em; }
+  /* Floating timer: one small draggable timer for the whole program instead of one per day. */
+  .pv-ftimer { position: fixed; right: 12px; bottom: 86px; z-index: 900; width: 92px; padding: 6px 6px 6px; border-radius: 14px; border: 1px solid var(--pra-border); background: rgba(10,10,14,0.92); backdrop-filter: blur(6px); box-shadow: 0 8px 26px rgba(0,0,0,0.5); text-align: center; touch-action: none; user-select: none; cursor: grab; }
+  .pv-ftimer.dragging { cursor: grabbing; opacity: .9; }
+  .pv-ftimer .pv-timer-top, .pv-ftimer .pv-timer-phase, .pv-ftimer .pv-timer-done { display: none; }
+  .pv-ftimer .pv-timer-ring { width: 60px; margin: 0 auto 3px; }
+  .pv-ftimer .pv-timer-ring circle { stroke-width: 10; }
+  .pv-ftimer .pv-timer-clock { font-size: .92rem; line-height: 1; }
+  .pv-ftimer .pv-timer-round { font-size: .42rem; letter-spacing: .04em; margin-top: 1px; }
+  .pv-ftimer .pv-timer-controls { gap: 3px; flex-wrap: wrap; }
+  .pv-ftimer .pv-timer-controls button { min-width: 0; min-height: 0; height: auto; flex: 1 1 40%; padding: 3px 2px; font-size: .56rem; line-height: 1.2; border-radius: 7px; }
+  .pv-ftimer .pv-timer-controls button[data-act="sound"] { flex-basis: 100%; }
+  .pv-ftimer-spec { font-size: .44rem; color: var(--pra-dim); font-weight: 700; letter-spacing: .04em; margin-bottom: 4px; }
   /* Compact versions inside the coach Flow canvas */
   .pv-compact { font-size: .8rem; line-height: 1.45; color: #d6d6dc; }
   .pv-compact b { color: #fff; }
@@ -215,10 +228,10 @@
 
   function ctaHtml(s, settings, dayNumber, compact) {
     const href = ctaHref(s, settings, dayNumber);
-    if (compact) return `<div class="step-type">Button</div><div class="pv-compact pv-compact-cta">${esc(s.problem || '')}<br><b>${esc(s.buttonText || 'Learn more')} →</b></div>`;
+    if (compact) return `<div class="step-type">Button</div><div class="pv-compact pv-compact-cta">${esc(s.agitate || s.problem || '')}<br><b>${esc(s.buttonText || 'Book your free Fast Track Call')} →</b></div>`;
     return `<div class="pv-cta">
-      ${s.problem ? `<p>${esc(s.problem)}</p>` : ''}${s.agitate ? `<p>${esc(s.agitate)}</p>` : ''}${s.solve ? `<p class="pv-cta-solve">${esc(s.solve)}</p>` : ''}
-      ${href ? `<a class="pv-cta-btn" href="${esc(href)}" target="_blank" rel="noopener">${esc(s.buttonText || 'Learn more')} <span aria-hidden="true">→</span></a>` : ''}
+      ${s.agitate ? `<p>${esc(s.agitate)}</p>` : ''}${s.solve ? `<p class="pv-cta-solve">${esc(s.solve)}</p>` : ''}
+      ${href ? `<a class="pv-cta-btn" href="${esc(href)}" target="_blank" rel="noopener">${esc(s.buttonText || 'Book your free Fast Track Call')} <span aria-hidden="true">→</span></a>` : ''}
     </div>`;
   }
 
@@ -277,7 +290,8 @@
         isToday ? '<span class="pv-chip today">Today</span>' : '',
         staff && !opts.preview ? (d.unlocked ? '<span class="pv-chip on">Unlocked</span>' : `<span class="pv-chip off">Opens ${esc(fmtWhen(d.unlocksAt))}</span>`) : ''].join('');
       const body = d.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: d.dayNumber })).join('');
-      return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}" ${isToday ? 'open' : ''}>
+      const tmr = d.timer ? ` data-timer="${esc(JSON.stringify({ ...d.timer, day: d.dayNumber }))}"` : '';
+      return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}"${tmr} ${isToday ? 'open' : ''}>
         <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
         <div class="pv-body" data-day="${esc(d.dayNumber)}">${body}</div></details>`;
     };
@@ -312,6 +326,8 @@
         ${(b.moves || []).map((m, mi) => `<div class="pv-bump-move" data-mi="${mi}">${m.clip || m.driveFileId ? `<div class="pv-bump-media"><video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video></div>` : ''}
           <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<p data-move-field="how">${esc(m.how || '')}</p>` : ''}${m.why || staff ? `<p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
+    const keepTimer = container.querySelector('.pv-ftimer');
+    if (keepTimer) keepTimer.remove();
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">
         <div class="pv-kicker" data-hero="kicker">${esc((pr.settings && pr.settings.kicker) || 'Powerbatics')}</div>
@@ -333,6 +349,23 @@
       </div>
     </div>`;
 
+    // Floating timer: today's day sets it; opening another day switches it (unless it's running).
+    const pvRoot = container.querySelector('.pv');
+    const dayCfg = (el) => { try { return el && el.dataset.timer ? JSON.parse(el.dataset.timer) : null; } catch { return null; } };
+    const firstCfg = dayCfg(container.querySelector('details.pv-today-block[data-timer]') || container.querySelector('details[open][data-timer]') || container.querySelector('details[data-timer]'));
+    if (keepTimer) pvRoot.appendChild(keepTimer);
+    else if (pr.days.length) pvRoot.appendChild(floatingTimer(firstCfg || (pr.settings && pr.settings.timer)));
+    if (!container._pvToggleBound) container._pvToggleBound = true, container.addEventListener('toggle', (e) => {
+      const det = e.target;
+      if (!det.open || !det.dataset || !det.dataset.timer) return;
+      const cur = container.querySelector('.pv-ftimer');
+      if (!cur || (cur._pvTimer && cur._pvTimer.isRunning())) return;
+      const cfg = dayCfg(det);
+      if (cur.dataset.cfg === JSON.stringify(cfg)) return;
+      const next = floatingTimer(cfg);
+      ['left', 'top', 'right', 'bottom'].forEach(k => { next.style[k] = cur.style[k]; });
+      cur.replaceWith(next);
+    }, true);
     container.querySelectorAll('video[data-src]').forEach(v => (opts.observeVideo ? opts.observeVideo(v) : (v.src = v.dataset.src)));
     container.querySelectorAll('video:not([data-sound])').forEach(v => { v.muted = true; v.addEventListener('volumechange', () => { if (!v.muted) v.muted = true; }); });
     container.querySelectorAll('[data-ask]').forEach(b => { b.onclick = () => opts.onAsk && opts.onAsk(b.dataset.ask); });
@@ -394,7 +427,7 @@
     const $ = (sel) => el.querySelector(sel);
     const fg = $('.fg'), CIRC = 339.29;
     let idx = 0, running = false, endsAt = 0, leftMs = phases[0].secs * 1000, lastWhole = null, raf = null, iv = null, wakeLock = null, done = false;
-    const api = { pause };
+    const api = { pause, isRunning: () => running };
     allTimers.add(api);
 
     function paint(ms) {
@@ -478,6 +511,41 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) { lockScreen(); loop(); } });
     paint(leftMs);
     return api;
+  }
+
+  // One small floating timer per program view. Rounds/work/rest come from the
+  // program's settings.timer ({ rounds, workSeconds, restSeconds }), default
+  // 5 x 60s with 30s rest. Drag it anywhere; its spot is remembered.
+  function floatingTimer(cfg) {
+    const t = cfg || {};
+    const rounds = Math.max(1, Number(t.rounds) || 5), work = Math.max(1, Number(t.workSeconds) || 60), rest = Math.max(0, Number(t.restSeconds ?? 30));
+    const wrap = document.createElement('div');
+    wrap.innerHTML = timerHtml({ rounds, workSeconds: work, restSeconds: rest });
+    const el = wrap.firstElementChild;
+    el.classList.add('pv-ftimer');
+    el.dataset.cfg = JSON.stringify(cfg || null);
+    el.querySelector('.pv-timer-ring').insertAdjacentHTML('afterend', `<div class="pv-ftimer-spec">${t.day ? `DAY ${t.day} · ` : ''}${rounds} × ${work}s${rest ? ` · ${rest}s rest` : ''}</div>`);
+    try { const p = JSON.parse(localStorage.getItem('pvFloatTimerPos') || 'null'); if (p && p.x >= 0 && p.y >= 0 && p.x < window.innerWidth - 40 && p.y < window.innerHeight - 40) Object.assign(el.style, { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' }); } catch {}
+    let drag = null;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      const r = el.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      el.classList.add('dragging'); el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const x = Math.min(window.innerWidth - el.offsetWidth - 4, Math.max(4, e.clientX - drag.dx));
+      const y = Math.min(window.innerHeight - el.offsetHeight - 4, Math.max(4, e.clientY - drag.dy));
+      Object.assign(el.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+    });
+    const end = () => {
+      if (!drag) return; drag = null; el.classList.remove('dragging');
+      try { localStorage.setItem('pvFloatTimerPos', JSON.stringify({ x: parseInt(el.style.left, 10), y: parseInt(el.style.top, 10) })); } catch {}
+    };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+    el._pvTimer = createTimer(el);
+    return el;
   }
 
   window.PRAProgram = { render, stepHtml, mountTimers, textHtml, fmtCountdown };
