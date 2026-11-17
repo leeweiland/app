@@ -1045,7 +1045,6 @@
              message, Edit/Delete for your own if you're staff). See
              openMsgActionBar() / openMsgMoreMenu(). -->
         <div class="msg-more-menu" id="msgMoreMenu">
-          <button class="msg-more-menu-item" id="msgMoreCopyBtn" style="display:none">Copy</button>
           <button class="msg-more-menu-item" id="msgMoreReportBtn">Report</button>
           <button class="msg-more-menu-item" id="msgMoreEditBtn" style="display:none">Edit</button>
           <button class="msg-more-menu-item" id="msgMoreDeleteBtn" style="display:none;color:#ff5c5c">Delete</button>
@@ -1064,6 +1063,7 @@
             <button class="mab-action" id="mabStarBtn" title="Star"></button>
             <button class="mab-action" id="mabLevelTestBtn" title="Forward to Online Level Tests"></button>
             <button class="mab-action" id="mabForwardBtn" title="Forward"></button>
+            <button class="mab-action" id="mabCopyBtn" title="Copy"></button>
             <button class="mab-action" id="mabReplyBtn" title="Reply"></button>
             <button class="mab-action" id="mabMoreBtn" title="More">⋯</button>
           </div>
@@ -3494,6 +3494,7 @@ document.getElementById('gymScheduleSaveBtn').addEventListener('click', async ()
 });
 
 document.getElementById('mabReplyBtn').innerHTML = svgReply();
+document.getElementById('mabCopyBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8.5" y="8.5" width="11" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>';
 document.getElementById('mabForwardBtn').innerHTML = svgForward();
 document.getElementById('mabLevelTestBtn').innerHTML = svgLevelTest();
 document.getElementById('mabStarBtn').innerHTML = svgStar();
@@ -3536,7 +3537,7 @@ function renderLevelsAccountActions(otherUser) {
   if (!isStaffMe() || !LEVELS_QUICK_ROLES.includes(otherUser.role)) { wrap.innerHTML = ''; return; }
   const targets = LEVELS_QUICK_ROLES.filter(r => r !== otherUser.role);
   wrap.innerHTML = targets.map(r => `<button class="pra-btn pra-btn-ghost levels-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + levelsRoleLabel(r)}</button>`).join('') + `
-    <button class="pra-btn pra-btn-ghost" id="levelsArchiveToggleBtn" style="flex:1;font-size:.78rem${otherUser.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${otherUser.archived ? 'Unarchive' : 'Archive'}</button>
+    ${otherUser.archived ? `<button class="pra-btn pra-btn-ghost" id="levelsArchiveToggleBtn" style="flex:1;font-size:.78rem" title="Blacklisted -- let them log in again">Restore account</button>` : ''}
   `;
   wrap.querySelectorAll('.levels-role-btn').forEach(btn => {
     btn.onclick = async () => {
@@ -3563,7 +3564,7 @@ function renderLevelsAccountActions(otherUser) {
       await loadConversations();
     };
   });
-  document.getElementById('levelsArchiveToggleBtn').onclick = async () => {
+  if (document.getElementById('levelsArchiveToggleBtn')) document.getElementById('levelsArchiveToggleBtn').onclick = async () => {
     const nextArchived = !otherUser.archived;
     if (nextArchived && !(await confirmDialog(`Archive ${otherUser.first} ${otherUser.last}? They'll be logged out and unable to sign back in until unarchived.`, 'Archive'))) return;
     const r = await fetch(`/api/chat/users/${otherUser.id}/archived`, {
@@ -6248,7 +6249,6 @@ function openMsgMoreMenu(anchorEl, mid) {
   moreMenuMessageId = mid;
   const mine = m.senderId === me.id;
   const staff = isStaffMe();
-  document.getElementById('msgMoreCopyBtn').style.display = msgCopyText(m) ? '' : 'none';
   document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
   document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
   document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';
@@ -6300,12 +6300,43 @@ function flashCopied(ok) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 1200);
 }
-document.getElementById('msgMoreCopyBtn').onclick = async () => {
-  const m = currentThreadMessages.find(x => x.id === moreMenuMessageId);
-  document.getElementById('msgMoreMenu').classList.remove('show');
+function mediaLinkFor(m) {
+  if (!m?.driveFileId) return '';
+  return isStaffMe() ? `https://drive.google.com/file/d/${m.driveFileId}/view` : `${location.origin}/api/chat/media/${m.driveFileId}`;
+}
+async function copyImageToClipboard(m) {
+  try {
+    if (!window.ClipboardItem || !navigator.clipboard?.write) return false;
+    // PNG is the one image type every clipboard accepts -- redraw through a canvas.
+    const pngPromise = (async () => {
+      const blob = await (await fetch(`/api/chat/media/${m.driveFileId}`)).blob();
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+      c.getContext('2d').drawImage(bmp, 0, 0);
+      return await new Promise(r => c.toBlob(r, 'image/png'));
+    })();
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngPromise })]);
+    return true;
+  } catch { return false; }
+}
+function canCopyMessage(m) {
+  return !!(msgCopyText(m) || ((m?.type === 'image' || m?.type === 'video') && m.driveFileId));
+}
+document.getElementById('mabCopyBtn').onclick = async () => {
+  const m = currentThreadMessages.find(x => x.id === actionBarMessageId);
   clearActionSelection();
+  if (!m) return;
   const text = msgCopyText(m);
-  if (text) flashCopied(await copyToClipboard(text));
+  if (text) { flashCopied(await copyToClipboard(text)); return; }
+  if (m.type === 'image') {
+    if (await copyImageToClipboard(m)) { flashCopied(true); return; }
+    flashCopied(await copyToClipboard(mediaLinkFor(m)));
+    return;
+  }
+  if (m.type === 'video') {
+    const ok = await copyToClipboard(mediaLinkFor(m));
+    flashCopied(ok);
+  }
 };
 document.getElementById('msgMoreEditBtn').onclick = () => {
   const mid = moreMenuMessageId;
@@ -6358,7 +6389,9 @@ function openMsgActionBar(anchorEl, mid) {
   document.getElementById('mabLevelTestBtn').style.display = canLevelTest ? '' : 'none';
   document.getElementById('mabForwardBtn').style.display = canReplyForward ? '' : 'none';
   document.getElementById('mabReplyBtn').style.display = canReplyForward ? '' : 'none';
-  const showMoreBtn = !mine || canAct || !!msgCopyText(m); // Copy is there for any message with text
+  document.getElementById('mabCopyBtn').style.display = canCopyMessage(m) ? '' : 'none';
+  const staffMe = isStaffMe();
+  const showMoreBtn = !mine || (staffMe && mine && m.type === 'text') || (staffMe && m.type !== 'appointment');
   document.getElementById('mabMoreBtn').style.display = showMoreBtn ? '' : 'none';
 
   const bar = document.getElementById('msgActionBar');
@@ -6370,7 +6403,6 @@ function openMsgActionBar(anchorEl, mid) {
   let moreMenuReserve = 0;
   if (showMoreBtn) {
     const staff = isStaffMe();
-    document.getElementById('msgMoreCopyBtn').style.display = msgCopyText(m) ? '' : 'none';
     document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
     document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
     document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';

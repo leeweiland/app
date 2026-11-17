@@ -262,7 +262,7 @@
     // "Mark Finished" (role user) also sets their CRM status to FINISHED --
     // same action as the Students panel (chat_backend.js students-overview/action).
     wrap.innerHTML = QUICK_ROLES.filter(r => r !== u.role).map(r => `<button class="pra-btn pra-btn-ghost pp-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + label(r)}</button>`).join('')
-      + `<button class="pra-btn pra-btn-ghost pp-archive-btn" style="flex:1;font-size:.78rem${u.archived ? '' : ';border-color:#ff5c5c;color:#ff5c5c'}">${u.archived ? 'Unarchive' : 'Archive'}</button>`;
+      + (u.archived ? `<button class="pra-btn pra-btn-ghost pp-archive-btn" style="flex:1;font-size:.78rem" title="Blacklisted -- let them log in again">Restore account</button>` : '');
     wrap.querySelectorAll('.pp-role-btn').forEach(btn => {
       btn.onclick = async () => {
         if (btn.dataset.role === 'user') {
@@ -281,7 +281,7 @@
         notifyChanged();
       };
     });
-    wrap.querySelector('.pp-archive-btn').onclick = async () => {
+    if (wrap.querySelector('.pp-archive-btn')) wrap.querySelector('.pp-archive-btn').onclick = async () => {
       const next = !u.archived;
       if (next && !(await confirmBox(`Archive ${u.first} ${u.last}? They'll be logged out and unable to sign back in until unarchived.`, 'Archive'))) return;
       const r = await fetch(`/api/chat/users/${u.id}/archived`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: next }) });

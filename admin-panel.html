@@ -220,6 +220,7 @@
   .um-access td { padding: 8px; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; vertical-align: middle; }
   .um-access td:first-child { text-align: left; }
   .um-access .um-desc { font-weight: 400; color: var(--pra-dim); }
+  .um-product { border: 1px solid var(--pra-border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; background: rgba(255,255,255,0.015); }
   .um-access .um-name { font-weight: 700; color: #fff; }
 </style>
 </head>
@@ -646,7 +647,7 @@
         <label class="pra-label">Role</label>
         <select class="pra-select" id="newUserRole">
           <option value="user">User</option>
-          <option value="trainee">Trainee (Handstand Protocol)</option>
+          <option value="trainee">Trainee</option>
           <option value="online">Online</option>
           <option value="gym">Gym</option>
           <option value="coach">Coach</option>
@@ -1205,7 +1206,7 @@ function renderUsers() {
       <td>
         <select class="role-select" data-id="${u.id}">
           <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-          <option value="trainee" ${u.role === 'trainee' ? 'selected' : ''}>Trainee (Handstand Protocol)</option>
+          <option value="trainee" ${u.role === 'trainee' ? 'selected' : ''}>Trainee</option>
           <option value="online" ${u.role === 'online' ? 'selected' : ''}>Online</option>
           <option value="gym" ${u.role === 'gym' ? 'selected' : ''}>Gym</option>
           <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>
@@ -1219,10 +1220,9 @@ function renderUsers() {
         ` : '—'}
       </td>
       <td>
-        ${u.role === 'admin' || u.role === 'admin2' ? '—' : `
-          <button class="pra-btn pra-btn-ghost archive-btn" data-id="${u.id}" data-archived="${!!u.archived}" style="padding:5px 12px;font-size:.75rem">
-            ${u.archived ? 'Unarchive' : 'Archive'}
-          </button>
+        ${!u.archived ? '—' : `
+          <span style="color:#ff5c5c;font-size:.72rem;margin-right:6px">Blacklisted</span>
+          <button class="pra-btn pra-btn-ghost archive-btn" data-id="${u.id}" data-archived="true" style="padding:5px 12px;font-size:.75rem" title="Let them log in again">Restore</button>
         `}
       </td>
       <td style="text-align:center">
@@ -1254,7 +1254,7 @@ function renderUsers() {
   document.getElementById('usersTableWrap').innerHTML = filtered.length ? `
     <div class="table-scroll">
     <table>
-      <thead><tr>${sortHeader('Name', 'name', 'sticky-col sticky-col-1')}${sortHeader('Email', 'email', 'sticky-col sticky-col-2')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Archived</th><th>Physique Notifs</th><th>Quota Badge</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
+      <thead><tr>${sortHeader('Name', 'name', 'sticky-col sticky-col-1')}${sortHeader('Email', 'email', 'sticky-col sticky-col-2')}${sortHeader('Phone', 'phone')}${sortHeader('Role', 'role')}<th>Zoom</th><th>Blacklisted</th><th>Physique Notifs</th><th>Quota Badge</th><th>Delete</th><th>Set Password</th><th>Profile</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
@@ -1757,7 +1757,7 @@ window.addEventListener('pageshow', () => {
     body.querySelectorAll('[data-refund]').forEach(btn => btn.onclick = async (ev) => {
       ev.stopPropagation();
       const o = d.orders.find(x => x.id === btn.dataset.refund);
-      if (!confirm(`Refund $${o.total} for ${o.product}${o.test ? ' (TEST order, no PayPal)' : ' through PayPal'}?\n\nThe protocol comes off their account${u?.role === 'trainee' ? ' and the account is archived' : ''}, and the CRM refund flow runs. This can't be undone.`)) return;
+      if (!confirm(`Refund $${o.total} for ${o.product}${o.test ? ' (TEST order, no PayPal)' : ' through PayPal'}?\n\nThe program comes off their account${u?.role === 'trainee' ? ' and they become a plain User' : ''}, and the CRM refund flow runs. This can't be undone.`)) return;
       btn.disabled = true; btn.textContent = 'Refunding…';
       const r = await fetch('/api/admin/trainee-refund', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, orderId: o.id }) });
       const j = await r.json().catch(() => ({}));
@@ -1831,7 +1831,7 @@ window.addEventListener('pageshow', () => {
     }</tbody></table></div>`;
 
     document.getElementById('umBody').innerHTML = `
-      <div class="um-what" style="margin-bottom:6px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
+      <div class="um-what" style="margin-bottom:6px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> blacklisted.</div>
       <div class="um-what" style="margin-bottom:14px">Every switch here takes effect the moment you flip it. Nothing redeploys or restarts the app.</div>
 
       ${card(1, '1. Sign Up', row('Public sign-up', 'The Sign Up tab on the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> until a coach makes them Online or Gym.', toggle('signupEnabled', s.signupEnabled), '',
@@ -1843,7 +1843,7 @@ window.addEventListener('pageshow', () => {
         row('Forgot password', 'The "Forgot password?" link on the login screen. It emails a reset link to the address on their account.', toggle('forgotPasswordEnabled', s.forgotPasswordEnabled),
           `<div class="um-sub">Reset links work for ${num('resetLinkMinutes', s.resetLinkMinutes)} minutes ${savedMsg('umMsg-resetLinkMinutes')}</div>`,
           ['people can reset their own password by email.', 'the link is hidden; only an admin can set a new password (Users &amp; Roles).']) +
-        row('Archived accounts', 'An archived account is logged out everywhere at once and can\'t log back in.', info))}
+        row('Blacklisted accounts', 'A blacklisted account is logged out everywhere at once and can\'t log back in.', info))}
 
       ${card(3, '3. Student Crosscheck',
         row('Auto-upgrade from the sales sheets', 'Compares plain Users against the buyers tabs below. You switched this off on Nov 12 because the CRM and sheets weren\'t reliable enough to grant access on their own &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
@@ -1886,10 +1886,10 @@ window.addEventListener('pageshow', () => {
         row('FINISHED in the CRM', 'When a contact\'s status is set to FINISHED in the CRM (by hand or by a flow).', toggle('crmFinishedSync', s.crmFinishedSync), '',
           ['their app account becomes a plain User automatically.', 'the app isn\'t changed; mark them finished here too.']))}
 
-      ${card(8, '8. Archive &amp; Blacklist',
-        row('Archive', 'Hides the account, logs them out everywhere, and they can\'t log back in. Chats and history are kept. Unarchive (Users &amp; Roles) brings them back.', info) +
+      ${card(8, '8. Blacklist',
+        row('Blacklist', 'The only way to cut someone off completely: from the Students panel it logs them out everywhere, they can\'t log back in, and their CRM status becomes BLACKLIST. Chats and history are kept. <b>Restore</b> next to their name in Users &amp; Roles lets them back in. (To take away access but keep their login, Mark Finished instead.)', info) +
         row('BLACKLIST in the CRM', 'When a contact\'s status is set to BLACKLIST in the CRM (or Blacklist in the Students panel).', toggle('crmBlacklistArchive', s.crmBlacklistArchive), '',
-          ['their app account is archived automatically.', 'the app account is left alone.']))}
+          ['their app account is blacklisted automatically (logged out, can\'t log in).', 'the app account is left alone.']))}
 
       ${card(9, '9. Renewals',
         `<div class="um-row" style="display:block"><div class="um-desc">End dates come from the buyers tabs in Student Crosscheck (column D; the latest one wins, so adding a renewal row clears it).</div></div>` +
@@ -1907,18 +1907,22 @@ window.addEventListener('pageshow', () => {
         row('Red banner for coaches &amp; admins', 'At the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet. Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>',
           ['shown to coaches and admins.', 'hidden (problems are still listed here).']))}
 
-      ${card(11, '11. Trainees (Handstand Protocol)', `
-        <p class="um-what">A <b>Trainee</b> bought the Handstand Protocol (the low-ticket product) but isn't a full student yet. In the CRM they're LOW TICKET; everything the CRM does for them is on its Products tab.</p>
-        ${row('Account from checkout', 'When someone pays, the CRM creates their app account as a Trainee (or upgrades a plain User; students and staff keep their role), sets their password, enrolls them in the Handstand Protocol plus any add-ons, and emails the login. They land on their protocol, not the chat.', info)}
-        ${row('Welcome message', 'Posts this into a new Trainee group from Lee. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled),
-          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umTraineeMsg')}</div>`)}
-        ${row('Archive Trainees on refund', 'A refunded Trainee is archived so they can\'t log in. Students and staff who bought it just lose the protocol.', toggle('traineeRefundArchive', s.traineeRefundArchive))}`)}
+      ${card(11, '11. Trainees', `
+        <p class="um-what">A <b>Trainee</b> bought a program on its own (from the CRM's Products tab) but isn't a full student. They see their program and their own group with Lee and Alexis; what else they can open is under Access by Role. Build each program in the <a href="/chat-app/programs-editor.html" target="_blank" rel="noopener">Programs Editor</a>.</p>
+        <div class="um-row" style="display:block"><div class="um-name">Products</div><div class="um-desc" style="margin-bottom:6px">Each product from the CRM, the program it gives the buyer, and how buyers get tagged.</div><div id="umProducts">Loading products…</div></div>
+        ${row('Welcome message', 'Posted into a new Trainee group from Lee. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled),
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umTraineeMsg')}</div>`,
+          ['posted automatically.', 'nothing is posted.'])}
+        ${row('Refunds', 'Right-click (or long-press) a person in Users &amp; Roles &rarr; Refund. It refunds the full amount in PayPal through the CRM, logs it on their contact, runs the CRM\'s refund flows, and takes the program and add-ons off their account. Refunds done in the CRM or PayPal do the same here.', info)}
+        ${row('Make them a User on refund', 'What happens to a refunded Trainee\'s account. Students and staff who bought a program keep their role and just lose the program.', toggle('traineeRefundMakeUser', s.traineeRefundMakeUser), '',
+          ['they become a plain User: they can still log in, with only what Users get under Access by Role.', 'they stay a Trainee with the program removed.'])}`)}
     `;
     wire();
     setupAccordions();
     fillSheetNames();
     loadAlerts();
     loadStudents();
+    loadProducts();
   }
 
   // Collapsed by default; the ones you open stay open next time (this device).
@@ -2037,6 +2041,36 @@ window.addEventListener('pageshow', () => {
     };
   }
 
+  async function loadProducts() {
+    const el = document.getElementById('umProducts');
+    if (!el) return;
+    const d = await fetch('/api/admin/products').then(r => r.json()).catch(() => null);
+    if (!d) { el.innerHTML = '<div class="um-desc" style="color:#ff8a8a">Could not load products.</div>'; return; }
+    const names = d.statusNames || {};
+    const flowList = (flows, label) => (flows || []).length
+      ? `<div class="um-desc" style="margin-top:4px"><b style="color:#cfd6dd">${label}:</b> ${flows.map(f => `${esc(f.name)}${f.active ? '' : ' (off)'}`).join(', ')}</div>` : '';
+    el.innerHTML = (d.crmError ? `<div class="um-desc" style="color:#ffb84d;margin-bottom:6px">CRM not reachable right now (${esc(d.crmError)}) -- showing what the app knows.</div>` : '') +
+      d.products.map(pr => {
+        const opts = ['<option value="">No program</option>'].concat(d.programs.map(t => `<option value="${esc(t.id)}" ${t.id === pr.programId ? 'selected' : ''}>${esc(t.name)} (${t.days} days${t.addOns.length ? ', ' + t.addOns.length + ' add-ons' : ''})</option>`)).join('');
+        const addOns = (pr.bumps || []).map(b => `${esc(b.name)}${b.price != null ? ' $' + esc(b.price) : ''}`).join(', ');
+        return `<div class="um-product">
+          <div class="um-name">${esc(pr.name)}${pr.price != null ? ` <span class="um-desc">$${esc(pr.price)}</span>` : ''}${pr.stats ? ` <span class="um-desc">&middot; ${pr.stats.paid} sold, ${pr.stats.refunded} refunded</span>` : ''}</div>
+          ${addOns ? `<div class="um-desc">Add-ons: ${addOns}</div>` : ''}
+          <div class="um-sub">Gives the program <select class="pra-select" data-product="${esc(pr.sku)}">${opts}</select> ${pr.programId ? `<a href="/chat-app/programs-editor.html?id=${esc(pr.programId)}" target="_blank" rel="noopener" style="color:#009bff">Edit program</a>` : ''} ${savedMsg('umProdMsg-' + pr.sku)}</div>
+          <div class="um-desc" style="margin-top:6px"><b style="color:#cfd6dd">Tagging in the app:</b> the buyer's account becomes a <b>Trainee</b> (a plain User is upgraded; students and staff keep their role), gets this program and the add-ons they bought, and a Trainee group with Lee and Alexis.</div>
+          ${flowList(pr.flows?.purchased, 'Tagging in the CRM on purchase (Product is purchased flows)')}
+          ${flowList(pr.flows?.refunded, 'On refund (Product is refunded flows)')}
+          <div class="um-desc" style="margin-top:4px">Change these flows on the CRM's Products tab.</div>
+        </div>`;
+      }).join('');
+    el.querySelectorAll('[data-product]').forEach(sel => {
+      sel.onchange = async () => {
+        const r = await fetch('/api/admin/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: sel.dataset.product, templateId: sel.value }) });
+        flash('umProdMsg-' + sel.dataset.product, r.ok);
+        if (r.ok) loadProducts();
+      };
+    });
+  }
   async function loadStudents() {
     const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
     const sel = document.getElementById('umBuildUser');

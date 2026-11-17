@@ -394,7 +394,8 @@ export function getConfig() {
   // Trainees (Handstand Protocol buyers), Lee 2026-11-17: off by default.
   if (cfg.traineeWelcomeEnabled === undefined) cfg.traineeWelcomeEnabled = false;
   if (!cfg.traineeWelcomeText) cfg.traineeWelcomeText = DEFAULT_TRAINEE_WELCOME;
-  if (cfg.traineeRefundArchive === undefined) cfg.traineeRefundArchive = true;
+  if (cfg.traineeRefundMakeUser === undefined) cfg.traineeRefundMakeUser = true;
+  if (!cfg.productPrograms || typeof cfg.productPrograms !== "object") cfg.productPrograms = {};
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
   if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
   if (cfg.callSummaryMinMinutes === undefined) cfg.callSummaryMinMinutes = 2;
@@ -3503,10 +3504,13 @@ function revokeHandstand(userId, reason) {
   u.hcBumps = [];
   u.hcRefundedAt = new Date().toISOString();
   u.hcRefundReason = reason || "refund";
-  const archive = isTrainee(u) && getConfig().traineeRefundArchive !== false;
-  if (archive) u.archived = true;
+  // User Management > Trainees: "Make them a User on refund" (default on).
+  // Students and staff who bought it keep their role and just lose the program.
+  const makeUser = isTrainee(u) && getConfig().traineeRefundMakeUser !== false;
+  if (makeUser) u.role = "user";
   writeJson(USERS_FILE, users);
-  console.log(`[trainee] handstand access removed ${u.id} role=${u.role}${archive ? " (archived)" : ""} reason=${u.hcRefundReason}`);
+  if (makeUser) { syncDefaultGroups(); syncAppSheetRole(u).catch(e => console.error("[APP sheet role sync]", e.message)); }
+  console.log(`[trainee] program access removed ${u.id} role=${u.role}${makeUser ? " (made user)" : ""} reason=${u.hcRefundReason}`);
   return { userId: u.id, role: u.role, archived: !!u.archived };
 }
 const TRAINEE_GROUP_OWNER_EMAIL = "lee@pacificrimathletics.com";
@@ -3529,6 +3533,13 @@ function normalizeBumps(list) {
 // settings on the template record itself (template.settings) -- read live
 // every time, so a change in Protocol Settings reaches every enrolled user.
 const PROGRAM_SETTINGS_DEFAULTS = { dripEnabled: true, waitAmount: 1, waitUnit: "days", lockedText: "Unlocks in {time}", ctaUrl: "" };
+// "Get the app" buttons shown in the program view (web only -- hidden inside the app itself).
+const PROGRAM_APP_BUTTONS_DEFAULTS = {
+  enabled: true, heading: "Get the app",
+  iosLabel: "iPhone", iosUrl: "https://apps.apple.com/us/app/pacific-rim-athletics-app/id6799860403",
+  androidLabel: "Android", androidUrl: "https://groups.google.com/g/pra-app-android",
+  desktopLabel: "Desktop", desktopUrl: "https://www.pacificrimathletics.com/chat",
+};
 const DRIP_UNIT_MS = { minutes: 60000, hours: 3600000, days: 86400000 };
 function programSettings(template) {
   const s = { ...PROGRAM_SETTINGS_DEFAULTS, ...(template?.settings || {}) };
@@ -3537,6 +3548,8 @@ function programSettings(template) {
   if (!DRIP_UNIT_MS[s.waitUnit]) s.waitUnit = "days";
   s.lockedText = String(s.lockedText || PROGRAM_SETTINGS_DEFAULTS.lockedText);
   s.ctaUrl = String(s.ctaUrl || "");
+  s.appButtons = { ...PROGRAM_APP_BUTTONS_DEFAULTS, ...(s.appButtons || {}) };
+  s.appButtons.enabled = s.appButtons.enabled !== false;
   return s;
 }
 function sanitizeProgramSettings(input, current) {
@@ -3551,6 +3564,17 @@ function sanitizeProgramSettings(input, current) {
     if (u && !/^https?:\/\//i.test(u)) throw new Error("CTA link must start with http:// or https://");
     next.ctaUrl = u.slice(0, 500);
   }
+  if (input.appButtons && typeof input.appButtons === "object") {
+    const ab = { ...next.appButtons };
+    if (input.appButtons.enabled !== undefined) ab.enabled = !!input.appButtons.enabled;
+    for (const k of ["heading", "iosLabel", "androidLabel", "desktopLabel"]) if (input.appButtons[k] !== undefined) ab[k] = String(input.appButtons[k]).slice(0, 60);
+    for (const k of ["iosUrl", "androidUrl", "desktopUrl"]) if (input.appButtons[k] !== undefined) {
+      const u = String(input.appButtons[k]).trim();
+      if (u && !/^https?:\/\//i.test(u)) throw new Error("App button links must start with http:// or https://");
+      ab[k] = u.slice(0, 500);
+    }
+    next.appButtons = ab;
+  }
   return next;
 }
 // A user's enrollments (programs[] on their TRAINING_PROTOCOLS_FILE record,
@@ -3563,7 +3587,10 @@ function findProgramTemplate(templates, enr) {
     || null;
 }
 function findHandstandTemplate(templates) {
-  return templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()) || null;
+  // User Management > Trainees: which program each product gives buyers.
+  const mapped = getConfig().productPrograms?.hc21;
+  return (mapped && templates.find(t => t.id === mapped))
+    || templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()) || null;
 }
 // Same flattening as training-protocol.html's linearStepOrder: a day's whole
 // below-chain finishes before the next day (its right neighbor) starts.
@@ -5340,7 +5367,7 @@ export async function handleChatRequest(req, res, url) {
       const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentGroupEnabled", "autoBuildProtocolEnabled",
         "levelsRowOnNewStudent", "appSheetTypeEnabled", "staffAlertsEnabled", "defaultProtocolEnabled", "welcomeMessageEnabled", "movesPublicDefault",
         "renewalMessageEnabled", "renewalPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
-        "traineeWelcomeEnabled", "traineeRefundArchive"];
+        "traineeWelcomeEnabled", "traineeRefundMakeUser"];
       const NUM_KEYS = { loginSessionDays: [1, 365, 30], resetLinkMinutes: [5, 1440, 60], minPasswordLength: [4, 64, 8], renewalMessageDaysBefore: [1, 90, 14] };
       const STR_KEYS = ["welcomeMessageText", "renewalMessageText", "renewalMessageSenderId", "renewalStudentText", "traineeWelcomeText",
         "appSheetId", "appSheetTab", "levelsSheetId", "crosscheckOnlineTab", "crosscheckGymTab", "crosscheckBlacklistTab"];
@@ -5379,6 +5406,34 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, { settings, staff, counts, defaultProtocol, sheets, accessFeatures: ACCESS_FEATURES, accessRoles: ACCESS_ROLES,
         defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE, defaultTraineeWelcome: DEFAULT_TRAINEE_WELCOME });
     }
+    // Products sold in the CRM (Products tab), what a purchase does there, and
+    // which app program each one gives the buyer.
+    if (p === "/api/admin/products") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const cfg = getConfig();
+      if (req.method === "POST") {
+        const { sku, templateId } = await readJsonBody(req);
+        if (!sku) return sendJson(res, 400, { error: "sku required" });
+        cfg.productPrograms = { ...(cfg.productPrograms || {}), [String(sku)]: String(templateId || "") };
+        writeJson(CONFIG_FILE, cfg);
+      }
+      const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+      const programs = templates.filter(t => t.kind === "program").map(t => ({ id: t.id, name: t.name, days: (t.steps || []).filter(s => s.type === "day").length, addOns: Object.keys(t.bumps || {}) }));
+      let crm = null, crmError = null;
+      try {
+        const r = await crmFetch("/api/hc/bridge/products");
+        crm = r.ok ? await r.json() : null;
+        if (!r.ok) crmError = `CRM answered ${r.status}`;
+      } catch (e) { crmError = e.message; }
+      const products = (crm?.products || [{ sku: "hc21", name: HANDSTAND_TEMPLATE_NAME, price: null, bumps: [] }]).map(pr => {
+        const mapped = getConfig().productPrograms?.[pr.sku];
+        const def = pr.sku === "hc21" ? findHandstandTemplate(templates) : null;
+        return { ...pr, programId: (mapped && templates.some(t => t.id === mapped)) ? mapped : (def?.id || "") };
+      });
+      const users = readJson(USERS_FILE, []);
+      return sendJson(res, 200, { products, programs, crmError, buyers: users.filter(u => isTrainee(u) && !u.archived).length });
+    }
+
     // Spreadsheet name + tab links, so settings show "1. EMAIL LISTS > GYM" not an id.
     if (p === "/api/admin/sheet-info" && req.method === "GET") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
@@ -6884,11 +6939,13 @@ export async function handleChatRequest(req, res, url) {
     }
     if (p === "/api/chat/protocol-templates" && req.method === "POST") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
-      const { name, steps } = await readJsonBody(req);
+      const { name, steps, kind } = await readJsonBody(req);
       if (!String(name || "").trim()) return sendJson(res, 400, { error: "Name is required" });
       if (!Array.isArray(steps) || !steps.length) return sendJson(res, 400, { error: "Nothing to save — this protocol has no steps yet" });
       const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
       const template = { id: randomUUID(), name: name.trim(), steps, createdAt: new Date().toISOString(), savedBy: user.id };
+      // Programs Editor (programs-editor.html) creates program templates.
+      if (kind === "program") { if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" }); template.kind = "program"; template.settings = programSettings({}); template.bumps = {}; template.goal = ""; }
       templates.push(template);
       writeJson(PROTOCOL_TEMPLATES_FILE, templates);
       return sendJson(res, 200, { template: { id: template.id, name: template.name, createdAt: template.createdAt, stepCount: steps.length } });

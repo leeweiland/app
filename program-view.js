@@ -23,6 +23,11 @@
   .pv-chat-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 9px 18px; border-radius: 999px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.03); color: #fff; font: inherit; font-size: .82rem; cursor: pointer; text-decoration: none; }
   .pv-chat-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
   .pv-chat-btn svg { width: 16px; height: 16px; }
+  .pv-app { margin-top: 16px; }
+  .pv-app-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .pv-app-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.03); color: #fff; font-size: .78rem; font-weight: 700; text-decoration: none; transition: border-color .15s, color .15s; }
+  .pv-app-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .pv-app-btn svg { width: 16px; height: 16px; }
   .pv-note { max-width: 760px; margin: 0 auto 16px; padding: 10px 14px; border-radius: 10px; border: 1px dashed rgba(0,155,255,0.45); background: var(--pra-blue-dim); color: #cfe9ff; font-size: .8rem; font-weight: 600; line-height: 1.5; text-align: center; }
   .pv-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .pv-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; max-width: 680px; width: 100%; margin: 0 auto; }
@@ -180,6 +185,22 @@
     </div>`;
   }
 
+  // "Get the app" buttons (Programs Editor > App buttons). Web only: inside
+  // the iPhone/Android app they already have it.
+  function appButtonsHtml(ab) {
+    if (!ab || ab.enabled === false) return '';
+    try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return ''; } catch {}
+    const ICONS = {
+      ios: '<svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.4" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+      android: '<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="9" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 9a3.5 3.5 0 0 1 7 0M9 5.5 7.8 4M15 5.5l1.2-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+      desktop: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="12" rx="1.8" stroke="currentColor" stroke-width="1.6"/><path d="M9 20h6M12 16.5V20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    };
+    const btns = [['ios', ab.iosLabel, ab.iosUrl], ['android', ab.androidLabel, ab.androidUrl], ['desktop', ab.desktopLabel, ab.desktopUrl]]
+      .filter(([, , url]) => url)
+      .map(([k, label, url]) => `<a class="pv-app-btn" href="${esc(url)}" target="_blank" rel="noopener">${ICONS[k]}<span>${esc(label || k)}</span></a>`).join('');
+    if (!btns) return '';
+    return `<div class="pv-app"><div class="pv-label">${esc(ab.heading || 'Get the app')}</div><div class="pv-app-row">${btns}</div></div>`;
+  }
   function youtubeHtml(s, compact) {
     const id = encodeURIComponent(s.youtubeId || '');
     if (compact) return `<div class="step-type">YouTube</div><img class="pv-yt-thumb" src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" alt=""/><div class="pv-compact" style="margin-top:6px"><b>${esc(s.title || '')}</b></div>`;
@@ -292,6 +313,7 @@
         ${pr.goal ? `<div class="pv-goal">${esc(pr.goal)}</div>` : ''}
         ${!opts.preview ? `<div class="pv-progress"><div class="pv-progress-bar"><span style="width:${pct}%"></span></div><div class="pv-progress-row"><span class="pv-label">Day ${pr.unlockedCount} of ${pr.totalDays}</span><span class="pv-label">${pct}%</span></div></div>` : ''}
         ${opts.onOpenChat ? `<button type="button" class="pv-chat-btn" data-open-chat>${CHAT_SVG}${esc(opts.chatLabel || 'Open your group chat')}</button>` : ''}
+        ${appButtonsHtml(pr.settings && pr.settings.appButtons)}
       </div>
       ${note ? `<div class="pv-note">${note}</div>` : ''}
       <div class="pv-layout">
