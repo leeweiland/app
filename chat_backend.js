@@ -6167,6 +6167,17 @@ export async function handleChatRequest(req, res, url) {
       if (!template) return sendJson(res, 404, { error: "Template not found" });
       return sendJson(res, 200, { program: buildProgramView(template, null, { staffView: true, ownedBumps: [] }) });
     }
+    // Same view from the editor's unsaved draft (steps / settings / goal) -- nothing is saved.
+    if (programTemplatePreview && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const template = readJson(PROTOCOL_TEMPLATES_FILE, []).find(t => t.id === programTemplatePreview[1]);
+      if (!template) return sendJson(res, 404, { error: "Template not found" });
+      const draft = await readJsonBody(req);
+      let settings = template.settings;
+      try { if (draft.settings) settings = sanitizeProgramSettings(draft.settings, template.settings); } catch {}
+      const view = { ...template, settings, steps: Array.isArray(draft.steps) && draft.steps.length ? draft.steps : template.steps, goal: typeof draft.goal === "string" ? draft.goal : template.goal };
+      return sendJson(res, 200, { program: buildProgramView(view, null, { staffView: true, ownedBumps: [] }) });
+    }
     const programMatch = p.match(/^\/api\/chat\/protocol-program\/([^/]+)$/);
     if (programMatch && req.method === "GET") {
       const targetUserId = programMatch[1];

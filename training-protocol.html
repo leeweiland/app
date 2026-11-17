@@ -329,11 +329,15 @@
   .template-add-form input, .template-add-form textarea { width: 100%; margin-bottom: 6px; }
   .template-add-form textarea { resize: vertical; min-height: 60px; font-family: inherit; }
   /* Program editor (a kind:"program" template edited in place, see openTemplateEditor) */
-  .tpl-bar { display: none; flex-direction: column; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 14px; border: 1px solid rgba(0,155,255,0.45); border-radius: 12px; background: var(--pra-blue-dim); }
+  .tpl-bar { display: none; flex-direction: row; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; background: none; min-width: 0; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+  .tpl-bar .tpl-bar-actions .pra-btn { padding: 6px 12px; font-size: .74rem; white-space: nowrap; }
+  .tpl-bar #tplSaveBtn[disabled] { opacity: .45; cursor: default; }
+  .tpl-bar .tpl-save-status { font-size: .72rem; white-space: nowrap; }
+  #viewLock { justify-content: flex-start; padding-top: 12vh; }
   .tpl-bar-title { font-family: var(--font-secondary); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--pra-blue); text-align: center; }
   .tpl-bar-title b { color: #fff; font-family: var(--font-primary); font-size: .95rem; letter-spacing: .01em; text-transform: none; display: block; margin-top: 2px; }
   .tpl-bar-note { font-size: .74rem; color: #cfe9ff; text-align: center; }
-  .tpl-bar-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .tpl-bar-actions { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 6px; }
   .tpl-bar-actions .pra-btn { padding: 7px 14px; font-size: .74rem; }
   .tpl-save-status { font-size: .72rem; color: var(--pra-dim); min-height: 1em; }
   .tpl-save-status.err { color: #ff7b7b; }
@@ -372,21 +376,21 @@
       <!-- Program editor bar: shown only while a kind:"program" template is
            open for editing (openTemplateEditor). Edits go straight into the
            template, never the Flow Builder draft. -->
-      <div class="tpl-bar" id="tplBar">
-        <div class="tpl-bar-title">Editing program<b id="tplBarName"></b></div>
-        <div class="tpl-bar-note">Every change saves straight into this program. Students enrolled in it see changes live. The Flow Builder draft is not touched.</div>
-        <div class="tpl-bar-actions">
-          <button class="pra-btn" id="tplPreviewBtn" type="button">Preview as student</button>
-          <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button">Add-ons &amp; goal</button>
-          <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
-          <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button">Exit program editor</button>
-        </div>
-        <div class="tpl-save-status" id="tplSaveStatus"></div>
-      </div>
       <div class="protocol-head-row protocol-controls-row">
         <div class="protocol-head-controls-left">
           <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
           <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
+          <div class="tpl-bar" id="tplBar">
+            <div class="tpl-bar-title">Editing program<b id="tplBarName" style="display:none"></b></div>
+            <div class="tpl-bar-actions">
+              <button class="pra-btn" id="tplPreviewBtn" type="button">Preview as student</button>
+              <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button">Add-ons &amp; goal</button>
+              <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
+              <button class="pra-btn" id="tplSaveBtn" type="button" disabled title="Publish your changes to everyone in this program">Save</button>
+              <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button" style="display:none">Exit program editor</button>
+            </div>
+            <div class="tpl-save-status" id="tplSaveStatus"></div>
+          </div>
         </div>
         <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
           <button class="view-mode-btn" id="ownFlowBtn" type="button" style="display:none" title="Your own protocol">Your Flow</button>
@@ -1032,7 +1036,10 @@ async function showProgramView(opt = {}) {
   const url = preview
     ? '/api/chat/protocol-program/template/' + encodeURIComponent(previewId)
     : '/api/chat/protocol-program/' + encodeURIComponent(targetUserId) + (wanted ? '?templateId=' + encodeURIComponent(wanted) : '');
-  const r = await fetch(url).catch(() => null);
+  const useDraft = preview && tplDirty && builderMode === 'tpl' && editingTemplate?.id === previewId;
+  const r = await (useDraft
+    ? fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps, settings: tplDraft.settings || undefined, goal: tplDraft.goal }) })
+    : fetch(url)).catch(() => null);
   const data = r ? await r.json().catch(() => ({})) : {};
   if (!r || !r.ok) { box.innerHTML = `<div class="pra-muted" style="text-align:center;padding:40px 0">${escapeHtml(data.error || 'Could not load this program.')}</div>`; return; }
   if (viewMode !== 'program') return;
@@ -1816,10 +1823,10 @@ function wireProgramHeroEditing(box, templateId) {
   const rec = editingTemplate?.record || {};
   const settings = rec.settings || {};
   const fields = {
-    kicker: { get: () => settings.kicker || 'Powerbatics', patch: v => ({ settings: { kicker: v } }) },
-    displayTitle: { get: () => settings.displayTitle || String(rec.name || '').replace(/^Powerbatics\s+/i, ''), patch: v => ({ settings: { displayTitle: v } }) },
-    goal: { get: () => rec.goal || '', patch: v => ({ goal: v }) },
-    appHeading: { get: () => settings.appButtons?.heading || 'Get the app', patch: v => ({ settings: { appButtons: { heading: v } } }) },
+    kicker: { get: () => tplDraft.settings?.kicker ?? settings.kicker ?? 'Powerbatics', patch: v => ({ settings: { kicker: v } }) },
+    displayTitle: { get: () => tplDraft.settings?.displayTitle ?? settings.displayTitle ?? String(rec.name || '').replace(/^Powerbatics\s+/i, ''), patch: v => ({ settings: { displayTitle: v } }) },
+    goal: { get: () => tplDraft.goal ?? rec.goal ?? '', patch: v => ({ goal: v }) },
+    appHeading: { get: () => tplDraft.settings?.appButtons?.heading ?? settings.appButtons?.heading ?? 'Get the app', patch: v => ({ settings: { appButtons: { heading: v } } }) },
   };
   box.querySelectorAll('[data-hero]').forEach(el => {
     const f = fields[el.dataset.hero];
@@ -1842,11 +1849,13 @@ function wireProgramHeroEditing(box, templateId) {
         el.contentEditable = 'false'; el.classList.remove('editing-text');
         const after = el.innerText.replace(/\s+/g, ' ').trim();
         if (save && after !== before.trim()) {
-          const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(templateId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f.patch(after)) }).catch(() => null);
-          if (r && r.ok) {
-            const d2 = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(templateId)).then(x => x.json()).catch(() => ({}));
-            if (d2.template && editingTemplate?.id === templateId) editingTemplate.record = d2.template;
-          } else alert('Not saved -- try again.');
+          const p2 = f.patch(after);
+          if (p2.goal !== undefined) tplDraft.goal = p2.goal;
+          if (p2.settings) {
+            const cur = tplDraft.settings || {};
+            tplDraft.settings = { ...cur, ...p2.settings, ...(p2.settings.appButtons ? { appButtons: { ...(cur.appButtons || {}), ...p2.settings.appButtons } } : {}) };
+          }
+          markTemplateDirty();
         }
         showProgramView(lastProgramViewOpt);
       };
@@ -2058,6 +2067,10 @@ function syncViewLock() {
 // undoing past the point you switched would silently cross-apply an edit
 // from one protocol onto the other.
 async function setProtocolMode(mode, builder) {
+  if (builderMode === 'tpl' && tplDirty && builder !== 'tpl') {
+    if (confirm('Save your program changes before leaving? (Cancel throws them away.)')) { if (!(await publishTemplateDraft())) return; }
+    else { tplDirty = false; tplDraft = { settings: null, goal: undefined }; }
+  }
   // builder: false | true | 'program' | 'tpl' (see builderMode)
   const key = builder === 'program' ? 'program' : builder === 'tpl' ? 'tpl' : builder ? 'true' : 'false';
   const builderChanged = key !== builderMode;
@@ -3839,7 +3852,42 @@ async function loadTemplateSteps() {
   render();
 }
 // Saves are queued so two quick edits can't land out of order.
+// A program's edits are a DRAFT until Save (Lee: don't publish live). Steps
+// live in `steps`; the top-of-view texts in tplDraft.
+let tplDirty = false;
+let tplDraft = { settings: null, goal: undefined };
+function markTemplateDirty() {
+  tplDirty = true;
+  const b = document.getElementById('tplSaveBtn'); if (b) b.disabled = false;
+  setTplStatus('Unsaved changes');
+}
 function saveTemplateSteps() {
+  if (!editingTemplate?.id) return Promise.resolve();
+  if (!steps.length) { setTplStatus('A program needs at least one step.', true); return Promise.resolve(); }
+  markTemplateDirty();
+  if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt);
+  return Promise.resolve();
+}
+async function publishTemplateDraft() {
+  const id = editingTemplate?.id;
+  if (!id || !tplDirty) return true;
+  const body = { steps };
+  if (tplDraft.settings) body.settings = tplDraft.settings;
+  if (tplDraft.goal !== undefined) body.goal = tplDraft.goal;
+  setTplStatus('Saving…');
+  const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) { setTplStatus(`Not saved: ${d.error || 'connection problem'}`, true); return false; }
+  tplDirty = false; tplDraft = { settings: null, goal: undefined };
+  const b = document.getElementById('tplSaveBtn'); if (b) b.disabled = true;
+  const fresh = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(id)).then(x => x.json()).catch(() => ({}));
+  if (fresh.template && editingTemplate?.id === id) editingTemplate.record = fresh.template;
+  setTplStatus('Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt);
+  return true;
+}
+window.addEventListener('beforeunload', (e) => { if (tplDirty) { e.preventDefault(); e.returnValue = ''; } });
+function saveTemplateStepsNow_unused() {
   const id = editingTemplate?.id;
   if (!id) return Promise.resolve();
   if (!steps.length) { setTplStatus('A program needs at least one step, so this was not saved. Ctrl+Z to undo.', true); return Promise.resolve(); }
@@ -3884,6 +3932,7 @@ function setupTemplateEditor() {
   document.getElementById('tplPreviewBtn').onclick = preview;
   document.getElementById('tplStudentViewBtn').onclick = preview;
   document.getElementById('tplBumpsBtn').onclick = openBumpsEditor;
+  document.getElementById('tplSaveBtn').onclick = () => publishTemplateDraft();
   document.getElementById('tplSettingsBtn').onclick = () => {
     document.getElementById('protocolSettingsBtn').click();
     const admin = document.getElementById('adminProtocolSettings'), save = document.getElementById('videoFoldersSaveBtn');
