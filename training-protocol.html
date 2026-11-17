@@ -192,6 +192,8 @@
   .step-delete { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit { position: absolute; top: 8px; right: 38px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--pra-border); background: rgba(16,16,20,0.75); color: var(--pra-dim); cursor: pointer; font-size: 12px; z-index: 2; }
   .step-edit:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
+  .step-video { position: absolute; top: 8px; right: 68px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(0,155,255,.55); background: rgba(16,16,20,0.75); color: #fff; cursor: pointer; z-index: 2; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .step-video:hover { border-color: var(--pra-blue); }
   /* Grabbing anywhere else on a card pans the canvas (see setupCanvasPanZoom)
      — this handle is the one spot on a card that picks the step up to move
      it instead, so the two gestures never fight each other. */
@@ -262,6 +264,24 @@
      below) instead of every result on the page trying to load its video
      at once. */
   .video-results-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  /* Video panel: bigger on desktop, up to 4 videos a row. */
+  .modal-box.video-panel { max-width: 1100px; width: 94vw; max-height: 88vh; }
+  @media (min-width: 560px) { .video-panel .video-results-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 820px) { .video-panel .video-results-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 1100px) { .video-panel .video-results-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .vp-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; flex-shrink: 0; }
+  .vp-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); font: inherit; font-size: .8rem; cursor: pointer; }
+  .vp-tab.active { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
+  .vp-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .vp-drop { border: 1.5px dashed rgba(0,155,255,0.5); border-radius: 12px; padding: 34px 16px; text-align: center; cursor: pointer; color: #fff; }
+  .vp-drop:hover { background: rgba(0,155,255,0.06); }
+  /* Editing in place: the editor sits inside the card instead of a popup. */
+  .modal-box.inline-edit { position: relative; max-width: none !important; width: auto; max-height: none; margin-top: 10px; padding: 12px; box-shadow: none; border-color: rgba(0,155,255,0.5); background: rgba(0,0,0,0.25); }
+  .modal-box.inline-edit .pra-h2 { font-size: .9rem; }
+  .modal-box.inline-edit .modal-scroll-body { max-height: none; overflow: visible; }
+  .step-node.editing-inline { z-index: 40; }
+  .inplace-video { position: absolute; top: 8px; right: 42px; z-index: 3; height: 28px; padding: 0 9px; display: flex; align-items: center; gap: 5px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(0,155,255,.55); font: inherit; font-size: .7rem; cursor: pointer; }
+  .inplace-video svg, .step-video svg { width: 14px; height: 14px; }
   /* overflow:hidden here (not needed -- .video-result-thumb already clips
      its own video/play-icon) made CSS Grid's "automatic minimum size"
      rule collapse this item's row track to 0-and-grow-from-there instead
@@ -435,10 +455,32 @@
 
   <!-- Drive video search -->
   <div class="modal-backdrop" id="videoModal">
-    <div class="pra-panel modal-box">
-      <div class="pra-h2" style="margin-bottom:14px">Choose a Video</div>
-      <input class="pra-input" id="videoSearchInput" placeholder="Search video name…" style="margin-bottom:12px"/>
-      <div id="videoResults" class="modal-scroll-body"></div>
+    <div class="pra-panel modal-box video-panel">
+      <div class="pra-h2" id="videoPanelTitle" style="margin-bottom:12px;flex-shrink:0">Choose a Video</div>
+      <div class="vp-tabs" id="videoPanelTabs">
+        <button type="button" class="vp-tab active" data-tab="library">Library</button>
+        <button type="button" class="vp-tab" data-tab="upload">Upload new</button>
+        <button type="button" class="vp-tab" data-tab="drive">Google Drive</button>
+        <button type="button" class="vp-tab" data-tab="youtube">YouTube link</button>
+      </div>
+      <div class="vp-body" data-body="library">
+        <input class="pra-input" id="videoSearchInput" placeholder="Search video name…" style="margin-bottom:12px;flex-shrink:0"/>
+        <div id="videoResults" class="modal-scroll-body"></div>
+      </div>
+      <div class="vp-body" data-body="upload" style="display:none">
+        <div class="vp-drop" id="vpUploadDrop">Pick a video from this device<div class="pra-muted" style="font-size:.78rem;margin-top:6px">It's saved to Drive and used here.</div></div>
+        <div class="pra-muted" id="vpUploadMsg" style="font-size:.82rem;margin-top:10px;min-height:1em"></div>
+      </div>
+      <div class="vp-body" data-body="drive" style="display:none">
+        <input class="pra-input" id="vpDriveInput" placeholder="Paste a Google Drive link (or file id)" autocomplete="off"/>
+        <button type="button" class="pra-btn" id="vpDriveUse" style="margin-top:10px">Use this video</button>
+        <div class="pra-muted" id="vpDriveMsg" style="font-size:.82rem;margin-top:10px;min-height:1em"></div>
+      </div>
+      <div class="vp-body" data-body="youtube" style="display:none">
+        <input class="pra-input" id="vpYoutubeInput" placeholder="Paste a YouTube link" autocomplete="off"/>
+        <button type="button" class="pra-btn" id="vpYoutubeUse" style="margin-top:10px">Use this video</button>
+        <div class="pra-muted" id="vpYoutubeMsg" style="font-size:.82rem;margin-top:10px;min-height:1em"></div>
+      </div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%;flex-shrink:0" onclick="closeModal('videoModal')">Cancel</button>
     </div>
   </div>
@@ -794,7 +836,21 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
 });
 
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function closeModal(id) { restoreInlineEditors(); document.getElementById(id).classList.remove('show'); }
+// Editing in place: textModal / stepEditModal open INSIDE the tapped card
+// (pendingInlineCard) instead of as a popup. The editor box is moved into
+// the card and put back into its popup shell when it closes or the view
+// re-renders.
+let pendingInlineCard = null;
+const inlineMoved = [];
+function restoreInlineEditors() {
+  while (inlineMoved.length) {
+    const { box, home, card } = inlineMoved.pop();
+    box.classList.remove('inline-edit');
+    home.appendChild(box);
+    card?.closest('.step-node')?.classList.remove('editing-inline');
+  }
+}
 
 // Admin Settings: edit the list of Drive folders searched for move videos.
 let videoFolders = [], defaultAiPrompt = '';
@@ -978,7 +1034,22 @@ async function showProgramView(opt = {}) {
   if (canEdit && preview) wireProgramViewEditing(box, pr.templateId);
 }
 
-function openModal(id) { document.getElementById(id).classList.add('show'); }
+function openModal(id) {
+  const card = pendingInlineCard;
+  pendingInlineCard = null;
+  if (card && card.isConnected && (id === 'textModal' || id === 'stepEditModal')) {
+    restoreInlineEditors();
+    const home = document.getElementById(id);
+    const box = home.querySelector('.modal-box');
+    box.classList.add('inline-edit');
+    card.appendChild(box);
+    card.closest('.step-node')?.classList.add('editing-inline');
+    inlineMoved.push({ box, home, card });
+    const f = box.querySelector('textarea, input'); if (f) setTimeout(() => f.focus(), 30);
+    return;
+  }
+  document.getElementById(id).classList.add('show');
+}
 // Click the dark overlay itself (not anything inside the panel) to close
 // whichever modal it belongs to — e.currentTarget is always the backdrop
 // since this is bound directly on it, so a click that bubbled up from a
@@ -1552,8 +1623,14 @@ function editStepInPlace(s) {
 }
 function wireInPlaceEditing(container, groupSel, cardSel, headOf, afterChange) {
   container.querySelectorAll(cardSel + '[data-step-id]').forEach(card => {
+    const st = steps.find(x => x.id === card.dataset.stepId);
+    if (st && (st.type === 'video' || st.type === 'youtube')) {
+      card.insertAdjacentHTML('afterbegin', `<button type="button" class="inplace-video" title="Change video">${VIDEO_BTN_SVG}<span>Video</span></button>`);
+      card.querySelector('.inplace-video').onclick = (e) => { e.stopPropagation(); openVideoPanel(st.id); };
+    }
     card.addEventListener('click', (e) => {
-      if (e.target.closest('video, a, button, input, textarea, .inplace-drag, .pv-ask, iframe')) return;
+      if (e.target.closest('video, a, button, input, textarea, select, .inplace-drag, .pv-ask, iframe, .inline-edit')) return;
+      pendingInlineCard = card;
       editStepInPlace(steps.find(x => x.id === card.dataset.stepId));
     });
   });
@@ -1993,6 +2070,7 @@ document.getElementById('defaultProtocolToggle').addEventListener('change', asyn
 });
 
 function render() {
+  restoreInlineEditors(); // an editor open inside a card goes home before the cards are rebuilt
   const emptyHint = document.getElementById('emptyHint');
   const firstBtn = document.getElementById('addFirstStepBtn');
   firstBtn.style.display = canEdit ? '' : 'none';
@@ -2046,6 +2124,7 @@ function render() {
         <div class="pra-panel step-card">
           ${canEdit ? `<button class="step-drag-handle" data-id="${s.id}" title="Drag to move">⠿</button>` : ''}
           ${canEdit ? `<button class="step-delete" data-id="${s.id}" title="Remove step">✕</button>` : ''}
+          ${canEdit && (s.type === 'video' || s.type === 'youtube') ? `<button class="step-video" data-id="${s.id}" title="Change video (library, upload, Drive, YouTube)">${VIDEO_BTN_SVG}</button>` : ''}
           ${canEdit && builderMode === 'tpl' ? `<button class="step-edit" data-id="${s.id}" title="Edit step">✎</button>`
             : canEdit && (s.type === 'text' || s.type === 'video') ? `<button class="step-edit" data-id="${s.id}" title="${s.type === 'video' ? 'Rename video' : 'Edit text'}">✎</button>` : ''}
           ${!canEdit && (s.type === 'video' || s.type === 'image') ? `<button class="step-ask" data-id="${s.id}" title="Ask a question about this">?</button>` : ''}
@@ -2092,10 +2171,12 @@ function render() {
       await saveSteps();
     };
   });
+  world.querySelectorAll('.step-video').forEach(btn => { btn.onclick = (e) => { e.stopPropagation(); openVideoPanel(btn.dataset.id); }; });
   world.querySelectorAll('.step-edit').forEach(btn => {
     btn.onclick = () => {
       const s = steps.find(x => x.id === btn.dataset.id);
       if (!s) return;
+      pendingInlineCard = btn.closest('.step-card'); // edit right in the card, no popup
       if (builderMode === 'tpl') { openStepEditor(s); return; }
       editingStepId = s.id;
       // Video steps: the pencil renames the move label shown above the clip.
@@ -3142,12 +3223,10 @@ async function setupApplyProtocol() {
 }
 
 function wireModals() {
+  wireVideoPanel();
   document.getElementById('chooseVideo').onclick = () => {
     closeModal('chooseTypeModal');
-    document.getElementById('videoSearchInput').value = '';
-    document.getElementById('videoResults').innerHTML = '';
-    openModal('videoModal');
-    searchVideos('');
+    openVideoPanel(null, 'library');
   };
   document.getElementById('chooseUploadVideo').onclick = () => {
     closeModal('chooseTypeModal');
@@ -3202,7 +3281,9 @@ function wireModals() {
   document.getElementById('videoFileInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return; // user cancelled the OS picker
-    const msg = document.getElementById('uploadStatusMsg');
+    const fromPanel = e.target.dataset.panel === '1';
+    delete e.target.dataset.panel;
+    const msg = document.getElementById(fromPanel ? 'vpUploadMsg' : 'uploadStatusMsg');
     msg.textContent = 'Uploading…';
     const fd = new FormData();
     fd.append('video', file);
@@ -3210,9 +3291,9 @@ function wireModals() {
       const r = await fetch('/api/chat/training-protocol/upload-video', { method: 'POST', body: fd });
       const d = await r.json();
       if (!r.ok) { msg.textContent = d.error || 'Upload failed.'; return; }
-      const step = await commitNewStep({ type: 'video', driveFileId: d.driveFileId, name: d.name });
-      labelVideoStepInBackground(step);
       msg.textContent = '';
+      if (!fromPanel) videoPanelTarget = null;
+      await applyVideoChoice({ driveFileId: d.driveFileId, name: d.name });
     } catch {
       msg.textContent = 'Upload failed.';
     }
@@ -3288,6 +3369,86 @@ let videoCurrentQuery = '';
 let videoLoadingMore = false;
 let videoSentinelObserver = null;
 
+// ── Video panel ─────────────────────────────────────────────────────────
+// One panel for adding a video or changing an existing one: pick from the
+// library (big grid), upload a new one, paste a Google Drive link, or a
+// YouTube link (that step becomes a YouTube step).
+const VIDEO_BTN_SVG = '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M16 10.5l5-3v9l-5-3" stroke="#009bff" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+let videoPanelTarget = null; // step id being changed, or null = add a new step
+function openVideoPanel(targetStepId, tab = 'library') {
+  videoPanelTarget = targetStepId || null;
+  document.getElementById('videoPanelTitle').textContent = targetStepId ? 'Change Video' : 'Add a Video';
+  ['vpUploadMsg', 'vpDriveMsg', 'vpYoutubeMsg'].forEach(id => { document.getElementById(id).textContent = ''; });
+  document.getElementById('vpDriveInput').value = '';
+  document.getElementById('vpYoutubeInput').value = '';
+  document.getElementById('videoSearchInput').value = '';
+  document.getElementById('videoResults').innerHTML = '';
+  pendingInlineCard = null;
+  openModal('videoModal');
+  showVideoPanelTab(tab);
+  searchVideos('');
+}
+function showVideoPanelTab(tab) {
+  document.querySelectorAll('#videoPanelTabs .vp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('#videoModal .vp-body').forEach(b => { b.style.display = b.dataset.body === tab ? 'flex' : 'none'; });
+}
+function extractDriveId(v) {
+  const t = String(v || '').trim();
+  const m = t.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || t.match(/[?&]id=([a-zA-Z0-9_-]{20,})/);
+  return m ? m[1] : (/^[a-zA-Z0-9_-]{20,}$/.test(t) ? t : '');
+}
+function extractYoutubeId(v) {
+  const t = String(v || '').trim();
+  const m = t.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([a-zA-Z0-9_-]{11})/i);
+  return m ? m[1] : (/^[a-zA-Z0-9_-]{11}$/.test(t) ? t : '');
+}
+// Put the chosen video on the step being changed, or add it as a new step.
+async function applyVideoChoice(choice) {
+  closeModal('videoModal');
+  const targetId = videoPanelTarget;
+  videoPanelTarget = null;
+  if (!targetId) {
+    if (choice.youtubeId) { await commitNewStep({ type: 'youtube', youtubeId: choice.youtubeId, title: choice.title || '' }); return; }
+    const step = await commitNewStep({ type: 'video', driveFileId: choice.driveFileId, name: choice.name || 'Video' });
+    labelVideoStepInBackground(step);
+    return;
+  }
+  const s = steps.find(x => x.id === targetId);
+  if (!s) return;
+  snapshotBeforeChange();
+  if (choice.youtubeId) {
+    const keepTitle = s.moveLabel || s.title || '';
+    delete s.driveFileId; delete s.name; delete s.sound;
+    s.type = 'youtube'; s.youtubeId = choice.youtubeId; s.title = keepTitle;
+  } else {
+    if (s.type === 'youtube') { delete s.youtubeId; delete s.intro; }
+    s.type = 'video'; s.driveFileId = choice.driveFileId; s.name = choice.name || s.name || 'Video';
+    if (!s.moveLabelManual) delete s.moveLabel;
+  }
+  render();
+  await saveSteps();
+  if (s.type === 'video' && !s.moveLabelManual) labelVideoStepInBackground(s);
+}
+function wireVideoPanel() {
+  document.querySelectorAll('#videoPanelTabs .vp-tab').forEach(b => { b.onclick = () => showVideoPanelTab(b.dataset.tab); });
+  document.getElementById('vpUploadDrop').onclick = () => {
+    const input = document.getElementById('videoFileInput');
+    input.value = '';
+    input.dataset.panel = '1';
+    input.click();
+  };
+  document.getElementById('vpDriveUse').onclick = () => {
+    const id = extractDriveId(document.getElementById('vpDriveInput').value);
+    if (!id) { document.getElementById('vpDriveMsg').textContent = "That doesn't look like a Google Drive link."; return; }
+    applyVideoChoice({ driveFileId: id, name: 'Drive video' });
+  };
+  document.getElementById('vpYoutubeUse').onclick = () => {
+    const id = extractYoutubeId(document.getElementById('vpYoutubeInput').value);
+    if (!id) { document.getElementById('vpYoutubeMsg').textContent = "That doesn't look like a YouTube link."; return; }
+    applyVideoChoice({ youtubeId: id });
+  };
+}
+
 function videoResultCardHtml(f) {
   return `
     <div class="video-result" data-id="${f.id}" data-name="${escapeHtml(f.name)}">
@@ -3303,11 +3464,7 @@ function wireVideoResultCards(box) {
   box.querySelectorAll('.video-result').forEach(el => {
     if (el.dataset.wired) return;
     el.dataset.wired = '1';
-    el.onclick = async () => {
-      const step = await commitNewStep({ type: 'video', driveFileId: el.dataset.id, name: el.dataset.name });
-      labelVideoStepInBackground(step);
-      closeModal('videoModal');
-    };
+    el.onclick = () => applyVideoChoice({ driveFileId: el.dataset.id, name: el.dataset.name });
   });
   box.querySelectorAll('.video-result-thumb video[data-src]').forEach(v => videoThumbObserver.observe(v));
 }
