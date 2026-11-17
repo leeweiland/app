@@ -1773,9 +1773,15 @@ function makeTextEditable(el, step, field, { single = false } = {}) {
     const finish = async (save) => {
       if (done) return; done = true;
       el.removeEventListener('blur', onBlur); el.removeEventListener('keydown', onKey);
+      // Read the words BEFORE leaving edit mode -- once the pre-wrap style is
+      // gone, innerText folds every line break into a space (that squashed two
+      // Handstand Protocol texts on 11/17 when they were clicked in and out).
+      const after = el.innerText.replace(/\u00a0/g, ' ').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
       el.contentEditable = 'false'; el.classList.remove('editing-text');
-      const after = el.innerText.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-      if (!save || after === before.trim()) { render(); if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt); return; }
+      const flat = (x) => String(x).replace(/\s+/g, ' ').trim();
+      // Only the line breaks differ (and none survive) -> not a real edit.
+      const lostBreaksOnly = flat(after) === flat(before) && !/\n/.test(after) && /\n/.test(before);
+      if (!save || after === before.trim() || lostBreaksOnly) { render(); if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt); return; }
       snapshotBeforeChange();
       const s = steps.find(x => x.id === step.id);
       if (!s) return;
