@@ -383,7 +383,7 @@
           <div class="tpl-bar" id="tplBar">
             <div class="tpl-bar-title">Editing program<b id="tplBarName" style="display:none"></b></div>
             <div class="tpl-bar-actions">
-              <button class="pra-btn" id="tplPreviewBtn" type="button">Preview as student</button>
+              <button class="pra-btn" id="tplPreviewBtn" type="button" style="display:none">Preview as student</button>
               <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button">Add-ons &amp; goal</button>
               <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
               <button class="pra-btn" id="tplSaveBtn" type="button" disabled title="Publish your changes to everyone in this program">Save</button>
@@ -1026,7 +1026,8 @@ async function showProgramView(opt = {}) {
   lastProgramViewOpt = opt;
   viewMode = 'program';
   document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(opt.btnId || 'programViewBtn').classList.add('active');
+  // Coaches: the program view IS the Low Ticket page (edit it right there).
+  document.getElementById(opt.btnId || (canEdit ? 'lowTicketBtn' : 'programViewBtn')).classList.add('active');
   applyViewModeDisplay();
   const box = document.getElementById('programView');
   if (!box.firstChild || opt.templateId) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
@@ -2023,7 +2024,7 @@ function applyViewModeDisplay() {
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
   document.getElementById('katasPage').style.display = viewMode === 'katas' ? 'flex' : 'none';
   document.getElementById('programView').style.display = viewMode === 'program' ? 'block' : 'none';
-  if (viewMode !== 'program') ['programViewBtn', 'tplStudentViewBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
+  if (viewMode !== 'program') ['programViewBtn', 'tplStudentViewBtn', 'lowTicketBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
   document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas' && viewMode !== 'program') ? 'block' : 'none';
   // The day-select row also needs at least one <option value="day-id">
   // (see syncPageDaySelectOptions, called from renderPageView) — hidden
@@ -3829,6 +3830,12 @@ function setTplStatus(text, isError) {
 }
 async function openTemplateEditor(t) {
   if (!canEdit || !t?.id) return;
+  // A program is edited on its Low Ticket page (no separate program canvas).
+  if (!(programPreviewTemplateId === t.id && targetUserId === me.id)) {
+    location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(t.id);
+    return;
+  }
+  return showProgramView();
   editingTemplate = { id: t.id, name: t.name || '', record: null };
   builderMode = ''; // force a fresh load even if another program was open
   try { const u = new URL(location.href); u.searchParams.set('editTemplate', t.id); history.replaceState(null, '', u); } catch {}
@@ -3920,7 +3927,8 @@ function syncTemplateEditorChrome() {
   const on = builderMode === 'tpl' && !!editingTemplate;
   document.getElementById('tplBar').style.display = on ? 'flex' : 'none';
   if (on) document.getElementById('tplBarName').textContent = editingTemplate.name || 'Loading…';
-  ['tplFlowBtn', 'tplPageBtn', 'tplStudentViewBtn'].forEach(id => { document.getElementById(id).style.display = on ? '' : 'none'; });
+  // Low Ticket is the one place a program is edited -- no separate Program Flow / Page / Student View.
+  ['tplFlowBtn', 'tplPageBtn', 'tplStudentViewBtn'].forEach(id => { document.getElementById(id).style.display = 'none'; });
   // Nothing that clears, regenerates, re-saves-as or applies the program.
   ['resetFlowBtn', 'aiGenerateBtn', 'applyProtocolBtn', 'saveTemplateBtn', 'deleteProtocolBtn'].forEach(id => { document.getElementById(id).style.display = canEdit && !on ? '' : 'none'; });
   if (!on) setTplStatus('');
