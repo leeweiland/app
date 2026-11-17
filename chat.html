@@ -7255,6 +7255,8 @@ async function subscribePush() {
 // talking, who left, video tracks) comes straight from Daily's own
 // real-time participant events, not the poll.
 let dailyCallObject = null;
+// chat-header.js holds its reload-on-deploy while this is true.
+window.praReloadBlocked = () => !!dailyCallObject || !!cameraRecorder || !!cameraStream;
 let currentCall = null;          // the call record from the backend, once joined/joining
 let currentCallConvoId = null;
 let callTiles = new Map();       // Daily session_id -> { el, video, avatar, nameEl }

@@ -81,7 +81,14 @@ window.PRABack = (function () {
       const r = await fetch('/api/app-boot-id', { cache: 'no-store' });
       const { bootId } = await r.json();
       if (pageBootId === null) { pageBootId = bootId; return; }
-      if (bootId !== pageBootId) location.reload();
+      // Never mid-call or mid-recording: a deploy reloaded Alfred's and his
+      // student's apps twice in one call (11/17). The page reloads on the
+      // first check after the call / recording is over.
+      if (bootId !== pageBootId) {
+        let busy = false;
+        try { busy = typeof window.praReloadBlocked === 'function' && window.praReloadBlocked(); } catch {}
+        if (!busy) location.reload();
+      }
     } catch {}
   }
   watchForNewDeploy();
