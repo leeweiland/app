@@ -88,6 +88,7 @@ db.exec(`
 // message sent before this existed, same as any other optional column here.
 const hasPosterColumn = db.prepare("PRAGMA table_info(messages)").all().some(c => c.name === "posterFileId");
 if (!hasPosterColumn) db.exec("ALTER TABLE messages ADD COLUMN posterFileId TEXT");
+db.exec("CREATE INDEX IF NOT EXISTS idx_messages_posterfileid ON messages(posterFileId)");
 
 // ── One-time backfill from the old JSON file ────────────────────────────
 // Runs at most once per deployment: if the table is already populated
@@ -331,7 +332,7 @@ export function searchConversationText(conversationId, query) {
 }
 
 const mediaStmt = db.prepare(
-  "SELECT * FROM messages WHERE conversationId = :conversationId AND type IN ('image', 'video') ORDER BY seq ASC"
+  "SELECT * FROM messages WHERE conversationId = :conversationId AND type IN ('image', 'video') AND driveFileId IS NOT NULL ORDER BY seq ASC"
 );
 export function getConversationMedia(conversationId) {
   return mediaStmt.all({ conversationId }).map(rowToMessage);
@@ -372,7 +373,20 @@ export function getVideoTimesSince(sinceISO) {
   return db.prepare("SELECT senderId, conversationId, createdAt FROM messages WHERE type = 'video' AND createdAt >= ?").all(sinceISO);
 }
 export function getVideosBySender(senderId) {
-  return db.prepare("SELECT * FROM messages WHERE type = 'video' AND senderId = ? ORDER BY createdAt DESC").all(senderId).map(rowToMessage);
+  return db.prepare("SELECT * FROM messages WHERE type = 'video' AND senderId = ? AND driveFileId IS NOT NULL ORDER BY createdAt DESC").all(senderId).map(rowToMessage);
+}
+
+// A video message's first-frame thumbnail (posterFileId) -- media-proxy auth.
+export function findMessageByPosterFileId(posterFileId) {
+  return rowToMessage(db.prepare("SELECT * FROM messages WHERE posterFileId = ? LIMIT 1").get(posterFileId));
+}
+// Chat videos are posted right away (thumbnail + spinner) and converted /
+// uploaded in the background. A restart mid-conversion loses that job, so on
+// boot any video still without its file is marked failed instead of
+// spinning forever.
+export function failUnfinishedVideos() {
+  return db.prepare("UPDATE messages SET text = :t WHERE type = 'video' AND driveFileId IS NULL AND text IS NULL")
+    .run({ t: "This video didn't finish uploading -- please send it again." }).changes;
 }
 
 migrateFromJsonIfNeeded();

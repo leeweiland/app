@@ -2653,6 +2653,75 @@ function convertChatVideoForWeb(inputPath, outputPath, trim) {
   execFileSync(FFMPEG_EXE, args, { stdio: ["pipe", "pipe", "pipe"], timeout: 240000 });
 }
 
+// ── Chat video uploads, off the request path ───────────────────────────
+// Converting with execFileSync blocked the whole server for every user
+// (Nov 16: John Grippo's Day 1 clips froze the app ~1 min and the send took
+// >3 min, so his phone gave up and nothing arrived). Now a send saves the
+// file, posts the message at once with a first-frame thumbnail
+// (posterFileId) and no driveFileId -- the app shows it with a spinner --
+// and this converts + uploads in the background, one video at a time,
+// filling in driveFileId when done.
+function runFfmpegAsync(args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    execFile(FFMPEG_EXE, args, { timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (e) => e ? reject(e) : resolve());
+  });
+}
+async function extractVideoFrameAsync(videoPath, seekSec, width) {
+  const framePath = videoPath + "-" + randomUUID() + ".jpg";
+  try {
+    await runFfmpegAsync(["-y", "-ss", String(seekSec), "-i", videoPath, "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "4", framePath], 30000);
+    return readFileSync(framePath);
+  } catch {
+    if (seekSec > 0) {
+      try {
+        await runFfmpegAsync(["-y", "-i", videoPath, "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "4", framePath], 30000);
+        return readFileSync(framePath);
+      } catch {}
+    }
+    return null;
+  } finally { try { unlinkSync(framePath); } catch {} }
+}
+let chatVideoQueue = Promise.resolve();
+function enqueueChatVideo(job) {
+  const run = chatVideoQueue.then(() => processChatVideo(job));
+  chatVideoQueue = run.catch(() => {});
+  return run;
+}
+async function processChatVideo({ msgId, tempPath, ext, mimeType, trim, user, folderId }) {
+  const webPath = tempPath + "-web.mp4";
+  let sourcePath = tempPath, outExt = ext, outMime = mimeType;
+  try {
+    const args = ["-y"];
+    if (trim) args.push("-ss", String(Math.max(0, trim.start)));
+    args.push("-i", tempPath);
+    if (trim) args.push("-t", String(Math.max(0.1, trim.end - trim.start)));
+    args.push("-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-fpsmax", "30",
+      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "-f", "mp4", webPath);
+    try {
+      await runFfmpegAsync(args, 15 * 60 * 1000);
+      sourcePath = webPath; outExt = ".mp4"; outMime = "video/mp4";
+    } catch (e) {
+      console.error("[chat video convert]", e.message); // fall back to the original file
+    }
+    const frame = await extractVideoFrameAsync(sourcePath, 1, 512);
+    const label = frame ? await guessContentLabel(frame, "image/jpeg") : "TRAINING VIDEO";
+    const baseName = `${user.first} ${user.last} ${label}`.toUpperCase();
+    const accessToken = await getDriveAccessToken();
+    const result = await uploadStreamToDrive(createReadStream(sourcePath), { name: baseName + outExt, mimeType: outMime, folderId, accessToken });
+    MessagesDB.updateMessageFields(msgId, { driveFileId: result.id, mimeType: outMime, driveFileName: baseName });
+  } catch (e) {
+    console.error("[chat video process]", msgId, e.message);
+    try { MessagesDB.updateMessageFields(msgId, { text: "This video didn't finish uploading -- please send it again." }); } catch {}
+  } finally {
+    try { unlinkSync(tempPath); } catch {}
+    try { unlinkSync(webPath); } catch {}
+  }
+}
+try {
+  const n = MessagesDB.failUnfinishedVideos();
+  if (n) console.log("[chat video] marked", n, "unfinished video(s) from before restart as failed");
+} catch (e) { console.error("[chat video] boot check", e.message); }
+
 function remuxVideoForWeb(inputPath, outputPath) {
   execFileSync(FFMPEG_EXE, [
     "-y", "-i", inputPath,
@@ -4460,7 +4529,7 @@ export async function handleChatRequest(req, res, url) {
     const fileId = mediaMatch[1];
     // Only allow access if this file is attached to a message in a conversation
     // the requester participates in, or is someone's profile picture.
-    const msg = MessagesDB.findMessageByDriveFileId(fileId);
+    const msg = MessagesDB.findMessageByDriveFileId(fileId) || MessagesDB.findMessageByPosterFileId(fileId);
     const allUsers = readJson(USERS_FILE, []);
     const isProfilePic = allUsers.some(u => u.profilePictureFileId === fileId);
     // Kata library videos: any signed-in student or staff member.
@@ -6998,6 +7067,7 @@ export async function handleChatRequest(req, res, url) {
         }
         const created = [];
         let isKata = false; // camera upload's "Is this a kata?" toggle
+        const pendingVideoJobs = [];
         const ct = req.headers["content-type"] || "";
         if (ct.startsWith("multipart/form-data")) {
           const cfg = getConfig();
@@ -7045,13 +7115,12 @@ export async function handleChatRequest(req, res, url) {
                   }
                 })());
               } else {
-                // Video — this folder is intentionally uncompressed, so the
-                // whole file is never held in memory: stream straight to a
-                // temp file, pull one frame off disk via ffmpeg for the
-                // content guess, then upload from disk.
+                // Video: save it to a temp file, grab a first-frame thumbnail,
+                // and post the message right away -- conversion + Drive upload
+                // happen in the background (processChatVideo) so a big clip
+                // never blocks the server or times out the sender's phone.
                 uploads.push((async () => {
                   const tempPath = join(tmpdir(), `chat-upload-${randomUUID()}${ext}`);
-                  let trimmedPath = null;
                   try {
                     await new Promise((res, rej) => {
                       const ws = createWriteStream(tempPath);
@@ -7060,58 +7129,25 @@ export async function handleChatRequest(req, res, url) {
                       ws.on("error", rej);
                       stream.on("error", rej);
                     });
-                    // Everything downstream (frame guess, upload) reads from
-                    // whichever path is "the file to use" — trimming, when
-                    // requested, just swaps that path once up front instead
-                    // of threading a condition through every step below.
-                    let sourcePath = tempPath;
                     const wantsTrim = Number.isFinite(trimStart) && Number.isFinite(trimEnd) && trimEnd > trimStart;
-                    // Every chat video is converted to the same web-safe
-                    // format protocol uploads get (H.264, <=30fps, moov at
-                    // the front) -- an Android 120fps screen recording with
-                    // its index at the end wouldn't play on iPhone. The trim
-                    // (if any) happens in the same pass. On failure, fall
-                    // back to the old trim-only/raw path below.
-                    trimmedPath = tempPath + "-web.mp4";
+                    let posterFileId = null;
                     try {
-                      convertChatVideoForWeb(tempPath, trimmedPath, wantsTrim ? { start: trimStart, end: trimEnd } : null);
-                      sourcePath = trimmedPath;
-                    } catch (e) {
-                      console.error("[convertChatVideoForWeb]", e.message);
-                      trimmedPath = null;
-                    }
-                    if (!trimmedPath && wantsTrim) {
-                      trimmedPath = tempPath + "-trimmed.mp4";
-                      try {
-                        trimVideo(tempPath, trimmedPath, trimStart, trimEnd);
-                        sourcePath = trimmedPath;
-                      } catch (e) {
-                        console.error("[trimVideo]", e.message);
-                        // Fall back to the untrimmed capture rather than
-                        // losing the student's clip entirely over a trim
-                        // failure — trimmedPath stays null so cleanup below
-                        // doesn't try to unlink a file that was never made.
-                        trimmedPath = null;
+                      const thumb = await extractVideoFrameAsync(tempPath, wantsTrim ? Math.max(0, trimStart) + 0.1 : 0.1, 480);
+                      if (thumb) {
+                        const r = await uploadStreamToDrive(Readable.from(thumb), {
+                          name: `${user.first} ${user.last} VIDEO THUMBNAIL.jpg`.toUpperCase(),
+                          mimeType: "image/jpeg", folderId: cfg.chatImagesFolderId, accessToken,
+                        });
+                        posterFileId = r.id;
                       }
-                    }
-                    const frame = extractVideoFrame(sourcePath);
-                    const label = frame ? await guessContentLabel(frame, "image/jpeg") : "TRAINING VIDEO";
-                    const baseName = `${user.first} ${user.last} ${label}`.toUpperCase();
-                    const outExt = sourcePath === trimmedPath ? ".mp4" : ext;
-                    const outMimeType = sourcePath === trimmedPath ? "video/mp4" : info.mimeType;
-                    const result = await uploadStreamToDrive(createReadStream(sourcePath), {
-                      name: baseName + outExt,
-                      mimeType: outMimeType,
-                      folderId: cfg.chatVideosFolderId,
-                      accessToken,
-                    });
-                    return { type, driveFileId: result.id, mimeType: outMimeType, name: info.filename, driveFileName: baseName };
+                    } catch (e) { console.error("[chat video thumbnail]", e.message); }
+                    const msgId = randomUUID();
+                    pendingVideoJobs.push({ msgId, tempPath, ext, mimeType: info.mimeType, trim: wantsTrim ? { start: trimStart, end: trimEnd } : null, user, folderId: cfg.chatVideosFolderId });
+                    return { type, msgId, driveFileId: null, posterFileId, mimeType: info.mimeType, name: info.filename };
                   } catch (e) {
                     stream.resume();
-                    return { error: e.message, name: info.filename };
-                  } finally {
                     try { unlinkSync(tempPath); } catch {}
-                    if (trimmedPath) { try { unlinkSync(trimmedPath); } catch {} }
+                    return { error: e.message, name: info.filename };
                   }
                 })());
               }
@@ -7127,8 +7163,8 @@ export async function handleChatRequest(req, res, url) {
             results.forEach((r, i) => {
               if (r.error) return;
               const msg = {
-                id: randomUUID(), conversationId: convoId, senderId: user.id,
-                type: r.type, driveFileId: r.driveFileId, mimeType: r.mimeType, name: r.name,
+                id: r.msgId || randomUUID(), conversationId: convoId, senderId: user.id,
+                type: r.type, driveFileId: r.driveFileId || undefined, posterFileId: r.posterFileId || undefined, mimeType: r.mimeType, name: r.name,
                 // The "FIRST LAST BEST-GUESS" label already used as this
                 // file's own Drive filename (see guessContentLabel above) —
                 // carried onto the message record too so the favorite-star
@@ -7141,6 +7177,10 @@ export async function handleChatRequest(req, res, url) {
               created.push(msg);
             });
             MessagesDB.insertMessages(toInsert);
+            for (const job of pendingVideoJobs) {
+              if (toInsert.some(m => m.id === job.msgId)) enqueueChatVideo(job).catch(() => {});
+              else { try { unlinkSync(job.tempPath); } catch {} }
+            }
             if (isKata) {
               const katas = readJson(KATAS_FILE, {});
               toInsert.filter(m => m.type === "video").forEach(m => { katas[m.id] = { senderId: m.senderId, createdAt: m.createdAt }; });

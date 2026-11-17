@@ -915,6 +915,16 @@
   .levels-name-edit-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
   .levels-name-input { width: 90px; padding: 4px 8px; font-size: .85rem; }
   .levels-name-save-btn, .levels-name-cancel-btn { padding: 4px 10px; font-size: .78rem; }
+
+  /* Chat video still processing on the server (see videoProcessingHtml). */
+  .vid-processing { position: relative; min-width: 200px; min-height: 140px; max-width: 320px; background: #0b0b10; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .vid-processing.small { min-width: 0; min-height: 0; width: 100%; height: 100%; max-width: none; border-radius: 0; }
+  .vid-processing img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; }
+  .vid-spinner { position: relative; width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #009bff; animation: vidspin .9s linear infinite; }
+  .vid-processing.small .vid-spinner { width: 24px; height: 24px; border-width: 2.5px; }
+  .vid-processing-label { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: .72rem; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); padding: 0 8px; }
+  .vid-failed .vid-processing-label { position: relative; bottom: auto; color: #ff8a8a; font-size: .78rem; }
+  @keyframes vidspin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -4392,7 +4402,8 @@ function renderBubble(m, convo) {
   }
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5" controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
+  else if (m.type === 'video' && !m.driveFileId) content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}${videoProcessingHtml(m)}</div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
@@ -4415,6 +4426,7 @@ function msgGridCellHtml(m, moreCount) {
   // multi-file sends loaded every tile in every one of them immediately on
   // open rather than only the ones actually scrolled into view, which is
   // what made a media-heavy thread feel very slow to open.
+  if (m.type === 'video' && !m.driveFileId) return `<div class="msg-grid-item">${videoProcessingHtml(m, true)}${overlay}</div>`;
   return m.type === 'video'
     ? `<div class="msg-grid-item" data-type="video" data-src="${src}" data-mid="${m.id}"><video data-src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
     : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img data-src="${src}"/>${overlay}</div>`;
@@ -6960,6 +6972,14 @@ async function loadContacts() {
 // thumbnail cell that opens the full lightbox (see setupLightbox's grid
 // click delegation below) rather than embedding native video controls,
 // which drop their play button at this thumbnail size.
+// A video still converting on the server (posted right away, file filled in
+// when ready): its first-frame thumbnail with a small spinner, or a note if
+// it failed. Swaps to the real video on the next 3s refresh once it's done.
+function videoProcessingHtml(m, small) {
+  const thumb = m.posterFileId ? `<img src="/api/chat/media/${m.posterFileId}" alt=""/>` : '';
+  if (m.text) return `<div class="vid-processing vid-failed${small ? ' small' : ''}">${thumb}<div class="vid-processing-label">${escapeHtml(m.text)}</div></div>`;
+  return `<div class="vid-processing${small ? ' small' : ''}">${thumb}<div class="vid-spinner"></div>${small ? '' : '<div class="vid-processing-label">Processing video…</div>'}</div>`;
+}
 function svgGridPlay() {
   return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.55)" stroke="#fff" stroke-width="1.2"/><path d="M10 8.5l6 3.5-6 3.5V8.5Z" fill="#fff"/></svg>`;
 }

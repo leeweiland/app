@@ -1229,27 +1229,63 @@ async function saveSteps() {
 // ALL decoding and playing simultaneously forever, which is what made the
 // whole browser (not just this page) sluggish -- even typing in an
 // unrelated text box, since it was all competing for the same CPU/GPU.
+// iPhones (WebKit) can only keep a limited number of <video> elements
+// decoding at once -- past that, every further one fails with "Media failed
+// to decode" (MediaError 3, seen for students in both Page and Flow view
+// once a long protocol had loaded 15-30 clips). So at most VIDEO_SLOTS
+// videos hold a source at a time: loading one more releases the one used
+// longest ago (a still of its current frame is kept as its poster so it
+// doesn't go black), and it reloads when it's scrolled back to.
+const VIDEO_SLOTS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 6 : 12;
+const loadedStepVideos = [];
+function releaseStepVideo(v) {
+  const i = loadedStepVideos.indexOf(v); if (i >= 0) loadedStepVideos.splice(i, 1);
+  if (!v.getAttribute('src')) return;
+  try {
+    if (v.readyState >= 2 && v.videoWidth) {
+      const c = document.createElement('canvas');
+      const scale = Math.min(1, 480 / v.videoWidth);
+      c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+      v.poster = c.toDataURL('image/jpeg', 0.7);
+    }
+  } catch {}
+  v.pause();
+  v.dataset.src = v.getAttribute('src');
+  v.removeAttribute('src');
+  try { v.load(); } catch {}
+}
+function loadStepVideo(v) {
+  const i = loadedStepVideos.indexOf(v);
+  if (i >= 0) { loadedStepVideos.splice(i, 1); loadedStepVideos.push(v); return false; }
+  // Videos from a previous render are gone from the page -- drop them first.
+  for (let k = loadedStepVideos.length - 1; k >= 0; k--) if (!loadedStepVideos[k].isConnected) { const d = loadedStepVideos[k]; loadedStepVideos.splice(k, 1); try { d.removeAttribute('src'); d.load(); } catch {} }
+  // Free slots, oldest first -- never the one someone is actively watching.
+  while (loadedStepVideos.length >= VIDEO_SLOTS) {
+    const victim = loadedStepVideos.find(x => x.paused || x.dataset.autoplay === 'false') || loadedStepVideos[0];
+    releaseStepVideo(victim);
+  }
+  v.src = v.dataset.src; v.removeAttribute('data-src');
+  loadedStepVideos.push(v);
+  // A decode failure gives its slot back; it retries next time it comes into view.
+  if (!v.dataset.slotErr) {
+    v.dataset.slotErr = '1';
+    v.addEventListener('error', () => { if (v.error && v.error.code === 3 && v.getAttribute('src')) { const src = v.getAttribute('src'); releaseStepVideo(v); v.dataset.src = src; } });
+  }
+  return true;
+}
 const stepVideoLazyObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     const video = entry.target;
     if (entry.isIntersecting) {
-      const freshlyAssigned = !!video.dataset.src;
-      if (freshlyAssigned) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
+      const freshlyAssigned = video.dataset.src ? loadStepVideo(video) : (loadStepVideo(video), false);
       // Your Flow renders its videos with data-autoplay="false" (see
       // renderStepContent) -- still loads the poster frame above, just
       // never auto-decodes/plays, since fitCanvasToView() can put every
       // step in the whole protocol "in view" simultaneously there.
       if (video.dataset.autoplay !== 'false') {
-        // Chat's own video bubbles (chatMediaLazyObserver, chat.html) never
-        // call .play() at all -- those work fine on a real iPhone, these
-        // don't (MEDIA_ERR_SRC_NOT_SUPPORTED/NETWORK_NO_SOURCE, confirmed
-        // via reportVideoError's own log on a real device), and calling
-        // .play() in the exact same tick as assigning a brand new .src is
-        // the other concrete difference between them -- Chrome tolerates it,
-        // WebKit's stricter media element state machine can apparently mark
-        // the whole source unplayable instead of just queuing the request.
-        // Only matters right after a fresh assignment -- scrolling back
-        // into view later, readyState is already past HAVE_NOTHING.
+        // .play() in the same tick as assigning a new .src makes WebKit
+        // mark the source unplayable -- wait for loadeddata after a fresh one.
         if (freshlyAssigned) {
           video.addEventListener('loadeddata', () => video.play().catch(() => {}), { once: true });
         } else {
@@ -1261,6 +1297,9 @@ const stepVideoLazyObserver = new IntersectionObserver((entries) => {
     }
   });
 }, { rootMargin: '400px' });
+// Flow view: a tap on a released (poster-only) video loads it again.
+document.addEventListener('play', (e) => { const v = e.target; if (v instanceof HTMLVideoElement && v.dataset.src && !v.getAttribute('src')) { loadStepVideo(v); v.play().catch(() => {}); } }, true);
+document.addEventListener('pointerdown', (e) => { const v = e.target.closest && e.target.closest('video'); if (v && v.dataset.src && !v.getAttribute('src')) { loadStepVideo(v); } }, true);
 
 // Real devices reporting "it just won't play" give no way to see WHY from
 // here -- no server-side request ever fails for that (the proxy serves a
