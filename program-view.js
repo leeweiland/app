@@ -69,6 +69,14 @@
   .pv-text ul { margin: 0; padding-left: 0; list-style: none; }
   .pv-text li { position: relative; padding-left: 18px; margin: 3px 0; }
   .pv-text li::before { content: ''; position: absolute; left: 3px; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: ${NEON}; }
+  /* DIAGNOSIS: faults to check, each with a glowing red X (Lee, 2026-11-17) */
+  .pv-text ul.pv-x li { padding-left: 24px; }
+  .pv-text ul.pv-x li::before { content: '✕'; left: 0; top: 0; width: auto; height: auto; border-radius: 0; background: none; color: #ff3b3b; font-weight: 900; font-size: 1.05em; line-height: inherit; text-shadow: 0 0 6px rgba(255,40,40,.95), 0 0 14px rgba(255,40,40,.6); }
+  .pv-bump-move .pv-label { display: block; margin: 10px 0 3px; }
+  .pv-bump-move ul.pv-x { margin: 0; padding-left: 0; list-style: none; }
+  .pv-bump-move ul.pv-x li { position: relative; padding-left: 24px; margin: 3px 0; font-size: .84rem; color: #d6d6dc; }
+  .pv-bump-move ul.pv-x li::before { content: '✕'; position: absolute; left: 0; top: 0; color: #ff3b3b; font-weight: 900; text-shadow: 0 0 6px rgba(255,40,40,.95), 0 0 14px rgba(255,40,40,.6); }
+  .pv-bump-move .pv-bump-imgwrap + .pv-bump-imgwrap { margin-top: 10px; }
   .pv-text-title { font-weight: 700; font-size: 1rem; margin-bottom: 6px; color: #fff; }
   .pv-yt { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
   .pv-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -184,7 +192,10 @@
       let label = '';
       if (lines.length > 1 && lines[0].length <= 40 && /^[A-Z0-9][A-Z0-9 '&+\-–—:,.()/!?]*$/.test(lines[0])) label = lines.shift();
       const bullets = lines.every(l => /^\s*[•\-]\s+/.test(l));
-      const body = bullets
+      const xs = lines.every(l => /^\s*✕\s*/.test(l));
+      const body = xs
+        ? '<ul class="pv-x">' + lines.map(l => `<li>${link(esc(l.replace(/^\s*✕\s*/, '')))}</li>`).join('') + '</ul>'
+        : bullets
         ? '<ul>' + lines.map(l => `<li>${link(esc(l.replace(/^\s*[•\-]\s+/, '')))}</li>`).join('') + '</ul>'
         : `<p>${lines.map(l => link(esc(l))).join('<br>')}</p>`;
       return (label ? `<span class="pv-label">${esc(label)}</span>` : '') + body;
@@ -325,7 +336,7 @@
         ${staff && !opts.preview ? `<div class="pv-chips"><span class="pv-chip ${b.owned ? 'on' : 'off'}">${b.owned ? 'Owned by student' : 'Not owned by student'}</span></div>` : ''}</div><span class="pv-caret">▾</span></summary>
         <div class="pv-body">${b.intro || staff ? `<div class="pv-bump-intro" data-bump-field="intro">${esc(b.intro || '')}</div>` : ''}
         ${(b.moves || []).map((m, mi) => `<div class="pv-bump-move" data-mi="${mi}">${m.clip || m.driveFileId ? `<div class="pv-bump-media"><video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video></div>` : ''}
-          <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<p data-move-field="how">${esc(m.how || '')}</p>` : ''}${m.why || staff ? `<p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
+          <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<span class="pv-label">How</span><p data-move-field="how">${esc(m.how || '')}</p>` : ''}${(m.diagnosis || []).length ? `<span class="pv-label">Diagnosis</span><ul class="pv-x">${m.diagnosis.map(x => `<li>${esc(String(x).replace(/^\s*✕\s*/, ''))}</li>`).join('')}</ul>` : ''}${m.dose ? `<span class="pv-label">Dose</span><p>${esc(m.dose)}</p>` : ''}${m.why || staff ? `<span class="pv-label">How it builds your handstand</span><p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.handstandImage ? `<div class="pv-bump-media pv-bump-imgwrap"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.handstandImage)}" alt="${esc(m.move || '')}: how it builds your handstand"/></div>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
     const keepTimer = container.querySelector('.pv-ftimer');
     if (keepTimer) keepTimer.remove();

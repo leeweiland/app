@@ -3666,7 +3666,7 @@ function programOwnsFile(userId, userRecord, fileId, ownedBumps) {
     const t = findProgramTemplate(templates, enr);
     if (!t) return false;
     if ((t.steps || []).some(s => s.driveFileId === fileId)) return true;
-    return Object.entries(t.bumps || {}).some(([key, b]) => owned.has(key) && (b.moves || []).some(m => m.clip === fileId || m.driveFileId === fileId || m.image === fileId));
+    return Object.entries(t.bumps || {}).some(([key, b]) => owned.has(key) && (b.moves || []).some(m => m.clip === fileId || m.driveFileId === fileId || m.image === fileId || m.handstandImage === fileId));
   });
 }
 // x-pra-app-key, compared in constant time (hashing first equalizes lengths).
