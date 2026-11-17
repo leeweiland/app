@@ -1708,6 +1708,7 @@ async function wireProgramViewEditing(box, templateId) {
       if (chain.has(el.dataset.stepId)) el.insertAdjacentHTML('afterbegin', DRAG_HANDLE_HTML);
     });
   });
+  wireProgramHeroEditing(box, templateId);
   box.querySelectorAll('.pv-block').forEach(block => {
     const body = block.querySelector('.pv-body[data-head]');
     const head = body && steps.find(s => s.id === body.dataset.head);
@@ -1789,6 +1790,54 @@ function wireTextEditing(card, st) {
     const label = card.querySelector('[data-edit="moveLabel"]') || card.querySelector('.step-type');
     if (label) makeTextEditable(label, st, 'moveLabel', { single: true });
   }
+}
+// The top of the Low Ticket view (kicker, title, goal, "Get the app"):
+// program-level fields, saved onto the program itself.
+function wireProgramHeroEditing(box, templateId) {
+  const rec = editingTemplate?.record || {};
+  const settings = rec.settings || {};
+  const fields = {
+    kicker: { get: () => settings.kicker || 'Powerbatics', patch: v => ({ settings: { kicker: v } }) },
+    displayTitle: { get: () => settings.displayTitle || String(rec.name || '').replace(/^Powerbatics\s+/i, ''), patch: v => ({ settings: { displayTitle: v } }) },
+    goal: { get: () => rec.goal || '', patch: v => ({ goal: v }) },
+    appHeading: { get: () => settings.appButtons?.heading || 'Get the app', patch: v => ({ settings: { appButtons: { heading: v } } }) },
+  };
+  box.querySelectorAll('[data-hero]').forEach(el => {
+    const f = fields[el.dataset.hero];
+    if (!f || el.dataset.editOn) return;
+    el.dataset.editOn = el.dataset.hero;
+    el.title = 'Click to edit';
+    if (!el.textContent.trim()) { el.textContent = 'Add a goal line'; el.style.opacity = '.45'; }
+    el.addEventListener('click', (e) => {
+      if (el.isContentEditable) return;
+      e.preventDefault(); e.stopPropagation();
+      const before = f.get();
+      el.textContent = before; el.style.opacity = '';
+      try { el.contentEditable = 'plaintext-only'; } catch {}
+      if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+      el.classList.add('editing-text');
+      el.focus();
+      let done = false;
+      const finish = async (save) => {
+        if (done) return; done = true;
+        el.contentEditable = 'false'; el.classList.remove('editing-text');
+        const after = el.innerText.replace(/\s+/g, ' ').trim();
+        if (save && after !== before.trim()) {
+          const r = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(templateId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f.patch(after)) }).catch(() => null);
+          if (r && r.ok) {
+            const d2 = await fetch('/api/chat/protocol-templates/' + encodeURIComponent(templateId)).then(x => x.json()).catch(() => ({}));
+            if (d2.template && editingTemplate?.id === templateId) editingTemplate.record = d2.template;
+          } else alert('Not saved -- try again.');
+        }
+        showProgramView(lastProgramViewOpt);
+      };
+      el.addEventListener('blur', () => finish(true), { once: true });
+      el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+        else if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      });
+    }, true);
+  });
 }
 // Image steps: a popup to upload the replacement picture.
 let imagePanelTarget = null;

@@ -3566,6 +3566,9 @@ function sanitizeProgramSettings(input, current) {
     if (u && !/^https?:\/\//i.test(u)) throw new Error("CTA link must start with http:// or https://");
     next.ctaUrl = u.slice(0, 500);
   }
+  // What the program view shows above the days (the template's real name stays fixed).
+  if (input.kicker !== undefined) next.kicker = String(input.kicker).slice(0, 60);
+  if (input.displayTitle !== undefined) next.displayTitle = String(input.displayTitle).slice(0, 120);
   if (input.appButtons && typeof input.appButtons === "object") {
     const ab = { ...next.appButtons };
     if (input.appButtons.enabled !== undefined) ab.enabled = !!input.appButtons.enabled;

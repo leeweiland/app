@@ -24,6 +24,8 @@
   .pv-chat-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
   .pv-chat-btn svg { width: 16px; height: 16px; }
   .pv-app { margin-top: 16px; }
+  /* Only on a computer -- on a phone they're already holding the device. */
+  @media (max-width: 760px), (hover: none) { .pv-app { display: none; } }
   .pv-app-row { display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .pv-app-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.03); color: #fff; font-size: .78rem; font-weight: 700; text-decoration: none; transition: border-color .15s, color .15s; }
   .pv-app-btn:hover { border-color: var(--pra-blue); color: var(--pra-blue); }
@@ -196,11 +198,11 @@
       android: '<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="9" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 9a3.5 3.5 0 0 1 7 0M9 5.5 7.8 4M15 5.5l1.2-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
       desktop: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="12" rx="1.8" stroke="currentColor" stroke-width="1.6"/><path d="M9 20h6M12 16.5V20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     };
-    const btns = [['ios', ab.iosLabel, ab.iosUrl], ['android', ab.androidLabel, ab.androidUrl], ['desktop', ab.desktopLabel, ab.desktopUrl]]
+    const btns = [['ios', ab.iosLabel, ab.iosUrl], ['android', ab.androidLabel, ab.androidUrl]]
       .filter(([, , url]) => url)
       .map(([k, label, url]) => `<a class="pv-app-btn" href="${esc(url)}" target="_blank" rel="noopener">${ICONS[k]}<span>${esc(label || k)}</span></a>`).join('');
     if (!btns) return '';
-    return `<div class="pv-app"><div class="pv-label">${esc(ab.heading || 'Get the app')}</div><div class="pv-app-row">${btns}</div></div>`;
+    return `<div class="pv-app"><div class="pv-label" data-hero="appHeading">${esc(ab.heading || 'Get the app')}</div><div class="pv-app-row">${btns}</div></div>`;
   }
   function youtubeHtml(s, compact) {
     const id = encodeURIComponent(s.youtubeId || '');
@@ -310,9 +312,9 @@
 
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">
-        <div class="pv-kicker">Powerbatics</div>
-        <div class="pv-title">${esc(String(pr.name || '').replace(/^Powerbatics\s+/i, ''))}</div>
-        ${pr.goal ? `<div class="pv-goal">${esc(pr.goal)}</div>` : ''}
+        <div class="pv-kicker" data-hero="kicker">${esc((pr.settings && pr.settings.kicker) || 'Powerbatics')}</div>
+        <div class="pv-title" data-hero="displayTitle">${esc((pr.settings && pr.settings.displayTitle) || String(pr.name || '').replace(/^Powerbatics\s+/i, ''))}</div>
+        ${pr.goal || staff ? `<div class="pv-goal" data-hero="goal">${esc(pr.goal || '')}</div>` : ''}
         ${!opts.preview ? `<div class="pv-progress"><div class="pv-progress-bar"><span style="width:${pct}%"></span></div><div class="pv-progress-row"><span class="pv-label">Day ${pr.unlockedCount} of ${pr.totalDays}</span><span class="pv-label">${pct}%</span></div></div>` : ''}
         ${opts.onOpenChat ? `<button type="button" class="pv-chat-btn" data-open-chat>${CHAT_SVG}${esc(opts.chatLabel || 'Open your group chat')}</button>` : ''}
         ${appButtonsHtml(pr.settings && pr.settings.appButtons)}
