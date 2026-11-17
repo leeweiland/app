@@ -1175,7 +1175,7 @@ function renderUsers() {
   const prevScrollTop = document.querySelector('#usersTableWrap .table-scroll')?.scrollTop || 0;
 
   const rows = pageUsers.map(u => `
-    <tr style="${u.archived ? 'opacity:.5' : ''}">
+    <tr style="${u.archived ? 'opacity:.5' : ''}" data-user-row="${u.id}" title="Right-click or long-press for purchases &amp; refund">
       <td class="sticky-col sticky-col-1" style="display:flex;gap:4px">
         <input class="pra-input inline-edit" data-id="${u.id}" data-field="first" value="${escapeAttr(u.first)}" style="width:64px" placeholder="First"/>
         <input class="pra-input inline-edit" data-id="${u.id}" data-field="last" value="${escapeAttr(u.last)}" style="width:84px" placeholder="Last"/>
@@ -1185,7 +1185,7 @@ function renderUsers() {
       <td>
         <select class="role-select" data-id="${u.id}">
           <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-          <option value="trainee" ${u.role === 'trainee' ? 'selected' : ''}>Trainee (Handstand)</option>
+          <option value="trainee" ${u.role === 'trainee' ? 'selected' : ''}>Trainee (Handstand Protocol)</option>
           <option value="online" ${u.role === 'online' ? 'selected' : ''}>Online</option>
           <option value="gym" ${u.role === 'gym' ? 'selected' : ''}>Gym</option>
           <option value="coach" ${u.role === 'coach' ? 'selected' : ''}>Coach</option>
@@ -1706,6 +1706,62 @@ window.addEventListener('pageshow', () => {
 </script>
 
 <script>
+// ── Users & Roles: right-click / long-press -> purchases & refund ────────
+// (Lee, 2026-11-17.) Purchases come from the CRM; Refund refunds in PayPal
+// through the CRM and removes the Handstand Protocol from the account.
+(function () {
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let menu = null;
+  function close() { if (menu) { menu.remove(); menu = null; } }
+  document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  async function open(userId, x, y) {
+    close();
+    const u = (typeof allUsers !== 'undefined' ? allUsers : []).find(v => v.id === userId);
+    menu = document.createElement('div');
+    menu.style.cssText = `position:fixed;z-index:9999;left:${Math.min(x, innerWidth - 330)}px;top:${Math.min(y, innerHeight - 260)}px;width:310px;max-height:60vh;overflow:auto;background:#141418;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:.82rem;color:#fff`;
+    menu.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${esc(u ? `${u.first} ${u.last}` : '')} &middot; Purchases</div><div class="pm-body" style="opacity:.7">Loading…</div>`;
+    document.body.appendChild(menu);
+    const body = menu.querySelector('.pm-body');
+    let d;
+    try { const r = await fetch('/api/admin/user-purchases?userId=' + encodeURIComponent(userId)); d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); }
+    catch (e) { body.textContent = 'Could not load purchases: ' + e.message; return; }
+    if (!d.orders.length) { body.textContent = 'No purchases.'; return; }
+    body.style.opacity = 1;
+    body.innerHTML = d.orders.map(o => `<div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.08)">
+      <div style="display:flex;justify-content:space-between"><b>${esc(o.product)}</b><span>$${esc(o.total)}</span></div>
+      ${o.bumps.map(b => `<div style="opacity:.75">+ ${esc(b.name)}</div>`).join('')}
+      <div style="opacity:.6;font-size:.74rem">${o.paidAt ? new Date(o.paidAt).toLocaleDateString() : ''} &middot; ${o.status === 'refunded' ? 'REFUNDED' : o.test ? 'TEST' : 'PAID'}</div>
+      ${o.status === 'paid' ? `<button class="pra-btn" data-refund="${esc(o.id)}" style="margin-top:6px;padding:6px 12px;font-size:.74rem;background:#c0392b;border-color:#c0392b">Refund $${esc(o.total)}</button>` : ''}
+    </div>`).join('');
+    body.querySelectorAll('[data-refund]').forEach(btn => btn.onclick = async (ev) => {
+      ev.stopPropagation();
+      const o = d.orders.find(x => x.id === btn.dataset.refund);
+      if (!confirm(`Refund $${o.total} for ${o.product}${o.test ? ' (TEST order, no PayPal)' : ' through PayPal'}?\n\nThe protocol comes off their account${u?.role === 'trainee' ? ' and the account is archived' : ''}, and the CRM refund flow runs. This can't be undone.`)) return;
+      btn.disabled = true; btn.textContent = 'Refunding…';
+      const r = await fetch('/api/admin/trainee-refund', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, orderId: o.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) { alert(j.error || 'Refund failed'); btn.disabled = false; btn.textContent = `Refund $${o.total}`; return; }
+      close();
+      if (typeof loadUsers === 'function') loadUsers();
+      alert('Refunded.');
+    });
+  }
+  const rowOf = (t) => t.closest && t.closest('tr[data-user-row]');
+  const skip = (t) => t.closest && t.closest('input,select,button,textarea,a');
+  document.addEventListener('contextmenu', (e) => {
+    const tr = rowOf(e.target); if (!tr || skip(e.target)) return;
+    e.preventDefault(); open(tr.dataset.userRow, e.clientX, e.clientY);
+  });
+  let pressTimer = null;
+  document.addEventListener('touchstart', (e) => {
+    const tr = rowOf(e.target); if (!tr || skip(e.target)) return;
+    const t = e.touches[0];
+    pressTimer = setTimeout(() => { pressTimer = null; open(tr.dataset.userRow, t.clientX, t.clientY); }, 550);
+  }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(ev => document.addEventListener(ev, () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true }));
+})();
+
 // ── User Management tab ──────────────────────────────────────────────────
 (function () {
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1718,7 +1774,7 @@ window.addEventListener('pageshow', () => {
     const s = state.settings, c = state.counts;
     const staffOpts = state.staff.map(u => `<option value="${esc(u.id)}" ${s.renewalMessageSenderId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
     document.getElementById('umBody').innerHTML = `
-      <div class="um-what" style="margin-bottom:14px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
+      <div class="um-what" style="margin-bottom:14px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
 
       <details class="um-card" data-k="1"><summary><h3>1. Sign Up</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Public sign-up', 'Anyone can create an account from the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> (no student features) until a coach makes them Online or Gym. Turn off to hide the Sign Up tab and refuse new sign-ups; you can still add people with <b>+ Add User</b> in Users &amp; Roles.', toggle('signupEnabled', s.signupEnabled))}
@@ -1767,6 +1823,17 @@ window.addEventListener('pageshow', () => {
 
       <details class="um-card" data-k="9"><summary><h3>9. Problems Banner</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Red banner for coaches &amp; admins', 'Shows at the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet (so their levels won\'t show). Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>')}
+      </div></details>
+
+      <details class="um-card" data-k="10"><summary><h3>10. Trainees (Handstand Protocol)</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
+        <p class="um-what">A <b>Trainee</b> bought the Handstand Protocol (the low-ticket product) but isn't a full student yet. In the CRM they're LOW TICKET; everything the CRM does for them is on its Products tab.</p>
+        ${row('Account from checkout', 'When someone pays, the CRM creates their app account as a Trainee (or upgrades a plain User; students and staff keep their role), sets their password, enrolls them in the Handstand Protocol plus any add-ons, and emails the login. They land on their protocol, not the chat. They see a <b>Trainee</b> tag; staff see it too.', always)}
+        ${row('Trainee group', 'Their own "&lt;Name&gt; Group" with Lee and Alexis only (no coaches).', always)}
+        ${row('Welcome message', 'Posts this into a new Trainee group from Lee. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled),
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button><span class="um-saved" id="umTraineeMsg"></span></div>`)}
+        ${row('Refund', 'Right-click (or long-press) a person in Users &amp; Roles &rarr; Refund. It refunds the full amount in PayPal through the CRM, logs it on their CRM contact, runs the CRM\'s "Product is refunded" flow (off the buyers list, emails and texts stop), and removes the Handstand Protocol and add-ons from their account. Refunds done in the CRM or in PayPal do the same here.', always)}
+        ${row('Archive Trainees on refund', 'A refunded Trainee is archived so they can\'t log in. Students and staff who bought it just lose the protocol.', toggle('traineeRefundArchive', s.traineeRefundArchive))}
+        ${row('Make Online / Make Gym', 'Turns a Trainee into a full student; New Student Setup (above) runs. Their Trainee group is kept as it is.', always)}
       </div></details>
     `;
     wire();
@@ -1820,6 +1887,10 @@ window.addEventListener('pageshow', () => {
       const m = document.getElementById('umRenewMsg'); m.textContent = ok ? 'Saved' : ''; setTimeout(() => { m.textContent = ''; }, 2000);
     };
     document.getElementById('umRenewSave').onclick = saveRenew;
+    document.getElementById('umTraineeSave').onclick = async () => {
+      const ok = await save({ traineeWelcomeText: document.getElementById('umTraineeText').value });
+      const m = document.getElementById('umTraineeMsg'); m.textContent = ok ? 'Saved' : ''; setTimeout(() => { m.textContent = ''; }, 2000);
+    };
     document.getElementById('umRenewDays').onchange = saveRenew;
     document.getElementById('umRenewSender').onchange = saveRenew;
     document.getElementById('umBuildBtn').onclick = async () => {

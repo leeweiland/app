@@ -236,6 +236,7 @@ const DEFAULT_APPOINTMENTS_CONFIG = {
 // reminders use), unlike coachName/date/time/duration which don't apply to
 // a group that was just created.
 const DEFAULT_RENEWAL_MESSAGE = "Hey {{firstName}}! Your training with us wraps up on {{endDate}}. Want to keep the momentum going? Reply here and we'll get your renewal set up.";
+const DEFAULT_TRAINEE_WELCOME = "Hey {{firstName}}, welcome to the Powerbatics Handstand Protocol! This is your private chat with me and Alexis. Start with the Day 1 test, write your numbers down, and send us a video any time you want feedback.";
 const DEFAULT_WELCOME_MESSAGE = `Welcome to training!  This app is your portal to Body Mastery and gaining Strength, Skill, and Sustainability!
 
 In here, you'll have access to:
@@ -372,6 +373,10 @@ export function getConfig() {
   if (cfg.callRecordingsFolderId === undefined) cfg.callRecordingsFolderId = "";
   if (cfg.nutritionPhotosFolderId === undefined) cfg.nutritionPhotosFolderId = "";
   if (cfg.welcomeMessageEnabled === undefined) cfg.welcomeMessageEnabled = true;
+  // Trainees (Handstand Protocol buyers), Lee 2026-11-17: off by default.
+  if (cfg.traineeWelcomeEnabled === undefined) cfg.traineeWelcomeEnabled = false;
+  if (!cfg.traineeWelcomeText) cfg.traineeWelcomeText = DEFAULT_TRAINEE_WELCOME;
+  if (cfg.traineeRefundArchive === undefined) cfg.traineeRefundArchive = true;
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
   if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
   if (cfg.callSummaryMinMinutes === undefined) cfg.callSummaryMinMinutes = 2;
@@ -3383,6 +3388,31 @@ export function isClientRole(role) { return role === "online" || role === "gym";
 // physique reminders, directory, default protocol or welcome message).
 export function isTrainee(user) { return user?.role === "trainee"; }
 const HANDSTAND_TEMPLATE_NAME = "Powerbatics Handstand Protocol";
+// Refund (CRM -> /api/bridge/trainee/revoke, or the Admin Panel's Refund):
+// the Handstand Protocol and its add-ons come off the account; a Trainee
+// (no other access) is also archived, so they can't log in. Students and
+// staff keep their account and role.
+function revokeHandstand(userId, reason) {
+  const users = readJson(USERS_FILE, []);
+  const u = users.find(x => x.id === userId);
+  if (!u) return null;
+  const all = readJson(TRAINING_PROTOCOLS_FILE, {});
+  const rec = all[u.id];
+  if (rec && Array.isArray(rec.programs)) {
+    const ht = findHandstandTemplate(readJson(PROTOCOL_TEMPLATES_FILE, []));
+    const before = rec.programs.length;
+    rec.programs = rec.programs.filter(e => !((ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()));
+    if (rec.programs.length !== before) { all[u.id] = rec; writeJson(TRAINING_PROTOCOLS_FILE, all); }
+  }
+  u.hcBumps = [];
+  u.hcRefundedAt = new Date().toISOString();
+  u.hcRefundReason = reason || "refund";
+  const archive = isTrainee(u) && getConfig().traineeRefundArchive !== false;
+  if (archive) u.archived = true;
+  writeJson(USERS_FILE, users);
+  console.log(`[trainee] handstand access removed ${u.id} role=${u.role}${archive ? " (archived)" : ""} reason=${u.hcRefundReason}`);
+  return { userId: u.id, role: u.role, archived: !!u.archived };
+}
 const TRAINEE_GROUP_OWNER_EMAIL = "lee@pacificrimathletics.com";
 const HC_BUMP_KEYS = ["wrist", "shoulder", "hips"];
 // Lee (by email) + Alexis (first name), active admins only; resolved at run
@@ -3795,6 +3825,17 @@ function syncDefaultGroups() {
 
   // The welcome message and the auto-applied student protocol are for
   // online/gym students only -- a trainee group starts empty.
+  {
+    const tcfg = getConfig();
+    if (tcfg.traineeWelcomeEnabled && tcfg.traineeWelcomeText) {
+      newlyCreatedGroups.filter(g => g.convo.autoGroupType === "trainee").forEach(({ convo, person, staffIds }) => {
+        const senderId = staffIds[0] || person.id;
+        const text = fillTemplate(tcfg.traineeWelcomeText, { firstName: person.first, lastName: person.last });
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+      });
+    }
+  }
   newlyCreatedGroups.splice(0, newlyCreatedGroups.length, ...newlyCreatedGroups.filter(g => g.convo.autoGroupType === "student"));
   if (newlyCreatedGroups.length) {
     const cfg = getConfig();
@@ -4217,6 +4258,16 @@ export async function handleChatRequest(req, res, url) {
   // Key-auth (x-pra-app-key = PRA_APP_BRIDGE_KEY), no session. POST creates
   // or upgrades the account and enrolls it; GET ?email= reports status.
   // Never overwrites an existing password; never sends email/SMS.
+  if (p === "/api/bridge/trainee/revoke") {
+    if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
+    if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
+    if (req.method !== "POST") return sendJson(res, 405, { error: "POST" });
+    const body = await readJsonBody(req);
+    const email = String(body.email || "").trim().toLowerCase();
+    const u = readJson(USERS_FILE, []).find(x => (body.userId && x.id === String(body.userId)) || (email && String(x.email || "").trim().toLowerCase() === email));
+    if (!u) return sendJson(res, 404, { error: "No app account" });
+    return sendJson(res, 200, { ok: true, ...revokeHandstand(u.id, String(body.reason || "refund")) });
+  }
   if (p === "/api/bridge/trainee") {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
@@ -5117,12 +5168,38 @@ export async function handleChatRequest(req, res, url) {
 
       return sendJson(res, 200, { ok: true });
     }
+    // ── Purchases + refund for one account (Admin Panel long-press) ─────
+    if (p === "/api/admin/user-purchases" && req.method === "GET") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const u = readJson(USERS_FILE, []).find(x => x.id === url.searchParams.get("userId"));
+      if (!u) return sendJson(res, 404, { error: "User not found" });
+      try {
+        const r = await crmFetch(`/api/hc/bridge/orders?appUserId=${encodeURIComponent(u.id)}&email=${encodeURIComponent(u.email || "")}`);
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) return sendJson(res, 502, { error: d.error || `CRM returned ${r.status}` });
+        return sendJson(res, 200, { orders: d.orders || [], refundedAt: u.hcRefundedAt || null });
+      } catch (e) { return sendJson(res, 502, { error: e.message }); }
+    }
+    if (p === "/api/admin/trainee-refund" && req.method === "POST") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const body = await readJsonBody(req);
+      const u = readJson(USERS_FILE, []).find(x => x.id === String(body.userId || ""));
+      if (!u) return sendJson(res, 404, { error: "User not found" });
+      try {
+        const r = await crmFetch("/api/hc/bridge/refund", { method: "POST", body: JSON.stringify({ appUserId: u.id, email: u.email || "", orderId: body.orderId || "", by: `${user.first || ""} ${user.last || ""}`.trim() || "PRA app" }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ok) return sendJson(res, 400, { error: d.error || `CRM returned ${r.status}` });
+        const local = revokeHandstand(u.id, "refund");
+        return sendJson(res, 200, { ok: true, order: d.order, account: local });
+      } catch (e) { return sendJson(res, 502, { error: e.message }); }
+    }
     // ── User Management tab (admin panel) ───────────────────────────────
     if (p === "/api/admin/user-management") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const KEYS = ["signupEnabled", "studentCrosscheckEnabled", "autoBuildProtocolEnabled", "levelsRowOnNewStudent", "staffAlertsEnabled",
         "defaultProtocolEnabled", "welcomeMessageEnabled", "welcomeMessageText", "movesPublicDefault",
-        "renewalMessageEnabled", "renewalMessageDaysBefore", "renewalMessageText", "renewalMessageSenderId"];
+        "renewalMessageEnabled", "renewalMessageDaysBefore", "renewalMessageText", "renewalMessageSenderId",
+        "traineeWelcomeEnabled", "traineeWelcomeText", "traineeRefundArchive"];
       if (req.method === "POST") {
         const body = await readJsonBody(req);
         const cfg = getConfig();
@@ -5142,9 +5219,10 @@ export async function handleChatRequest(req, res, url) {
         online: users.filter(u => u.role === "online" && !u.archived).length,
         gym: users.filter(u => u.role === "gym" && !u.archived).length,
         users: users.filter(u => u.role === "user" && !u.archived).length,
+        trainees: users.filter(u => u.role === "trainee" && !u.archived).length,
         archived: users.filter(u => u.archived).length,
       };
-      return sendJson(res, 200, { settings, staff, counts, defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE });
+      return sendJson(res, 200, { settings, staff, counts, defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE, defaultTraineeWelcome: DEFAULT_TRAINEE_WELCOME });
     }
     // Run auto-build by hand for one student (from a banner/User Management).
     if (p === "/api/admin/auto-build-protocol" && req.method === "POST") {
