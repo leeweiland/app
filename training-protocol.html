@@ -1963,6 +1963,24 @@ function wireBumpEditing(box) {
       inlineTextEdit(mv.querySelector('[data-move-field="move"]'), { ...mf('move'), single: true, placeholder: 'Move name' });
       inlineTextEdit(mv.querySelector('[data-move-field="how"]'), { ...mf('how'), placeholder: 'Add how' });
       inlineTextEdit(mv.querySelector('[data-move-field="why"]'), { ...mf('why'), placeholder: 'Add why' });
+      // Dose (one line) and Diagnosis (red-X lines, stored with the "✕ " prefix): click to edit,
+      // X removes a line, "+ Add line" adds one. Part of the draft until Save, like the rest.
+      inlineTextEdit(mv.querySelector('[data-move-field="dose"]'), { ...mf('dose'), single: true, placeholder: 'Add dose' });
+      const diag = () => { const m = moves()[mi]; if (!m) return []; if (!Array.isArray(m.diagnosis)) m.diagnosis = []; return m.diagnosis; };
+      mv.querySelectorAll('[data-diag-i]').forEach(li => {
+        const di = Number(li.dataset.diagI);
+        inlineTextEdit(li, { get: () => String(diag()[di] || '').replace(/^\s*✕\s*/, ''), set: v => { const d = diag(); if (di < d.length) d[di] = '✕ ' + String(v).replace(/^\s*✕\s*/, '').trim(); }, single: true, placeholder: 'Fault to check' });
+        li.style.position = 'relative';
+        li.insertAdjacentHTML('beforeend', X_BTN('Remove this line'));
+        const x = li.querySelector('.inplace-x');
+        x.style.top = '-2px'; x.style.right = '0';
+        x.onclick = (e) => { e.preventDefault(); e.stopPropagation(); diag().splice(di, 1); bumpsChanged(); };
+      });
+      const dl = mv.querySelector('[data-diag-list]');
+      if (dl) {
+        dl.insertAdjacentHTML('afterend', '<button type="button" class="pra-btn pra-btn-ghost bump-add-diag" style="padding:2px 10px;font-size:.72rem;margin:2px 0 4px">+ Add line</button>');
+        dl.nextElementSibling.onclick = (e) => { e.preventDefault(); e.stopPropagation(); diag().push('✕ New fault'); bumpsChanged(); };
+      }
       // The move: Video (add / change) and X (delete the whole move).
       const tools = document.createElement('div');
       tools.className = 'inplace-tools';
