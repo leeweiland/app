@@ -183,6 +183,14 @@
 
   /* User Management tab */
   .um-card { border: 1px solid var(--pra-border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; background: rgba(255,255,255,0.02); }
+  .um-card > summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .um-card > summary::-webkit-details-marker { display: none; }
+  .um-card > summary h3 { margin: 0 !important; flex: 1; }
+  .um-card .um-count { font-size: .68rem; color: var(--pra-dim); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  .um-card .um-chev { width: 18px; height: 18px; flex-shrink: 0; transition: transform .15s; opacity: .7; }
+  .um-card[open] .um-chev { transform: rotate(180deg); }
+  .um-card[open] > summary { margin-bottom: 8px; }
+  .um-card:hover { border-color: rgba(0,155,255,0.45); }
   .um-card h3 { margin: 0 0 6px; font-family: var(--font-secondary); font-size: .86rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
   .um-what { font-size: .82rem; color: var(--pra-dim); line-height: 1.5; margin: 0 0 10px; }
   .um-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.06); }
@@ -1712,19 +1720,19 @@ window.addEventListener('pageshow', () => {
     document.getElementById('umBody').innerHTML = `
       <div class="um-what" style="margin-bottom:14px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
 
-      <div class="um-card"><h3>1. Sign Up</h3>
+      <details class="um-card" data-k="1"><summary><h3>1. Sign Up</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Public sign-up', 'Anyone can create an account from the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> (no student features) until a coach makes them Online or Gym. Turn off to hide the Sign Up tab and refuse new sign-ups; you can still add people with <b>+ Add User</b> in Users &amp; Roles.', toggle('signupEnabled', s.signupEnabled))}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>2. Log In &amp; Passwords</h3>
+      <details class="um-card" data-k="2"><summary><h3>2. Log In &amp; Passwords</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Email + password', 'People log in with their email and password and stay logged in on that device. <b>Forgot password</b> emails them a reset link. An archived account is logged out everywhere and can\'t log back in.', always)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>3. Student Crosscheck</h3>
+      <details class="um-card" data-k="3"><summary><h3>3. Student Crosscheck</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Auto-upgrade from the sales sheets', 'When on, a plain User whose name is on the ONLINE BUYERS or GYM BUYERS sheet is made Online or Gym automatically (Gym wins if both), unless they\'re on the BLACKLIST tab. Off since Nov 12 &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled))}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>4. New Student Setup</h3>
+      <details class="um-card" data-k="4"><summary><h3>4. New Student Setup</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         <p class="um-what">Runs once, the first time someone is made Online or Gym (when their student group is created). Renewals and people who already had a group are left alone.</p>
         ${row('Student group', 'Creates their "&lt;Name&gt; Group" chat with every coach and admin in it.', always)}
         ${row('Welcome message', 'Posts the welcome message into their new group from an admin.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled), `<div class="um-sub"><button class="pra-btn pra-btn-ghost" type="button" id="umEditWelcome" style="font-size:.74rem;padding:6px 12px">Edit the message</button></div>`)}
@@ -1733,39 +1741,60 @@ window.addEventListener('pageshow', () => {
           `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`)}
         ${row('Levels sheet row', 'Adds them to the Levels sheet (Gym or Online tab) at Foundation, unless they\'re already on it, so their levels and katas show right away.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent))}
         ${row('APP sheet type', 'Sets their TYPE on the APP sheet to Student so they show as a student on the Strength Ninjas map.', always)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>5. Upgrading &amp; Downgrading</h3>
+      <details class="um-card" data-k="5"><summary><h3>5. Upgrading &amp; Downgrading</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Make Online / Make Gym', 'Gives them student access: their group, Custom Training Protocol, Physique Builder, Katas and Levels. The first time, New Student Setup (above) runs. Coaches can do this from a profile; the Students panel does it and updates the CRM too.', always)}
         ${row('Make User / Mark Finished', 'Takes student features away: their protocol locks and the Physique tab locks. They\'re taken out of staff-only chats; their group and history are kept. From the Students panel this also sets them FINISHED in the CRM.', always)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>6. Archive &amp; Blacklist</h3>
+      <details class="um-card" data-k="6"><summary><h3>6. Archive &amp; Blacklist</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Archive', 'Hides the account and logs them out everywhere; they can\'t log in. Their chats and history stay. Unarchive to bring them back.', always)}
         ${row('Blacklist', 'From the Students panel: archives the app account, logs them out, and sets them BLACKLIST in the CRM so they\'re skipped by sales automations.', always)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>7. Renewals</h3>
+      <details class="um-card" data-k="7"><summary><h3>7. Renewals</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Renewal pills', 'Coaches and admins see an orange pill on a student whose end date (kickoff sheet) is within 2 months, pink within 1 month. Only staff see these.', always)}
         ${row('Renewal message', 'Once, inside the window below, posts this into the student\'s group (10am-1pm Alaska). Use {{firstName}}, {{lastName}} and {{endDate}}. The first day it\'s on, everyone already inside the window gets it.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
           `<div class="um-sub">Send <input class="pra-input" id="umRenewDays" type="number" min="1" max="90" value="${esc(s.renewalMessageDaysBefore)}" style="width:70px"/> days before their end date, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
            <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button><span class="um-saved" id="umRenewMsg"></span></div>`)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>8. Profiles, Levels &amp; Katas</h3>
+      <details class="um-card" data-k="8"><summary><h3>8. Profiles, Levels &amp; Katas</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Moves on profiles', 'Shows a student\'s moves history on their profile by default. A student who turns theirs off stays private.', toggle('movesPublicDefault', s.movesPublicDefault))}
         ${row('Levels &amp; katas', 'Levels come from the Levels sheet, matched by first + last name. Each student sees the kata for the level they\'re at (Katas tab and the thumbnails on their profile), from the KATAS BY ELEMENT Drive folders; coaches and admins see every student\'s.', always)}
-      </div>
+      </div></details>
 
-      <div class="um-card"><h3>9. Problems Banner</h3>
+      <details class="um-card" data-k="9"><summary><h3>9. Problems Banner</h3><span class="um-count"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="um-card-body">
         ${row('Red banner for coaches &amp; admins', 'Shows at the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet (so their levels won\'t show). Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>')}
-      </div>
+      </div></details>
     `;
     wire();
+    setupAccordions();
     loadAlerts();
     loadStudents();
   }
 
+  // Collapsed by default; the ones you open stay open next time (this device).
+  function setupAccordions() {
+    let open = [];
+    try { open = JSON.parse(localStorage.getItem('pra-um-open') || '[]'); } catch {}
+    document.querySelectorAll('#umBody details.um-card').forEach(d => {
+      if (open.includes(d.dataset.k)) d.open = true;
+      d.addEventListener('toggle', () => {
+        const now = [...document.querySelectorAll('#umBody details.um-card[open]')].map(x => x.dataset.k);
+        try { localStorage.setItem('pra-um-open', JSON.stringify(now)); } catch {}
+      });
+    });
+    updateCounts();
+  }
+  // "2 of 3 on" next to each section title, so you can see at a glance without opening it.
+  function updateCounts() {
+    document.querySelectorAll('#umBody details.um-card').forEach(d => {
+      const t = d.querySelectorAll('[data-um]'), on = [...t].filter(x => x.checked).length;
+      d.querySelector('.um-count').textContent = t.length ? `${on} of ${t.length} on` : 'Info';
+    });
+  }
   async function save(patch) {
     const r = await fetch('/api/admin/user-management', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
     if (!r.ok) { alert('Could not save -- try again.'); return false; }
@@ -1780,6 +1809,7 @@ window.addEventListener('pageshow', () => {
         const ok = await save({ [key]: el.checked });
         if (!ok) { el.checked = !el.checked; return; }
         // Keep the other tabs' copies of the same switch in step.
+        updateCounts();
         const twin = document.getElementById(key);
         if (twin && twin !== el && twin.type === 'checkbox') twin.checked = el.checked;
       };
