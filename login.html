@@ -134,6 +134,12 @@ function showForm(form) {
 
 tabLogin.onclick = () => { tabLogin.classList.add('active'); tabSignup.classList.remove('active'); showForm(loginForm); };
 tabSignup.onclick = () => { tabSignup.classList.add('active'); tabLogin.classList.remove('active'); showForm(signupForm); };
+// Sign-up can be switched off in Admin Panel > User Management.
+fetch('/api/auth/signup-status').then(r => r.ok ? r.json() : null).then(d => {
+  if (!d || d.enabled !== false) return;
+  tabSignup.style.display = 'none';
+  if (tabSignup.classList.contains('active')) tabLogin.click();
+}).catch(() => {});
 document.getElementById('forgotLink').onclick = () => showForm(forgotForm);
 document.getElementById('backToLoginLink').onclick = () => { tabLogin.click(); };
 

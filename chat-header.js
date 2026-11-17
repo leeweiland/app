@@ -455,6 +455,56 @@ window.PRABack = (function () {
     },
   };
 
+  // Red "needs attention" banner for coaches/admins: problems an automation
+  // hit (auto-build found no custom page / videos missing, a student's name
+  // doesn't match the Levels sheet). Admin Panel > User Management can turn
+  // it off. Collapsed to one line; tap to see each one, open it, or dismiss.
+  async function mountStaffAlerts(headerBar) {
+    let alerts = [];
+    try { const r = await fetch('/api/chat/staff-alerts'); if (r.ok) alerts = (await r.json()).alerts || []; } catch {}
+    if (!alerts.length || document.getElementById('pra-staff-alerts')) return;
+    const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const st = document.createElement('style');
+    st.textContent = `
+      #pra-staff-alerts { position: fixed; left: 50%; transform: translateX(-50%); z-index: 499; width: min(560px, calc(100vw - 24px)); font-family: var(--font-primary, sans-serif); }
+      #pra-staff-alerts .psa-bar { display: flex; align-items: center; gap: 8px; width: 100%; background: rgba(150,20,20,0.92); border: 1px solid #ff4d4d; color: #fff; border-radius: 10px; padding: 7px 12px; font-size: .78rem; font-weight: 700; cursor: pointer; box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+      #pra-staff-alerts .psa-bar svg { width: 16px; height: 16px; flex-shrink: 0; }
+      #pra-staff-alerts .psa-bar .psa-caret { margin-left: auto; transition: transform .15s; }
+      #pra-staff-alerts.open .psa-caret { transform: rotate(180deg); }
+      #pra-staff-alerts .psa-list { display: none; margin-top: 6px; background: rgba(16,16,20,0.97); border: 1px solid #ff4d4d; border-radius: 10px; max-height: 50vh; overflow-y: auto; }
+      #pra-staff-alerts.open .psa-list { display: block; }
+      #pra-staff-alerts .psa-item { display: flex; gap: 10px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,0.07); font-size: .78rem; color: #ddd; line-height: 1.4; }
+      #pra-staff-alerts .psa-item:first-child { border-top: none; }
+      #pra-staff-alerts .psa-item b { color: #fff; display: block; margin-bottom: 2px; }
+      #pra-staff-alerts .psa-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+      #pra-staff-alerts .psa-actions a, #pra-staff-alerts .psa-actions button { font-size: .7rem; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.3); background: transparent; color: #fff; text-decoration: none; cursor: pointer; text-align: center; }
+      #pra-staff-alerts .psa-actions a { border-color: #009bff; color: #009bff; }
+    `;
+    document.head.appendChild(st);
+    const box = document.createElement('div');
+    box.id = 'pra-staff-alerts';
+    const warn = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5 21.5 20h-19L12 3.5Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1" fill="#fff"/></svg>';
+    const caret = '<svg class="psa-caret" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const render = () => {
+      if (!alerts.length) { box.remove(); return; }
+      box.innerHTML = `<div class="psa-bar" role="button">${warn}<span>${alerts.length} ${alerts.length === 1 ? 'thing needs' : 'things need'} attention</span>${caret}</div>
+        <div class="psa-list">${alerts.map(a => `<div class="psa-item" data-id="${esc(a.id)}"><div style="flex:1;min-width:0"><b>${esc(a.title)}</b>${esc(a.detail)}</div><div class="psa-actions">${a.link ? `<a href="${esc(a.link)}">Open</a>` : ''}<button type="button" class="psa-dismiss">Dismiss</button></div></div>`).join('')}</div>`;
+      box.querySelector('.psa-bar').onclick = () => box.classList.toggle('open');
+      box.querySelectorAll('.psa-dismiss').forEach(btn => btn.onclick = async () => {
+        const id = btn.closest('.psa-item').dataset.id;
+        alerts = alerts.filter(a => a.id !== id);
+        render();
+        fetch('/api/chat/staff-alerts/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {});
+      });
+    };
+    render();
+    document.body.appendChild(box);
+    const place = () => { box.style.top = ((headerBar && headerBar.getBoundingClientRect().bottom) || 0) + 8 + 'px'; };
+    place();
+    window.addEventListener('resize', place);
+    if (window.ResizeObserver && headerBar) new ResizeObserver(place).observe(headerBar);
+  }
+
   async function build() {
     injectStyles();
     setupKeyboardInsetTracking();
@@ -494,6 +544,7 @@ window.PRABack = (function () {
       const r = await fetch('/api/auth/me');
       if (r.ok) { const d = await r.json(); myRole = d.user?.role || null; isAdmin = myRole === 'admin'; myId = d.user?.id || null; }
     } catch {}
+    if (['coach', 'admin', 'admin2'].includes(myRole)) mountStaffAlerts(bar);
     if (myId) {
       syncPhoneSteps();
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPhoneSteps(); });

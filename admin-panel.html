@@ -180,6 +180,21 @@
   .pra-toggle::before { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .pra-toggle:checked { background: var(--pra-blue); }
   .pra-toggle:checked::before { transform: translateX(16px); }
+
+  /* User Management tab */
+  .um-card { border: 1px solid var(--pra-border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; background: rgba(255,255,255,0.02); }
+  .um-card h3 { margin: 0 0 6px; font-family: var(--font-secondary); font-size: .86rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
+  .um-what { font-size: .82rem; color: var(--pra-dim); line-height: 1.5; margin: 0 0 10px; }
+  .um-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+  .um-row:first-of-type { border-top: none; }
+  .um-row .um-txt { flex: 1; min-width: 0; }
+  .um-row .um-name { font-size: .86rem; color: #fff; font-weight: 700; margin-bottom: 2px; }
+  .um-row .um-desc { font-size: .78rem; color: var(--pra-dim); line-height: 1.45; }
+  .um-always { font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); border: 1px solid var(--pra-border); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .um-sub { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .um-sub .pra-input, .um-sub .pra-select { max-width: 260px; }
+  .um-saved { font-size: .72rem; color: #22c55e; min-height: 1em; margin-left: 6px; }
+  .um-alert { border-left: 3px solid #ff4d4d; background: rgba(255,77,77,0.06); padding: 8px 10px; border-radius: 6px; margin-top: 6px; font-size: .78rem; }
 </style>
 </head>
 <body>
@@ -196,6 +211,7 @@
     <div class="admin-tab-bar" id="adminTabBar">
       <div class="admin-tab-bar-inner">
         <button class="admin-tab active" data-section="usersSection">Users &amp; Roles</button>
+        <button class="admin-tab" data-section="userManagementSection">User Management</button>
         <button class="admin-tab" data-section="chatConfigSection">Chat Configuration</button>
         <button class="admin-tab" data-section="automatedMessagesSection">Automated Messages</button>
         <button class="admin-tab" data-section="apptConfigSection">Appointments</button>
@@ -207,7 +223,7 @@
 
     <div class="pra-panel section" id="usersSection">
       <div class="pra-h2" style="margin-bottom:14px">Users &amp; Roles</div>
-      <div style="margin:-4px 0 14px">
+      <div style="margin:-4px 0 14px;display:none">
         <label class="pra-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" class="pra-toggle" id="movesPublicDefault"/> Show students' moves history on their profiles by default
         </label>
@@ -237,6 +253,12 @@
       <div id="usersTableWrap">Loading…</div>
     </div>
 
+
+    <div class="pra-panel section" id="userManagementSection" style="display:none">
+      <div class="pra-h2" style="margin-bottom:4px">User Management</div>
+      <div class="pra-muted" style="font-size:.8rem;margin-bottom:16px">Everything that happens to a person from sign-up to finished, in order. Switches save right away. Admins only.</div>
+      <div id="umBody">Loading…</div>
+    </div>
     <div class="pra-panel section" id="chatConfigSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:14px">Chat Configuration</div>
       <div class="field">
@@ -797,7 +819,7 @@ function setupAdminTabs() {
   tabs.forEach(tab => {
     tab.onclick = () => {
       tabs.forEach(t => t.classList.toggle('active', t === tab));
-      ['usersSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'calendarBlockingSection', 'archetypesSection'].forEach(id => {
+      ['usersSection', 'userManagementSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'calendarBlockingSection', 'archetypesSection'].forEach(id => {
         document.getElementById(id).style.display = id === tab.dataset.section ? '' : 'none';
       });
       // .pra-root is the actual scroll container on every page in this app
@@ -1673,6 +1695,136 @@ window.addEventListener('pageshow', () => {
   usersPage = 0;
   renderUsers();
 });
+</script>
+
+<script>
+// ── User Management tab ──────────────────────────────────────────────────
+(function () {
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let state = null;
+  const toggle = (key, on) => `<input type="checkbox" class="pra-toggle" data-um="${key}" ${on ? 'checked' : ''}/>`;
+  const always = '<span class="um-always">Always on</span>';
+  const row = (name, desc, control, extra = '') => `<div class="um-row"><div class="um-txt"><div class="um-name">${name}</div><div class="um-desc">${desc}</div>${extra}</div><div>${control}</div></div>`;
+
+  function render() {
+    const s = state.settings, c = state.counts;
+    const staffOpts = state.staff.map(u => `<option value="${esc(u.id)}" ${s.renewalMessageSenderId === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+    document.getElementById('umBody').innerHTML = `
+      <div class="um-what" style="margin-bottom:14px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> archived.</div>
+
+      <div class="um-card"><h3>1. Sign Up</h3>
+        ${row('Public sign-up', 'Anyone can create an account from the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> (no student features) until a coach makes them Online or Gym. Turn off to hide the Sign Up tab and refuse new sign-ups; you can still add people with <b>+ Add User</b> in Users &amp; Roles.', toggle('signupEnabled', s.signupEnabled))}
+      </div>
+
+      <div class="um-card"><h3>2. Log In &amp; Passwords</h3>
+        ${row('Email + password', 'People log in with their email and password and stay logged in on that device. <b>Forgot password</b> emails them a reset link. An archived account is logged out everywhere and can\'t log back in.', always)}
+      </div>
+
+      <div class="um-card"><h3>3. Student Crosscheck</h3>
+        ${row('Auto-upgrade from the sales sheets', 'When on, a plain User whose name is on the ONLINE BUYERS or GYM BUYERS sheet is made Online or Gym automatically (Gym wins if both), unless they\'re on the BLACKLIST tab. Off since Nov 12 &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled))}
+      </div>
+
+      <div class="um-card"><h3>4. New Student Setup</h3>
+        <p class="um-what">Runs once, the first time someone is made Online or Gym (when their student group is created). Renewals and people who already had a group are left alone.</p>
+        ${row('Student group', 'Creates their "&lt;Name&gt; Group" chat with every coach and admin in it.', always)}
+        ${row('Welcome message', 'Posts the welcome message into their new group from an admin.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled), `<div class="um-sub"><button class="pra-btn pra-btn-ghost" type="button" id="umEditWelcome" style="font-size:.74rem;padding:6px 12px">Edit the message</button></div>`)}
+        ${row('Default protocol', 'Gives them the Flow Builder draft as their protocol to start, unless they already have a saved program of their own.', toggle('defaultProtocolEnabled', s.defaultProtocolEnabled))}
+        ${row('Auto-build their program', 'Finds their page on custom.pacificrimathletics.com (title has their first and last name, not DONOTUSE; a "NEW" page wins) and builds their protocol from it, videos and instructions included. <b>It only replaces the default or an empty protocol &mdash; a protocol a coach has already worked on is left alone.</b> If no page is found or some videos aren\'t in Drive, coaches and admins get a red banner.', toggle('autoBuildProtocolEnabled', s.autoBuildProtocolEnabled),
+          `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`)}
+        ${row('Levels sheet row', 'Adds them to the Levels sheet (Gym or Online tab) at Foundation, unless they\'re already on it, so their levels and katas show right away.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent))}
+        ${row('APP sheet type', 'Sets their TYPE on the APP sheet to Student so they show as a student on the Strength Ninjas map.', always)}
+      </div>
+
+      <div class="um-card"><h3>5. Upgrading &amp; Downgrading</h3>
+        ${row('Make Online / Make Gym', 'Gives them student access: their group, Custom Training Protocol, Physique Builder, Katas and Levels. The first time, New Student Setup (above) runs. Coaches can do this from a profile; the Students panel does it and updates the CRM too.', always)}
+        ${row('Make User / Mark Finished', 'Takes student features away: their protocol locks and the Physique tab locks. They\'re taken out of staff-only chats; their group and history are kept. From the Students panel this also sets them FINISHED in the CRM.', always)}
+      </div>
+
+      <div class="um-card"><h3>6. Archive &amp; Blacklist</h3>
+        ${row('Archive', 'Hides the account and logs them out everywhere; they can\'t log in. Their chats and history stay. Unarchive to bring them back.', always)}
+        ${row('Blacklist', 'From the Students panel: archives the app account, logs them out, and sets them BLACKLIST in the CRM so they\'re skipped by sales automations.', always)}
+      </div>
+
+      <div class="um-card"><h3>7. Renewals</h3>
+        ${row('Renewal pills', 'Coaches and admins see an orange pill on a student whose end date (kickoff sheet) is within 2 months, pink within 1 month. Only staff see these.', always)}
+        ${row('Renewal message', 'Once, inside the window below, posts this into the student\'s group (10am-1pm Alaska). Use {{firstName}}, {{lastName}} and {{endDate}}. The first day it\'s on, everyone already inside the window gets it.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
+          `<div class="um-sub">Send <input class="pra-input" id="umRenewDays" type="number" min="1" max="90" value="${esc(s.renewalMessageDaysBefore)}" style="width:70px"/> days before their end date, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
+           <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button><span class="um-saved" id="umRenewMsg"></span></div>`)}
+      </div>
+
+      <div class="um-card"><h3>8. Profiles, Levels &amp; Katas</h3>
+        ${row('Moves on profiles', 'Shows a student\'s moves history on their profile by default. A student who turns theirs off stays private.', toggle('movesPublicDefault', s.movesPublicDefault))}
+        ${row('Levels &amp; katas', 'Levels come from the Levels sheet, matched by first + last name. Each student sees the kata for the level they\'re at (Katas tab and the thumbnails on their profile), from the KATAS BY ELEMENT Drive folders; coaches and admins see every student\'s.', always)}
+      </div>
+
+      <div class="um-card"><h3>9. Problems Banner</h3>
+        ${row('Red banner for coaches &amp; admins', 'Shows at the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet (so their levels won\'t show). Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>')}
+      </div>
+    `;
+    wire();
+    loadAlerts();
+    loadStudents();
+  }
+
+  async function save(patch) {
+    const r = await fetch('/api/admin/user-management', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
+    if (!r.ok) { alert('Could not save -- try again.'); return false; }
+    state = await r.json();
+    return true;
+  }
+
+  function wire() {
+    document.querySelectorAll('#umBody [data-um]').forEach(el => {
+      el.onchange = async () => {
+        const key = el.dataset.um;
+        const ok = await save({ [key]: el.checked });
+        if (!ok) { el.checked = !el.checked; return; }
+        // Keep the other tabs' copies of the same switch in step.
+        const twin = document.getElementById(key);
+        if (twin && twin !== el && twin.type === 'checkbox') twin.checked = el.checked;
+      };
+    });
+    document.getElementById('umEditWelcome').onclick = () => document.querySelector('.admin-tab[data-section="automatedMessagesSection"]').click();
+    const saveRenew = async () => {
+      const ok = await save({ renewalMessageDaysBefore: document.getElementById('umRenewDays').value, renewalMessageSenderId: document.getElementById('umRenewSender').value, renewalMessageText: document.getElementById('umRenewText').value });
+      const m = document.getElementById('umRenewMsg'); m.textContent = ok ? 'Saved' : ''; setTimeout(() => { m.textContent = ''; }, 2000);
+    };
+    document.getElementById('umRenewSave').onclick = saveRenew;
+    document.getElementById('umRenewDays').onchange = saveRenew;
+    document.getElementById('umRenewSender').onchange = saveRenew;
+    document.getElementById('umBuildBtn').onclick = async () => {
+      const id = document.getElementById('umBuildUser').value, msg = document.getElementById('umBuildMsg');
+      if (!id) return;
+      msg.style.color = ''; msg.textContent = 'Building…';
+      const r = await fetch('/api/admin/auto-build-protocol', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: id }) });
+      const d = await r.json().catch(() => ({}));
+      const text = { built: `Built ${d.steps} steps from "${d.page}"${d.missing ? ` (${d.missing} videos missing)` : ''}`, 'left-alone': 'Left alone: a coach has already worked on their protocol', 'no-page': 'No custom page found (see the banner)', 'empty-page': 'Their page has no moves', error: 'The custom site didn\'t answer' }[d.status] || d.error || 'Something went wrong';
+      msg.style.color = d.status === 'built' ? '#22c55e' : '#ffb84d';
+      msg.textContent = text;
+      loadAlerts();
+    };
+  }
+
+  async function loadStudents() {
+    const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
+    const sel = document.getElementById('umBuildUser');
+    if (sel) sel.insertAdjacentHTML('beforeend', d.students.map(u => `<option value="${esc(u.id)}">${esc(u.first + ' ' + u.last)}</option>`).join(''));
+  }
+  async function loadAlerts() {
+    const el = document.getElementById('umAlerts');
+    if (!el) return;
+    const d = await fetch('/api/chat/staff-alerts').then(r => r.ok ? r.json() : { alerts: [] }).catch(() => ({ alerts: [] }));
+    el.innerHTML = d.alerts.length ? `<div class="um-desc" style="margin-top:8px">${d.alerts.length} open now:</div>` + d.alerts.map(a => `<div class="um-alert"><b>${esc(a.title)}</b><br>${esc(a.detail)}</div>`).join('') : '<div class="um-desc" style="margin-top:8px">Nothing open right now.</div>';
+  }
+
+  window.loadUserManagement = async function () {
+    const r = await fetch('/api/admin/user-management');
+    if (!r.ok) { document.getElementById('umBody').textContent = 'Admins only.'; return; }
+    state = await r.json();
+    render();
+  };
+  document.querySelector('.admin-tab[data-section="userManagementSection"]').addEventListener('click', () => { if (!state) window.loadUserManagement(); });
+})();
 </script>
 </body>
 </html>

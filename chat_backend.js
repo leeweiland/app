@@ -25,6 +25,7 @@ import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
+import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -234,6 +235,7 @@ const DEFAULT_APPOINTMENTS_CONFIG = {
 // only tokens that make sense here (same fillTemplate() the appointment
 // reminders use), unlike coachName/date/time/duration which don't apply to
 // a group that was just created.
+const DEFAULT_RENEWAL_MESSAGE = "Hey {{firstName}}! Your training with us wraps up on {{endDate}}. Want to keep the momentum going? Reply here and we'll get your renewal set up.";
 const DEFAULT_WELCOME_MESSAGE = `Welcome to training!  This app is your portal to Body Mastery and gaining Strength, Skill, and Sustainability!
 
 In here, you'll have access to:
@@ -388,6 +390,16 @@ export function getConfig() {
   if (cfg.onlineLevelTestChannelId === undefined) cfg.onlineLevelTestChannelId = "";
   if (cfg.defaultProtocolEnabled === undefined) cfg.defaultProtocolEnabled = false;
   if (cfg.movesPublicDefault === undefined) cfg.movesPublicDefault = true;
+  // User Management tab (admin panel) -- see USER_MANAGEMENT_KEYS.
+  if (cfg.signupEnabled === undefined) cfg.signupEnabled = true;
+  if (cfg.studentCrosscheckEnabled === undefined) cfg.studentCrosscheckEnabled = false;
+  if (cfg.autoBuildProtocolEnabled === undefined) cfg.autoBuildProtocolEnabled = true;
+  if (cfg.levelsRowOnNewStudent === undefined) cfg.levelsRowOnNewStudent = true;
+  if (cfg.staffAlertsEnabled === undefined) cfg.staffAlertsEnabled = true;
+  if (cfg.renewalMessageEnabled === undefined) cfg.renewalMessageEnabled = false;
+  if (!cfg.renewalMessageDaysBefore) cfg.renewalMessageDaysBefore = 14;
+  if (!cfg.renewalMessageText) cfg.renewalMessageText = DEFAULT_RENEWAL_MESSAGE;
+  if (cfg.renewalMessageSenderId === undefined) cfg.renewalMessageSenderId = "";
   if (cfg.physiqueMontageFolderId === undefined) cfg.physiqueMontageFolderId = "";
   // Merge in any new default appointment fields for configs saved before this feature existed.
   cfg.appointments = { ...DEFAULT_APPOINTMENTS_CONFIG, ...(cfg.appointments || {}) };
@@ -1521,9 +1533,9 @@ function renewalForStudent(student, viewer, eligibility) {
 // forward, since this only ever touches accounts still sitting at the plain
 // "user" default.
 async function syncStudentRoles(users) {
-  // Disabled 2026-11-12 (Lee): no auto-upgrade from the kickoff/buyers
-  // sheets -- coaches set students up manually.
-  return;
+  // Off by default since 2026-11-12 (Lee): coaches set students up by
+  // hand. Switchable in Admin Panel > User Management.
+  if (!getConfig().studentCrosscheckEnabled) return;
   try {
     const { online, gym } = await fetchStudentEligibility();
     let changed = false;
@@ -1533,7 +1545,10 @@ async function syncStudentRoles(users) {
       if (gym.has(key)) { u.role = "gym"; changed = true; }
       else if (online.has(key)) { u.role = "online"; changed = true; }
     });
-    if (changed) { writeJson(USERS_FILE, users); syncDefaultGroups(); }
+    if (changed) {
+      writeJson(USERS_FILE, users); syncDefaultGroups();
+      users.filter(u => isClientRole(u.role)).forEach(u => ensureStudentLevelsRow(u).catch(() => {}));
+    }
   } catch (e) {
     console.error("[student role sync]", e.message); // best-effort — never blocks the admin panel from loading
   }
@@ -1723,11 +1738,155 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
   levelsCache = null; // next read should reflect the write immediately
 }
 
+// ── Staff alerts (the red banner coaches/admins see) ─────────────────────
+// Problems an automation hit that a person needs to fix: auto-build found no
+// custom page / videos missing, a student's name doesn't match the Levels
+// sheet. Stored ones live here; name mismatches are worked out live.
+const STAFF_ALERTS_FILE = "chat_staff_alerts.json"; // { alerts: [...], dismissed: { [id]: { by, at } } }
+function readStaffAlerts() {
+  const d = readJson(STAFF_ALERTS_FILE, null) || {};
+  return { alerts: Array.isArray(d.alerts) ? d.alerts : [], dismissed: d.dismissed || {} };
+}
+function addStaffAlert(alert) {
+  const d = readStaffAlerts();
+  d.alerts = d.alerts.filter(a => a.id !== alert.id);
+  d.alerts.push({ ...alert, createdAt: new Date().toISOString() });
+  delete d.dismissed[alert.id];
+  writeJson(STAFF_ALERTS_FILE, d);
+}
+function clearStaffAlert(id) {
+  const d = readStaffAlerts();
+  const before = d.alerts.length;
+  d.alerts = d.alerts.filter(a => a.id !== id);
+  if (d.alerts.length !== before) writeJson(STAFF_ALERTS_FILE, d);
+}
+const normName = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+async function nameMismatchAlerts() {
+  const people = await fetchAllLevels();
+  const users = readJson(USERS_FILE, []).filter(u => isClientRole(u.role) && !u.archived);
+  const out = [];
+  for (const u of users) {
+    const f = normName(u.first), l = normName(u.last);
+    if (!f || !l) continue;
+    if (people.some(p => normName(p.first) === f && normName(p.last) === l)) continue;
+    const near = people.filter(p => {
+      const pf = normName(p.first), pl = normName(p.last);
+      return (pl === l && (pf[0] === f[0] || pf.startsWith(f) || f.startsWith(pf))) || (pf === f && pl[0] === l[0] && pl.length > 1);
+    });
+    if (!near.length) continue;
+    const names = near.map(p => `"${p.first} ${p.last}" (${p.program})`).join(" or ");
+    out.push({
+      id: "nm:" + u.id, kind: "name-mismatch", userId: u.id,
+      title: `${u.first} ${u.last}: name doesn't match the Levels sheet`,
+      detail: `The Levels sheet has ${names}. Their levels and katas won't show in the app until the names match.`,
+      link: "/chat-app/levels.html",
+    });
+  }
+  return out;
+}
+
+// ── Auto-build a new student's protocol from their custom-site page ──────
+// Only ever replaces an untouched default/empty protocol (updatedBy unset --
+// a coach's edit or apply stamps their user id) -- a protocol a coach has
+// worked on is left alone. Anything that needs a human goes to the banner.
+function isUntouchedProtocol(p) {
+  return !p || !Array.isArray(p.steps) || !p.steps.length || p.updatedBy == null;
+}
+async function autoBuildProtocolFromCustomPage(person, { force = false } = {}) {
+  if (!force && !getConfig().autoBuildProtocolEnabled) return { status: "off" };
+  const name = `${String(person.first || "").trim()} ${String(person.last || "").trim()}`.trim();
+  const link = "/chat-app/training-protocol.html?userId=" + encodeURIComponent(person.id);
+  let built;
+  try {
+    built = await buildFromCustomPage(person.first, person.last);
+  } catch (e) {
+    addStaffAlert({ id: "ab:" + person.id, kind: "auto-build", userId: person.id, link,
+      title: `${name}: couldn't build their program`,
+      detail: `The custom site didn't answer (${e.message}). Their protocol is still the default -- build it by hand.` });
+    return { status: "error", error: e.message };
+  }
+  if (!built.found) {
+    addStaffAlert({ id: "ab:" + person.id, kind: "auto-build", userId: person.id, link,
+      title: `${name}: no custom program page found`,
+      detail: `Nothing on custom.pacificrimathletics.com is titled with "${name}" (DONOTUSE pages are skipped), so their protocol is still the default. Build it by hand, or fix the page title and run auto-build again from User Management.` });
+    return { status: "no-page" };
+  }
+  if (!built.steps.length) {
+    addStaffAlert({ id: "ab:" + person.id, kind: "auto-build", userId: person.id, link,
+      title: `${name}: their custom page has no moves`,
+      detail: `Found "${built.pageTitle}" but couldn't read any moves from it. Their protocol is still the default.` });
+    return { status: "empty-page" };
+  }
+  const all = readJson(TRAINING_PROTOCOLS_FILE, {});
+  const existing = all[person.id];
+  if (!isUntouchedProtocol(existing)) {
+    console.log(`[auto-build] ${name}: left alone (protocol already edited by a coach)`);
+    return { status: "left-alone" };
+  }
+  all[person.id] = { ...(existing || {}), steps: built.steps, protocolName: `${name} - Custom Program`, updatedAt: new Date().toISOString(), updatedBy: "auto-build", builtFrom: built.sourceUrl };
+  writeJson(TRAINING_PROTOCOLS_FILE, all);
+  clearStaffAlert("ab:" + person.id);
+  console.log(`[auto-build] ${name}: built ${built.steps.length} steps from ${built.sourceUrl}`);
+  if (built.missing.length) {
+    const names = [...new Set(built.missing.map(m => m.name || "video " + m.vimeoId))];
+    addStaffAlert({ id: "abm:" + person.id, kind: "auto-build", userId: person.id, link,
+      title: `${name}: ${names.length} video${names.length === 1 ? "" : "s"} missing from their program`,
+      detail: `Built from "${built.pageTitle}", but these aren't in Drive yet so they show as text only: ${names.slice(0, 8).join(", ")}${names.length > 8 ? "…" : ""}.` });
+  } else clearStaffAlert("abm:" + person.id);
+  return { status: "built", steps: built.steps.length, missing: built.missing.length, page: built.pageTitle };
+}
+
+// ── Renewal auto-message ────────────────────────────────────────────────
+// Off by default. Once a day (10am-1pm Alaska) every Online/Gym student
+// whose end date (kickoff sheet) is within N days gets one message in their
+// group -- at most once per end date.
+const RENEWAL_SENT_FILE = "chat_renewal_messages_sent.json"; // { [userId]: "YYYY-MM-DD" end date already messaged }
+async function checkRenewalMessages() {
+  const cfg = getConfig();
+  if (!cfg.renewalMessageEnabled || !cfg.renewalMessageText) return;
+  const mins = currentMinutesInZone("America/Anchorage");
+  if (mins < 10 * 60 || mins > 13 * 60) return;
+  const eligibility = await fetchStudentEligibility();
+  const users = readJson(USERS_FILE, []);
+  const convos = readJson(CONVOS_FILE, []);
+  const sent = readJson(RENEWAL_SENT_FILE, null) || {};
+  const today = alaskaTodayMs();
+  const winDays = Math.max(1, Number(cfg.renewalMessageDaysBefore) || 14);
+  let changed = false;
+  for (const u of users) {
+    if (!isClientRole(u.role) || u.archived) continue;
+    const key = nameKey(u.first, u.last);
+    const primary = u.role === "gym" ? eligibility.endDates.gym : eligibility.endDates.online;
+    const other = u.role === "gym" ? eligibility.endDates.online : eligibility.endDates.gym;
+    const endMs = primary.get(key) ?? other.get(key);
+    if (endMs == null) continue;
+    const daysLeft = Math.round((endMs - today) / RENEW_DAY_MS);
+    if (daysLeft < 0 || daysLeft > winDays) continue;
+    const endDate = new Date(endMs).toISOString().slice(0, 10);
+    if (sent[u.id] === endDate) continue;
+    const convo = convos.find(c => c.autoGroupType === "student" && c.autoGroupUserId === u.id);
+    if (!convo) continue;
+    const senderId = (cfg.renewalMessageSenderId && convo.participantIds.includes(cfg.renewalMessageSenderId))
+      ? cfg.renewalMessageSenderId
+      : convo.participantIds.find(id => isAdmin(users.find(x => x.id === id) || {})) || convo.participantIds.find(id => id !== u.id);
+    if (!senderId) continue;
+    const pretty = new Date(endMs).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
+    const text = fillTemplate(cfg.renewalMessageText, { firstName: u.first, lastName: u.last, endDate: pretty });
+    MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+    notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+    sent[u.id] = endDate; changed = true;
+    console.log(`[renewal message] ${u.first} ${u.last} (ends ${endDate})`);
+  }
+  if (changed) writeJson(RENEWAL_SENT_FILE, sent);
+}
+setInterval(() => { checkRenewalMessages().catch(e => console.error("[renewal message]", e.message)); }, 30 * 60 * 1000);
+
 // A new student (online/gym) starts at Foundation: give them a Levels sheet
 // row (GYM or ONLINE tab by role, Foundation blank = In Progress) unless
 // they're already on either tab. Called wherever someone becomes a student.
 async function ensureStudentLevelsRow(u) {
   if (!u || !isClientRole(u.role) || !u.first || !u.last) return;
+  if (getConfig().levelsRowOnNewStudent === false) return;
   levelsCache = null;
   const people = await fetchAllLevels();
   if (findLevelsEntries(people, u.first, u.last).length) return;
@@ -3674,6 +3833,7 @@ function syncDefaultGroups() {
       return src.map(s => ({ ...s, id: idMap.get(s.id), parentId: s.parentId ? idMap.get(s.parentId) : null }));
     };
     let changed = false;
+    const autoBuildList = [];
     newlyCreatedGroups.forEach(({ person }) => {
       const mine = studentPrograms.find(t => nameKey(t.studentName) === nameKey(`${person.first}${person.last}`));
       const existing = allProtocols[person.id];
@@ -3687,12 +3847,18 @@ function syncDefaultGroups() {
         allProtocols[person.id] = { ...existing, steps: cloneSteps(mine.steps), protocolName: mine.name, templateId: mine.id, updatedAt: new Date().toISOString(), updatedBy: "auto-student-program" };
         changed = true;
         console.log(`[protocol] ${person.first} ${person.last}: applied their saved program "${mine.name}"`);
-      } else if (draft?.steps?.length) {
-        allProtocols[person.id] = { ...existing, steps: cloneSteps(draft.steps), protocolName: draft.protocolName || null, updatedAt: new Date().toISOString(), updatedBy: null };
-        changed = true;
+      } else {
+        if (draft?.steps?.length) {
+          allProtocols[person.id] = { ...existing, steps: cloneSteps(draft.steps), protocolName: draft.protocolName || null, updatedAt: new Date().toISOString(), updatedBy: null };
+          changed = true;
+        }
+        // No saved program -- build one from their custom-site page (async;
+        // replaces the default above only if nobody has touched it since).
+        autoBuildList.push(person);
       }
     });
     if (changed) writeJson(TRAINING_PROTOCOLS_FILE, allProtocols);
+    autoBuildList.forEach(person => autoBuildProtocolFromCustomPage(person).catch(e => console.error("[auto-build]", e.message)));
   }
 }
 
@@ -4114,6 +4280,13 @@ export async function handleChatRequest(req, res, url) {
   }
 
   // ─── Auth ───────────────────────────────────────────────────────────────
+  // Public: login.html hides its Sign Up tab when sign-up is switched off.
+  if (req.method === "GET" && p === "/api/auth/signup-status") {
+    return sendJson(res, 200, { enabled: getConfig().signupEnabled !== false });
+  }
+  if (req.method === "POST" && p === "/api/auth/signup" && getConfig().signupEnabled === false && readJson(USERS_FILE, []).length) {
+    return sendJson(res, 403, { error: "Sign up is closed right now. Contact Pacific Rim Athletics to get access." });
+  }
   if (req.method === "POST" && p === "/api/auth/signup") {
     const ct = req.headers["content-type"] || "";
     let fields = {}, profilePictureFileId = null;
@@ -4944,6 +5117,48 @@ export async function handleChatRequest(req, res, url) {
 
       return sendJson(res, 200, { ok: true });
     }
+    // ── User Management tab (admin panel) ───────────────────────────────
+    if (p === "/api/admin/user-management") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const KEYS = ["signupEnabled", "studentCrosscheckEnabled", "autoBuildProtocolEnabled", "levelsRowOnNewStudent", "staffAlertsEnabled",
+        "defaultProtocolEnabled", "welcomeMessageEnabled", "welcomeMessageText", "movesPublicDefault",
+        "renewalMessageEnabled", "renewalMessageDaysBefore", "renewalMessageText", "renewalMessageSenderId"];
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+        const cfg = getConfig();
+        for (const k of KEYS) {
+          if (body[k] === undefined) continue;
+          if (k === "renewalMessageDaysBefore") cfg[k] = Math.max(1, Math.min(90, Number(body[k]) || 14));
+          else if (typeof cfg[k] === "boolean" || /Enabled$|Default$|Student$/.test(k)) cfg[k] = !!body[k];
+          else cfg[k] = String(body[k]);
+        }
+        writeJson(CONFIG_FILE, cfg);
+      }
+      const cfg = getConfig();
+      const users = readJson(USERS_FILE, []);
+      const settings = Object.fromEntries(KEYS.map(k => [k, cfg[k]]));
+      const staff = users.filter(u => isStaff(u) && !u.archived).map(u => ({ id: u.id, name: `${u.first} ${u.last}`, role: u.role }));
+      const counts = {
+        online: users.filter(u => u.role === "online" && !u.archived).length,
+        gym: users.filter(u => u.role === "gym" && !u.archived).length,
+        users: users.filter(u => u.role === "user" && !u.archived).length,
+        archived: users.filter(u => u.archived).length,
+      };
+      return sendJson(res, 200, { settings, staff, counts, defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE });
+    }
+    // Run auto-build by hand for one student (from a banner/User Management).
+    if (p === "/api/admin/auto-build-protocol" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { userId } = await readJsonBody(req);
+      const target = readJson(USERS_FILE, []).find(u => u.id === userId);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      try {
+        return sendJson(res, 200, await autoBuildProtocolFromCustomPage(target, { force: true }));
+      } catch (e) {
+        return sendJson(res, 500, { error: e.message });
+      }
+    }
+
     if (p === "/api/admin/chat-config") {
       if (req.method === "GET") {
         if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
@@ -5512,6 +5727,24 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/katas/refresh" && req.method === "POST") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
       await fetchKataLibrary(true);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // Red banner for coaches/admins (chat-header.js): problems to fix.
+    if (p === "/api/chat/staff-alerts" && req.method === "GET") {
+      if (!isStaff(user) || !getConfig().staffAlertsEnabled) return sendJson(res, 200, { alerts: [] });
+      const d = readStaffAlerts();
+      let all = [...d.alerts];
+      try { all = all.concat(await nameMismatchAlerts()); } catch (e) { console.error("[staff alerts] name check", e.message); }
+      return sendJson(res, 200, { alerts: all.filter(a => !d.dismissed[a.id]) });
+    }
+    if (p === "/api/chat/staff-alerts/dismiss" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
+      const { id } = await readJsonBody(req);
+      const d = readStaffAlerts();
+      d.dismissed[String(id)] = { by: user.id, at: new Date().toISOString() };
+      d.alerts = d.alerts.filter(a => a.id !== id);
+      writeJson(STAFF_ALERTS_FILE, d);
       return sendJson(res, 200, { ok: true });
     }
 
