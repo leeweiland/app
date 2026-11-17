@@ -460,7 +460,6 @@
       <div class="vp-tabs" id="videoPanelTabs">
         <button type="button" class="vp-tab active" data-tab="library">Library</button>
         <button type="button" class="vp-tab" data-tab="upload">Upload new</button>
-        <button type="button" class="vp-tab" data-tab="drive">Google Drive</button>
         <button type="button" class="vp-tab" data-tab="youtube">YouTube link</button>
       </div>
       <div class="vp-body" data-body="library">
@@ -470,11 +469,6 @@
       <div class="vp-body" data-body="upload" style="display:none">
         <div class="vp-drop" id="vpUploadDrop">Pick a video from this device<div class="pra-muted" style="font-size:.78rem;margin-top:6px">It's saved to Drive and used here.</div></div>
         <div class="pra-muted" id="vpUploadMsg" style="font-size:.82rem;margin-top:10px;min-height:1em"></div>
-      </div>
-      <div class="vp-body" data-body="drive" style="display:none">
-        <input class="pra-input" id="vpDriveInput" placeholder="Paste a Google Drive link (or file id)" autocomplete="off"/>
-        <button type="button" class="pra-btn" id="vpDriveUse" style="margin-top:10px">Use this video</button>
-        <div class="pra-muted" id="vpDriveMsg" style="font-size:.82rem;margin-top:10px;min-height:1em"></div>
       </div>
       <div class="vp-body" data-body="youtube" style="display:none">
         <input class="pra-input" id="vpYoutubeInput" placeholder="Paste a YouTube link" autocomplete="off"/>
@@ -3391,8 +3385,7 @@ let videoPanelTarget = null; // step id being changed, or null = add a new step
 function openVideoPanel(targetStepId, tab = 'library') {
   videoPanelTarget = targetStepId || null;
   document.getElementById('videoPanelTitle').textContent = targetStepId ? 'Change Video' : 'Add a Video';
-  ['vpUploadMsg', 'vpDriveMsg', 'vpYoutubeMsg'].forEach(id => { document.getElementById(id).textContent = ''; });
-  document.getElementById('vpDriveInput').value = '';
+  ['vpUploadMsg', 'vpYoutubeMsg'].forEach(id => { document.getElementById(id).textContent = ''; });
   document.getElementById('vpYoutubeInput').value = '';
   document.getElementById('videoSearchInput').value = '';
   document.getElementById('videoResults').innerHTML = '';
@@ -3449,11 +3442,6 @@ function wireVideoPanel() {
     input.value = '';
     input.dataset.panel = '1';
     input.click();
-  };
-  document.getElementById('vpDriveUse').onclick = () => {
-    const id = extractDriveId(document.getElementById('vpDriveInput').value);
-    if (!id) { document.getElementById('vpDriveMsg').textContent = "That doesn't look like a Google Drive link."; return; }
-    applyVideoChoice({ driveFileId: id, name: 'Drive video' });
   };
   document.getElementById('vpYoutubeUse').onclick = () => {
     const id = extractYoutubeId(document.getElementById('vpYoutubeInput').value);
