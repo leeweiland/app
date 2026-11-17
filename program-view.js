@@ -237,7 +237,7 @@
     const askBtn = ctx.canAsk && (s.type === 'video' || s.type === 'image') ? `<button type="button" class="pv-ask" data-ask="${esc(s.id)}">Ask a question</button>` : '';
     if (s.type === 'video') {
       const label = s.moveLabel || s.name || '';
-      return `<div class="pv-step" data-step-id="${esc(s.id)}">${label || askBtn ? `<div class="pv-step-label"><span class="pv-label">${esc(label)}</span>${askBtn}</div>` : ''}
+      return `<div class="pv-step" data-step-id="${esc(s.id)}">${label || askBtn ? `<div class="pv-step-label"><span class="pv-label" data-edit="moveLabel">${esc(label)}</span>${askBtn}</div>` : ''}
         ${s.sound ? `<video data-sound data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls preload="metadata" playsinline></video>` : `<video data-src="/api/chat/media/${encodeURIComponent(s.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>`}</div>`;
     }
     if (s.type === 'image') {
@@ -269,19 +269,19 @@
           <div class="pv-countdown" data-unlocks="${esc(d.unlocksAt)}" data-template="${esc(pr.settings.lockedText)}">${esc(lockedText(pr.settings.lockedText, d.unlocksAt, now))}</div></div>${LOCK_SVG}</div>`;
       }
       const isToday = !staff && d.dayNumber === newest;
-      const chips = [d.category ? `<span class="pv-chip">${esc(d.category)}</span>` : '',
+      const chips = [d.category ? `<span class="pv-chip" data-edit="category">${esc(d.category)}</span>` : '',
         isToday ? '<span class="pv-chip today">Today</span>' : '',
         staff && !opts.preview ? (d.unlocked ? '<span class="pv-chip on">Unlocked</span>' : `<span class="pv-chip off">Opens ${esc(fmtWhen(d.unlocksAt))}</span>`) : ''].join('');
       const body = d.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: d.dayNumber })).join('');
       return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}" ${isToday ? 'open' : ''}>
-        <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
+        <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
         <div class="pv-body" data-day="${esc(d.dayNumber)}">${body}</div></details>`;
     };
     const sectionBlock = (sec, i) => {
       const open = staff ? false : newest <= 1;
       const body = sec.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: 0 })).join('');
       const secIdx = i;
-      return `<details class="pv-block" ${open ? 'open' : ''}><summary class="pv-head">${numBox(i + 1, 'START')}<div class="pv-head-text"><div class="pv-head-title">${esc(sec.title || 'Start here')}</div><div class="pv-chips"><span class="pv-chip">Watch before Day 1</span></div></div><span class="pv-caret">▾</span></summary>
+      return `<details class="pv-block" ${open ? 'open' : ''}><summary class="pv-head">${numBox(i + 1, 'START')}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(sec.title || 'Start here')}</div><div class="pv-chips"><span class="pv-chip" data-edit="chip">${esc(sec.chip || 'Watch before Day 1')}</span></div></div><span class="pv-caret">▾</span></summary>
         <div class="pv-body" data-section="${secIdx}">${body}</div></details>`;
     };
 

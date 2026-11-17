@@ -3623,7 +3623,7 @@ function buildProgramView(template, enr, { staffView, ownedBumps, now = Date.now
   let cur = null;
   for (const s of order) {
     if (s.type === "day") { cur = { dayNumber: Number(s.dayNumber) || days.length + 1, title: s.title || "", category: s.category || "", steps: [] }; days.push(cur); continue; }
-    if (s.type === "section") { cur = { title: s.title || s.content || "", steps: [] }; sections.push(cur); continue; }
+    if (s.type === "section") { cur = { title: s.title || s.content || "", chip: s.chip || "", steps: [] }; sections.push(cur); continue; }
     if (!cur) { cur = { title: "", steps: [] }; sections.push(cur); }
     cur.steps.push(s);
   }

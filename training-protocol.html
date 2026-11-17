@@ -71,6 +71,9 @@
   .sp-modal { font-family: var(--font-primary, sans-serif); color: var(--pra-white, #fff); }
   .sp-modal .template-item-title { font-family: var(--font-primary, sans-serif); }
   .page-group { display: flex; flex-direction: column; gap: 16px; }
+  [data-edit-on] { cursor: text; border-radius: 6px; transition: box-shadow .12s; }
+  [data-edit-on]:hover { box-shadow: 0 0 0 1px rgba(0,155,255,.45); }
+  .editing-text { outline: 2px solid var(--pra-blue); outline-offset: 2px; border-radius: 6px; white-space: pre-wrap; cursor: text; background: rgba(0,155,255,.06); }
   .sp-modal .pra-input, .sp-modal .pra-btn { box-sizing: border-box; max-width: 100%; }
   .editable-card { position: relative; cursor: pointer; }
   .editable-card:hover { outline: 1px solid rgba(0,155,255,0.45); outline-offset: 2px; border-radius: 12px; }
@@ -1599,7 +1602,17 @@ function renderPageView() {
   container.innerHTML = html;
   container.querySelectorAll('video[data-src]').forEach(v => { stepVideoLazyObserver.observe(v); reportVideoError(v); });
   PRAProgram.mountTimers(container);
-  if (canEdit) wireInPlaceEditing(container, '.page-group[data-head]', '.page-step-card', el => el.dataset.head, async () => { render(); await saveSteps(); });
+  if (canEdit) {
+    wireInPlaceEditing(container, '.page-group[data-head]', '.page-step-card', el => el.dataset.head, async () => { render(); await saveSteps(); });
+    container.querySelectorAll('.page-group[data-head]').forEach(g => {
+      const head = steps.find(s => s.id === g.dataset.head);
+      const h = g.previousElementSibling;
+      if (head && h && h.classList.contains('page-day-heading')) {
+        const t = h.querySelector('div') || h;
+        if (head.type === 'section' || h.querySelector('div')) makeTextEditable(t, head, 'title', { single: true });
+      }
+    });
+  }
 }
 
 // ── Editing in place (Page View + Low Ticket view) ─────────────────────
@@ -1635,10 +1648,14 @@ function wireInPlaceEditing(container, groupSel, cardSel, headOf, afterChange) {
       card.insertAdjacentHTML('afterbegin', `<button type="button" class="inplace-video" title="Change video">${VIDEO_BTN_SVG}<span>Video</span></button>`);
       card.querySelector('.inplace-video').onclick = (e) => { e.stopPropagation(); openVideoPanel(st.id); };
     }
+    if (st) wireTextEditing(card, st);
     card.addEventListener('click', (e) => {
-      if (e.target.closest('video, a, button, input, textarea, select, .inplace-drag, .pv-ask, iframe, .inline-edit')) return;
+      if (e.target.closest('video, a, button, input, textarea, select, .inplace-drag, .pv-ask, iframe, .inline-edit, [data-edit-on], .editing-text')) return;
+      const s2 = steps.find(x => x.id === card.dataset.stepId);
+      if (!s2 || s2.type === 'text' || s2.type === 'video' || s2.type === 'youtube') return; // text: click the words; video: the Video button
+      if (s2.type === 'image') { openImagePanel(s2.id); return; }
       pendingInlineCard = card;
-      editStepInPlace(steps.find(x => x.id === card.dataset.stepId));
+      editStepInPlace(s2);
     });
   });
   if (!window.Sortable) return;
@@ -1686,7 +1703,96 @@ async function wireProgramViewEditing(box, templateId) {
       if (chain.has(el.dataset.stepId)) el.insertAdjacentHTML('afterbegin', DRAG_HANDLE_HTML);
     });
   });
+  box.querySelectorAll('.pv-block').forEach(block => {
+    const body = block.querySelector('.pv-body[data-head]');
+    const head = body && steps.find(s => s.id === body.dataset.head);
+    if (!head) return;
+    block.querySelectorAll('summary [data-edit]').forEach(el => makeTextEditable(el, head, el.dataset.edit, { single: true }));
+  });
   wireInPlaceEditing(box, '.pv-body[data-head]', '.pv-step', el => el.dataset.head, async () => { await saveSteps(); });
+}
+
+// ── Click-to-edit text ───────────────────────────────────────────────────
+// Click the words and type: the text itself becomes editable right where it
+// is (Enter / clicking away saves, Esc cancels). Popups are only for
+// images and videos.
+function rawFieldValue(step, field) {
+  if (field === 'moveLabel') return step.moveLabel || videoStepLabel(step) || '';
+  if (field === 'chip' && step.type === 'section') return step.chip || 'Watch before Day 1';
+  if (field === 'title' && step.type === 'section') return step.title || step.content || 'Start here';
+  if (field === 'title' && step.type === 'day') return step.title || ('Day ' + step.dayNumber);
+  return step[field] || '';
+}
+function makeTextEditable(el, step, field, { single = false } = {}) {
+  if (!el || !canEdit || el.dataset.editOn) return;
+  el.dataset.editOn = field;
+  el.title = 'Click to edit';
+  const start = (e) => {
+    if (el.isContentEditable) return;
+    e.preventDefault(); e.stopPropagation();
+    const before = rawFieldValue(step, field);
+    el.textContent = before;
+    try { el.contentEditable = 'plaintext-only'; } catch { el.contentEditable = 'true'; }
+    if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+    el.classList.add('editing-text');
+    el.focus();
+    try { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch {}
+    let done = false;
+    const finish = async (save) => {
+      if (done) return; done = true;
+      el.removeEventListener('blur', onBlur); el.removeEventListener('keydown', onKey);
+      el.contentEditable = 'false'; el.classList.remove('editing-text');
+      const after = el.innerText.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      if (!save || after === before.trim()) { render(); if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt); return; }
+      snapshotBeforeChange();
+      const s = steps.find(x => x.id === step.id);
+      if (!s) return;
+      if (after) s[field] = after; else delete s[field];
+      if (field === 'moveLabel') s.moveLabelManual = true;
+      render();
+      await saveSteps();
+    };
+    const onBlur = () => finish(true);
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      else if (ev.key === 'Enter' && (single || ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); finish(true); }
+      ev.stopPropagation();
+    };
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('keydown', onKey);
+  };
+  el.addEventListener('click', start, true);
+}
+// The text bits of one card: a text step's words (and its title), a video's name.
+function wireTextEditing(card, st) {
+  if (!canEdit) return;
+  if (st.type === 'text') {
+    const title = card.querySelector('.pv-text-title, .step-type');
+    if (title && st.title) makeTextEditable(title, st, 'title', { single: true });
+    const body = card.querySelector('.pv-text') || card.querySelector('.step-text');
+    if (body) {
+      // Editing the words, not the title line inside .pv-text.
+      const target = body.classList.contains('pv-text') ? body : body;
+      if (title && body.contains(title)) {
+        const wrap = document.createElement('div');
+        [...body.childNodes].filter(n => n !== title).forEach(n => wrap.appendChild(n));
+        body.appendChild(wrap);
+        makeTextEditable(wrap, st, 'content');
+      } else makeTextEditable(target, st, 'content');
+    }
+  } else if (st.type === 'video') {
+    const label = card.querySelector('[data-edit="moveLabel"]') || card.querySelector('.step-type');
+    if (label) makeTextEditable(label, st, 'moveLabel', { single: true });
+  }
+}
+// Image steps: a popup to upload the replacement picture.
+let imagePanelTarget = null;
+function openImagePanel(stepId) {
+  imagePanelTarget = stepId || null;
+  document.getElementById('imageFileInput').value = '';
+  document.getElementById('imageUploadMsg').textContent = '';
+  pendingInlineCard = null;
+  openModal('imageModal');
 }
 
 function hasPrimaryChild(step) { return steps.some(c => c.parentId === step.id && !c.isBranchRoot); }
@@ -2183,7 +2289,13 @@ function render() {
     btn.onclick = () => {
       const s = steps.find(x => x.id === btn.dataset.id);
       if (!s) return;
-      pendingInlineCard = btn.closest('.step-card'); // edit right in the card, no popup
+      const cardEl = btn.closest('.step-card');
+      if (s.type === 'text' || s.type === 'video') {
+        wireTextEditing(cardEl, s);
+        const el = s.type === 'text' ? (cardEl.querySelector('.step-text') || cardEl.querySelector('.pv-text')) : cardEl.querySelector('.step-type, [data-edit="moveLabel"]');
+        if (el) { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return; }
+      }
+      pendingInlineCard = cardEl; // other step types: their fields inside the card
       if (builderMode === 'tpl') { openStepEditor(s); return; }
       editingStepId = s.id;
       // Video steps: the pencil renames the move label shown above the clip.
@@ -3316,6 +3428,11 @@ function wireModals() {
     const r = await fetch('/api/chat/training-protocol/upload-image', { method: 'POST', body: fd });
     const d = await r.json();
     if (!r.ok) { msg.textContent = d.error || 'Upload failed.'; return; }
+    if (imagePanelTarget) {
+      const s = steps.find(x => x.id === imagePanelTarget);
+      imagePanelTarget = null;
+      if (s) { snapshotBeforeChange(); s.driveFileId = d.driveFileId; render(); closeModal('imageModal'); await saveSteps(); return; }
+    }
     await commitNewStep({ type: 'image', driveFileId: d.driveFileId });
     closeModal('imageModal');
   };
