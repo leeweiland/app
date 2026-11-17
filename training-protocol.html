@@ -61,6 +61,18 @@
   .protocol-head-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
   .protocol-head-row > :first-child { justify-self: start; }
   .protocol-head-row > :last-child { justify-self: end; }
+  /* View menu on its own row, icons underneath (Lee, 2026-11-17). */
+  .protocol-controls-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 12px; }
+  .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: center; flex-wrap: wrap; justify-content: center; }
+  .protocol-controls-row > .protocol-head-controls-left { grid-area: left; }
+  .protocol-controls-row > .protocol-head-controls-right { grid-area: right; }
+  .view-mode-btn { white-space: nowrap; }
+  .sp-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+  .sp-box { width: 100%; max-width: 420px; background: #111116; border: 1px solid var(--pra-border); border-radius: 14px; padding: 16px; }
+  .sp-box h3 { margin: 0 0 10px; font-size: 1rem; }
+  .sp-list { max-height: 50vh; overflow-y: auto; margin-top: 10px; }
+  .sp-list button { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 8px; color: #fff; padding: 9px 10px; font: inherit; font-size: .9rem; cursor: pointer; }
+  .sp-list button:hover, .sp-list button.hl { background: var(--pra-blue-dim); color: var(--pra-blue); }
   .protocol-head-controls-left, .protocol-head-controls-right { display: flex; align-items: center; gap: 10px; }
   .client-name { font-family: var(--font-secondary); font-size: .95rem; color: #fff; text-align: center; }
   /* .tile-val-input is body-scan.html's own established "this is inline-
@@ -333,7 +345,7 @@
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
           <button class="view-mode-btn" id="programViewBtn" type="button" style="display:none">Handstand Protocol</button>
-          <button class="view-mode-btn" id="katasViewBtn" type="button">Katas</button>
+          <button class="view-mode-btn" id="katasViewBtn" type="button">Your Katas</button>
           <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
           <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
           <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Student Page</button>
@@ -342,6 +354,9 @@
           <button class="view-mode-btn" id="tplStudentViewBtn" type="button" style="display:none">Student View</button>
           <button class="view-mode-btn" id="flowBuilderBtn" data-mode="flow" data-builder="true" style="display:none">Flow Builder</button>
           <button class="view-mode-btn" id="pageBuilderBtn" data-mode="page" data-builder="true" style="display:none">Page View</button>
+          <button class="view-mode-btn" id="pickStudentFlowBtn" type="button" style="display:none" title="Open a student's flow">Student Flow</button>
+          <button class="view-mode-btn" id="pickStudentPageBtn" type="button" style="display:none" title="Open a student's page">Student Page</button>
+          <button class="view-mode-btn" id="lowTicketBtn" type="button" style="display:none" title="The Handstand Protocol (low-ticket program)">Low Ticket</button>
           <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
         </div>
         <div class="protocol-head-controls-right">
@@ -375,7 +390,8 @@
     <!-- Dripped program (Handstand Protocol) -- see program-view.js -->
     <div id="programView" style="display:none"></div>
     <div class="protocol-page" id="katasPage" style="display:none">
-      <div id="katasStudentRow" style="display:none;justify-content:center">
+      <div id="katasStudentRow" style="display:none;justify-content:center;gap:8px;flex-wrap:wrap">
+        <input class="pra-input" id="katasStudentSearch" placeholder="Search students…" autocomplete="off" style="max-width:220px"/>
         <select class="pra-select" id="katasStudentSelect" style="max-width:320px"></select>
       </div>
       <div id="katasList"></div>
@@ -1046,6 +1062,7 @@ async function init() {
     if (params.get('program') || !steps.length || me.role === 'trainee') await showProgramView();
   }
   if (me.role === 'trainee') document.getElementById('backBtn').textContent = 'Group Chat';
+  syncCoachMenu();
   // Locked when Protocol is switched off for this role (User Management > Access by Role).
   const myAccess = window.PRA_ACCESS || (await fetch('/api/auth/me').then(r => r.json()).then(d => d.access).catch(() => null));
   if (targetUserId === me.id && myAccess && myAccess.protocol === false && !canEdit) showProtocolLock();
@@ -1655,6 +1672,7 @@ async function setProtocolMode(mode, builder) {
   ['programFlowBtn', 'programPageBtn'].forEach(id => { document.getElementById(id).style.display = (canEdit && editingProgram && (programOpen || ownPage)) ? '' : 'none'; });
   // On someone else's page, their Student Flow/Page step aside while another student's program is open.
   ['flowViewBtn', 'pageViewBtn'].forEach(id => { document.getElementById(id).style.display = (programOpen && !ownPage) ? 'none' : ''; });
+  syncCoachMenu();
   const nameEl = document.getElementById('clientName');
   nameEl.textContent = programOpen ? editingProgram.studentName : clientLabel;
   nameEl.style.pointerEvents = programOpen ? 'none' : '';
@@ -1724,8 +1742,18 @@ async function showKatas(which) {
   if (which === 'students') {
     if (!katasStudentsLoaded) {
       const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
-      sel.innerHTML = '<option value="">Choose a student…</option>' + d.students.map(st => `<option value="${escapeHtml(st.id)}">${escapeHtml(st.first + ' ' + st.last)}</option>`).join('');
+      const fill = (q) => {
+        const keep = sel.value;
+        const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+        const hits = d.students.filter(st => words.every(w => `${st.first} ${st.last}`.toLowerCase().includes(w)));
+        sel.innerHTML = `<option value="">${words.length ? `${hits.length} match${hits.length === 1 ? '' : 'es'}…` : 'Choose a student…'}</option>` + hits.map(st => `<option value="${escapeHtml(st.id)}">${escapeHtml(st.first + ' ' + st.last)}</option>`).join('');
+        if (hits.some(st => st.id === keep)) sel.value = keep;
+        return hits;
+      };
+      fill('');
       sel.onchange = () => showKatas('students');
+      const search = document.getElementById('katasStudentSearch');
+      search.oninput = () => { const hits = fill(search.value); if (hits.length === 1 && sel.value !== hits[0].id) { sel.value = hits[0].id; showKatas('students'); } };
       katasStudentsLoaded = true;
       if (targetUserId !== me.id && d.students.some(st => st.id === targetUserId)) sel.value = targetUserId;
     }
@@ -1742,12 +1770,78 @@ async function showKatas(which) {
     list.innerHTML = `<div class="kata-empty">${escapeHtml(e.message || 'Could not load katas')}</div>`;
   }
 }
+// Coaches/admins see the whole menu, always, in this order (Lee, 2026-11-17):
+// Your Flow, Your Page, Your Katas, Student Flow, Student Page, Student
+// Katas, Flow Builder, Page View, Low Ticket. On your own page Student
+// Flow/Page open a student picker; on a student's page Your Flow/Page/Katas
+// jump back to your own.
+function syncCoachMenu() {
+  if (!canEdit || !me) return;
+  const $ = id => document.getElementById(id);
+  const ownPage = targetUserId === me.id;
+  const shown = id => $(id).style.display !== 'none';
+  const programBtns = shown('programFlowBtn');
+  $('pickStudentFlowBtn').style.display = ownPage && !programBtns ? '' : 'none';
+  $('pickStudentPageBtn').style.display = ownPage && !programBtns ? '' : 'none';
+  $('katasViewBtn').style.display = '';
+  $('lowTicketBtn').style.display = '';
+  $('programViewBtn').style.display = 'none';
+  const order = [
+    ownPage ? 'flowViewBtn' : 'ownFlowBtn', ownPage ? 'pageViewBtn' : 'ownPageBtn', 'katasViewBtn',
+    programBtns ? 'programFlowBtn' : ownPage ? 'pickStudentFlowBtn' : 'flowViewBtn',
+    programBtns ? 'programPageBtn' : ownPage ? 'pickStudentPageBtn' : 'pageViewBtn',
+    'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn', 'lowTicketBtn',
+  ];
+  document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => { b.style.order = 50; });
+  order.forEach((id, i) => { $(id).style.order = i; });
+  $('protocolSettingsBtn').style.order = 99;
+}
+let studentPickList = null;
+async function openStudentPicker(view) {
+  if (!studentPickList) {
+    const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
+    studentPickList = d.students || [];
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'sp-modal';
+  wrap.innerHTML = `<div class="sp-box"><h3>Open a student's ${view === 'page' ? 'page' : 'flow'}</h3><input class="pra-input" placeholder="Search students…" autocomplete="off" style="width:100%"/><div class="sp-list"></div></div>`;
+  document.body.appendChild(wrap);
+  const input = wrap.querySelector('input'), list = wrap.querySelector('.sp-list');
+  const go = id => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(id) + '&view=' + view; };
+  let hits = [];
+  const draw = () => {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    hits = studentPickList.filter(st => words.every(w => `${st.first} ${st.last}`.toLowerCase().includes(w)));
+    list.innerHTML = hits.map((st, i) => `<button type="button" data-id="${escapeHtml(st.id)}" class="${i === 0 && words.length ? 'hl' : ''}">${escapeHtml(st.first + ' ' + st.last)}</button>`).join('') || '<div class="pra-muted" style="padding:8px">No students match.</div>';
+    list.querySelectorAll('button').forEach(b => b.onclick = () => go(b.dataset.id));
+  };
+  input.oninput = draw;
+  input.onkeydown = e => { if (e.key === 'Enter' && hits[0]) go(hits[0].id); if (e.key === 'Escape') wrap.remove(); };
+  wrap.onclick = e => { if (e.target === wrap) wrap.remove(); };
+  draw();
+  input.focus();
+}
+async function openLowTicket() {
+  // On a trainee's page (or a preview), their program view is right here.
+  if (programPreviewTemplateId || enrolledPrograms.length) { await showProgramView(); return; }
+  const d = await fetch('/api/chat/protocol-templates').then(r => r.ok ? r.json() : { templates: [] }).catch(() => ({ templates: [] }));
+  const t = (d.templates || []).filter(x => x.isProgram).find(x => /handstand/i.test(x.name || '')) || (d.templates || []).find(x => x.isProgram);
+  if (!t) { alert('No low-ticket program is set up yet.'); return; }
+  location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(t.id);
+}
 function setupViewModeToggle() {
   const ownKatas = !canEdit || targetUserId === me.id;
   document.getElementById('katasViewBtn').style.display = ownKatas ? '' : 'none';
   document.getElementById('katasViewBtn').onclick = () => showKatas('own');
   document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
+  if (canEdit) {
+    // Your Katas from a student's page goes back to your own katas.
+    if (targetUserId !== me.id) document.getElementById('katasViewBtn').onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&view=katas'; };
+    document.getElementById('pickStudentFlowBtn').onclick = () => openStudentPicker('flow');
+    document.getElementById('pickStudentPageBtn').onclick = () => openStudentPicker('page');
+    document.getElementById('lowTicketBtn').onclick = () => openLowTicket();
+  }
   if (params.get('view') === 'katas') setTimeout(() => showKatas(ownKatas ? 'own' : 'students'), 0);
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
