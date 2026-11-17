@@ -298,6 +298,13 @@
   .modal-box.inline-edit .pra-h2 { font-size: .9rem; }
   .modal-box.inline-edit .modal-scroll-body { max-height: none; overflow: visible; }
   .step-node.editing-inline { z-index: 40; }
+  .inplace-tools { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; align-items: center; }
+  .inplace-tools .inplace-drag, .inplace-tools .inplace-video { position: static; }
+  .inplace-x { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,90,90,.6); font: inherit; font-size: 1rem; line-height: 1; cursor: pointer; padding: 0; }
+  .inplace-x:hover { background: #d93a3a; border-color: #d93a3a; }
+  .pv-bump-media > .inplace-x { position: absolute; top: 8px; left: 8px; z-index: 3; }
+  .bump-add-move { margin-top: 12px; padding: 6px 12px; font-size: .74rem; }
+  [data-placeholder-on] { opacity: .45; font-style: italic; }
   .inplace-video { position: absolute; top: 8px; right: 42px; z-index: 3; height: 28px; padding: 0 9px; display: flex; align-items: center; gap: 5px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(0,155,255,.55); font: inherit; font-size: .7rem; cursor: pointer; }
   .inplace-video svg, .step-video svg { width: 14px; height: 14px; }
   /* overflow:hidden here (not needed -- .video-result-thumb already clips
@@ -384,7 +391,7 @@
             <div class="tpl-bar-title">Editing program<b id="tplBarName" style="display:none"></b></div>
             <div class="tpl-bar-actions">
               <button class="pra-btn" id="tplPreviewBtn" type="button" style="display:none">Preview as student</button>
-              <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button">Add-ons &amp; goal</button>
+              <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button" style="display:none">Add-ons &amp; goal</button>
               <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
               <button class="pra-btn" id="tplSaveBtn" type="button" disabled title="Publish your changes to everyone in this program">Save</button>
               <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button" style="display:none">Exit program editor</button>
@@ -1039,7 +1046,7 @@ async function showProgramView(opt = {}) {
     : '/api/chat/protocol-program/' + encodeURIComponent(targetUserId) + (wanted ? '?templateId=' + encodeURIComponent(wanted) : '');
   const useDraft = preview && tplDirty && builderMode === 'tpl' && editingTemplate?.id === previewId;
   const r = await (useDraft
-    ? fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps, settings: tplDraft.settings || undefined, goal: tplDraft.goal }) })
+    ? fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps, settings: tplDraft.settings || undefined, goal: tplDraft.goal, bumps: tplDraft.bumps || undefined }) })
     : fetch(url)).catch(() => null);
   const data = r ? await r.json().catch(() => ({})) : {};
   if (!r || !r.ok) { box.innerHTML = `<div class="pra-muted" style="text-align:center;padding:40px 0">${escapeHtml(data.error || 'Could not load this program.')}</div>`; return; }
@@ -1673,16 +1680,41 @@ function editStepInPlace(s) {
   document.getElementById('textStepInput').value = s.type === 'video' ? videoStepLabel(s) : (s.content || '');
   openModal('textModal');
 }
+// X on a card: the step goes, whatever hung below it moves up into its slot
+// (same as the builder's delete). Ctrl+Z / undo brings it back.
+async function deleteStepInPlace(id) {
+  const target = steps.find(s => s.id === id);
+  if (!target) return;
+  snapshotBeforeChange();
+  childrenOf(steps, id).forEach(c => {
+    c.parentId = target.parentId;
+    if (!c.isBranchRoot) c.isBranchRoot = target.isBranchRoot;
+  });
+  steps = steps.filter(s => s.id !== id);
+  render();
+  await saveSteps();
+}
+const X_BTN = (title) => `<button type="button" class="inplace-x" title="${title}" aria-label="${title}">&times;</button>`;
 function wireInPlaceEditing(container, groupSel, cardSel, headOf, afterChange) {
   container.querySelectorAll(cardSel + '[data-step-id]').forEach(card => {
     const st = steps.find(x => x.id === card.dataset.stepId);
+    const tools = document.createElement('div');
+    tools.className = 'inplace-tools';
     if (st && (st.type === 'video' || st.type === 'youtube')) {
-      card.insertAdjacentHTML('afterbegin', `<button type="button" class="inplace-video" title="Change video">${VIDEO_BTN_SVG}<span>Video</span></button>`);
-      card.querySelector('.inplace-video').onclick = (e) => { e.stopPropagation(); openVideoPanel(st.id); };
+      tools.insertAdjacentHTML('beforeend', `<button type="button" class="inplace-video" title="Change video">${VIDEO_BTN_SVG}<span>Video</span></button>`);
+      tools.querySelector('.inplace-video').onclick = (e) => { e.stopPropagation(); openVideoPanel(st.id); };
     }
+    const drag = card.querySelector(':scope > .inplace-drag');
+    if (drag) tools.appendChild(drag);
+    if (st && st.type !== 'day' && st.type !== 'section') {
+      const kind = { text: 'text', image: 'image', video: 'video', youtube: 'video' }[st.type] || 'step';
+      tools.insertAdjacentHTML('beforeend', X_BTN('Delete this ' + kind));
+      tools.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); deleteStepInPlace(st.id); };
+    }
+    if (tools.children.length) card.insertAdjacentElement('afterbegin', tools);
     if (st) wireTextEditing(card, st);
     card.addEventListener('click', (e) => {
-      if (e.target.closest('video, a, button, input, textarea, select, .inplace-drag, .pv-ask, iframe, .inline-edit, [data-edit-on], .editing-text')) return;
+      if (e.target.closest('video, a, button, input, textarea, select, .inplace-drag, .inplace-tools, .pv-ask, iframe, .inline-edit, [data-edit-on], .editing-text')) return;
       const s2 = steps.find(x => x.id === card.dataset.stepId);
       if (!s2 || s2.type === 'text' || s2.type === 'video' || s2.type === 'youtube') return; // text: click the words; video: the Video button
       if (s2.type === 'image') { openImagePanel(s2.id); return; }
@@ -1736,6 +1768,7 @@ async function wireProgramViewEditing(box, templateId) {
     });
   });
   wireProgramHeroEditing(box, templateId);
+  wireBumpEditing(box);
   box.querySelectorAll('.pv-block').forEach(block => {
     const body = block.querySelector('.pv-body[data-head]');
     const head = body && steps.find(s => s.id === body.dataset.head);
@@ -1872,6 +1905,90 @@ function wireProgramHeroEditing(box, templateId) {
         else if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
       });
     }, true);
+  });
+}
+// Add-ons, edited right in the Low Ticket view: click a title / intro /
+// move name / how / why to type; Video button and X per move; X on a move's
+// video or picture; "+ Add move". All of it is part of the draft until Save.
+function bumpsDraftObj() {
+  if (!tplDraft.bumps) tplDraft.bumps = JSON.parse(JSON.stringify(editingTemplate?.record?.bumps || {}));
+  return tplDraft.bumps;
+}
+function bumpsChanged() { markTemplateDirty(); if (viewMode === 'program' && lastProgramViewOpt) showProgramView(lastProgramViewOpt); }
+function inlineTextEdit(el, { get, set, single = false, placeholder = '' }) {
+  if (!el || el.dataset.editOn) return;
+  el.dataset.editOn = '1';
+  el.title = 'Click to edit';
+  if (!el.textContent.trim() && placeholder) { el.textContent = placeholder; el.dataset.placeholderOn = '1'; el.style.display = 'block'; }
+  el.addEventListener('click', (e) => {
+    if (el.isContentEditable) return;
+    e.preventDefault(); e.stopPropagation();
+    const before = get();
+    el.textContent = before; delete el.dataset.placeholderOn;
+    try { el.contentEditable = 'plaintext-only'; } catch {}
+    if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
+    el.classList.add('editing-text');
+    el.focus();
+    let done = false;
+    const finish = (save) => {
+      if (done) return; done = true;
+      let after = el.innerText.replace(/\u00a0/g, ' ').replace(/\r/g, '');
+      after = single ? after.replace(/\s+/g, ' ').trim() : after.replace(/\n{3,}/g, '\n\n').trim();
+      el.contentEditable = 'false'; el.classList.remove('editing-text');
+      const flat = (x) => String(x).replace(/\s+/g, ' ').trim();
+      if (save && after !== String(before).trim() && !(flat(after) === flat(before) && !/\n/.test(after))) { set(after); bumpsChanged(); }
+      else showProgramView(lastProgramViewOpt);
+    };
+    el.addEventListener('blur', () => finish(true), { once: true });
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      else if (ev.key === 'Enter' && (single || ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); finish(true); }
+      ev.stopPropagation();
+    });
+  }, true);
+}
+function wireBumpEditing(box) {
+  if (!canEdit || builderMode !== 'tpl') return;
+  box.querySelectorAll('.pv-bump[data-bump]').forEach(block => {
+    const key = block.dataset.bump;
+    const bump = () => bumpsDraftObj()[key] || (bumpsDraftObj()[key] = { moves: [] });
+    const moves = () => { const b = bump(); if (!Array.isArray(b.moves)) b.moves = []; return b.moves; };
+    const field = (f) => ({ get: () => (tplDraft.bumps || editingTemplate?.record?.bumps || {})[key]?.[f] || '', set: v => { bump()[f] = v; } });
+    inlineTextEdit(block.querySelector('[data-bump-field="title"]'), { ...field('title'), single: true });
+    inlineTextEdit(block.querySelector('[data-bump-field="intro"]'), { ...field('intro'), placeholder: 'Add an intro' });
+    block.querySelectorAll('.pv-bump-move[data-mi]').forEach(mv => {
+      const mi = Number(mv.dataset.mi);
+      const cur = () => moves()[mi] || {};
+      const mf = (f) => ({ get: () => cur()[f] || '', set: v => { if (moves()[mi]) moves()[mi][f] = v; } });
+      inlineTextEdit(mv.querySelector('[data-move-field="move"]'), { ...mf('move'), single: true, placeholder: 'Move name' });
+      inlineTextEdit(mv.querySelector('[data-move-field="how"]'), { ...mf('how'), placeholder: 'Add how' });
+      inlineTextEdit(mv.querySelector('[data-move-field="why"]'), { ...mf('why'), placeholder: 'Add why' });
+      // The move: Video (add / change) and X (delete the whole move).
+      const tools = document.createElement('div');
+      tools.className = 'inplace-tools';
+      tools.style.top = '12px';
+      tools.innerHTML = `<button type="button" class="inplace-video" title="${mv.querySelector('video') ? 'Change video' : 'Add a video'}">${VIDEO_BTN_SVG}<span>Video</span></button>${X_BTN('Delete this move')}`;
+      tools.querySelector('.inplace-video').onclick = (e) => { e.preventDefault(); e.stopPropagation(); openVideoPanel({ bump: key, mi }); };
+      tools.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); moves().splice(mi, 1); bumpsChanged(); };
+      mv.insertAdjacentElement('afterbegin', tools);
+      if (!mv.querySelector('video')) mv.style.paddingTop = '48px';
+      // X on just the video / just the picture.
+      const vid = mv.querySelector('.pv-bump-media:not(.pv-bump-imgwrap)');
+      if (vid) {
+        vid.insertAdjacentHTML('afterbegin', X_BTN('Remove this video'));
+        vid.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); const m = moves()[mi]; if (m) { delete m.clip; delete m.driveFileId; } bumpsChanged(); };
+      }
+      const img = mv.querySelector('.pv-bump-imgwrap');
+      if (img) {
+        img.insertAdjacentHTML('afterbegin', X_BTN('Remove this picture'));
+        img.querySelector('.inplace-x').onclick = (e) => { e.preventDefault(); e.stopPropagation(); const m = moves()[mi]; if (m) delete m.image; bumpsChanged(); };
+      }
+    });
+    const body = block.querySelector('.pv-body');
+    if (body) {
+      body.insertAdjacentHTML('beforeend', '<button type="button" class="pra-btn pra-btn-ghost bump-add-move">+ Add move</button>');
+      body.querySelector('.bump-add-move').onclick = (e) => { e.preventDefault(); e.stopPropagation(); moves().push({ move: 'New move', clip: '', how: '', why: '' }); bumpsChanged(); };
+    }
   });
 }
 // Image steps: a popup to upload the replacement picture.
@@ -3633,6 +3750,9 @@ let videoPanelTarget = null; // step id being changed, or null = add a new step
 function openVideoPanel(targetStepId, tab = 'library') {
   videoPanelTarget = targetStepId || null;
   document.getElementById('videoPanelTitle').textContent = targetStepId ? 'Change Video' : 'Add a Video';
+  // Add-on moves play library / uploaded clips only.
+  const ytTab = document.querySelector('#videoPanelTabs .vp-tab[data-tab="youtube"]');
+  if (ytTab) ytTab.style.display = targetStepId && typeof targetStepId === 'object' ? 'none' : '';
   ['vpUploadMsg', 'vpYoutubeMsg'].forEach(id => { document.getElementById(id).textContent = ''; });
   document.getElementById('vpYoutubeInput').value = '';
   document.getElementById('videoSearchInput').value = '';
@@ -3661,6 +3781,15 @@ async function applyVideoChoice(choice) {
   closeModal('videoModal');
   const targetId = videoPanelTarget;
   videoPanelTarget = null;
+  if (targetId && typeof targetId === 'object' && targetId.bump) {
+    if (!choice.driveFileId) return;
+    const b = bumpsDraftObj()[targetId.bump];
+    const m = b && Array.isArray(b.moves) ? b.moves[targetId.mi] : null;
+    if (!m) return;
+    if ('driveFileId' in m && !('clip' in m)) m.driveFileId = choice.driveFileId; else { m.clip = choice.driveFileId; delete m.driveFileId; }
+    bumpsChanged();
+    return;
+  }
   if (!targetId) {
     if (choice.youtubeId) { await commitNewStep({ type: 'youtube', youtubeId: choice.youtubeId, title: choice.title || '' }); return; }
     const step = await commitNewStep({ type: 'video', driveFileId: choice.driveFileId, name: choice.name || 'Video' });
@@ -3885,6 +4014,16 @@ async function publishTemplateDraft() {
   const id = editingTemplate?.id;
   if (!id || !tplDirty) return true;
   const body = { steps };
+  if (tplDraft.bumps) {
+    // A move left without a name gets dropped if it's empty, else it's an error.
+    for (const [k, b] of Object.entries(tplDraft.bumps)) {
+      if (!Array.isArray(b.moves)) continue;
+      b.moves = b.moves.filter(m => Object.entries(m).some(([key, v]) => v !== '' && v != null));
+      const unnamed = b.moves.findIndex(m => !String(m.move || '').trim());
+      if (unnamed >= 0) { setTplStatus(`${b.title || k}: move ${unnamed + 1} needs a name.`, true); return false; }
+    }
+    body.bumps = tplDraft.bumps;
+  }
   if (tplDraft.settings) body.settings = tplDraft.settings;
   if (tplDraft.goal !== undefined) body.goal = tplDraft.goal;
   setTplStatus('Saving…');

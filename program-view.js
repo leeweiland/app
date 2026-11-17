@@ -92,7 +92,9 @@
   .pv-bump { border: 1px solid rgba(212,255,0,0.45); border-left: 4px solid ${NEON}; }
   .pv-addon-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: ${NEON}; color: #000; font-family: var(--font-secondary); font-size: .58rem; letter-spacing: .14em; font-weight: 700; }
   .pv-bump-intro { font-size: .84rem; font-weight: 400; color: var(--pra-dim); line-height: 1.5; }
-  .pv-bump-move { border-top: 1px solid var(--pra-border); padding-top: 12px; }
+  .pv-bump-move { border-top: 1px solid var(--pra-border); padding-top: 12px; position: relative; }
+  .pv-bump-media { position: relative; }
+  .pv-bump-move p:empty, .pv-bump-intro:empty { display: none; }
   .pv-bump-move video { display: block; width: 100%; max-height: 240px; object-fit: contain; background: #000; border-radius: 10px; }
   .pv-bump-move h4 { margin: 10px 0 4px; font-size: .92rem; }
   .pv-bump-move p { margin: 0 0 4px; font-size: .84rem; font-weight: 400; line-height: 1.5; color: #d6d6dc; }
@@ -304,11 +306,11 @@
     }
     const bumps = pr.bumps || [];
     const side = bumps.length ? `<section class="pv-addons"><div class="pv-addons-title">${staff ? 'Add-ons' : 'Your add-ons'}</div>
-      ${bumps.map(b => `<details class="pv-block pv-bump"><summary class="pv-head"><div class="pv-head-text"><div class="pv-head-title">${esc(b.title)}</div><div class="pv-chips"><span class="pv-addon-chip">ADD-ON</span></div>
+      ${bumps.map(b => `<details class="pv-block pv-bump" data-bump="${esc(b.key)}"><summary class="pv-head"><div class="pv-head-text"><div class="pv-head-title" data-bump-field="title">${esc(b.title)}</div><div class="pv-chips"><span class="pv-addon-chip">ADD-ON</span></div>
         ${staff && !opts.preview ? `<div class="pv-chips"><span class="pv-chip ${b.owned ? 'on' : 'off'}">${b.owned ? 'Owned by student' : 'Not owned by student'}</span></div>` : ''}</div><span class="pv-caret">▾</span></summary>
-        <div class="pv-body">${b.intro ? `<div class="pv-bump-intro">${esc(b.intro)}</div>` : ''}
-        ${(b.moves || []).map(m => `<div class="pv-bump-move">${m.clip || m.driveFileId ? `<video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video>` : ''}
-          <h4>${esc(m.move || '')}</h4>${m.how ? `<p>${esc(m.how)}</p>` : ''}${m.why ? `<p class="why">${esc(m.why)}</p>` : ''}${m.image ? `<img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
+        <div class="pv-body">${b.intro || staff ? `<div class="pv-bump-intro" data-bump-field="intro">${esc(b.intro || '')}</div>` : ''}
+        ${(b.moves || []).map((m, mi) => `<div class="pv-bump-move" data-mi="${mi}">${m.clip || m.driveFileId ? `<div class="pv-bump-media"><video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video></div>` : ''}
+          <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<p data-move-field="how">${esc(m.how || '')}</p>` : ''}${m.why || staff ? `<p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">

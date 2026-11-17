@@ -6175,7 +6175,8 @@ export async function handleChatRequest(req, res, url) {
       const draft = await readJsonBody(req);
       let settings = template.settings;
       try { if (draft.settings) settings = sanitizeProgramSettings(draft.settings, template.settings); } catch {}
-      const view = { ...template, settings, steps: Array.isArray(draft.steps) && draft.steps.length ? draft.steps : template.steps, goal: typeof draft.goal === "string" ? draft.goal : template.goal };
+      const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+      const view = { ...template, settings, steps: Array.isArray(draft.steps) && draft.steps.length ? draft.steps : template.steps, goal: typeof draft.goal === "string" ? draft.goal : template.goal, bumps: isObj(draft.bumps) ? draft.bumps : template.bumps };
       return sendJson(res, 200, { program: buildProgramView(view, null, { staffView: true, ownedBumps: [] }) });
     }
     const programMatch = p.match(/^\/api\/chat\/protocol-program\/([^/]+)$/);
