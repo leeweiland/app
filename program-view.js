@@ -292,23 +292,28 @@
     const unlocked = pr.days.filter(d => d.unlocked);
     const newest = unlocked.length ? unlocked[unlocked.length - 1].dayNumber : 0;
     const ctxBase = { settings: pr.settings, canAsk: !!opts.canAsk };
+    // A daily routine (e.g. the Bodyweight Strength Protocol: 21 moves, all open
+    // from Day 1) sets dayLabel "Move" and dayOrder "asc": cards read "Move 1..21"
+    // in order, with no "Today" card. Dripped courses keep newest-first.
+    const L = (pr.settings && pr.settings.dayLabel) || 'Day';
+    const asc = !!(pr.settings && pr.settings.dayOrder === 'asc');
 
     const dayBlock = (d) => {
       if (!d.unlocked && !staff) {
-        return `<div class="pv-locked">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-locked-title">${esc(d.title || 'Day ' + d.dayNumber)}</div>
+        return `<div class="pv-locked">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-locked-title">${esc(d.title || L + ' ' + d.dayNumber)}</div>
           <div class="pv-countdown" data-unlocks="${esc(d.unlocksAt)}" data-template="${esc(pr.settings.lockedText)}">${esc(lockedText(pr.settings.lockedText, d.unlocksAt, now))}</div></div>${LOCK_SVG}</div>`;
       }
-      const isToday = !staff && d.dayNumber === newest;
+      const isToday = !staff && !asc && d.dayNumber === newest;
       const chips = [d.category ? `<span class="pv-chip" data-edit="category">${esc(d.category)}</span>` : '',
         isToday ? '<span class="pv-chip today">Today</span>' : '',
         staff && !opts.preview ? (d.unlocked ? '<span class="pv-chip on">Unlocked</span>' : `<span class="pv-chip off">Opens ${esc(fmtWhen(d.unlocksAt))}</span>`) : ''].join('');
       const body = d.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: d.dayNumber })).join('');
       return `<details class="pv-block${isToday ? ' pv-today-block' : ''}" id="pv-day-${d.dayNumber}" ${isToday ? 'open' : ''}>
-        <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(d.title || 'Day ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
+        <summary class="pv-head">${numBox(d.dayNumber)}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(d.title || L + ' ' + d.dayNumber)}</div><div class="pv-chips">${chips}</div></div><span class="pv-caret">▾</span></summary>
         <div class="pv-body" data-day="${esc(d.dayNumber)}">${body}</div></details>`;
     };
     const sectionBlock = (sec, i) => {
-      const open = staff ? false : newest <= 1;
+      const open = staff ? false : (asc || newest <= 1);
       const body = sec.steps.map(s => programStepHtml(s, { ...ctxBase, dayNumber: 0 })).join('');
       const secIdx = i;
       return `<details class="pv-block" ${open ? 'open' : ''}><summary class="pv-head">${numBox(i + 1, 'START')}<div class="pv-head-text"><div class="pv-head-title" data-edit="title">${esc(sec.title || 'Start here')}</div><div class="pv-chips"><span class="pv-chip" data-edit="chip">${esc(sec.chip || 'Watch before Day 1')}</span></div></div><span class="pv-caret">▾</span></summary>
@@ -316,7 +321,7 @@
     };
 
     // Students: newest day on top, next locked day above it. Staff: in order.
-    const days = staff ? pr.days.slice() : pr.days.slice().sort((a, b) => b.dayNumber - a.dayNumber);
+    const days = staff || asc ? pr.days.slice().sort((a, b) => a.dayNumber - b.dayNumber) : pr.days.slice().sort((a, b) => b.dayNumber - a.dayNumber);
     const lockedFirst = staff ? [] : days.filter(d => !d.unlocked);
     const openDays = staff ? days : days.filter(d => d.unlocked);
 
@@ -336,7 +341,7 @@
         ${staff && !opts.preview ? `<div class="pv-chips"><span class="pv-chip ${b.owned ? 'on' : 'off'}">${b.owned ? 'Owned by student' : 'Not owned by student'}</span></div>` : ''}</div><span class="pv-caret">▾</span></summary>
         <div class="pv-body">${b.intro || staff ? `<div class="pv-bump-intro" data-bump-field="intro">${esc(b.intro || '')}</div>` : ''}
         ${(b.moves || []).map((m, mi) => `<div class="pv-bump-move" data-mi="${mi}">${m.clip || m.driveFileId ? `<div class="pv-bump-media"><video data-src="/api/chat/media/${encodeURIComponent(m.clip || m.driveFileId)}#t=0.5" controls loop autoplay muted preload="metadata" playsinline></video></div>` : ''}
-          <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<span class="pv-label">How</span><p data-move-field="how">${esc(m.how || '')}</p>` : ''}${(m.diagnosis || []).length || staff ? `<span class="pv-label">Diagnosis</span><ul class="pv-x" data-diag-list>${(m.diagnosis || []).map((x, di) => `<li data-diag-i="${di}">${esc(String(x).replace(/^\s*✕\s*/, ''))}</li>`).join('')}</ul>` : ''}${m.dose || staff ? `<span class="pv-label">Dose</span><p data-move-field="dose">${esc(m.dose || '')}</p>` : ''}${m.why || staff ? `<span class="pv-label">How it builds your handstand</span><p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.handstandImage ? `<div class="pv-bump-media pv-bump-imgwrap" data-img-field="handstandImage"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.handstandImage)}" alt="${esc(m.move || '')}: how it builds your handstand"/></div>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap" data-img-field="image"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
+          <h4 data-move-field="move">${esc(m.move || '')}</h4>${m.how || staff ? `<span class="pv-label">How</span><p data-move-field="how">${esc(m.how || '')}</p>` : ''}${(m.diagnosis || []).length || staff ? `<span class="pv-label">Diagnosis</span><ul class="pv-x" data-diag-list>${(m.diagnosis || []).map((x, di) => `<li data-diag-i="${di}">${esc(String(x).replace(/^\s*✕\s*/, ''))}</li>`).join('')}</ul>` : ''}${m.dose || staff ? `<span class="pv-label">Dose</span><p data-move-field="dose">${esc(m.dose || '')}</p>` : ''}${m.why || staff ? `<span class="pv-label">${esc((pr.settings && pr.settings.bumpWhyLabel) || 'How it builds your handstand')}</span><p class="why" data-move-field="why">${esc(m.why || '')}</p>` : ''}${m.handstandImage ? `<div class="pv-bump-media pv-bump-imgwrap" data-img-field="handstandImage"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.handstandImage)}" alt="${esc(m.move || '')}: how it builds your handstand"/></div>` : ''}${m.image ? `<div class="pv-bump-media pv-bump-imgwrap" data-img-field="image"><img class="pv-bump-img" loading="lazy" src="/api/chat/media/${encodeURIComponent(m.image)}" alt="${esc(m.move || '')} anatomy"/></div>` : ''}</div>`).join('')}</div></details>`).join('')}</section>` : '';
 
     const keepTimer = container.querySelector('.pv-ftimer');
     if (keepTimer) keepTimer.remove();
@@ -354,7 +359,7 @@
         <div class="pv-kicker" data-hero="kicker">${esc((pr.settings && pr.settings.kicker) || 'Powerbatics')}</div>
         <div class="pv-title" data-hero="displayTitle">${esc((pr.settings && pr.settings.displayTitle) || String(pr.name || '').replace(/^Powerbatics\s+/i, ''))}</div>
         ${pr.goal || staff ? `<div class="pv-goal" data-hero="goal">${esc(pr.goal || '')}</div>` : ''}
-        ${!opts.preview ? `<div class="pv-progress"><div class="pv-progress-bar"><span style="width:${pct}%"></span></div><div class="pv-progress-row"><span class="pv-label">Day ${pr.unlockedCount} of ${pr.totalDays}</span><span class="pv-label">${pct}%</span></div></div>` : ''}
+        ${opts.preview ? '' : pr.settings && pr.settings.dripEnabled === false ? `<div class="pv-progress"><div class="pv-progress-row"><span class="pv-label">${pr.totalDays} ${esc(L.toLowerCase())}s · all open</span></div></div>` : `<div class="pv-progress"><div class="pv-progress-bar"><span style="width:${pct}%"></span></div><div class="pv-progress-row"><span class="pv-label">${esc(L)} ${pr.unlockedCount} of ${pr.totalDays}</span><span class="pv-label">${pct}%</span></div></div>`}
         ${opts.onOpenChat ? `<button type="button" class="pv-chat-btn" data-open-chat>${CHAT_SVG}${esc(opts.chatLabel || 'Open your group chat')}</button>` : ''}
         ${appButtonsHtml(pr.settings && pr.settings.appButtons)}
       </div>

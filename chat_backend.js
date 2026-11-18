@@ -3514,33 +3514,48 @@ export function isClientRole(role) { return role === "online" || role === "gym";
 // physique reminders, directory, default protocol or welcome message).
 export function isTrainee(user) { return user?.role === "trainee"; }
 const HANDSTAND_TEMPLATE_NAME = "Powerbatics Handstand Protocol";
+// Every low-ticket product the CRM sells (crm-app challenge_backend.js +
+// product_funnel.js), keyed by sku: the program template a buyer gets and
+// the add-on keys that product's checkout can send. Add-on keys are unique
+// across products (they all live in user.hcBumps). A bridge call without a
+// product is the Handstand Protocol (the CRM's original call).
+const PRODUCTS = {
+  hc21: { templateName: HANDSTAND_TEMPLATE_NAME, bumps: ["wrist", "shoulder", "hips"] },
+  bsp21: { templateName: "Bodyweight Strength Protocol", bumps: ["bsp_knees", "bsp_spine", "bsp_neck"] },
+};
+const productOf = (sku) => PRODUCTS[String(sku || "hc21")] ? String(sku || "hc21") : null;
 // Refund (CRM -> /api/bridge/trainee/revoke, or the Admin Panel's Refund):
 // the Handstand Protocol and its add-ons come off the account; a Trainee
 // (no other access) is also archived, so they can't log in. Students and
 // staff keep their account and role.
-function revokeHandstand(userId, reason) {
+function revokeHandstand(userId, reason, sku = "hc21") {
   const users = readJson(USERS_FILE, []);
   const u = users.find(x => x.id === userId);
   if (!u) return null;
+  const prod = PRODUCTS[sku] || PRODUCTS.hc21;
   const all = readJson(TRAINING_PROTOCOLS_FILE, {});
   const rec = all[u.id];
+  let programsLeft = 0;
   if (rec && Array.isArray(rec.programs)) {
-    const ht = findHandstandTemplate(readJson(PROTOCOL_TEMPLATES_FILE, []));
+    const ht = findProductTemplate(readJson(PROTOCOL_TEMPLATES_FILE, []), sku);
     const before = rec.programs.length;
-    rec.programs = rec.programs.filter(e => !((ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()));
+    rec.programs = rec.programs.filter(e => !((ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === prod.templateName.toLowerCase()));
     if (rec.programs.length !== before) { all[u.id] = rec; writeJson(TRAINING_PROTOCOLS_FILE, all); }
+    programsLeft = rec.programs.length;
   }
-  u.hcBumps = [];
+  // Only this product's add-ons come off (another product they bought keeps its own).
+  u.hcBumps = (u.hcBumps || []).filter(b => !prod.bumps.includes(b));
   u.hcRefundedAt = new Date().toISOString();
   u.hcRefundReason = reason || "refund";
   // User Management > Trainees: "Make them a User on refund" (default on).
-  // Students and staff who bought it keep their role and just lose the program.
-  const makeUser = isTrainee(u) && getConfig().traineeRefundMakeUser !== false;
+  // Students and staff who bought it keep their role and just lose the program;
+  // a Trainee who still owns another product stays a Trainee.
+  const makeUser = isTrainee(u) && !programsLeft && getConfig().traineeRefundMakeUser !== false;
   if (makeUser) u.role = "user";
   writeJson(USERS_FILE, users);
   if (makeUser) { syncDefaultGroups(); syncAppSheetRole(u).catch(e => console.error("[APP sheet role sync]", e.message)); }
-  console.log(`[trainee] program access removed ${u.id} role=${u.role}${makeUser ? " (made user)" : ""} reason=${u.hcRefundReason}`);
-  return { userId: u.id, role: u.role, archived: !!u.archived };
+  console.log(`[trainee] ${sku} program access removed ${u.id} role=${u.role}${makeUser ? " (made user)" : ""} reason=${u.hcRefundReason}`);
+  return { userId: u.id, role: u.role, archived: !!u.archived, product: sku };
 }
 const TRAINEE_GROUP_OWNER_EMAIL = "lee@pacificrimathletics.com";
 const HC_BUMP_KEYS = ["wrist", "shoulder", "hips"];
@@ -3553,9 +3568,10 @@ function traineeGroupStaffIds(users) {
   const ids = [lee, ...alexis].filter(Boolean).map(u => u.id);
   return ids.length ? Array.from(new Set(ids)) : admins.map(u => u.id);
 }
-function normalizeBumps(list) {
+function normalizeBumps(list, sku = "hc21") {
   const alias = { wrists: "wrist", shoulders: "shoulder", hip: "hips" };
-  return Array.from(new Set((Array.isArray(list) ? list : [list]).map(b => String(b || "").trim().toLowerCase()).map(b => alias[b] || b).filter(b => HC_BUMP_KEYS.includes(b))));
+  const keys = (PRODUCTS[sku] || PRODUCTS.hc21).bumps || HC_BUMP_KEYS;
+  return Array.from(new Set((Array.isArray(list) ? list : [list]).map(b => String(b || "").trim().toLowerCase()).map(b => alias[b] || b).filter(b => keys.includes(b))));
 }
 
 // Program templates (e.g. the Handstand Protocol) carry protocol-level
@@ -3596,6 +3612,10 @@ function sanitizeProgramSettings(input, current) {
   // What the program view shows above the days (the template's real name stays fixed).
   if (input.kicker !== undefined) next.kicker = String(input.kicker).slice(0, 60);
   if (input.displayTitle !== undefined) next.displayTitle = String(input.displayTitle).slice(0, 120);
+  // Daily-routine programs: "Move 1..21" in order instead of "Day N" newest-first (program-view.js).
+  if (input.dayLabel !== undefined) next.dayLabel = String(input.dayLabel).slice(0, 20);
+  if (input.dayOrder !== undefined) next.dayOrder = input.dayOrder === "asc" ? "asc" : "";
+  if (input.bumpWhyLabel !== undefined) next.bumpWhyLabel = String(input.bumpWhyLabel).slice(0, 60);
   if (input.appButtons && typeof input.appButtons === "object") {
     const ab = { ...next.appButtons };
     if (input.appButtons.enabled !== undefined) ab.enabled = !!input.appButtons.enabled;
@@ -3618,11 +3638,13 @@ function findProgramTemplate(templates, enr) {
     || templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === String(enr.templateName || "").trim().toLowerCase())
     || null;
 }
-function findHandstandTemplate(templates) {
+function findHandstandTemplate(templates) { return findProductTemplate(templates, "hc21"); }
+function findProductTemplate(templates, sku) {
   // User Management > Trainees: which program each product gives buyers.
-  const mapped = getConfig().productPrograms?.hc21;
+  const mapped = getConfig().productPrograms?.[sku];
+  const name = (PRODUCTS[sku] || {}).templateName;
   return (mapped && templates.find(t => t.id === mapped))
-    || templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase()) || null;
+    || (name && templates.find(t => t.kind !== "student" && String(t.name || "").trim().toLowerCase() === name.toLowerCase())) || null;
 }
 // Same flattening as training-protocol.html's linearStepOrder: a day's whole
 // below-chain finishes before the next day (its right neighbor) starts.
@@ -3707,18 +3729,19 @@ function bridgeKeyOk(req) {
 // Idempotent: adds a Handstand Protocol enrollment (startedAt = now) unless
 // one exists; an existing one keeps its startedAt. Works before the template
 // is installed (matched by name later). Returns the enrollment.
-function enrollInHandstand(userId, source) {
+function enrollInHandstand(userId, source, sku = "hc21") {
   const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
-  const template = findHandstandTemplate(templates);
+  const template = findProductTemplate(templates, sku);
+  const templateName = (PRODUCTS[sku] || PRODUCTS.hc21).templateName;
   const all = readJson(TRAINING_PROTOCOLS_FILE, {});
   const rec = all[userId] || {};
   const programs = Array.isArray(rec.programs) ? rec.programs : [];
-  const nameKey = HANDSTAND_TEMPLATE_NAME.toLowerCase();
+  const nameKey = templateName.toLowerCase();
   let enr = programs.find(e => (template && e.templateId === template.id) || String(e.templateName || "").toLowerCase() === nameKey);
   let changed = false;
   if (!enr) {
     const now = new Date().toISOString();
-    enr = { templateId: template?.id || null, templateName: HANDSTAND_TEMPLATE_NAME, startedAt: now, assignedAt: now, source: source || null };
+    enr = { templateId: template?.id || null, templateName, startedAt: now, assignedAt: now, source: source || null, product: sku };
     programs.push(enr);
     changed = true;
   } else {
@@ -4456,7 +4479,9 @@ export async function handleChatRequest(req, res, url) {
     const email = String(body.email || "").trim().toLowerCase();
     const u = readJson(USERS_FILE, []).find(x => (body.userId && x.id === String(body.userId)) || (email && String(x.email || "").trim().toLowerCase() === email));
     if (!u) return sendJson(res, 404, { error: "No app account" });
-    return sendJson(res, 200, { ok: true, ...revokeHandstand(u.id, String(body.reason || "refund")) });
+    const sku = productOf(body.product);
+    if (!sku) return sendJson(res, 400, { error: "Unknown product" });
+    return sendJson(res, 200, { ok: true, ...revokeHandstand(u.id, String(body.reason || "refund"), sku) });
   }
   if (p === "/api/bridge/trainee") {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
@@ -4468,10 +4493,12 @@ export async function handleChatRequest(req, res, url) {
       if (!email) return sendJson(res, 400, { error: "email is required" });
       const u = findByEmail(email);
       if (!u) return sendJson(res, 200, { exists: false });
+      const sku = productOf(url.searchParams.get("product"));
+      if (!sku) return sendJson(res, 400, { error: "Unknown product" });
       const rec = readJson(TRAINING_PROTOCOLS_FILE, {})[u.id];
       const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
-      const ht = findHandstandTemplate(templates);
-      const enr = (rec?.programs || []).find(e => (ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === HANDSTAND_TEMPLATE_NAME.toLowerCase());
+      const ht = findProductTemplate(templates, sku);
+      const enr = (rec?.programs || []).find(e => (ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === PRODUCTS[sku].templateName.toLowerCase());
       const template = findProgramTemplate(templates, enr);
       const view = enr && template ? buildProgramView(template, enr, { staffView: true, ownedBumps: u.hcBumps }) : null;
       return sendJson(res, 200, {
@@ -4486,7 +4513,9 @@ export async function handleChatRequest(req, res, url) {
       const email = String(body.email || "").trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return sendJson(res, 400, { error: "A valid email is required" });
       const source = String(body.source || "").slice(0, 200) || null;
-      const bumps = normalizeBumps(body.bumps);
+      const sku = productOf(body.product);
+      if (!sku) return sendJson(res, 400, { error: "Unknown product" });
+      const bumps = normalizeBumps(body.bumps, sku);
       let u = findByEmail(email);
       let created = false;
       if (!u) {
@@ -4512,10 +4541,10 @@ export async function handleChatRequest(req, res, url) {
       if (!u.phone && body.phone) u.phone = String(body.phone).trim();
       u.hcBumps = Array.from(new Set([...(u.hcBumps || []), ...bumps]));
       writeJson(USERS_FILE, users);
-      const { enrollment, templateInstalled } = enrollInHandstand(u.id, source);
+      const { enrollment, templateInstalled } = enrollInHandstand(u.id, source, sku);
       if (isTrainee(u)) syncDefaultGroups();
-      console.log(`[bridge trainee] ${created ? "created" : "updated"} ${u.id} role=${u.role} bumps=${u.hcBumps.join(",") || "-"}`);
-      return sendJson(res, 200, { userId: u.id, created, passwordSet: created, role: u.role, bumps: u.hcBumps, startedAt: enrollment.startedAt, templateInstalled });
+      console.log(`[bridge trainee] ${sku} ${created ? "created" : "updated"} ${u.id} role=${u.role} bumps=${u.hcBumps.join(",") || "-"}`);
+      return sendJson(res, 200, { userId: u.id, created, passwordSet: created, role: u.role, bumps: u.hcBumps, startedAt: enrollment.startedAt, templateInstalled, product: sku, templateId: enrollment.templateId || null });
     }
     return sendJson(res, 405, { error: "GET or POST" });
   }
@@ -5390,7 +5419,7 @@ export async function handleChatRequest(req, res, url) {
         const r = await crmFetch("/api/hc/bridge/refund", { method: "POST", body: JSON.stringify({ appUserId: u.id, email: u.email || "", orderId: body.orderId || "", by: `${user.first || ""} ${user.last || ""}`.trim() || "PRA app" }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !d.ok) return sendJson(res, 400, { error: d.error || `CRM returned ${r.status}` });
-        const local = revokeHandstand(u.id, "refund");
+        const local = revokeHandstand(u.id, "refund", productOf(d.order?.sku) || "hc21");
         return sendJson(res, 200, { ok: true, order: d.order, account: local });
       } catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
@@ -5460,7 +5489,7 @@ export async function handleChatRequest(req, res, url) {
       } catch (e) { crmError = e.message; }
       const products = (crm?.products || [{ sku: "hc21", name: HANDSTAND_TEMPLATE_NAME, price: null, bumps: [] }]).map(pr => {
         const mapped = getConfig().productPrograms?.[pr.sku];
-        const def = pr.sku === "hc21" ? findHandstandTemplate(templates) : null;
+        const def = PRODUCTS[pr.sku] ? findProductTemplate(templates, pr.sku) : null;
         return { ...pr, programId: (mapped && templates.some(t => t.id === mapped)) ? mapped : (def?.id || "") };
       });
       const users = readJson(USERS_FILE, []);
