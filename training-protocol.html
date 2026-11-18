@@ -1037,7 +1037,11 @@ async function showProgramView(opt = {}) {
   document.getElementById(opt.btnId || (canEdit ? 'lowTicketBtn' : 'programViewBtn')).classList.add('active');
   applyViewModeDisplay();
   const box = document.getElementById('programView');
-  if (!box.firstChild || opt.templateId) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
+  // Re-showing the same program after an edit/delete keeps the current view on screen
+  // until the new one is ready, so PRAProgram.render can keep the open blocks and the
+  // scroll position. "Loading…" only when there's nothing to keep (Lee, 2026-11-17).
+  const sameProgram = box.querySelector('.pv') && (!opt.templateId || opt.templateId === currentProgramTemplateId);
+  if (!box.firstChild || (opt.templateId && !sameProgram)) box.innerHTML = '<div class="pra-muted" style="text-align:center;padding:40px 0">Loading…</div>';
   const previewId = opt.templateId || (programPreviewTemplateId && canEdit ? programPreviewTemplateId : null);
   const preview = !!previewId;
   const wanted = params.get('program') || enrolledPrograms[0]?.templateId || '';

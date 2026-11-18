@@ -340,6 +340,15 @@
 
     const keepTimer = container.querySelector('.pv-ftimer');
     if (keepTimer) keepTimer.remove();
+    // A re-render (an edit or delete in Low Ticket / Page View, an unlock) keeps the
+    // same blocks open and the same scroll position instead of jumping back (Lee, 2026-11-17).
+    const blockKey = (d) => d.id || (d.dataset.bump ? 'bump:' + d.dataset.bump : '') || (d.querySelector(':scope > .pv-body[data-section]') ? 'sec:' + d.querySelector(':scope > .pv-body[data-section]').dataset.section : '');
+    const hadView = !!container.querySelector('.pv');
+    const prevOpen = hadView ? new Map([...container.querySelectorAll('details.pv-block')].map(d => [blockKey(d), d.open]).filter(([k]) => k)) : null;
+    let scroller = container.parentElement;
+    while (scroller && scroller !== document.body && !(scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+    if (scroller === document.body) scroller = null;
+    const prevScroll = hadView ? { win: window.scrollY, el: scroller ? scroller.scrollTop : 0 } : null;
     container.innerHTML = `<div class="pv">
       <div class="pv-hero">
         <div class="pv-kicker" data-hero="kicker">${esc((pr.settings && pr.settings.kicker) || 'Powerbatics')}</div>
@@ -361,6 +370,12 @@
       </div>
     </div>`;
 
+    if (prevOpen) {
+      container.querySelectorAll('details.pv-block').forEach(d => { const k = blockKey(d); if (prevOpen.has(k)) d.open = prevOpen.get(k); });
+      window.scrollTo(0, prevScroll.win);
+      if (scroller) scroller.scrollTop = prevScroll.el;
+      requestAnimationFrame(() => { window.scrollTo(0, prevScroll.win); if (scroller) scroller.scrollTop = prevScroll.el; });
+    }
     // Floating 60-second timer, kept across re-renders so a running countdown survives.
     const pvRoot = container.querySelector('.pv');
     if (keepTimer) pvRoot.appendChild(keepTimer);
