@@ -3412,6 +3412,8 @@ async function notifyAdmins(payload) {
 }
 
 async function sendPushToTargets(targets, payload) {
+  // A named link ([name](url)) reads as just its name in the notification.
+  if (payload && typeof payload.body === "string") payload = { ...payload, body: payload.body.replace(/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s)]+)\)/g, "$1") };
   ensureVapidKeys();
   const fbApp = getFirebaseApp();
   // This whole path used to fail completely silently — no log for a

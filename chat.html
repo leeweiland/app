@@ -2922,7 +2922,7 @@ async function startConvo(otherUserId) {
 
 function previewText(m) {
   if (!m) return 'No messages yet';
-  if (m.type === 'text') return m.text;
+  if (m.type === 'text') return String(m.text || '').replace(MD_LINK_RE, '$1');
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'appointment') {
     const start = new Date(m.startISO);
@@ -4608,8 +4608,18 @@ function appLinkTitle(clean) {
   const hit = APP_LINKS.find(l => l.path && (l.path({ id: 'x' }) || '').split('?')[0] === u.pathname);
   return hit ? hit.title : null;
 }
+// Named links: "[Anandhi's Custom Training Protocol](https://...)" shows as just
+// the name, clickable (the message box's Links menu sends them this way).
+const MD_LINK_RE = /\[([^\]\n]{1,160})\]\((https?:\/\/[^\s)<]+)\)/g;
 function linkifyUrls(escapedText) {
-  if (window.PRALinkify) return window.PRALinkify(escapedText, { appTitle: appLinkTitle });
+  const named = [];
+  escapedText = escapedText.replace(MD_LINK_RE, (m, label, url) => {
+    let same = false; try { same = new URL(url.replace(/&amp;/g, '&')).origin === location.origin; } catch {}
+    named.push(`<a href="${url}" class="bubble-link"${same ? '' : ' target="_blank" rel="noopener noreferrer"'}>${label}</a>`);
+    return `\u0000${named.length - 1}\u0000`;
+  });
+  const restore = (h) => named.length ? h.replace(/\u0000(\d+)\u0000/g, (m, i) => named[Number(i)]) : h;
+  if (window.PRALinkify) return restore(window.PRALinkify(escapedText, { appTitle: appLinkTitle }));
   return escapedText.replace(/https?:\/\/[^\s<]+/gi, (url) => {
     // Trailing punctuation almost always belongs to the sentence, not the
     // URL itself ("check this out: https://x.com.") — keep it outside the link.
@@ -4619,7 +4629,7 @@ function linkifyUrls(escapedText) {
     const appTitle = appLinkTitle(clean);
     if (appTitle) return `<a href="${clean}" class="bubble-link">${appTitle}</a>${trailing}`;
     return `<a href="${clean}" target="_blank" rel="noopener noreferrer" class="bubble-link">${clean}</a>${trailing}`;
-  });
+  }).replace(/\u0000(\d+)\u0000/g, (m, i) => named[Number(i)]);
 }
 
 // ── Image lightbox (click to open, ctrl+wheel / pinch to zoom, drag to pan) ──
@@ -6123,7 +6133,7 @@ function selectMention(idx) {
 async function sendText() {
   closeMentionDropdown();
   const input = document.getElementById('textInput');
-  const text = input.value.trim();
+  const text = applyComposerLinks(input.value.trim());
   if (!activeConvoId || (!text && !pendingPasteFiles.length && !pendingGifUrl)) return;
   input.value = '';
   input.style.height = 'auto';
@@ -7269,6 +7279,19 @@ async function setupNativePush() {
 // Copy, Paste, and for coaches a Links panel that slides out with the app
 // pages the people in this chat are allowed to open.
 let composerSel = { start: 0, end: 0 };
+// Links picked from the menu go in as their name; sending turns each name
+// (if it's still there) into a clickable named link.
+let composerLinks = [];
+function applyComposerLinks(text) {
+  let out = text;
+  for (const l of composerLinks) {
+    const i = out.indexOf(l.label);
+    if (i < 0) continue;
+    out = out.slice(0, i) + `[${l.label}](${l.url})` + out.slice(i + l.label.length);
+  }
+  composerLinks = [];
+  return out;
+}
 function closeComposerMenu() { document.getElementById('composerMenu')?.remove(); }
 function insertIntoComposer(text) {
   const ta = document.getElementById('textInput');
@@ -7335,7 +7358,7 @@ function openComposerMenu(x, y) {
     const draw = (q) => {
       const f = links.filter(l => !q || l.label.toLowerCase().includes(q.toLowerCase()));
       list.innerHTML = f.map((l, i) => `<button type="button" class="cm-item cm-link" data-i="${links.indexOf(l)}"><span>${escapeHtml(l.label)}<small>${escapeHtml(l.url.replace(/^https?:\/\//, ''))}</small></span></button>`).join('');
-      list.querySelectorAll('.cm-link').forEach(b => b.onclick = () => { const l = links[Number(b.dataset.i)]; closeComposerMenu(); insertIntoComposer(l.url); });
+      list.querySelectorAll('.cm-link').forEach(b => b.onclick = () => { const l = links[Number(b.dataset.i)]; closeComposerMenu(); composerLinks.push({ label: l.label, url: l.url }); insertIntoComposer(l.label); });
     };
     draw('');
     const s = el.querySelector('#cmLinkSearch');
