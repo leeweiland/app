@@ -33,6 +33,9 @@
   /* ── Sidebar ── */
   .sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid var(--pra-border); display: flex; flex-direction: column; }
   /* Black Friday early-renewal banner, open chat/group thread, under the head icons and above the messages; one line, font shrinks to fit; removed after the sale (script below). */
+  .bf-renew-banner { display: flex; align-items: center; justify-content: center; gap: .45em; width: 100%; border: 0; border-radius: 0; cursor: pointer; }
+  .bf-renew-banner:hover { filter: brightness(1.06); }
+  .bf-renew-banner .bf-enter { width: 1.35em; height: 1.35em; flex-shrink: 0; }
   .bf-renew-banner { flex-shrink: 0; background: rgb(212,255,0); color: #000; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: 13px; letter-spacing: .03em; line-height: 1.2; text-align: center; padding: 6px 8px; white-space: nowrap; overflow: hidden; }
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
@@ -1052,8 +1055,8 @@
           </div>
         </div>
         <div id="searchResults" style="display:none;padding:8px 20px;font-size:.8rem;border-bottom:1px solid var(--pra-border)"></div>
-        <div class="bf-renew-banner" id="bfRenewBanner">Insane Black Friday Early Renewal Savings - Ask Your Coach</div>
-        <script>(function(){var b=document.getElementById('bfRenewBanner');if(Date.now()>Date.parse('2026-12-01T10:00:00Z')){b.remove();return;}function fit(){if(!b.clientWidth)return;var f=13;b.style.fontSize=f+'px';while(b.scrollWidth>b.clientWidth&&f>7){f-=.5;b.style.fontSize=f+'px';}}try{new ResizeObserver(fit).observe(b);}catch(e){window.addEventListener('resize',fit);}if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);})();</script>
+        <button type="button" class="bf-renew-banner" id="bfRenewBanner" title="Message your coach">Insane Black Friday Early Renewal Savings - Ask Your Coach<svg class="bf-enter" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 5v7.5a2 2 0 0 1-2 2H6" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 10.5 5.5 14.5l4 4" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <script>(function(){var b=document.getElementById('bfRenewBanner');if(Date.now()>Date.parse('2026-12-01T10:00:00Z')){b.remove();return;}function fit(){if(!b.clientWidth)return;var f=13;b.style.fontSize=f+'px';while(b.scrollWidth>b.clientWidth&&f>7){f-=.5;b.style.fontSize=f+'px';}}try{new ResizeObserver(fit).observe(b);}catch(e){window.addEventListener('resize',fit);}b.onclick=function(){try{var own=(typeof conversations!=='undefined'&&typeof me!=='undefined'&&me&&!isStaffMe())?conversations.find(function(c){return c.autoGroupType==='student'&&c.autoGroupUserId===me.id;}):null;if(own&&own.id!==activeConvoId)openConvo(own.id);setTimeout(function(){var t=document.getElementById('textInput');if(t)t.focus();},150);}catch(e){}};if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);})();</script>
         <div class="thread-body-wrap">
           <div class="thread-body" id="threadBody"></div>
           <button type="button" class="new-msg-pill" id="newMsgPill">
