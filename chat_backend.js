@@ -394,6 +394,9 @@ export function getConfig() {
   // Trainees (Handstand Protocol buyers), Lee 2026-11-17: off by default.
   if (cfg.traineeWelcomeEnabled === undefined) cfg.traineeWelcomeEnabled = false;
   if (!cfg.traineeWelcomeText) cfg.traineeWelcomeText = DEFAULT_TRAINEE_WELCOME;
+  if (!cfg.traineeWelcomeByProduct || typeof cfg.traineeWelcomeByProduct !== "object") cfg.traineeWelcomeByProduct = {};
+  if (cfg.traineeWelcomeByProduct.hc21 === undefined) cfg.traineeWelcomeByProduct.hc21 = cfg.traineeWelcomeText;
+  if (cfg.traineeWelcomeByProduct.bsp21 === undefined) cfg.traineeWelcomeByProduct.bsp21 = "Hey {{firstName}}, welcome to the Bodyweight Strength Protocol! This is your private chat with me and Alexis. Start with Day 1, and send us a video any time you want feedback.";
   if (cfg.traineeRefundMakeUser === undefined) cfg.traineeRefundMakeUser = true;
   if (!cfg.productPrograms || typeof cfg.productPrograms !== "object") cfg.productPrograms = {};
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
@@ -4012,7 +4015,12 @@ function syncDefaultGroups() {
     if (tcfg.traineeWelcomeEnabled && tcfg.traineeWelcomeText) {
       newlyCreatedGroups.filter(g => g.convo.autoGroupType === "trainee").forEach(({ convo, person, staffIds }) => {
         const senderId = staffIds[0] || person.id;
-        const text = fillTemplate(tcfg.traineeWelcomeText, { firstName: person.first, lastName: person.last });
+        // Each product has its own welcome (User Management > Trainees); empty = none.
+        const byProduct = tcfg.traineeWelcomeByProduct || {};
+        const sku = person.hcLastProduct || "hc21";
+        const tpl = byProduct[sku] !== undefined ? byProduct[sku] : (sku === "hc21" ? tcfg.traineeWelcomeText : "");
+        if (!String(tpl || "").trim()) return;
+        const text = fillTemplate(tpl, { firstName: person.first, lastName: person.last });
         MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
         notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
       });
@@ -4542,6 +4550,7 @@ export async function handleChatRequest(req, res, url) {
       }
       if (!u.phone && body.phone) u.phone = String(body.phone).trim();
       u.hcBumps = Array.from(new Set([...(u.hcBumps || []), ...bumps]));
+      u.hcLastProduct = sku;
       writeJson(USERS_FILE, users);
       const { enrollment, templateInstalled } = enrollInHandstand(u.id, source, sku);
       if (isTrainee(u)) syncDefaultGroups();
@@ -5441,6 +5450,10 @@ export async function handleChatRequest(req, res, url) {
         for (const k of BOOL_KEYS) if (body[k] !== undefined) cfg[k] = !!body[k];
         for (const [k, [lo, hi, def]] of Object.entries(NUM_KEYS)) if (body[k] !== undefined) cfg[k] = Math.max(lo, Math.min(hi, Number(body[k]) || def));
         for (const k of STR_KEYS) if (body[k] !== undefined) cfg[k] = String(body[k]);
+        if (body.traineeWelcomeByProduct && typeof body.traineeWelcomeByProduct === "object") {
+          cfg.traineeWelcomeByProduct = { ...(cfg.traineeWelcomeByProduct || {}) };
+          for (const [sku, t] of Object.entries(body.traineeWelcomeByProduct)) if (PRODUCTS[sku]) cfg.traineeWelcomeByProduct[sku] = String(t || "").slice(0, 4000);
+        }
         if (body.access && typeof body.access === "object") cfg.access = mergeAccessDefaults({ ...cfg.access, ...Object.fromEntries(Object.entries(body.access).map(([r, v]) => [r, { ...(cfg.access?.[r] || {}), ...v }])) });
         writeJson(CONFIG_FILE, cfg);
         // Sheet changes take effect on the next read, not after a 10-minute cache.
@@ -5452,6 +5465,7 @@ export async function handleChatRequest(req, res, url) {
       const users = readJson(USERS_FILE, []);
       const settings = Object.fromEntries([...BOOL_KEYS, ...Object.keys(NUM_KEYS), ...STR_KEYS].map(k => [k, cfg[k]]));
       settings.access = cfg.access;
+      settings.traineeWelcomeByProduct = cfg.traineeWelcomeByProduct || {};
       const staff = users.filter(u => isStaff(u) && !u.archived).map(u => ({ id: u.id, name: `${u.first} ${u.last}`, role: u.role }));
       const counts = {
         online: users.filter(u => u.role === "online" && !u.archived).length,

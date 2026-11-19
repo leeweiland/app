@@ -1832,90 +1832,87 @@ window.addEventListener('pageshow', () => {
 
     document.getElementById('umBody').innerHTML = `
       <div class="um-what" style="margin-bottom:6px">Right now: <b style="color:#fff">${c.online}</b> Online, <b style="color:#fff">${c.gym}</b> Gym, <b style="color:#fff">${c.trainees || 0}</b> Trainees, <b style="color:#fff">${c.users}</b> plain Users, <b style="color:#fff">${c.archived}</b> blacklisted.</div>
-      <div class="um-what" style="margin-bottom:14px">Every switch here takes effect the moment you flip it. Nothing redeploys or restarts the app.</div>
+      <div class="um-what" style="margin-bottom:14px">Switches take effect instantly. Nothing redeploys.</div>
 
-      ${card(1, '1. Sign Up', row('Public sign-up', 'The Sign Up tab on the app\'s login screen. They must tick the Terms box, and a duplicate email, phone or name is blocked. New accounts start as a plain <b>User</b> until a coach makes them Online or Gym.', toggle('signupEnabled', s.signupEnabled), '',
-        ['anyone can create an account.', 'the Sign Up tab disappears and new sign-ups are refused. You can still add people with + Add User in Users &amp; Roles.']))}
+      ${card(1, '1. Sign Up', row('Public sign-up', 'The Sign Up tab on the login screen. New accounts start as a plain <b>User</b>.', toggle('signupEnabled', s.signupEnabled), '',
+        ['anyone can sign up.', 'Sign Up is hidden; add people in Users &amp; Roles.']))}
 
       ${card(2, '2. Log In &amp; Passwords',
-        row('Stay logged in', 'Forever, like YouTube. A login stays until they log out, their password is reset, or they\'re blacklisted.', '<div class="um-inline"><b>Always on</b></div>', '') +
-        row('Minimum password length', 'Applies to sign-up, password resets, and passwords you set in Users &amp; Roles.', `<div class="um-inline">${num('minPasswordLength', s.minPasswordLength)} characters</div>`, savedMsg('umMsg-minPasswordLength')) +
-        row('Forgot password', 'The "Forgot password?" link on the login screen. It emails a reset link to the address on their account.', toggle('forgotPasswordEnabled', s.forgotPasswordEnabled),
-          `<div class="um-sub">Reset links work for ${num('resetLinkMinutes', s.resetLinkMinutes)} minutes ${savedMsg('umMsg-resetLinkMinutes')}</div>`,
-          ['people can reset their own password by email.', 'the link is hidden; only an admin can set a new password (Users &amp; Roles).']) +
-        row('Blacklisted accounts', 'A blacklisted account is logged out everywhere at once and can\'t log back in.', info))}
+        row('Stay logged in', 'Forever, until they log out, reset their password or are blacklisted.', '<div class="um-inline"><b>Always on</b></div>', '') +
+        row('Minimum password length', 'For sign-up, resets and passwords you set.', `<div class="um-inline">${num('minPasswordLength', s.minPasswordLength)} characters</div>`, savedMsg('umMsg-minPasswordLength')) +
+        row('Forgot password', 'Emails them a reset link from the login screen.', toggle('forgotPasswordEnabled', s.forgotPasswordEnabled),
+          `<div class="um-sub">Links work for ${num('resetLinkMinutes', s.resetLinkMinutes)} minutes ${savedMsg('umMsg-resetLinkMinutes')}</div>`,
+          ['they reset it themselves.', 'only an admin can set a new one.']))}
 
       ${card(3, '3. Student Crosscheck',
-        row('Auto-upgrade from the sales sheets', 'Compares plain Users against the buyers tabs below. You switched this off on Nov 12 because the CRM and sheets weren\'t reliable enough to grant access on their own &mdash; coaches set students up by hand.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
-          ['a plain User whose name is on the Online or Gym buyers tab becomes Online or Gym automatically (Gym wins if both), unless they\'re on the blacklist tab.', 'nobody is upgraded automatically.']) +
-        `<div class="um-row" style="display:block"><div class="um-name">Sheets used</div><div class="um-desc" style="margin-bottom:8px">The same tabs also give the renewal dates (End Date, column D) and the names in the Students panel.</div>
+        row('Auto-upgrade from the sales sheets', 'A plain User on the Online or Gym buyers tab becomes Online or Gym. Off since Nov 12.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
+          ['upgraded automatically (Gym wins, blacklist tab skipped).', 'coaches set students up by hand.']) +
+        `<div class="um-row" style="display:block"><div class="um-name">Sheets used</div><div class="um-desc" style="margin-bottom:8px">Also gives renewal end dates (column D).</div>
           ${sheetField('app-cross', 'Sheet:', 'appSheetId', sh.app.id, [sh.crosscheck.online, sh.crosscheck.gym, sh.crosscheck.blacklist])}
-          <div class="um-sub">Online buyers tab <input class="pra-input" data-str="crosscheckOnlineTab" value="${esc(sh.crosscheck.online)}" style="max-width:200px"/> Gym buyers tab <input class="pra-input" data-str="crosscheckGymTab" value="${esc(sh.crosscheck.gym)}" style="max-width:200px"/> Blacklist tab <input class="pra-input" data-str="crosscheckBlacklistTab" value="${esc(sh.crosscheck.blacklist)}" style="max-width:220px"/> ${savedMsg('umMsg-crosscheckTabs')}</div>
+          <div class="um-sub">Online tab <input class="pra-input" data-str="crosscheckOnlineTab" value="${esc(sh.crosscheck.online)}" style="max-width:200px"/> Gym tab <input class="pra-input" data-str="crosscheckGymTab" value="${esc(sh.crosscheck.gym)}" style="max-width:200px"/> Blacklist tab <input class="pra-input" data-str="crosscheckBlacklistTab" value="${esc(sh.crosscheck.blacklist)}" style="max-width:220px"/> ${savedMsg('umMsg-crosscheckTabs')}</div>
         </div>`)}
 
       ${card(4, '4. Profiles, Levels &amp; Katas',
-        `<div class="um-row" style="display:block"><div class="um-name">Levels sheet</div><div class="um-desc" style="margin-bottom:8px">Everyone's levels, matched to app accounts by first + last name (Gym tab for gym students, Online tab for online).</div>${sheetField('levels', 'Sheet:', 'levelsSheetId', sh.levels.id, ['GYM', 'ONLINE'])}</div>` +
-        row('Moves on profiles', 'A student\'s moves history (videos they\'ve posted) on their profile.', toggle('movesPublicDefault', s.movesPublicDefault), '',
-          ['shown by default; a student can still turn theirs off.', 'hidden by default; a student can still turn theirs on.']) +
-        row('Katas', 'Each student sees the kata for the level they\'re at (Katas tab + thumbnails on their profile), from the <a href="https://drive.google.com/drive/folders/1IpdnlRqiAcNAgJ5Vz7zN3zyEHJqsilnZ" target="_blank" rel="noopener">KATAS BY ELEMENT</a> Drive folder. Who can see them is under Access by Role.', info))}
+        `<div class="um-row" style="display:block"><div class="um-name">Levels sheet</div><div class="um-desc" style="margin-bottom:8px">Matched to accounts by first + last name.</div>${sheetField('levels', 'Sheet:', 'levelsSheetId', sh.levels.id, ['GYM', 'ONLINE'])}</div>` +
+        row('Moves on profiles', 'The videos a student has posted, on their profile.', toggle('movesPublicDefault', s.movesPublicDefault), '',
+          ['shown by default.', 'hidden by default.']) +
+        row('Katas', 'The kata for their level, from <a href="https://drive.google.com/drive/folders/1IpdnlRqiAcNAgJ5Vz7zN3zyEHJqsilnZ" target="_blank" rel="noopener">KATAS BY ELEMENT</a>.', info))}
 
-      ${card(5, '5. New Student Setup',
-        `<p class="um-what">Runs once, the first time someone is made Online or Gym. Renewals and people who already had a group are left alone.</p>` +
-        row('Student group', 'Their "&lt;Name&gt; Group" chat with every coach and admin.', toggle('studentGroupEnabled', s.studentGroupEnabled), '',
-          ['a new student gets their group right away (the welcome message and auto-build below run when it\'s created).', 'no group is created for new students, so the welcome message and auto-build don\'t run either. Existing groups stay.']) +
-        row('Welcome message', 'Posted into their new group from an admin. Use {{firstName}} and {{lastName}}.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled),
-          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umWelcomeText" rows="6" style="width:100%;max-width:none">${esc(s.welcomeMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umWelcomeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg')}</div>`,
-          ['posted automatically.', 'nothing is posted.']) +
-        row('Default protocol', `What a new student starts with if they don't have a saved program. Right now it's <b style="color:#fff">${esc(dp.name)}</b> (${dp.days} day${dp.days === 1 ? '' : 's'}, ${dp.videos} videos, ${dp.steps} steps). <a href="/chat-app/training-protocol.html?userId=${esc(window.__umMeId || '')}" target="_blank" rel="noopener">Edit it in the Flow Builder</a>.`, toggle('defaultProtocolEnabled', s.defaultProtocolEnabled), '',
-          ['they start with the draft above.', 'they start with an empty protocol until a coach or auto-build fills it.']) +
-        row('Auto-build their program', 'Finds their page on custom.pacificrimathletics.com (title has their first and last name, not DONOTUSE; a "NEW" page wins) and builds their protocol from it, videos and instructions included. <b>It only replaces the default or an empty protocol &mdash; a protocol a coach has already worked on is left alone.</b> No page found or videos missing &rarr; the red banner.', toggle('autoBuildProtocolEnabled', s.autoBuildProtocolEnabled),
-          `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`,
-          ['built automatically for each new student.', 'new students keep the default; you can still run it by hand here.']) +
-        row('Levels sheet row', 'Adds them to the Levels sheet above (Gym or Online tab) at Foundation, unless they\'re already on it.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent), '',
-          ['added automatically, so their levels and katas show right away.', 'not added; a coach adds them when setting their first level.']) +
-        row('APP sheet type', 'Writes their account type (Student, User, Trainee, Coach, Admin) into the TYPE column of the APP sheet whenever their role changes. The map colors people by it.', toggle('appSheetTypeEnabled', s.appSheetTypeEnabled),
-          sheetField('app', 'Sheet:', 'appSheetId', sh.app.id, [sh.app.tab]),
-          ['kept up to date automatically.', 'TYPE is left for you to set by hand.']))}
+      ${card(5, '5. Trainees', `
+        <p class="um-what">Bought a program on its own (CRM Products tab). They get the program and a group with Lee and Alexis. Build programs in the <a href="/chat-app/programs-editor.html" target="_blank" rel="noopener">Programs Editor</a>.</p>
+        ${row('Welcome messages', 'Posted from Lee into a new Trainee group. Each product has its own below. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled), '',
+          ['posted automatically.', 'nothing is posted.'])}
+        <div class="um-row" style="display:block"><div class="um-name">Products</div><div id="umProducts">Loading products…</div></div>
+        ${row('Refunds', 'Right-click a person in Users &amp; Roles &rarr; Refund (full PayPal refund through the CRM). CRM or PayPal refunds do the same.', info)}
+        ${row('Make them a User on refund', 'Students and staff just lose the program.', toggle('traineeRefundMakeUser', s.traineeRefundMakeUser), '',
+          ['they become a plain User.', 'they stay a Trainee, program removed.'])}`)}
 
       ${card(6, '6. Access by Role',
-        `<p class="um-what">What each kind of account can open, coaches included. Admins always have everything. A switched-off section disappears from their menu and shows "Locked" if they open it.</p>${accessTable}${savedMsg('umAccessMsg')}`)}
+        `<p class="um-what">What each account type can open. Admins see everything. Off = hidden from the menu and "Locked".</p>${accessTable}${savedMsg('umAccessMsg')}`)}
 
-      ${card(7, '7. Upgrading &amp; Downgrading',
-        row('Make Online / Make Gym', 'Gives them everything switched on for Online/Gym under Access by Role. The first time, New Student Setup runs. Coaches can do it from a profile; the Students panel does it and updates the CRM too.', info) +
-        row('Mark Finished (= Make User)', '"Mark Finished" (profile) and "Make User" (Students panel, Users &amp; Roles) are the same thing: they become a plain User. They lose what\'s switched off for Users under Access by Role (by default: Custom Training Protocol, Physique Builder, Katas). They\'re taken out of staff-only chats; their group and history are kept. From the Students panel it also sets them FINISHED in the CRM.', info) +
-        row('FINISHED in the CRM', 'When a contact\'s status is set to FINISHED in the CRM (by hand or by a flow).', toggle('crmFinishedSync', s.crmFinishedSync), '',
-          ['their app account becomes a plain User automatically.', 'the app isn\'t changed; mark them finished here too.']))}
+      ${card(7, '7. New Student Setup',
+        `<p class="um-what">Runs the first time someone is made Online or Gym.</p>` +
+        row('Student group', 'Their group chat with every coach and admin.', toggle('studentGroupEnabled', s.studentGroupEnabled), '',
+          ['created right away.', 'no group (and no welcome or auto-build).']) +
+        row('Welcome message', 'Posted into their new group. Use {{firstName}} and {{lastName}}.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled),
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umWelcomeText" rows="6" style="width:100%;max-width:none">${esc(s.welcomeMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umWelcomeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg')}</div>`,
+          ['posted automatically.', 'nothing is posted.']) +
+        row('Default protocol', `Now: <b style="color:#fff">${esc(dp.name)}</b> (${dp.days} day${dp.days === 1 ? '' : 's'}, ${dp.videos} videos). <a href="/chat-app/training-protocol.html?userId=${esc(window.__umMeId || '')}" target="_blank" rel="noopener">Edit</a>`, toggle('defaultProtocolEnabled', s.defaultProtocolEnabled), '',
+          ['they start with it.', 'they start empty.']) +
+        row('Auto-build their program', 'Builds it from their custom.pacificrimathletics.com page. Never replaces a protocol a coach worked on.', toggle('autoBuildProtocolEnabled', s.autoBuildProtocolEnabled),
+          `<div class="um-sub"><select class="pra-select" id="umBuildUser"><option value="">Run it now for…</option></select><button class="pra-btn" type="button" id="umBuildBtn" style="font-size:.74rem;padding:7px 12px">Build</button><span class="um-saved" id="umBuildMsg"></span></div>`,
+          ['built for each new student.', 'run it by hand here.']) +
+        row('Levels sheet row', 'Adds them at Foundation.', toggle('levelsRowOnNewStudent', s.levelsRowOnNewStudent), '',
+          ['added automatically.', 'a coach adds them.']) +
+        row('APP sheet type', 'Keeps the TYPE column of the APP sheet up to date (the map uses it).', toggle('appSheetTypeEnabled', s.appSheetTypeEnabled),
+          sheetField('app', 'Sheet:', 'appSheetId', sh.app.id, [sh.app.tab]),
+          ['updated automatically.', 'set by hand.']))}
 
-      ${card(8, '8. Blacklist',
-        row('Blacklist', 'The only way to cut someone off completely: from the Students panel it logs them out everywhere, they can\'t log back in, and their CRM status becomes BLACKLIST. Chats and history are kept. <b>Restore</b> next to their name in Users &amp; Roles lets them back in. (To take away access but keep their login, Mark Finished instead.)', info) +
-        row('BLACKLIST in the CRM', 'When a contact\'s status is set to BLACKLIST in the CRM (or Blacklist in the Students panel).', toggle('crmBlacklistArchive', s.crmBlacklistArchive), '',
-          ['their app account is blacklisted automatically (logged out, can\'t log in).', 'the app account is left alone.']))}
+      ${card(8, '8. Upgrading &amp; Downgrading',
+        row('Make Online / Make Gym', 'Gives them that role\'s access. First time runs New Student Setup.', info) +
+        row('Mark Finished (= Make User)', 'They become a plain User and keep their group and history.', info) +
+        row('FINISHED in the CRM', 'A contact set to FINISHED in the CRM.', toggle('crmFinishedSync', s.crmFinishedSync), '',
+          ['becomes a plain User here too.', 'nothing changes here.']))}
 
-      ${card(9, '9. Renewals',
-        `<div class="um-row" style="display:block"><div class="um-desc">End dates come from the buyers tabs in Student Crosscheck (column D; the latest one wins, so adding a renewal row clears it).</div></div>` +
-        row('Renewal pills for coaches', 'An orange pill on a student whose end date is within 2 months, pink within 1 month, on their chat and profile.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
-          ['coaches and admins see the pills.', 'no pills.']) +
-        row('Renewal notice for students', 'The student sees their own orange/pink notice at the top of the app with this text. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
+      ${card(9, '9. Blacklist',
+        row('Blacklist', 'Logs them out everywhere and blocks login. <b>Restore</b> in Users &amp; Roles undoes it.', info) +
+        row('BLACKLIST in the CRM', 'A contact set to BLACKLIST in the CRM.', toggle('crmBlacklistArchive', s.crmBlacklistArchive), '',
+          ['blacklisted here too.', 'left alone.']))}
+
+      ${card(10, '10. Renewals',
+        row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
+          ['shown to coaches.', 'hidden.']) +
+        row('Renewal notice for students', 'Their own notice at the top of the app. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
           `<div class="um-sub" style="display:block"><textarea class="pra-input" data-str="renewalStudentText" rows="2" style="width:100%;max-width:none">${esc(s.renewalStudentText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" data-str-save="renewalStudentText" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save text</button>${savedMsg('umMsg-renewalStudentText')}</div>`,
-          ['students inside the 2-month window see it.', 'students never see it.']) +
-        row('Renewal message', 'Posted once into the student\'s group (10am-1pm Alaska), inside the window below. Use {{firstName}}, {{lastName}} and {{endDate}}. The first day it\'s on, everyone already inside the window gets it.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
-          `<div class="um-sub">Send ${num('renewalMessageDaysBefore', s.renewalMessageDaysBefore)} days before their end date, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
+          ['shown inside 2 months.', 'never shown.']) +
+        row('Renewal message', 'Posted once into their group. Use {{firstName}}, {{lastName}}, {{endDate}}.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
+          `<div class="um-sub">Send ${num('renewalMessageDaysBefore', s.renewalMessageDaysBefore)} days before, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
            <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umRenewMsg')}</div>`,
-          ['each student gets it once per end date.', 'nothing is sent.']))}
+          ['sent once per end date.', 'not sent.']))}
 
-      ${card(10, '10. Problems Banner',
-        row('Red banner for coaches &amp; admins', 'At the top of the app when something needs a person: auto-build found no page or videos are missing, or a student\'s name doesn\'t match the Levels sheet. Each one can be dismissed.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>',
-          ['shown to coaches and admins.', 'hidden (problems are still listed here).']))}
-
-      ${card(11, '11. Trainees', `
-        <p class="um-what">A <b>Trainee</b> bought a program on its own (from the CRM's Products tab) but isn't a full student. They see their program and their own group with Lee and Alexis; what else they can open is under Access by Role. Build each program in the <a href="/chat-app/programs-editor.html" target="_blank" rel="noopener">Programs Editor</a>.</p>
-        <div class="um-row" style="display:block"><div class="um-name">Products</div><div class="um-desc" style="margin-bottom:6px">Each product from the CRM, the program it gives the buyer, and how buyers get tagged.</div><div id="umProducts">Loading products…</div></div>
-        ${row('Welcome message', 'Posted into a new Trainee group from Lee. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled),
-          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umTraineeText" rows="3" style="width:100%;max-width:none">${esc(s.traineeWelcomeText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umTraineeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umTraineeMsg')}</div>`,
-          ['posted automatically.', 'nothing is posted.'])}
-        ${row('Refunds', 'Right-click (or long-press) a person in Users &amp; Roles &rarr; Refund. It refunds the full amount in PayPal through the CRM, logs it on their contact, runs the CRM\'s refund flows, and takes the program and add-ons off their account. Refunds done in the CRM or PayPal do the same here.', info)}
-        ${row('Make them a User on refund', 'What happens to a refunded Trainee\'s account. Students and staff who bought a program keep their role and just lose the program.', toggle('traineeRefundMakeUser', s.traineeRefundMakeUser), '',
-          ['they become a plain User: they can still log in, with only what Users get under Access by Role.', 'they stay a Trainee with the program removed.'])}`)}
+      ${card(11, '11. Problems Banner',
+        row('Red banner for coaches &amp; admins', 'Missing program pages or videos, name mismatches, phones that can\'t be rung.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>',
+          ['shown.', 'hidden (still listed here).']))}
     `;
     wire();
     setupAccordions();
@@ -2025,7 +2022,7 @@ window.addEventListener('pageshow', () => {
     };
     document.getElementById('umRenewSave').onclick = saveRenew;
     document.getElementById('umRenewSender').onchange = saveRenew;
-    document.getElementById('umTraineeSave').onclick = async () => {
+    if (document.getElementById('umTraineeSave')) document.getElementById('umTraineeSave').onclick = async () => {
       flash('umTraineeMsg', await save({ traineeWelcomeText: document.getElementById('umTraineeText').value }));
     };
     document.getElementById('umBuildBtn').onclick = async () => {
@@ -2057,12 +2054,18 @@ window.addEventListener('pageshow', () => {
           <div class="um-name">${esc(pr.name)}${pr.price != null ? ` <span class="um-desc">$${esc(pr.price)}</span>` : ''}${pr.stats ? ` <span class="um-desc">&middot; ${pr.stats.paid} sold, ${pr.stats.refunded} refunded</span>` : ''}</div>
           ${addOns ? `<div class="um-desc">Add-ons: ${addOns}</div>` : ''}
           <div class="um-sub">Gives the program <select class="pra-select" data-product="${esc(pr.sku)}">${opts}</select> ${pr.programId ? `<a href="/chat-app/programs-editor.html?id=${esc(pr.programId)}" target="_blank" rel="noopener" style="color:#009bff">Edit program</a>` : ''} ${savedMsg('umProdMsg-' + pr.sku)}</div>
-          <div class="um-desc" style="margin-top:6px"><b style="color:#cfd6dd">Tagging in the app:</b> the buyer's account becomes a <b>Trainee</b> (a plain User is upgraded; students and staff keep their role), gets this program and the add-ons they bought, and a Trainee group with Lee and Alexis.</div>
-          ${flowList(pr.flows?.purchased, 'Tagging in the CRM on purchase (Product is purchased flows)')}
-          ${flowList(pr.flows?.refunded, 'On refund (Product is refunded flows)')}
-          <div class="um-desc" style="margin-top:4px">Change these flows on the CRM's Products tab.</div>
+          ${flowList(pr.flows?.purchased, 'CRM on purchase')}
+          ${flowList(pr.flows?.refunded, 'CRM on refund')}
+          <div class="um-sub" style="display:block;margin-top:8px"><div class="um-name" style="font-size:.8rem">Welcome message</div><textarea class="pra-input" data-welcome="${esc(pr.sku)}" rows="3" style="width:100%;max-width:none">${esc((state.settings.traineeWelcomeByProduct || {})[pr.sku] ?? '')}</textarea><button class="pra-btn pra-btn-ghost" type="button" data-welcome-save="${esc(pr.sku)}" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg-' + pr.sku)}</div>
         </div>`;
       }).join('');
+    el.querySelectorAll('[data-welcome-save]').forEach(btn => {
+      btn.onclick = async () => {
+        const sku = btn.dataset.welcomeSave;
+        const text = el.querySelector(`[data-welcome="${sku}"]`).value;
+        flash('umWelcomeMsg-' + sku, await save({ traineeWelcomeByProduct: { [sku]: text } }));
+      };
+    });
     el.querySelectorAll('[data-product]').forEach(sel => {
       sel.onchange = async () => {
         const r = await fetch('/api/admin/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: sel.dataset.product, templateId: sel.value }) });
