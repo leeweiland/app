@@ -6119,7 +6119,8 @@ export async function handleChatRequest(req, res, url) {
       let all = [...d.alerts];
       try { all = all.concat(await nameMismatchAlerts()); } catch (e) { console.error("[staff alerts] name check", e.message); }
       try { all = all.concat(noPushAlerts()); } catch (e) { console.error("[staff alerts] push check", e.message); }
-      return sendJson(res, 200, { alerts: all.filter(a => !d.dismissed[a.id]) });
+      // adminOnly: video-call problems the person on the call can't fix themselves.
+      return sendJson(res, 200, { alerts: all.filter(a => !d.dismissed[a.id] && (!a.adminOnly || isAdmin(user))) });
     }
     if (p === "/api/chat/staff-alerts/dismiss" && req.method === "POST") {
       if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches only" });
@@ -7625,6 +7626,33 @@ export async function handleChatRequest(req, res, url) {
           console.error("[call/start]", e.message);
           return sendJson(res, 502, { error: "Could not start the call. Try again in a moment." });
         }
+      }
+
+      // A call problem the person on the call can't fix themselves (broken
+      // browser, camera/mic error with no clear cause, Daily failing to
+      // connect). They never see it -- it goes to the admins' red banner.
+      // Problems they CAN fix (camera busy in Zoom, blocked permission, weak
+      // Wi-Fi) are shown to them on the call screen instead, never sent here.
+      const callIssueMatch = sub.match(/^\/call\/([^/]+)\/issue$/);
+      if (callIssueMatch && req.method === "POST") {
+        const call = readJson(CALLS_FILE, []).find(c => c.id === callIssueMatch[1] && c.conversationId === convoId);
+        if (!call) return sendJson(res, 404, { error: "Call not found" });
+        const { kind, detail } = await readJsonBody(req);
+        const k = String(kind || "unknown").replace(/[^\w-]/g, "").slice(0, 40) || "unknown";
+        const what = {
+          "join-failed": "couldn't connect to the call at all",
+          "media-unsupported": "their browser/app can't use a camera or mic (often an in-app browser like Instagram's, or an old browser)",
+          "camera-error": "camera/mic failed for an unknown reason",
+          "call-error": "the call dropped with an error",
+        }[k] || k;
+        const who = `${user.first} ${user.last}`.trim();
+        const extra = String(detail || "").slice(0, 240);
+        console.log(`[call issue] ${call.id} ${who}: ${k} ${extra}`);
+        addStaffAlert({ id: `call:${call.id}:${user.id}:${k}`, kind: "call-issue", adminOnly: true, userId: user.id,
+          link: "/chat-app/chat.html?convo=" + encodeURIComponent(convoId),
+          title: `${who}: video call problem`,
+          detail: `${what[0].toUpperCase() + what.slice(1)}.${extra ? ` (${extra})` : ""}` });
+        return sendJson(res, 200, { ok: true });
       }
 
       const callActionMatch = sub.match(/^\/call\/([^/]+)\/(accept|decline|end)$/);

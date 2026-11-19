@@ -794,6 +794,15 @@
   .call-screen.minimized { touch-action: none; }
   .call-screen.minimized.dragging { cursor: grabbing; transition: none; }
   .call-screen.minimized .call-status-row { display: none; }
+  /* Call problem the person can fix themselves (camera busy in another app,
+     blocked permission, weak Wi-Fi) -- see onCallCameraError(). */
+  .call-warn { display: none; align-items: center; gap: 10px; margin: 0 12px 8px; padding: 10px 12px; border-radius: 10px; background: rgba(150,20,20,0.92); border: 1px solid #ff4d4d; color: #fff; font-size: .84rem; line-height: 1.4; flex-shrink: 0; }
+  .call-warn.show { display: flex; }
+  .call-warn svg { flex-shrink: 0; }
+  .call-warn span { flex: 1; min-width: 0; }
+  .call-warn button { flex-shrink: 0; background: transparent; border: 1px solid rgba(255,255,255,.45); color: #fff; border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: .78rem; cursor: pointer; }
+  .call-warn #callWarnClose { border: none; font-size: 1.2rem; line-height: 1; padding: 2px 4px; }
+  .call-screen.minimized .call-warn { display: none; }
   .call-screen.minimized .call-video-grid { padding: 0; gap: 2px; }
   .call-screen.minimized .call-tile { border-radius: 0; }
   .call-screen.minimized .call-video-grid.one-to-one .call-tile[data-local] { right: 6px; bottom: 6px; width: 46px; height: 66px; }
@@ -1666,6 +1675,7 @@
       <div class="call-status-name" id="callStatusName"></div>
       <div id="callStatusSub"></div>
     </div>
+    <div class="call-warn" id="callWarn" role="alert"><svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 3.5 21.5 20h-19L12 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1" fill="currentColor"/></svg><span id="callWarnText"></span><button type="button" id="callWarnRetry">Try again</button><button type="button" id="callWarnClose" aria-label="Dismiss">&times;</button></div>
     <div class="call-video-grid" id="callVideoGrid"></div>
     <div class="call-controls">
       <button class="call-control-btn" id="callMicBtn" title="Mute"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7"/><path d="M6 11a6 6 0 0 0 12 0M12 19v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
@@ -7608,18 +7618,122 @@ async function joinCall(call, token, convoId, displayName) {
   dailyCallObject.on('participant-updated', renderCallParticipants);
   dailyCallObject.on('participant-left', renderCallParticipants);
   dailyCallObject.on('left-meeting', closeCallScreen);
-  dailyCallObject.on('error', (e) => console.error('[call] error', e));
+  dailyCallObject.on('error', (e) => { console.error('[call] error', e); reportCallIssue('call-error', e?.errorMsg || e?.error?.msg || ''); });
+  dailyCallObject.on('camera-error', onCallCameraError);
+  dailyCallObject.on('network-quality-change', onCallNetworkQuality);
   try {
     await dailyCallObject.join({ url: call.dailyRoomUrl, token });
     if (getCallBgMode() !== 'off') applyCallBackground(getCallBgMode());
   } catch (e) {
     console.error('[call] join failed', e);
+    reportCallIssue('join-failed', e?.errorMsg || e?.message || String(e || ''));
     await alertDialog('Could not join the call.');
     closeCallScreen();
     return;
   }
   renderCallParticipants();
 }
+
+// ── Call problem warnings ────────────────────────────────────────────────
+// Rule: the person on the call only ever sees a problem THEY can fix on
+// their end -- camera/mic held by another app (Zoom, Teams…), camera/mic
+// permission blocked, no camera plugged in, or their own internet too weak.
+// Anything they can't fix (broken/unsupported browser, unknown device
+// error, Daily failing to connect) is never shown to them: it goes to the
+// admins' red banner via /call/:id/issue, and shows here only for admins.
+const callWarnings = new Map();   // kind -> { text, retry, media }
+const CALL_WARN_ORDER = ['device', 'network', 'admin'];
+let callNetBadTimer = null;
+const callIssuesSent = new Set();
+function renderCallWarn() {
+  const box = document.getElementById('callWarn');
+  const kind = CALL_WARN_ORDER.find(k => callWarnings.has(k));
+  box.classList.toggle('show', !!kind);
+  if (!kind) return;
+  const w = callWarnings.get(kind);
+  box.dataset.kind = kind;
+  document.getElementById('callWarnText').textContent = w.text;
+  const retryBtn = document.getElementById('callWarnRetry');
+  retryBtn.style.display = w.retry ? '' : 'none';
+  retryBtn.onclick = w.retry || null;
+}
+function showCallWarn(kind, text, retry, media) { callWarnings.set(kind, { text, retry, media }); renderCallWarn(); }
+function hideCallWarn(kind) { if (callWarnings.delete(kind)) renderCallWarn(); }
+function clearCallWarnings() { callWarnings.clear(); clearTimeout(callNetBadTimer); callNetBadTimer = null; callIssuesSent.clear(); renderCallWarn(); }
+function reportCallIssue(kind, detail) {
+  const call = currentCall, convoId = currentCallConvoId;
+  if (!call || !convoId || callIssuesSent.has(kind)) return;
+  callIssuesSent.add(kind);
+  fetch(`/api/chat/conversations/${convoId}/call/${call.id}/issue`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, detail: `${detail || ''} | ${navigator.userAgent}`.trim() }),
+  }).catch(() => {});
+  if (isAdminMe()) showCallWarn('admin', `Call problem on your side (${kind})${detail ? ': ' + detail : ''}`);
+}
+const isNativeCallApp = () => !!window.Capacitor?.isNativePlatform?.();
+// Asks the OS for the camera/mic again -- off then on, since Daily only
+// re-requests a device when its "on" preference actually changes.
+async function retryCallDevices(media) {
+  if (!dailyCallObject) return;
+  hideCallWarn('device');
+  const video = media.includes('video'), audio = media.includes('audio');
+  try {
+    if (video) dailyCallObject.setLocalVideo(false);
+    if (audio) dailyCallObject.setLocalAudio(false);
+    await new Promise(r => setTimeout(r, 300));
+    if (video) { dailyCallObject.setLocalVideo(true); localVideoOn = true; document.getElementById('callCamBtn').classList.remove('off'); }
+    if (audio) { dailyCallObject.setLocalAudio(true); localAudioOn = true; document.getElementById('callMicBtn').classList.remove('off'); }
+  } catch (e) { console.error('[call] retry devices', e); }
+}
+function onCallCameraError(e) {
+  const err = e?.error || {};
+  const type = err.type;
+  console.warn('[call] camera-error', err);
+  const nameOf = (media) => media.includes('video') && media.includes('audio') ? 'camera and microphone' : media.includes('audio') ? 'microphone' : 'camera';
+  if (type === 'cam-in-use' || type === 'mic-in-use' || type === 'cam-mic-in-use') {
+    const media = type === 'cam-in-use' ? ['video'] : type === 'mic-in-use' ? ['audio'] : ['video', 'audio'];
+    showCallWarn('device', `Your ${nameOf(media)} is being used by another app. Close Zoom, Teams, FaceTime, or any other app or browser tab using it, then tap Try again.`, () => retryCallDevices(media), media);
+    return;
+  }
+  if (type === 'permissions') {
+    const media = Array.isArray(err.blockedMedia) && err.blockedMedia.length ? err.blockedMedia : ['video', 'audio'];
+    const dev = nameOf(media);
+    const ua = navigator.userAgent;
+    let how;
+    if (isNativeCallApp()) how = `Open your phone's Settings, find this app, and turn on ${dev} access.`;
+    else if (err.blockedBy === 'browser' && /Windows/i.test(ua)) how = `Open Windows Settings > Privacy & security > ${media.includes('video') ? 'Camera' : 'Microphone'} and turn on access for apps and desktop apps.`;
+    else if (err.blockedBy === 'browser' && /Mac OS X/i.test(ua) && !/iPhone|iPad/i.test(ua)) how = `Open System Settings > Privacy & Security > ${media.includes('video') ? 'Camera' : 'Microphone'} and turn on your browser.`;
+    else if (/iPhone|iPad|Android/i.test(ua)) how = `Open your phone's Settings, find your browser, and allow ${dev} access.`;
+    else how = `Click the camera icon (or the lock) at the left of the address bar and allow ${dev}.`;
+    showCallWarn('device', `Your ${dev} is blocked. ${how} Then tap Try again.`, () => retryCallDevices(media), media);
+    return;
+  }
+  if (type === 'not-found') {
+    const media = Array.isArray(err.missingMedia) && err.missingMedia.length ? err.missingMedia : ['video'];
+    showCallWarn('device', `No ${nameOf(media)} found. Plug one in or switch it on, then tap Try again.`, () => retryCallDevices(media), media);
+    return;
+  }
+  // constraints / undefined-mediadevices / unknown -- nothing they can do.
+  reportCallIssue(type === 'undefined-mediadevices' ? 'media-unsupported' : 'camera-error', `${type || 'unknown'}${err.msg ? ': ' + err.msg : ''}`);
+}
+// Only THEIR OWN connection is reported here, and only when it stays bad
+// for a few seconds, so a one-second blip never flashes a warning.
+function onCallNetworkQuality(e) {
+  const state = e?.networkState || (e?.threshold === 'very-low' ? 'bad' : e?.threshold === 'low' ? 'warning' : 'good');
+  if (state === 'bad') {
+    if (!callNetBadTimer && !callWarnings.has('network')) callNetBadTimer = setTimeout(() => {
+      callNetBadTimer = null;
+      if (dailyCallObject) showCallWarn('network', 'Your internet connection is too weak for video right now. Move closer to your Wi-Fi router, pause downloads or streaming on your network, or switch to mobile data.');
+    }, 5000);
+  } else if (state === 'good') {
+    clearTimeout(callNetBadTimer); callNetBadTimer = null;
+    hideCallWarn('network');
+  }
+}
+document.getElementById('callWarnClose').onclick = () => {
+  const kind = document.getElementById('callWarn').dataset.kind;
+  if (kind) hideCallWarn(kind);
+};
 
 // Shrinks the call to a small corner tile (so the chat panel underneath is
 // visible and usable again while the call keeps running) or restores it
@@ -7713,6 +7827,7 @@ function closeCallScreen() {
   currentCall = null;
   currentCallConvoId = null;
   recordingStarted = false;
+  clearCallWarnings();
 }
 
 async function endCall() {
@@ -7747,6 +7862,9 @@ function renderCallParticipants() {
       callTiles.set(p.session_id, tile);
     }
     if (p.local) tile.el.setAttribute('data-local', ''); else tile.el.setAttribute('data-remote', '');
+    // A device warning clears itself once that camera/mic actually works again.
+    const devWarn = p.local && callWarnings.get('device');
+    if (devWarn && (devWarn.media || []).every(m => p.tracks?.[m]?.state === 'playable')) hideCallWarn('device');
     tile.nameEl.textContent = p.local ? 'You' : (p.user_name || '');
 
     const videoTrack = p.tracks?.video, audioTrack = p.tracks?.audio;
