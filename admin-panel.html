@@ -868,7 +868,8 @@ function setupAdminTabs() {
   // A refresh comes back to the tab you were on (this device).
   let saved = null; try { saved = localStorage.getItem('pra-admin-tab'); } catch {}
   const back = saved && [...tabs].find(t => t.dataset.section === saved);
-  if (back && !back.classList.contains('active')) back.onclick();
+  // .click(), not .onclick(): sections like User Management load on their own click listener.
+  if (back && !back.classList.contains('active')) setTimeout(() => back.click(), 0);
 }
 
 async function init() {
