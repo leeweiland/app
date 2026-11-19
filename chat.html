@@ -2194,6 +2194,12 @@ async function init() {
     if (restoreConvoId && conversations.some(c => c.id === restoreConvoId)) {
       const savedScroll = sessionStorage.getItem('pra-chat-scroll-' + restoreConvoId);
       openConvo(restoreConvoId, { restoreScrollTop: savedScroll != null ? Number(savedScroll) : undefined });
+    } else if (!deepLinkDm && me && !isStaffMe()) {
+      // A student opening the app lands straight in their own group chat
+      // (once per app session -- going back to the list afterwards sticks).
+      let opened = false; try { opened = sessionStorage.getItem('pra-chat-autoopened') === '1'; } catch {}
+      const own = conversations.find(c => c.autoGroupType === 'student' && c.autoGroupUserId === me.id);
+      if (own && !opened) { try { sessionStorage.setItem('pra-chat-autoopened', '1'); } catch {} openConvo(own.id); }
     }
   }
   setupComposer();
