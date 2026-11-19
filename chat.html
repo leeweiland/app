@@ -384,6 +384,9 @@
   .mab-actions-row { justify-content: space-between; }
   .mab-action { width: 34px; height: 34px; border-radius: 50%; background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--pra-text); font-size: 1.1rem; }
   .mab-action:hover { background: rgba(255,255,255,0.08); }
+  .mab-action.mab-keyed { width: auto; padding: 0 9px; border-radius: 17px; gap: 4px; }
+  .mab-action .mab-key { font-size: .72rem; font-weight: 800; color: #9aa3ad; letter-spacing: .02em; }
+  .mab-action.mab-danger { color: #ff6b6b; }
   .mab-action svg { width: 18px; height: 18px; }
   .mab-action.starred svg .star-fill { fill: #ffd54a; stroke: #ffd54a; }
   /* Quoted-message block shown above a reply's own content, and the small
@@ -1081,9 +1084,11 @@
           <div class="mab-row mab-actions-row">
             <button class="mab-action" id="mabStarBtn" title="Star"></button>
             <button class="mab-action" id="mabLevelTestBtn" title="Forward to Online Level Tests"></button>
-            <button class="mab-action" id="mabForwardBtn" title="Forward"></button>
+            <button class="mab-action" id="mabForwardBtn" title="Forward (F)"></button>
             <button class="mab-action" id="mabCopyBtn" title="Copy"></button>
-            <button class="mab-action" id="mabReplyBtn" title="Reply"></button>
+            <button class="mab-action" id="mabReplyBtn" title="Reply (R)"></button>
+            <button class="mab-action" id="mabEditBtn" title="Edit"></button>
+            <button class="mab-action mab-danger" id="mabDeleteBtn" title="Delete"></button>
             <button class="mab-action" id="mabMoreBtn" title="More">⋯</button>
           </div>
         </div>
@@ -3518,9 +3523,13 @@ document.getElementById('gymScheduleSaveBtn').addEventListener('click', async ()
   setTimeout(() => closeModal('gymScheduleModal'), 1600);
 });
 
-document.getElementById('mabReplyBtn').innerHTML = svgReply();
+document.getElementById('mabReplyBtn').innerHTML = svgReply() + '<span class="mab-key">R</span>';
 document.getElementById('mabCopyBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8.5" y="8.5" width="11" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>';
-document.getElementById('mabForwardBtn').innerHTML = svgForward();
+document.getElementById('mabForwardBtn').innerHTML = svgForward() + '<span class="mab-key">F</span>';
+document.getElementById('mabForwardBtn').classList.add('mab-keyed');
+document.getElementById('mabReplyBtn').classList.add('mab-keyed');
+document.getElementById('mabEditBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 19.5l1-4L15.8 5.2a1.8 1.8 0 0 1 2.5 0l.5.5a1.8 1.8 0 0 1 0 2.5L8.5 18.5l-4 1Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.5 7.5l3 3" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>';
+document.getElementById('mabDeleteBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7h14M10 7V5h4v2M7 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 11v6M13.5 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 document.getElementById('mabLevelTestBtn').innerHTML = svgLevelTest();
 document.getElementById('mabStarBtn').innerHTML = svgStar();
 document.getElementById('videoReplyStarBtn').innerHTML = svgStar();
@@ -6286,8 +6295,9 @@ function openMsgMoreMenu(anchorEl, mid) {
   const mine = m.senderId === me.id;
   const staff = isStaffMe();
   document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
-  document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
-  document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';
+  // Edit / Delete sit right on the action bar now; "⋯" is just Report.
+  document.getElementById('msgMoreEditBtn').style.display = 'none';
+  document.getElementById('msgMoreDeleteBtn').style.display = 'none';
   const menu = document.getElementById('msgMoreMenu');
   positionMessagePopupNear(menu, anchorEl);
   menu.classList.add('show');
@@ -6427,7 +6437,9 @@ function openMsgActionBar(anchorEl, mid) {
   document.getElementById('mabReplyBtn').style.display = canReplyForward ? '' : 'none';
   document.getElementById('mabCopyBtn').style.display = canCopyMessage(m) ? '' : 'none';
   const staffMe = isStaffMe();
-  const showMoreBtn = !mine || (staffMe && mine && m.type === 'text') || (staffMe && m.type !== 'appointment');
+  document.getElementById('mabEditBtn').style.display = (staffMe && mine && m.type === 'text') ? '' : 'none';
+  document.getElementById('mabDeleteBtn').style.display = (staffMe && m.type !== 'appointment') ? '' : 'none';
+  const showMoreBtn = !mine;
   document.getElementById('mabMoreBtn').style.display = showMoreBtn ? '' : 'none';
 
   const bar = document.getElementById('msgActionBar');
@@ -6440,8 +6452,8 @@ function openMsgActionBar(anchorEl, mid) {
   if (showMoreBtn) {
     const staff = isStaffMe();
     document.getElementById('msgMoreReportBtn').style.display = !mine ? '' : 'none';
-    document.getElementById('msgMoreEditBtn').style.display = (staff && mine && m.type === 'text') ? '' : 'none';
-    document.getElementById('msgMoreDeleteBtn').style.display = (staff && m.type !== 'appointment') ? '' : 'none';
+    document.getElementById('msgMoreEditBtn').style.display = 'none';
+    document.getElementById('msgMoreDeleteBtn').style.display = 'none';
     const menu = document.getElementById('msgMoreMenu');
     menu.style.visibility = 'hidden';
     menu.classList.add('show');
@@ -6523,6 +6535,21 @@ document.getElementById('mabReplyBtn').onclick = () => {
   clearActionSelection();
   if (mid) startReply(mid);
 };
+document.getElementById('mabEditBtn').onclick = () => {
+  moreMenuMessageId = actionBarMessageId;
+  document.getElementById('msgMoreEditBtn').click();
+};
+document.getElementById('mabDeleteBtn').onclick = () => {
+  moreMenuMessageId = actionBarMessageId;
+  document.getElementById('msgMoreDeleteBtn').click();
+};
+document.addEventListener('keydown', (e) => {
+  if (!actionBarMessageId || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+  const k = e.key.toLowerCase();
+  const btn = k === 'r' ? document.getElementById('mabReplyBtn') : k === 'f' ? document.getElementById('mabForwardBtn') : null;
+  if (btn && btn.style.display !== 'none') { e.preventDefault(); btn.click(); }
+});
 document.getElementById('mabMoreBtn').onclick = (e) => {
   const mid = actionBarMessageId;
   // Keep the bar open and anchor the submenu to the whole bar (not the
