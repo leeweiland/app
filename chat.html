@@ -53,8 +53,14 @@
   .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--pra-border); }
   .sidebar-search input { font-size: .85rem; padding: 8px 12px; }
   .sidebar-search-row { display: flex; gap: 8px; align-items: center; }
-  .chat-type-filter { flex: 0 0 auto; width: 108px; font-size: .74rem; padding: 8px 8px; }
-  .chat-type-filter.on { border-color: var(--pra-blue); color: #fff; }
+  .chat-type-btn { flex: 0 0 auto; max-width: 132px; display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.04); color: var(--pra-dim); font: inherit; font-size: .74rem; cursor: pointer; white-space: nowrap; }
+  .chat-type-btn span { overflow: hidden; text-overflow: ellipsis; }
+  .chat-type-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .chat-type-btn.on { border-color: var(--pra-blue); color: #fff; }
+  #chatTypeMenu { position: fixed; z-index: 2600; min-width: 180px; max-width: calc(100vw - 16px); max-height: min(60vh, 420px); overflow-y: auto; padding: 5px; border-radius: 12px; background: #15161b; border: 1px solid #2b2d36; box-shadow: 0 10px 30px rgba(0,0,0,.55); }
+  #chatTypeMenu button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: #d6d9de; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap; }
+  #chatTypeMenu button:hover { background: rgba(0,155,255,.12); color: #fff; }
+  #chatTypeMenu button.sel { color: #009bff; font-weight: 700; }
   .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
   .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
@@ -991,7 +997,8 @@
           <input class="pra-input" id="chatSearchInput" placeholder="Search name…"/>
           <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
         </div>
-        <select class="pra-select chat-type-filter" id="chatTypeFilter" title="Show one kind of chat" style="display:none">
+        <button type="button" class="chat-type-btn" id="chatTypeBtn" title="Show one kind of chat" style="display:none"><span id="chatTypeLabel">All</span><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <select class="pra-select chat-type-filter" id="chatTypeFilter" style="display:none" aria-hidden="true" tabindex="-1">
           <option value="">All</option>
           <option value="groups">All groups</option>
           <option value="students">All students</option>
@@ -2886,15 +2893,37 @@ function chatTypeMatches(i, f) {
 }
 function setupChatTypeFilter() {
   const sel = document.getElementById('chatTypeFilter');
-  if (!sel || sel.dataset.wired || !isStaffMe()) return;
+  const btn = document.getElementById('chatTypeBtn');
+  if (!sel || !btn || sel.dataset.wired || !isStaffMe()) return;
   sel.dataset.wired = '1';
-  sel.style.display = '';
+  btn.style.display = '';
   try { const v = localStorage.getItem('pra-chat-type-filter'); if (v && [...sel.options].some(o => o.value === v)) sel.value = v; } catch {}
-  sel.classList.toggle('on', !!sel.value);
+  const sync = () => {
+    document.getElementById('chatTypeLabel').textContent = sel.options[sel.selectedIndex]?.text || 'All';
+    btn.classList.toggle('on', !!sel.value);
+  };
+  sync();
   sel.onchange = () => {
     try { localStorage.setItem('pra-chat-type-filter', sel.value); } catch {}
-    sel.classList.toggle('on', !!sel.value);
+    sync();
     renderConvoList();
+  };
+  // A small dark menu under the button, kept inside the screen on phones.
+  const close = () => { document.getElementById('chatTypeMenu')?.remove(); document.removeEventListener('pointerdown', away, true); };
+  const away = (e) => { if (!e.target.closest('#chatTypeMenu, #chatTypeBtn')) close(); };
+  btn.onclick = () => {
+    if (document.getElementById('chatTypeMenu')) { close(); return; }
+    const m = document.createElement('div');
+    m.id = 'chatTypeMenu';
+    m.innerHTML = [...sel.options].map(o => `<button type="button" data-v="${o.value}" class="${o.value === sel.value ? 'sel' : ''}">${o.text}</button>`).join('');
+    document.body.appendChild(m);
+    const r = btn.getBoundingClientRect();
+    const w = m.offsetWidth, h = m.offsetHeight;
+    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+    const top = r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - 6 - h) : r.bottom + 6;
+    m.style.left = left + 'px'; m.style.top = top + 'px';
+    m.querySelectorAll('button').forEach(b => b.onclick = () => { sel.value = b.dataset.v; close(); sel.onchange(); });
+    setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
   };
 }
 function renderConvoList() {
