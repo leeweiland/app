@@ -52,6 +52,9 @@
   .sidebar-actions { display: flex; gap: 8px; }
   .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--pra-border); }
   .sidebar-search input { font-size: .85rem; padding: 8px 12px; }
+  .sidebar-search-row { display: flex; gap: 8px; align-items: center; }
+  .chat-type-filter { flex: 0 0 auto; width: 108px; font-size: .74rem; padding: 8px 8px; }
+  .chat-type-filter.on { border-color: var(--pra-blue); color: #fff; }
   .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
   .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
@@ -983,9 +986,24 @@
           <button class="convo-fav-toggle" id="channelsViewToggle" title="Show only channels"># CHANNELS</button>
         </div>
       </div>
-      <div class="sidebar-search search-clear-wrap">
-        <input class="pra-input" id="chatSearchInput" placeholder="Search name…"/>
-        <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
+      <div class="sidebar-search sidebar-search-row">
+        <div class="search-clear-wrap" style="flex:1;min-width:0">
+          <input class="pra-input" id="chatSearchInput" placeholder="Search name…"/>
+          <button type="button" class="search-clear-btn" data-clears="chatSearchInput">✕</button>
+        </div>
+        <select class="pra-select chat-type-filter" id="chatTypeFilter" title="Show one kind of chat" style="display:none">
+          <option value="">All</option>
+          <option value="online">Online students</option>
+          <option value="online-groups">Online student groups</option>
+          <option value="gym">Gym students</option>
+          <option value="gym-groups">Gym student groups</option>
+          <option value="trainee">Trainees</option>
+          <option value="user">Users</option>
+          <option value="coach">Coaches</option>
+          <option value="admin">Admins</option>
+          <option value="groups">Group chats</option>
+          <option value="dms">Direct messages</option>
+        </select>
       </div>
       <div class="bulk-select-bar" id="bulkSelectBar">
         <div class="bulk-select-presets">
@@ -2855,7 +2873,32 @@ let favoritesOnlyView = false;
 let unreadOnlyView = false;
 let channelsOnlyView = false;
 
+// The sidebar's type dropdown (coaches/admins): one kind of person or chat.
+function chatTypeMatches(i, f) {
+  const role = i.avatarUser?.role || '';
+  const group = !!i.isGroup;
+  if (f === 'groups') return group;
+  if (f === 'dms') return !group && !i.isSelfRow;
+  if (f === 'online-groups') return group && role === 'online';
+  if (f === 'gym-groups') return group && role === 'gym';
+  if (f === 'admin') return role === 'admin' || role === 'admin2';
+  return role === f;
+}
+function setupChatTypeFilter() {
+  const sel = document.getElementById('chatTypeFilter');
+  if (!sel || sel.dataset.wired || !isStaffMe()) return;
+  sel.dataset.wired = '1';
+  sel.style.display = '';
+  try { const v = localStorage.getItem('pra-chat-type-filter'); if (v && [...sel.options].some(o => o.value === v)) sel.value = v; } catch {}
+  sel.classList.toggle('on', !!sel.value);
+  sel.onchange = () => {
+    try { localStorage.setItem('pra-chat-type-filter', sel.value); } catch {}
+    sel.classList.toggle('on', !!sel.value);
+    renderConvoList();
+  };
+}
 function renderConvoList() {
+  setupChatTypeFilter();
   const wrap = document.getElementById('convoList');
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
   let items = buildDirectory();
@@ -2863,6 +2906,8 @@ function renderConvoList() {
   if (unreadOnlyView) items = items.filter(i => i.unread || i.renewal?.unhandled);
   if (channelsOnlyView) items = items.filter(i => i.isChannel);
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
+  const typeF = isStaffMe() ? (document.getElementById('chatTypeFilter')?.value || '') : '';
+  if (typeF) items = items.filter(i => chatTypeMatches(i, typeF));
   lastConvoItems = items;
   if (!items.length) {
     const msg = channelsOnlyView
