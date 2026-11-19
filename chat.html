@@ -1007,6 +1007,7 @@
           <option value="online">Online students</option>
           <option value="gym-groups">Gym student groups</option>
           <option value="gym">Gym students</option>
+          <option value="trainee-groups">Trainee groups</option>
           <option value="trainee">Trainees</option>
           <option value="user">Users</option>
           <option value="coach">Coaches</option>
@@ -2889,6 +2890,7 @@ function chatTypeMatches(i, f) {
   if (f === 'students') return role === 'online' || role === 'gym';
   if (f === 'online-groups') return group && role === 'online';
   if (f === 'gym-groups') return group && role === 'gym';
+  if (f === 'trainee-groups') return group && role === 'trainee';
   if (f === 'admin') return role === 'admin' || role === 'admin2';
   return role === f;
 }
