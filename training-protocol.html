@@ -2417,6 +2417,24 @@ function setupViewModeToggle() {
     document.getElementById('lowTicketBtn').onclick = () => openLowTicket();
   }
   if (params.get('view') === 'katas') setTimeout(() => showKatas(ownKatas ? 'own' : 'students'), 0);
+  // A refresh comes back to the view you were on (Flow / Page / Katas /
+  // Flow Builder / Page View...) for this same page address. Buttons that
+  // open a picker or another page aren't replayed -- their address does it.
+  {
+    const REPLAY = ['flowViewBtn', 'pageViewBtn', 'katasViewBtn', 'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn'];
+    const key = 'pra-tp-view:' + location.pathname + location.search;
+    document.getElementById('viewModeToggle').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b && REPLAY.includes(b.id)) { try { localStorage.setItem(key, b.id); } catch {} }
+    }, true);
+    if (!params.get('view')) {
+      let saved = null; try { saved = localStorage.getItem(key); } catch {}
+      const btn = saved && REPLAY.includes(saved) ? document.getElementById(saved) : null;
+      let tries = 0;
+      const go = () => { if (!btn || btn.classList.contains('active')) return; if (btn.style.display !== 'none' && btn.offsetParent !== null) { btn.click(); return; } if (++tries < 15) setTimeout(go, 300); };
+      setTimeout(go, 0);
+    }
+  }
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, ['program', 'tpl'].includes(btn.dataset.builder) ? btn.dataset.builder : btn.dataset.builder === 'true');

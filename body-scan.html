@@ -783,7 +783,10 @@ function renderHubTabs(preserveActive) {
   // Admin-only -- sits directly ahead of Search, which puts it right next
   // to Profile in the normal (profile-complete) steady state.
   if (isAdminMe()) order = [...order.filter(id => id !== 'search'), 'activity', 'search'];
-  if (!preserveActive) activeHub = order[0];
+  if (!preserveActive) {
+    let saved = null; try { saved = localStorage.getItem('pra-physique-tab'); } catch {}
+    activeHub = profileComplete && saved && order.includes(saved) ? saved : order[0];
+  }
   document.getElementById('hubTabsBar').innerHTML = order.map(id =>
     `<div class="hub-tab${id === activeHub ? ' active' : ''}" data-hub="${id}">${HUB_LABELS[id]}</div>`
   ).join('');
@@ -791,6 +794,7 @@ function renderHubTabs(preserveActive) {
   document.querySelectorAll('.hub-tab').forEach(tab => {
     tab.onclick = () => {
       activeHub = tab.dataset.hub;
+      if (!viewingUserId) { try { localStorage.setItem('pra-physique-tab', activeHub); } catch {} }
       renderHubTabs(true);
       logClientActivity('tab_viewed', `Viewed the ${HUB_LABELS[activeHub]} tab`);
     };

@@ -862,8 +862,13 @@ function setupAdminTabs() {
       if (tab.dataset.section === 'usersSection') fitUsersTable();
       requestAnimationFrame(clearScrollbarStrip);
       setTimeout(clearScrollbarStrip, 600); // sections that fill in after a fetch
+      try { localStorage.setItem('pra-admin-tab', tab.dataset.section); } catch {}
     };
   });
+  // A refresh comes back to the tab you were on (this device).
+  let saved = null; try { saved = localStorage.getItem('pra-admin-tab'); } catch {}
+  const back = saved && [...tabs].find(t => t.dataset.section === saved);
+  if (back && !back.classList.contains('active')) back.onclick();
 }
 
 async function init() {
