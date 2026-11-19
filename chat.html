@@ -993,16 +993,16 @@
         </div>
         <select class="pra-select chat-type-filter" id="chatTypeFilter" title="Show one kind of chat" style="display:none">
           <option value="">All</option>
-          <option value="online">Online students</option>
+          <option value="groups">All groups</option>
+          <option value="students">All students</option>
           <option value="online-groups">Online student groups</option>
-          <option value="gym">Gym students</option>
+          <option value="online">Online students</option>
           <option value="gym-groups">Gym student groups</option>
+          <option value="gym">Gym students</option>
           <option value="trainee">Trainees</option>
           <option value="user">Users</option>
           <option value="coach">Coaches</option>
           <option value="admin">Admins</option>
-          <option value="groups">Group chats</option>
-          <option value="dms">Direct messages</option>
         </select>
       </div>
       <div class="bulk-select-bar" id="bulkSelectBar">
@@ -2878,7 +2878,7 @@ function chatTypeMatches(i, f) {
   const role = i.avatarUser?.role || '';
   const group = !!i.isGroup;
   if (f === 'groups') return group;
-  if (f === 'dms') return !group && !i.isSelfRow;
+  if (f === 'students') return role === 'online' || role === 'gym';
   if (f === 'online-groups') return group && role === 'online';
   if (f === 'gym-groups') return group && role === 'gym';
   if (f === 'admin') return role === 'admin' || role === 'admin2';
