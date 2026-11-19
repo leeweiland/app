@@ -534,11 +534,15 @@ window.PRABack = (function () {
     document.body.appendChild(box);
     // Below the header -- and below a page's own fixed bar under it (the Admin Panel's tabs).
     const place = () => {
-      const under = [headerBar, document.getElementById('adminTabBar')].filter(Boolean).map(el => el.getBoundingClientRect().bottom);
-      box.style.top = (under.length ? Math.max(...under) : 0) + 8 + 'px';
+      // Only bars actually on screen count (a phone's chat view hides the header),
+      // and never above the phone's camera / status bar.
+      const under = [headerBar, document.getElementById('adminTabBar')].filter(el => el && el.offsetParent !== null).map(el => el.getBoundingClientRect().bottom).filter(v => v > 0);
+      const px = (under.length ? Math.max(...under) : 0) + 8;
+      box.style.top = `max(${px}px, calc(env(safe-area-inset-top, 0px) + ${window.innerWidth <= 760 ? 48 : 8}px))`;
     };
     place();
     window.addEventListener('resize', place);
+    setInterval(place, 1500); // the header shows/hides as you open and leave a chat
     if (window.ResizeObserver && headerBar) new ResizeObserver(place).observe(headerBar);
   }
 

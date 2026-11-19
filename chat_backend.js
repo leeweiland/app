@@ -7465,6 +7465,34 @@ export async function handleChatRequest(req, res, url) {
       if (!convo) return sendJson(res, 404, { error: "Conversation not found" });
       if (!convo.participantIds.includes(user.id)) return sendJson(res, 403, { error: "Not a participant" });
 
+      // Composer right-click / long-press "Links": app pages the people in
+      // this chat can open (User Management > Access by Role). A student's
+      // own group = that student; otherwise only what EVERY non-staff member can see.
+      if (sub === "/link-options" && req.method === "GET") {
+        if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+        const users = readJson(USERS_FILE, []);
+        const people = convo.autoGroupType === "student" && convo.autoGroupUserId
+          ? [users.find(u => u.id === convo.autoGroupUserId)].filter(Boolean)
+          : convo.participantIds.map(id => users.find(u => u.id === id)).filter(u => u && !isStaff(u));
+        const all = Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true]));
+        const acc = people.length ? people.map(accessFor).reduce((a, b) => Object.fromEntries(Object.keys(all).map(k => [k, !!a[k] && !!b[k]]))) : all;
+        const one = people.length === 1 ? people[0] : null;
+        const base = "https://" + (req.headers["x-forwarded-host"] || req.headers.host);
+        const first = one ? (one.first || "Their") : "";
+        const links = [];
+        if (one && acc.protocol) links.push({ label: `${first}'s Custom Training Protocol`, path: `/chat-app/training-protocol.html?userId=${encodeURIComponent(one.id)}` });
+        if (one && acc.katas) links.push({ label: `${first}'s Katas`, path: `/chat-app/training-protocol.html?userId=${encodeURIComponent(one.id)}&view=katas` });
+        const pages = [["physique", "Body Mastery Builder", "/chat-app/body-scan.html"], ["videos", "Powerbatics Training Videos", "/chat-app/moves-dictionary.html"],
+          ["levels", "Levels", "/chat-app/levels.html"], ["map", "Strength Ninjas map", "/chat-app/users-map.html"], ["quiz", "Training Personality Quiz", "/personality-quiz/index.html"],
+          ["shop", "Shop", "/chat-app/shop.html"], ["retreats", "Retreats", "/chat-app/retreats.html"]];
+        for (const [k, label, path] of pages) if (acc[k]) links.push({ label, path });
+        links.push({ label: "Their profile", path: "/chat-app/profile.html" });
+        return sendJson(res, 200, {
+          forWho: one ? `${one.first || ""} ${one.last || ""}`.trim() : (people.length ? `everyone in this chat (${people.length})` : "this chat"),
+          links: links.map(l => ({ label: l.label, url: base + l.path })),
+        });
+      }
+
       // Delete the whole group — DMs aren't deletable this way since there's
       // no "everyone else" left to keep it around for.
       if (sub === "" && req.method === "DELETE") {

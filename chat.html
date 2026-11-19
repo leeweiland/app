@@ -724,6 +724,18 @@
   #notifPrompt .np-how { font-size: .82rem; color: #c3c9d1; line-height: 1.45; background: rgba(0,155,255,.1); border: 1px solid rgba(0,155,255,.4); border-radius: 10px; padding: 10px 12px; }
   #notifPrompt .np-go { width: 100%; }
   #notifPrompt .np-later { background: none; border: 0; color: #8b929c; font: inherit; font-size: .82rem; cursor: pointer; padding: 6px; }
+  /* Message box right-click / long-press menu (Copy, Paste, Links). */
+  #composerMenu { position: fixed; z-index: 2500; width: 260px; max-width: calc(100vw - 16px); overflow: hidden; border-radius: 12px; background: #15161b; border: 1px solid #2b2d36; box-shadow: 0 10px 30px rgba(0,0,0,.55); font-family: "Century Gothic", Poppins, "Trebuchet MS", sans-serif; }
+  #composerMenu .cm-track { display: flex; width: 200%; transition: transform .2s ease; }
+  #composerMenu.links-open .cm-track { transform: translateX(-50%); }
+  #composerMenu .cm-pane { width: 50%; padding: 6px; max-height: 340px; overflow-y: auto; }
+  #composerMenu .cm-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 10px; border: 0; border-radius: 8px; background: none; color: #fff; font: inherit; font-size: .86rem; text-align: left; cursor: pointer; }
+  #composerMenu .cm-item:hover { background: rgba(0,155,255,.12); }
+  #composerMenu .cm-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+  #composerMenu .cm-item .cm-arrow { margin-left: auto; color: #009bff; }
+  #composerMenu .cm-head { padding: 6px 10px 8px; font-size: .72rem; color: #8b929c; }
+  #composerMenu .cm-search { width: calc(100% - 8px); margin: 0 4px 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid #2b2d36; background: #0d0e12; color: #fff; font: inherit; font-size: .82rem; }
+  #composerMenu .cm-link small { display: block; color: #8b929c; font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   #startCallBtn.call-live { background: #22c55e; border-color: #22c55e; opacity: 1; box-shadow: 0 0 12px rgba(34,197,94,.7); }
   #startCallBtn.call-live svg * { stroke: #fff !important; }
   .call-screen { position: fixed; inset: 0; background: #0a0a0f; z-index: 10000; display: none; flex-direction: column; }
@@ -7252,6 +7264,105 @@ async function setupNativePush() {
   }
   return true;
 }
+
+// ── Message box menu: right-click (computer) or long-press (phone) ───────
+// Copy, Paste, and for coaches a Links panel that slides out with the app
+// pages the people in this chat are allowed to open.
+let composerSel = { start: 0, end: 0 };
+function closeComposerMenu() { document.getElementById('composerMenu')?.remove(); }
+function insertIntoComposer(text) {
+  const ta = document.getElementById('textInput');
+  const v = ta.value, { start, end } = composerSel;
+  const pre = v.slice(0, start), post = v.slice(end);
+  const pad = pre && !/\s$/.test(pre) ? ' ' : '';
+  ta.value = pre + pad + text + post;
+  const caret = (pre + pad + text).length;
+  ta.focus();
+  try { ta.setSelectionRange(caret, caret); } catch {}
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function openComposerMenu(x, y) {
+  closeComposerMenu();
+  const ta = document.getElementById('textInput');
+  composerSel = { start: ta.selectionStart ?? ta.value.length, end: ta.selectionEnd ?? ta.value.length };
+  const icon = (d) => `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">${d}</svg>`;
+  const ICO = {
+    copy: icon('<rect x="8.5" y="8.5" width="11" height="11" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5" stroke="#009bff" stroke-width="1.6"/>'),
+    paste: icon('<rect x="5.5" y="5" width="13" height="15.5" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 5V3.8h6V5" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 11h6M9 14.5h4" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/>'),
+    link: icon('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/>'),
+  };
+  const el = document.createElement('div');
+  el.id = 'composerMenu';
+  el.innerHTML = `<div class="cm-track">
+    <div class="cm-pane cm-main">
+      <button type="button" class="cm-item" data-act="copy">${ICO.copy}<span>Copy</span></button>
+      <button type="button" class="cm-item" data-act="paste">${ICO.paste}<span>Paste</span></button>
+      ${isStaffMe() && activeConvoId ? `<button type="button" class="cm-item" data-act="links">${ICO.link}<span>Links</span><span class="cm-arrow">›</span></button>` : ''}
+    </div>
+    <div class="cm-pane cm-links">
+      <button type="button" class="cm-item" data-act="back"><span class="cm-arrow" style="margin:0">‹</span><span>Back</span></button>
+      <div class="cm-head" id="cmLinksFor">Loading links…</div>
+      <input class="cm-search" id="cmLinkSearch" type="text" placeholder="Search links" autocomplete="off"/>
+      <div id="cmLinkList"></div>
+    </div></div>`;
+  document.body.appendChild(el);
+  // Above the press on a phone (keeps clear of the keyboard), next to it on a computer.
+  const w = el.offsetWidth, h = Math.max(el.offsetHeight, 180);
+  const left = Math.min(Math.max(8, x), window.innerWidth - w - 8);
+  const top = y - h - 12 > 8 ? y - h - 12 : Math.min(y + 12, window.innerHeight - h - 8);
+  el.style.left = left + 'px'; el.style.top = Math.max(8, top) + 'px';
+  el.addEventListener('mousedown', (e) => { if (!e.target.closest('input')) e.preventDefault(); }); // keep the message box's selection
+  el.querySelector('[data-act="copy"]').onclick = async () => {
+    const { start, end } = composerSel;
+    const text = end > start ? ta.value.slice(start, end) : ta.value;
+    closeComposerMenu();
+    try { await navigator.clipboard.writeText(text); }
+    catch { ta.focus(); ta.setSelectionRange(end > start ? start : 0, end > start ? end : ta.value.length); try { document.execCommand('copy'); } catch {} }
+  };
+  el.querySelector('[data-act="paste"]').onclick = async () => {
+    closeComposerMenu();
+    try { const t = await navigator.clipboard.readText(); if (t) insertIntoComposer(t); }
+    catch { alertDialog('Your browser blocked pasting from here. Use Ctrl+V (or long-press the box and tap Paste).'); }
+  };
+  const linksBtn = el.querySelector('[data-act="links"]');
+  if (linksBtn) linksBtn.onclick = async () => {
+    el.classList.add('links-open');
+    const list = el.querySelector('#cmLinkList');
+    const r = await fetch(`/api/chat/conversations/${encodeURIComponent(activeConvoId)}/link-options`).catch(() => null);
+    const d = r && r.ok ? await r.json().catch(() => ({})) : {};
+    const links = d.links || [];
+    el.querySelector('#cmLinksFor').textContent = links.length ? `Pages ${d.forWho || 'they'} can open` : 'No links for this chat.';
+    const draw = (q) => {
+      const f = links.filter(l => !q || l.label.toLowerCase().includes(q.toLowerCase()));
+      list.innerHTML = f.map((l, i) => `<button type="button" class="cm-item cm-link" data-i="${links.indexOf(l)}"><span>${escapeHtml(l.label)}<small>${escapeHtml(l.url.replace(/^https?:\/\//, ''))}</small></span></button>`).join('');
+      list.querySelectorAll('.cm-link').forEach(b => b.onclick = () => { const l = links[Number(b.dataset.i)]; closeComposerMenu(); insertIntoComposer(l.url); });
+    };
+    draw('');
+    const s = el.querySelector('#cmLinkSearch');
+    s.oninput = () => draw(s.value.trim());
+  };
+  el.querySelector('[data-act="back"]').onclick = () => el.classList.remove('links-open');
+  setTimeout(() => {
+    const away = (e) => { if (!e.target.closest('#composerMenu')) { closeComposerMenu(); document.removeEventListener('pointerdown', away, true); } };
+    document.addEventListener('pointerdown', away, true);
+  }, 0);
+}
+function wireComposerMenu() {
+  const ta = document.getElementById('textInput');
+  if (!ta || ta.dataset.menuWired) return;
+  ta.dataset.menuWired = '1';
+  let timer = null, sx = 0, sy = 0;
+  ta.addEventListener('contextmenu', (e) => { e.preventDefault(); clearTimeout(timer); timer = null; openComposerMenu(e.clientX, e.clientY); });
+  ta.addEventListener('touchstart', (e) => {
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
+    clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; if (!document.getElementById('composerMenu')) openComposerMenu(sx, sy); }, 550);
+  }, { passive: true });
+  ta.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (Math.hypot(t.clientX - sx, t.clientY - sy) > 10) { clearTimeout(timer); timer = null; } }, { passive: true });
+  ta.addEventListener('touchend', () => { clearTimeout(timer); timer = null; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeComposerMenu(); });
+}
+wireComposerMenu();
 
 async function setupPush() {
   if (await setupNativePush()) return;
