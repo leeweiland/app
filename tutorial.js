@@ -63,7 +63,7 @@
       iconSub('Levels', bottom('Levels'), 'Your skill progress, every category.', 'levels'),
       { page: 'levels', targets: [], title: 'Levels', text: 'Level up each skill from 1 to 10 and grow your Super Level.' },
     ] },
-    { figure: 'hoop_sierra', subs: [
+    { figure: 'silks_alexis', subs: [
       iconSub('Clothing', bottom('Shop'), 'PRA gear. Students get 10% off.', 'shop'),
       { page: 'shop', targets: [], title: 'Clothing', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' },
     ] },
@@ -175,19 +175,20 @@
   .ptu-launch:hover { animation-play-state: paused; box-shadow: 0 0 24px rgba(212,255,0,.9), inset 0 0 10px rgba(212,255,0,.3); }
   @keyframes ptuLaunchPulse { 0%, 100% { box-shadow: 0 0 8px rgba(212,255,0,.45), inset 0 0 6px rgba(212,255,0,.15); } 50% { box-shadow: 0 0 22px rgba(212,255,0,.95), inset 0 0 10px rgba(212,255,0,.35); } }
   .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+  .ptu-launch.in-bar-right { position: absolute; right: 12px; transform: translateY(-50%); z-index: 2; }
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   // ── Athlete silhouettes (white line figures, blue glow) ───────────────
   // Real moves, one per step: white silhouettes cut from real footage (Lee's
   // handstand, backflip, human flag, airflare, front flip, planche press;
-  // Clayton's drop gainer flip; Georgia, Sierra and Sedona on aerial hoop), rendered
+  // Clayton's drop gainer flip; Georgia and Sedona on aerial hoop; Alexis on silks), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=4`;
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=5`;
   // Each showing gets a fresh object URL of the downloaded file, so the clip
   // always plays from its first frame (a reused URL resumes mid-loop).
   const FIG_BLOBS = {};
-  ['handstand', 'cflip', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'press'].forEach(n => {
+  ['handstand', 'cflip', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'silks_alexis', 'frontflip', 'hoop_sedona', 'press'].forEach(n => {
     fetch(FIG_SRC(n)).then(r => r.ok ? r.blob() : null).then(b => { if (b) FIG_BLOBS[n] = b; }).catch(() => {});
   });
   const FIGS = new Proxy({}, { get: (_, n) => {
@@ -554,14 +555,18 @@
     }
     const wide = window.innerWidth >= 768;
     const bar = document.getElementById('chat-app-header');
-    const chatsRow = document.getElementById('studentsCountBtn') && document.getElementById('studentsCountBtn').parentElement;
-    if (wide && bar) {
-      b.classList.add('in-bar');
-      if (b.parentElement !== bar) { if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative'; bar.appendChild(b); }
-    } else if (chatsRow) {
-      b.classList.remove('in-bar');
-      if (b.parentElement !== chatsRow) chatsRow.appendChild(b);
-    } else if (b.parentElement) b.remove();
+    if (!bar) { if (b.parentElement) b.remove(); return; }
+    if (b.parentElement !== bar) { if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative'; bar.appendChild(b); }
+    if (wide) {
+      // Desktop: centered in the top bar.
+      b.classList.add('in-bar'); b.classList.remove('in-bar-right'); b.style.top = '';
+    } else {
+      // Phone: top-right corner, on the same line as the logo.
+      b.classList.add('in-bar-right'); b.classList.remove('in-bar');
+      const logo = bar.querySelector('.cah-label');
+      const br = bar.getBoundingClientRect(), lr = logo ? logo.getBoundingClientRect() : null;
+      b.style.top = (lr && lr.height ? (lr.top - br.top + lr.height / 2) : 24) + 'px';
+    }
   }
   window.addEventListener('resize', () => { if (document.querySelector('.ptu-launch')) mountLauncher(); });
 

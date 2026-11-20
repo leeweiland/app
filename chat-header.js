@@ -372,7 +372,6 @@ window.PRABack = (function () {
     // the site's "app mode" (?app=1 hides the site's own logo, menu, promo
     // bar and footer).
     { href: '/chat-app/retreats.html', icon: ICON_SVG.retreats, title: 'Retreats' },
-    { href: 'https://www.pacificrimathletics.com/online-kickoff', icon: ICON_SVG.onlineKickoff, title: 'Online Kickoff', external: true, staffOnly: true },
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
 
