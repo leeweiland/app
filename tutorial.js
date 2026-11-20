@@ -478,17 +478,21 @@
       state.sub++; save(state); sub = step.subs[state.sub];
     }
     if (!pageMatches(sub.page)) { render(sub, { away: true }); return; }
-    // Open their group chat first when the target lives in the thread header.
+    // Open the chat whose header has the calendar: their own group (gym
+    // students), else -- testers -- the first Gym student's group.
     if (sub.openGroup && !findTarget(sub)) {
-      const row = document.querySelector('.convo-item[data-own-group]') || document.querySelector('.convo-item');
+      const gymRow = [...document.querySelectorAll('.convo-item')].find(r => r.querySelector('.role-tag-gym'));
+      const row = document.querySelector('.convo-item[data-own-group]') || gymRow;
       if (row) row.click();
     }
-    // Wait (briefly) for the thing to point at to render.
-    const t0 = Date.now(), limit = sub.wait || 6000;
+    // Wait (briefly) for the thing to point at to render. A part that can't
+    // find its target is skipped instead of floating with no arrow.
+    const t0 = Date.now(), limit = sub.wait || (sub.openGroup ? 2500 : 6000);
     (function wait() {
       if (!state.active) return;
-      if (!sub.targets.length || findTarget(sub) || Date.now() - t0 > limit) { render(sub); return; }
-      setTimeout(wait, 200);
+      if (!sub.targets.length || findTarget(sub)) { render(sub); return; }
+      if (Date.now() - t0 > limit) { if (sub.openGroup) advanceSub(true); else render(sub); return; }
+      setTimeout(wait, 150);
     })();
   }
   function start() {

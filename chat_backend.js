@@ -8235,9 +8235,12 @@ export async function handleChatRequest(req, res, url) {
       // and — unlike normal scheduling — to the Gym client themselves,
       // self-serve, in their own DM with a coach.
       if (sub === "/schedule-gym" && req.method === "POST") {
-        if (convo.type !== "dm") return sendJson(res, 400, { error: "Gym scheduling is only available in a 1:1 chat" });
+        // A Gym student can also book from their own coaching group (all 11
+        // have one; most have no 1:1 chat). Staff keep the 1:1 rule.
+        const ownGymGroup = convo.type === "group" && convo.autoGroupType === "student" && convo.autoGroupUserId === user.id && user.role === "gym";
+        if (convo.type !== "dm" && !ownGymGroup) return sendJson(res, 400, { error: "Gym scheduling is only available in a 1:1 chat" });
         const users = readJson(USERS_FILE, []);
-        const otherId = convo.participantIds.find(id => id !== user.id);
+        const otherId = convo.type === "dm" ? convo.participantIds.find(id => id !== user.id) : null;
         // Whichever participant actually has the "gym" role is the client,
         // regardless of which of the two people is the one booking.
         const clientCandidate = user.role === "gym" ? user : users.find(u => u.id === otherId && u.role === "gym");

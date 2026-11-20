@@ -3417,7 +3417,11 @@ function canScheduleIn(convo) {
 // the viewer is that client (self-serve booking) or the coach/admin on the
 // other end (booking on their behalf).
 function gymClientIn(convo) {
-  if (!convo || convo.type !== 'dm') return null;
+  if (!convo) return null;
+  // A Gym student's own coaching group (self-serve booking only -- staff in
+  // that group keep the general scheduler).
+  if (convo.type === 'group') return (me.role === 'gym' && convo.autoGroupType === 'student' && convo.autoGroupUserId === me.id) ? me : null;
+  if (convo.type !== 'dm') return null;
   if (me.role === 'gym') return me;
   const other = otherParticipant(convo);
   return other?.role === 'gym' ? other : null;
