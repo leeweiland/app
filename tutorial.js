@@ -341,7 +341,7 @@
     c.innerHTML = '<div class="q">Really cancel?</div><div class="r"><button class="ptu-btn dark" data-a="yes">Yes, cancel</button><button class="ptu-btn" data-a="no">Keep going</button></div>';
     body.appendChild(c);
     c.querySelector('[data-a="no"]').onclick = () => c.remove();
-    c.querySelector('[data-a="yes"]').onclick = () => { state.active = false; state.cancelled = true; save(state); teardown(); mountLauncher(); };
+    c.querySelector('[data-a="yes"]').onclick = () => { state.active = false; state.cancelled = true; save(state); teardown(); mountLauncher(); window.dispatchEvent(new Event('pra-quickstart-done')); };
   }
   function render(sub, opts = {}) {
     teardown();
@@ -491,7 +491,7 @@
       ctx.globalAlpha = 1;
       requestAnimationFrame(frame);
     })();
-    const close = () => { running = false; clearInterval(burstTimer); clearInterval(figTimer); wrap.remove(); mountLauncher(); };
+    const close = () => { running = false; clearInterval(burstTimer); clearInterval(figTimer); wrap.remove(); mountLauncher(); window.dispatchEvent(new Event('pra-quickstart-done')); };
     // After the 3s show, straight back to the chat.
     setTimeout(() => { wrap.style.transition = 'opacity .4s'; wrap.style.opacity = '0'; setTimeout(() => { close(); if (!PAGES.chat.test(path)) location.href = PAGES.chat.url; }, 400); }, 3400);
   }

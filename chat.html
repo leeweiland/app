@@ -2250,6 +2250,7 @@ async function init() {
   setupComposer();
   setupPublishModal();
   setupPush();
+  if (!isStaffMe() || (window.PRA_QS && window.PRA_QS.tester)) checkMediaPermissions();
   setupSearchClearButtons();
   setupSidebarResize();
   setupComposerResize();
@@ -5606,6 +5607,7 @@ async function startCameraStream() {
     // upfront avoids re-negotiating getUserMedia (and a second permission
     // prompt) the moment someone taps over to Video mode.
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacing, ...CAMERA_VIDEO_CONSTRAINTS }, audio: true });
+    markMediaAllowed();
   } catch (e) {
     console.error('[camera] getUserMedia(video+audio) failed:', e.name, e.message);
     // Android/Capacitor's permission bridge grants/denies the whole
@@ -7325,27 +7327,88 @@ function pushDebugToast(msg) {
 const NOTIF_SNOOZE_KEY = 'pra_notif_prompt_snooze';
 function notifPromptSnoozed() { try { return Number(localStorage.getItem(NOTIF_SNOOZE_KEY) || 0) > Date.now(); } catch { return false; } }
 function hideNotifPrompt() { document.getElementById('notifPrompt')?.remove(); }
-function showNotifPrompt({ denied, onEnable }) {
-  if (isStaffMe() || notifPromptSnoozed() || document.getElementById('notifPrompt')) return;
+// ── Permissions reminder ────────────────────────────────────────────────
+// Shown on every app open, ONLY to people who haven't allowed notifications
+// and/or camera + microphone ("Not now" hides it until the next open). Waits
+// until Quick Start is finished so the two never stack.
+const PERM_DISMISS_KEY = 'pra_perm_prompt_dismissed'; // sessionStorage: this open only
+const MEDIA_BLOCKED_KEY = 'pra_media_blocked';         // a call/camera failed on permissions
+const permNeeds = {};
+let permRenderTimer = null;
+function showNotifPrompt({ denied, onEnable }) { needPerm('notif', { denied, onEnable }); }
+function needPerm(kind, info) {
+  permNeeds[kind] = info;
+  clearTimeout(permRenderTimer);
+  permRenderTimer = setTimeout(renderPermsPrompt, 700);
+}
+function permPromptAllowed() {
+  if (isStaffMe() && !(window.PRA_QS && window.PRA_QS.tester)) return false;
+  try { if (sessionStorage.getItem(PERM_DISMISS_KEY)) return false; } catch {}
+  return true;
+}
+async function quickStartPending() {
+  let st = null; try { st = JSON.parse(localStorage.getItem('praTutorial.v1') || 'null'); } catch {}
+  if (st && st.active) return true;
+  const qs = await (window.PRA_QS_PROMISE || Promise.resolve(null));
+  return !!(qs && qs.enabled && qs.autoStart && !qs.completed && !(st && (st.cancelled || st.done)));
+}
+async function renderPermsPrompt() {
+  const kinds = Object.keys(permNeeds);
+  if (!kinds.length || !permPromptAllowed() || document.getElementById('notifPrompt')) return;
+  if (await quickStartPending()) { window.addEventListener('pra-quickstart-done', () => setTimeout(renderPermsPrompt, 800), { once: true }); return; }
   const ios = window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === 'ios';
   const native = window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform();
-  const how = !denied ? '' : native
-    ? (ios ? 'Tap <b>Open Settings</b> (or go to <b>Settings</b> &gt; <b>PRA</b>), then <b>Notifications</b>, and turn on <b>Allow Notifications</b>.' : 'Open your phone\'s <b>Settings</b> &gt; <b>Apps</b> &gt; <b>PRA</b> &gt; <b>Notifications</b> and turn them on.')
-    : 'Click the lock icon next to this page\'s address, set <b>Notifications</b> to <b>Allow</b>, then reload.';
+  const n = permNeeds.notif, m = permNeeds.media;
+  const what = n && m ? 'camera, microphone & notifications' : m ? 'camera & microphone' : 'notifications';
+  const howFor = (label) => native
+    ? (ios ? `Tap <b>Open Settings</b> (or go to <b>Settings</b> &gt; <b>PRA</b>) and turn on <b>${label}</b>.` : `Open your phone's <b>Settings</b> &gt; <b>Apps</b> &gt; <b>PRA</b> &gt; <b>Permissions</b> and allow <b>${label}</b>.`)
+    : `Click the lock icon next to this page's address, set <b>${label}</b> to <b>Allow</b>, then reload.`;
+  const deniedLabels = [n && n.denied ? 'Notifications' : '', m && m.denied ? 'Camera and Microphone' : ''].filter(Boolean);
+  const askable = [n && !n.denied ? n : null, m && !m.denied ? m : null].filter(Boolean);
   const el = document.createElement('div');
   el.id = 'notifPrompt';
   el.innerHTML = `<div class="np-card">
-    <svg viewBox="0 0 24 24" fill="none" width="46" height="46"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 2h-15l1.5-2Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 20.5a2 2 0 0 0 4 0" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg>
-    <div class="np-t">Turn on notifications</div>
-    <div class="np-s">This is how your coach's video calls ring your phone, and how you hear about new messages. With them off, calls can't reach you.</div>
-    ${how ? `<div class="np-how">${how}</div>` : ''}
-    ${!denied ? '<button type="button" class="pra-btn np-go">Turn on notifications</button>' : (native && ios ? '<button type="button" class="pra-btn np-go">Open Settings</button>' : '')}
+    <svg viewBox="0 0 24 24" fill="none" width="46" height="46"><rect x="3" y="6.5" width="12.5" height="11" rx="2.2" stroke="#fff" stroke-width="1.6"/><path d="M15.5 10.5l5-3v9l-5-3" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    <div class="np-t">Turn on ${what}</div>
+    <div class="np-s">These are necessary for your private coaching video calls${n ? ', and so your coach\'s calls and messages can reach you' : ''}.</div>
+    ${deniedLabels.length ? `<div class="np-how">${howFor(deniedLabels.join(' and '))}</div>` : ''}
+    ${askable.length ? '<button type="button" class="pra-btn np-go">Allow</button>' : (native && ios ? '<button type="button" class="pra-btn np-go np-settings">Open Settings</button>' : '')}
     <button type="button" class="np-later">Not now</button></div>`;
   document.body.appendChild(el);
-  el.querySelector('.np-later').onclick = () => { try { localStorage.setItem(NOTIF_SNOOZE_KEY, String(Date.now() + 24 * 3600 * 1000)); } catch {} hideNotifPrompt(); };
+  el.querySelector('.np-later').onclick = () => { try { sessionStorage.setItem(PERM_DISMISS_KEY, '1'); } catch {} hideNotifPrompt(); };
   const go = el.querySelector('.np-go');
-  if (go) go.onclick = () => { if (denied) { location.href = 'app-settings:'; return; } hideNotifPrompt(); onEnable && onEnable(); };
+  if (go) go.onclick = async () => {
+    if (go.classList.contains('np-settings')) { location.href = 'app-settings:'; return; }
+    hideNotifPrompt();
+    for (const a of askable) { try { await (a.onEnable && a.onEnable()); } catch {} }
+  };
 }
+// Camera + microphone: only flagged when they're really not allowed -- the
+// browser/OS says "denied", a call or the camera already failed on
+// permissions, or (regular browsers only) they were never asked.
+async function checkMediaPermissions() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  let cam = 'unknown', mic = 'unknown';
+  try { cam = (await navigator.permissions.query({ name: 'camera' })).state; } catch {}
+  try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch {}
+  let flagged = false; try { flagged = !!localStorage.getItem(MEDIA_BLOCKED_KEY); } catch {}
+  if (cam === 'granted' && mic === 'granted') { try { localStorage.removeItem(MEDIA_BLOCKED_KEY); } catch {} return; }
+  const native = window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform();
+  const denied = cam === 'denied' || mic === 'denied' || flagged;
+  // In the phone app the web layer can't see the phone's own setting until
+  // something asks, so "prompt" there isn't proof it's off -- only a denial is.
+  const neverAsked = !native && (cam === 'prompt' || mic === 'prompt');
+  if (!denied && !neverAsked) return;
+  needPerm('media', { denied, onEnable: async () => {
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      st.getTracks().forEach(t => t.stop());
+      markMediaAllowed();
+    } catch { markMediaBlocked(); }
+  } });
+}
+function markMediaBlocked() { try { localStorage.setItem(MEDIA_BLOCKED_KEY, '1'); } catch {} }
+function markMediaAllowed() { try { localStorage.removeItem(MEDIA_BLOCKED_KEY); } catch {} }
 async function setupNativePush() {
   if (!window.Capacitor || !Capacitor.isNativePlatform()) return false;
   const { PushNotifications } = Capacitor.Plugins;
@@ -7626,6 +7689,7 @@ async function joinCall(call, token, convoId, displayName) {
   dailyCallObject.on('left-meeting', closeCallScreen);
   dailyCallObject.on('error', (e) => { console.error('[call] error', e); reportCallIssue('call-error', e?.errorMsg || e?.error?.msg || ''); });
   dailyCallObject.on('camera-error', onCallCameraError);
+  dailyCallObject.on('started-camera', markMediaAllowed);
   dailyCallObject.on('network-quality-change', onCallNetworkQuality);
   try {
     await dailyCallObject.join({ url: call.dailyRoomUrl, token });
@@ -7702,6 +7766,7 @@ function onCallCameraError(e) {
     return;
   }
   if (type === 'permissions') {
+    markMediaBlocked();
     const media = Array.isArray(err.blockedMedia) && err.blockedMedia.length ? err.blockedMedia : ['video', 'audio'];
     const dev = nameOf(media);
     const ua = navigator.userAgent;
