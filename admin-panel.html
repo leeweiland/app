@@ -252,6 +252,7 @@
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
+  <script src="/chat-app/link-tool.js"></script>
   <div class="wrap">
     <!-- No "Admin Panel" heading here on purpose -- the tab bar below is
          position:fixed (see its own comment), so static in-flow content
@@ -419,7 +420,7 @@
       </div>
       <div class="field">
         <label class="pra-label">Welcome Message</label>
-        <textarea class="pra-input" id="welcomeMessageText" rows="14" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
+        <textarea class="pra-input" id="welcomeMessageText" data-linktool rows="14" style="width:100%;font-family:var(--font-primary);resize:vertical"></textarea>
         <div class="pra-muted" style="font-size:.74rem;margin-top:4px">Tokens: {{firstName}} {{lastName}}</div>
       </div>
       <div class="field">
@@ -1961,7 +1962,7 @@ window.addEventListener('pageshow', () => {
         row('Student group', 'Their group chat with every coach and admin.', toggle('studentGroupEnabled', s.studentGroupEnabled), '',
           ['created right away.', 'no group (and no welcome or auto-build).']) +
         row('Welcome message', 'Posted into their new group. Use {{firstName}} and {{lastName}}.', toggle('welcomeMessageEnabled', s.welcomeMessageEnabled),
-          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umWelcomeText" rows="6" style="width:100%;max-width:none">${esc(s.welcomeMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umWelcomeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg')}</div>`,
+          `<div class="um-sub" style="display:block"><textarea class="pra-input" id="umWelcomeText" data-linktool rows="6" style="width:100%;max-width:none">${esc(s.welcomeMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umWelcomeSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg')}</div>`,
           ['posted automatically.', 'nothing is posted.']) +
         row('Default protocol', `Now: <b style="color:#fff">${esc(dp.name)}</b> (${dp.days} day${dp.days === 1 ? '' : 's'}, ${dp.videos} videos). <a href="/chat-app/training-protocol.html?userId=${esc(window.__umMeId || '')}" target="_blank" rel="noopener">Edit</a>`, toggle('defaultProtocolEnabled', s.defaultProtocolEnabled), '',
           ['they start with it.', 'they start empty.']) +
@@ -1993,7 +1994,7 @@ window.addEventListener('pageshow', () => {
           ['shown inside 2 months.', 'never shown.']) +
         row('Renewal message', 'Posted once into their group. Use {{firstName}}, {{lastName}}, {{endDate}}.', toggle('renewalMessageEnabled', s.renewalMessageEnabled),
           `<div class="um-sub">Send ${num('renewalMessageDaysBefore', s.renewalMessageDaysBefore)} days before, from <select class="pra-select" id="umRenewSender"><option value="">An admin in their group</option>${staffOpts}</select></div>
-           <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umRenewMsg')}</div>`,
+           <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" data-linktool rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn pra-btn-ghost" type="button" id="umRenewSave" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umRenewMsg')}</div>`,
           ['sent once per end date.', 'not sent.']))}
 
       ${card(11, '11. Problems Banner',
@@ -2142,7 +2143,7 @@ window.addEventListener('pageshow', () => {
           <div class="um-sub">Gives the program <select class="pra-select" data-product="${esc(pr.sku)}">${opts}</select> ${pr.programId ? `<a href="/chat-app/programs-editor.html?id=${esc(pr.programId)}" target="_blank" rel="noopener" style="color:#009bff">Edit program</a>` : ''} ${savedMsg('umProdMsg-' + pr.sku)}</div>
           ${flowList(pr.flows?.purchased, 'CRM on purchase')}
           ${flowList(pr.flows?.refunded, 'CRM on refund')}
-          <div class="um-sub" style="display:block;margin-top:8px"><div class="um-name" style="font-size:.8rem">Welcome message</div><textarea class="pra-input" data-welcome="${esc(pr.sku)}" rows="3" style="width:100%;max-width:none">${esc((state.settings.traineeWelcomeByProduct || {})[pr.sku] ?? '')}</textarea><button class="pra-btn pra-btn-ghost" type="button" data-welcome-save="${esc(pr.sku)}" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg-' + pr.sku)}</div>
+          <div class="um-sub" style="display:block;margin-top:8px"><div class="um-name" style="font-size:.8rem">Welcome message</div><textarea class="pra-input" data-welcome="${esc(pr.sku)}" data-linktool rows="3" style="width:100%;max-width:none">${esc((state.settings.traineeWelcomeByProduct || {})[pr.sku] ?? '')}</textarea><button class="pra-btn pra-btn-ghost" type="button" data-welcome-save="${esc(pr.sku)}" style="font-size:.74rem;padding:6px 12px;margin-top:6px">Save message</button>${savedMsg('umWelcomeMsg-' + pr.sku)}</div>
         </div>`;
       }).join('');
     el.querySelectorAll('[data-welcome-save]').forEach(btn => {

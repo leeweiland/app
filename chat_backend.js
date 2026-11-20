@@ -2076,9 +2076,9 @@ async function checkRenewalMessages() {
       : convo.participantIds.find(id => isAdmin(users.find(x => x.id === id) || {})) || convo.participantIds.find(id => id !== u.id);
     if (!senderId) continue;
     const pretty = new Date(endMs).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
-    const text = fillTemplate(cfg.renewalMessageText, { firstName: u.first, lastName: u.last, endDate: pretty });
+    const text = fillTemplate(cfg.renewalMessageText, { firstName: u.first, lastName: u.last, endDate: pretty, userId: u.id });
     MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
-    notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+    notifyParticipants(convo.id, senderId, { title: "New message", body: pushText(text).slice(0, 120), conversationId: convo.id }).catch(() => {});
     sent[u.id] = endDate; changed = true;
     console.log(`[renewal message] ${u.first} ${u.last} (ends ${endDate})`);
   }
@@ -2367,6 +2367,8 @@ async function sendApptSms(toEmail, toPhone, text) {
 
 // Cheap {{token}} substitution — templates are plain strings edited in the
 // admin panel, not a templating engine, so this stays intentionally simple.
+// Push notifications show "[words](url)" links as just the words.
+const pushText = (t) => String(t || "").replace(/\[([^\]\n]{1,160})\]\((https?:\/\/[^\s)<]+)\)/g, "$1");
 function fillTemplate(tpl, vars) {
   return String(tpl || "").replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] != null ? vars[k] : ""));
 }
@@ -4103,9 +4105,9 @@ function syncDefaultGroups() {
         const sku = person.hcLastProduct || "hc21";
         const tpl = byProduct[sku] !== undefined ? byProduct[sku] : (sku === "hc21" ? tcfg.traineeWelcomeText : "");
         if (!String(tpl || "").trim()) return;
-        const text = fillTemplate(tpl, { firstName: person.first, lastName: person.last });
+        const text = fillTemplate(tpl, { firstName: person.first, lastName: person.last, userId: person.id });
         MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
-        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+        notifyParticipants(convo.id, senderId, { title: "New message", body: pushText(text).slice(0, 120), conversationId: convo.id }).catch(() => {});
       });
     }
   }
@@ -4120,9 +4122,9 @@ function syncDefaultGroups() {
         // automated message in this file (appointment reminders, etc.)
         // always has a real staff sender.
         const senderId = staffIds[0] || person.id;
-        const text = fillTemplate(cfg.welcomeMessageText, { firstName: person.first, lastName: person.last });
+        const text = fillTemplate(cfg.welcomeMessageText, { firstName: person.first, lastName: person.last, userId: person.id });
         MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
-        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+        notifyParticipants(convo.id, senderId, { title: "New message", body: pushText(text).slice(0, 120), conversationId: convo.id }).catch(() => {});
       });
     }
     // Same "clone with fresh step/parent ids" shape as POST .../apply
@@ -5704,9 +5706,9 @@ export async function handleChatRequest(req, res, url) {
         // on the rare chance an auto-group somehow has no staff in it.
         const senderId = convo.participantIds.find(id => isAdmin(users.find(u => u.id === id) || {})) || convo.participantIds[0];
         if (!senderId) continue;
-        const text = fillTemplate(cfg.welcomeMessageText, { firstName: student?.first || "", lastName: student?.last || "" });
+        const text = fillTemplate(cfg.welcomeMessageText, { firstName: student?.first || "", lastName: student?.last || "", userId: student?.id || "" });
         MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
-        notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+        notifyParticipants(convo.id, senderId, { title: "New message", body: pushText(text).slice(0, 120), conversationId: convo.id }).catch(() => {});
         sent++;
       }
       return sendJson(res, 200, { ok: true, sent, totalEmptyGroups: emptyGroups.length });
