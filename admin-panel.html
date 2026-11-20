@@ -2216,7 +2216,7 @@ window.addEventListener('pageshow', () => {
     $('qsSteps').innerHTML = steps.map((st, si) => `<div class="qs-step"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
       st.subs.map((sub, ui) => {
         const k = `${si + 1}.${ui + 1}`, o = texts[k] || {};
-        const tag = sub.note ? `<div class="qs-tag">${esc(sub.note)}</div>` : '';
+        const tag = (sub.note ? `<div class="qs-tag">${esc(sub.note)}</div>` : '') + (sub.kicker ? `<div class="qs-tag" style="color:#5cc8ff">Header line: ${esc(sub.kicker)}</div>` : '') + (sub.textByRole ? `<div class="qs-tag" style="color:#5cc8ff">${Object.entries(sub.textByRole).map(([r, t]) => esc(r) + 's see: ' + esc(t)).join(' · ')}</div>` : '');
         return tag + `<div class="qs-sub-row" data-k="${k}"><div class="n">${ui + 1}</div><input class="pra-input" data-f="title" placeholder="${esc(sub.title)}" value="${esc(o.title || '')}"/><input class="pra-input" data-f="text" placeholder="${esc(sub.text)}" value="${esc(o.text || '')}"/></div>`;
       }).join('') + `</div>`).join('') || '<span class="pra-muted">Could not load the steps.</span>';
   }

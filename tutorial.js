@@ -33,13 +33,13 @@
   const iconSub = (title, sel, text, page) => ({ page: '*', targets: [sel], title, text, go: page, clickGo: true });
   const STEPS = [
     { figure: 'handstand', subs: [
-      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
+      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Run through Quick Start to set yourself up for success', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
     ] },
     { figure: 'cflip', subs: [
       { page: 'chat', roles: ['gym'], openGroup: 'gym', note: 'Gym students only', targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
       { page: 'chat', phoneOnly: true, skipIfMissing: true, clickAdvance: true, note: 'Phones only, when a chat is open', targets: ['#backBtn'], title: 'Back to your chats', text: 'Tap back to return to your chats.' },
       iconSub('Your Training Protocol', top('My Training Protocol'), 'Your training plan lives here. Tap it or hit Next.', 'protocol'),
-      { page: 'protocol', targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'], activate: true, title: 'Your Training', text: 'Your custom protocol (or the Handstand Protocol), day by day.' },
+      { page: 'protocol', targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'], activate: true, title: 'Your Training', text: 'Your custom training protocol, day by day.', textByRole: { trainee: 'Your Handstand Protocol, day by day.' } },
       { page: 'protocol', targets: ['#katasViewBtn'], activate: true, title: 'Katas', text: 'Flow routines to learn, film and level up.' },
     ] },
     { figure: 'flip', subs: [
@@ -91,6 +91,8 @@
   });
   // Role-only parts (e.g. gym booking) -- testers see every part.
   STEPS.forEach(st => { st.subs = st.subs.filter(sub => !sub.roles || sub.roles.includes(me.role) || QS.tester); });
+  // Wording that depends on who's looking (e.g. Handstand Protocol buyers).
+  STEPS.forEach(st => st.subs.forEach(sub => { if (sub.textByRole && sub.textByRole[me.role]) sub.text = sub.textByRole[me.role]; }));
   const isPhone = () => window.innerWidth < 768;
   const TOTAL = STEPS.length * 10;
 
@@ -116,6 +118,8 @@
   .ptu-tally { display: flex; align-items: center; gap: 6px; color: #b07f00; font-size: .8rem; letter-spacing: 0; }
   .ptu-coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 1.5px #b07f00; display: inline-block; flex-shrink: 0; }
   .ptu-title { font-weight: 800; font-size: 1.02rem; margin: 8px 0 4px; }
+  .ptu-kicker { margin-top: 10px; font-size: .74rem; font-weight: 800; color: #0077cc; line-height: 1.3; }
+  .ptu-kicker + .ptu-title { margin-top: 3px; }
   .ptu-text { font-size: .86rem; color: #374151; line-height: 1.45; }
   .ptu-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
   .ptu-btn { border: none; border-radius: 9px; padding: 9px 18px; font-weight: 800; font-size: .82rem; cursor: pointer; font-family: inherit; background: #009bff; color: #fff; }
@@ -149,6 +153,9 @@
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
   .ptu-fig { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; animation: ptuFigIn 1.6s ease-out forwards; }
+  .ptu-fig { isolation: isolate; }
+  .ptu-fig::before { content: ''; position: absolute; inset: -14%; z-index: -1; border-radius: 50%; background: radial-gradient(circle, rgba(0,0,0,.82) 0%, rgba(0,0,0,.6) 52%, rgba(0,0,0,0) 72%);
+    backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); -webkit-mask-image: radial-gradient(circle, #000 55%, transparent 72%); mask-image: radial-gradient(circle, #000 55%, transparent 72%); }
   .ptu-fig img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 0 7px rgba(0,155,255,.95)) drop-shadow(0 0 2px rgba(255,255,255,.9)); }
   @keyframes ptuFigIn { 0% { opacity: 0; transform: scale(.4) translateY(20px); } 15% { opacity: 1; transform: scale(1.05) translateY(0); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.95) translateY(-10px); } }
   .ptu-final { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(4,4,8,.72); }
@@ -329,9 +336,11 @@
     panel.innerHTML = `<div class="ptu-prog"><i></i></div><div class="ptu-body">
       <button class="ptu-x" title="Close Quick Start" aria-label="Close Quick Start">&#x2715;</button>
       <div class="ptu-head"><span>STEP ${stepNo} / ${STEPS.length}</span><span class="ptu-tally"><span class="ptu-coin"></span><b>${state.coins}</b><span style="color:#9ca3af;font-weight:600">/ ${TOTAL}</span></span></div>
-      <div class="ptu-title"></div><div class="ptu-text"></div>
+      <div class="ptu-kicker"></div><div class="ptu-title"></div><div class="ptu-text"></div>
       <div class="ptu-foot"><button class="ptu-btn ghost ptu-back${(state.step || state.sub) ? ' on' : ''}">Back</button><button class="ptu-btn ptu-next">${opts.away ? 'Take me there' : 'Next'}</button></div></div>`;
     panel.querySelector('.ptu-title').textContent = sub.title;
+    const kick = panel.querySelector('.ptu-kicker');
+    if (sub.kicker) kick.textContent = sub.kicker; else kick.remove();
     panel.querySelector('.ptu-text').textContent = sub.text;
     currentSub = sub;
     halo = document.createElement('div'); halo.className = 'ptu-halo';
