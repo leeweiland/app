@@ -2018,9 +2018,9 @@ async function autoBuildProtocolFromCustomPage(person, { force = false } = {}) {
     return { status: "error", error: e.message };
   }
   if (!built.found) {
-    addStaffAlert({ id: "ab:" + person.id, kind: "auto-build", userId: person.id, link,
-      title: `${name}: no custom program page found`,
-      detail: `Nothing on custom.pacificrimathletics.com is titled with "${name}" (DONOTUSE pages are skipped), so their protocol is still the default. Build it by hand, or fix the page title and run auto-build again from User Management.` });
+    // No custom page is normal (most new students don't have one): they keep
+    // the default protocol (Simple But Brutal). Logged, never a staff alert (Lee, 2026-11-20).
+    console.log(`[auto-build] ${name}: no custom page -- keeping the default protocol`);
     return { status: "no-page" };
   }
   if (!built.steps.length) {
