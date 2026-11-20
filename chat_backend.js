@@ -1379,7 +1379,7 @@ async function fetchKataLibrary(force) {
   return kataLibraryCache;
 }
 // The levels a person is currently at, one kata per element: Foundation
-// (always), then each numbered element they've reached (an unrecorded
+// (only until they're on other levels), then each numbered element they've reached (an unrecorded
 // element reads as Level 1 once Foundation is done -- same rule as the
 // profile chips).
 async function katasForPerson(first, last) {
@@ -1391,12 +1391,15 @@ async function katasForPerson(first, last) {
   const foundationDone = entries.some(e => checked(e.levels?.FOUNDATION));
   const label = (c) => c.toLowerCase().replace(/(^|\s)\S/g, t => t.toUpperCase());
   const pick = (cat, level) => { const v = (lib.byKey[`${cat}|${level}`] || [])[0]; return v ? { driveFileId: v.id, name: v.name } : null; };
-  const katas = [{ cat: "FOUNDATION", level: 0, label: "Foundation", video: pick("FOUNDATION", 0) }];
+  // Foundation only until they're on the other levels (Lee, 2026-11-20):
+  // once Foundation is done -- or any element has a recorded level -- it drops off.
+  const katas = [];
   for (const cat of KATA_CATS.slice(1)) {
     const level = Math.max(0, ...entries.map(e => Number(e.levels?.[cat]) || 0)) || (foundationDone ? 1 : 0);
     if (!level) continue;
     katas.push({ cat, level, label: `${label(cat)} Level ${level}`, video: pick(cat, level) });
   }
+  if (!katas.length) katas.unshift({ cat: "FOUNDATION", level: 0, label: "Foundation", video: pick("FOUNDATION", 0) });
   return { katas, hasLevels: entries.length > 0 };
 }
 
