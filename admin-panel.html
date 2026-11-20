@@ -222,6 +222,28 @@
   .um-access .um-desc { font-weight: 400; color: var(--pra-dim); }
   .um-product { border: 1px solid var(--pra-border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; background: rgba(255,255,255,0.015); }
   .um-access .um-name { font-weight: 700; color: #fff; }
+
+  #quickStartSection .qs-group { border: 1px solid var(--pra-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; background: rgba(255,255,255,.02); }
+  #quickStartSection .qs-h { font-weight: 800; font-size: .92rem; margin-bottom: 10px; color: #fff; }
+  #quickStartSection .qs-sub { font-size: .76rem; color: var(--pra-dim); margin: 12px 0 6px; }
+  #quickStartSection .qs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 8px; font-size: .84rem; }
+  #quickStartSection .qs-radio, #quickStartSection .qs-chk { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: .84rem; }
+  #quickStartSection .qs-num input { width: 64px; display: inline-block; padding: 6px 8px; }
+  #quickStartSection .qs-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #quickStartSection .qs-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(0,155,255,.12); border: 1px solid rgba(0,155,255,.4); font-size: .78rem; }
+  #quickStartSection .qs-chip button { background: none; border: none; color: var(--pra-dim); cursor: pointer; padding: 0; font-size: .9rem; }
+  #quickStartSection .qs-step { border-top: 1px solid var(--pra-border); padding: 10px 0; }
+  #quickStartSection .qs-step:first-child { border-top: none; padding-top: 0; }
+  #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; margin-bottom: 6px; }
+  #quickStartSection .qs-step-h span { color: #ffd23f; font-weight: 700; margin-left: 6px; }
+  #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(120px, 1fr) minmax(180px, 2fr); gap: 6px; align-items: center; margin-bottom: 6px; }
+  #quickStartSection .qs-sub-row .n { color: var(--pra-dim); font-size: .72rem; text-align: right; }
+  #quickStartSection .qs-sub-row input { padding: 6px 8px; font-size: .8rem; }
+  @media (max-width: 560px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px 1fr; } #quickStartSection .qs-sub-row input:last-child { grid-column: 2; } }
+  #quickStartSection table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  #quickStartSection th, #quickStartSection td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
+  #quickStartSection th { color: var(--pra-dim); font-weight: 700; }
+  #quickStartSection .qs-table-wrap { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -244,6 +266,7 @@
         <button class="admin-tab" data-section="apptConfigSection">Appointments</button>
         <button class="admin-tab" data-section="calendarBlockingSection">Calendar Blocking</button>
         <button class="admin-tab" data-section="archetypesSection">Training Personality Archetypes</button>
+        <button class="admin-tab" data-section="quickStartSection">Quick Start</button>
       </div>
     </div>
     <div id="adminTabBarSpacer"></div>
@@ -611,6 +634,57 @@
       </div>
     </div>
 
+    <div class="pra-panel section" id="quickStartSection" style="display:none">
+      <div class="pra-h2" style="margin-bottom:6px">Quick Start</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:16px">The coin-collecting walkthrough of the app (10 steps, 100 coins). Changes save with the button at the bottom.</div>
+
+      <div class="qs-group">
+        <div class="qs-h">Who gets it</div>
+        <div class="qs-row">
+          <label class="qs-radio"><input type="radio" name="qsEnabledFor" value="off"/> Off</label>
+          <label class="qs-radio"><input type="radio" name="qsEnabledFor" value="testers"/> Testers only</label>
+          <label class="qs-radio"><input type="radio" name="qsEnabledFor" value="everyone"/> Everyone in these roles</label>
+        </div>
+        <div class="qs-row" id="qsRoles">
+          <label class="qs-chk"><input type="checkbox" value="user"/> Users</label>
+          <label class="qs-chk"><input type="checkbox" value="trainee"/> Trainees</label>
+          <label class="qs-chk"><input type="checkbox" value="online"/> Online</label>
+          <label class="qs-chk"><input type="checkbox" value="gym"/> Gym</label>
+          <label class="qs-chk"><input type="checkbox" value="coach"/> Coaches</label>
+          <label class="qs-chk"><input type="checkbox" value="admin"/> Admins</label>
+        </div>
+        <div class="qs-sub">Testers (always get it, whatever the setting above)</div>
+        <div class="qs-chips" id="qsTesterChips"></div>
+        <div class="qs-row"><input class="pra-input" id="qsTesterSearch" list="qsUserList" placeholder="Add a tester — type a name…" style="max-width:320px"/><datalist id="qsUserList"></datalist></div>
+      </div>
+
+      <div class="qs-group">
+        <div class="qs-h">Starting</div>
+        <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsAutoStart"/> Opens by itself on Chat for anyone who hasn't finished it (closing it with the X stops that on their device)</label>
+      </div>
+
+      <div class="qs-group">
+        <div class="qs-h">Quick Start button</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Shows once they've finished it, so they can run it again. Phone: right of "Chats" (right of the students count for staff). Desktop: centered in the top bar.</div>
+        <div class="qs-row qs-num">Show for the first <input class="pra-input" type="number" min="0" max="60" id="qsFirstDays"/> days of using the app</div>
+        <div class="qs-row qs-num">If someone hasn't opened the app for <input class="pra-input" type="number" min="0" max="60" id="qsAwayDays"/>+ days, show it again for <input class="pra-input" type="number" min="0" max="60" id="qsComebackDays"/> days</div>
+        <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsTestersAlways"/> Testers always see the button</label>
+      </div>
+
+      <div class="qs-group">
+        <div class="qs-h">Steps &amp; wording</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Leave a box empty to keep the default (shown faded). Each step is worth 10 coins.</div>
+        <div id="qsSteps">Loading…</div>
+      </div>
+
+      <button class="pra-btn" id="qsSaveBtn" type="button" style="width:100%;margin-top:6px">Save Quick Start</button>
+      <div class="save-msg" id="qsSaveMsg"></div>
+
+      <div class="qs-group" style="margin-top:22px">
+        <div class="qs-h">Progress</div>
+        <div id="qsPeople" class="pra-muted" style="font-size:.8rem">Loading…</div>
+      </div>
+    </div>
     <div class="pra-panel section" id="archetypesSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
@@ -848,7 +922,7 @@ function setupAdminTabs() {
   tabs.forEach(tab => {
     tab.onclick = () => {
       tabs.forEach(t => t.classList.toggle('active', t === tab));
-      ['usersSection', 'userManagementSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'calendarBlockingSection', 'archetypesSection'].forEach(id => {
+      ['usersSection', 'userManagementSection', 'chatConfigSection', 'automatedMessagesSection', 'apptConfigSection', 'calendarBlockingSection', 'archetypesSection', 'quickStartSection'].forEach(id => {
         document.getElementById(id).style.display = id === tab.dataset.section ? '' : 'none';
       });
       // .pra-root is the actual scroll container on every page in this app
@@ -2100,6 +2174,91 @@ window.addEventListener('pageshow', () => {
     render();
   };
   document.querySelector('.admin-tab[data-section="userManagementSection"]').addEventListener('click', () => { if (!state) window.loadUserManagement(); });
+})();
+</script>
+<script>
+// Admin Panel > Quick Start (settings for tutorial.js, saved via /api/admin/quickstart).
+(function () {
+  let data = null, testers = [];
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (ms) => ms ? new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+  function loadSteps() {
+    return new Promise((resolve) => {
+      if (window.PRA_QS_STEPS) return resolve(window.PRA_QS_STEPS);
+      window.PRA_QS_EDITOR = true;
+      const sc = document.createElement('script'); sc.src = '/chat-app/tutorial.js?editor=1&v=' + Date.now();
+      sc.onload = () => resolve(window.PRA_QS_STEPS || []); sc.onerror = () => resolve([]);
+      document.body.appendChild(sc);
+    });
+  }
+  function renderTesters() {
+    const byId = new Map((data.users || []).map(u => [u.id, u]));
+    $('qsTesterChips').innerHTML = testers.map(id => `<span class="qs-chip">${esc(byId.get(id)?.name || id)}<button type="button" data-id="${esc(id)}" title="Remove">&times;</button></span>`).join('') || '<span class="pra-muted" style="font-size:.76rem">No testers.</span>';
+    $('qsTesterChips').querySelectorAll('button').forEach(b => b.onclick = () => { testers = testers.filter(x => x !== b.dataset.id); renderTesters(); });
+  }
+  function renderPeople() {
+    const rows = (data.people || []);
+    if (!rows.length) { $('qsPeople').textContent = 'Nobody has opened it yet.'; return; }
+    $('qsPeople').innerHTML = `<div class="qs-table-wrap"><table><tr><th>Name</th><th>Role</th><th>Finished</th><th>Times</th><th>First seen</th><th>Last seen</th><th>Button until</th><th></th></tr>` +
+      rows.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.role)}</td><td>${r.completedAt ? fmt(r.completedAt) : '<span class="pra-muted">not yet</span>'}</td><td>${r.completions}</td><td>${fmt(r.firstSeenAt)}</td><td>${fmt(r.lastSeenAt)}</td><td>${fmt(r.showUntil)}</td>` +
+      `<td>${r.completedAt ? `<button class="pra-btn pra-btn-ghost" style="padding:3px 10px;font-size:.72rem" data-reset="${esc(r.id)}" title="Mark as not finished, so it opens by itself again">Reset</button>` : ''}</td></tr>`).join('') + `</table></div>`;
+    $('qsPeople').querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => {
+      const r = await fetch('/api/admin/quickstart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resetUserId: b.dataset.reset }) });
+      if (r.ok) { data = await r.json(); renderPeople(); }
+    });
+  }
+  async function renderSteps() {
+    const steps = await loadSteps();
+    const texts = data.config.texts || {};
+    $('qsSteps').innerHTML = steps.map((st, si) => `<div class="qs-step"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
+      st.subs.map((sub, ui) => {
+        const k = `${si + 1}.${ui + 1}`, o = texts[k] || {};
+        return `<div class="qs-sub-row" data-k="${k}"><div class="n">${ui + 1}</div><input class="pra-input" data-f="title" placeholder="${esc(sub.title)}" value="${esc(o.title || '')}"/><input class="pra-input" data-f="text" placeholder="${esc(sub.text)}" value="${esc(o.text || '')}"/></div>`;
+      }).join('') + `</div>`).join('') || '<span class="pra-muted">Could not load the steps.</span>';
+  }
+  function fill() {
+    const c = data.config;
+    document.querySelectorAll('input[name="qsEnabledFor"]').forEach(r => { r.checked = r.value === c.enabledFor; });
+    document.querySelectorAll('#qsRoles input').forEach(x => { x.checked = (c.roles || []).includes(x.value); });
+    $('qsAutoStart').checked = !!c.autoStart;
+    $('qsFirstDays').value = c.buttonFirstDays; $('qsAwayDays').value = c.awayDays; $('qsComebackDays').value = c.comebackDays;
+    $('qsTestersAlways').checked = !!c.testersAlwaysButton;
+    testers = [...(c.testers || [])];
+    $('qsUserList').innerHTML = (data.users || []).map(u => `<option value="${esc(u.name)}">${esc(u.role)}</option>`).join('');
+    renderTesters(); renderPeople(); renderSteps();
+  }
+  $('qsTesterSearch').addEventListener('change', (e) => {
+    const u = (data.users || []).find(x => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
+    if (u && !testers.includes(u.id)) { testers.push(u.id); renderTesters(); }
+    e.target.value = '';
+  });
+  $('qsSaveBtn').onclick = async () => {
+    const texts = {};
+    document.querySelectorAll('#qsSteps .qs-sub-row').forEach(row => {
+      const title = row.querySelector('[data-f="title"]').value.trim(), text = row.querySelector('[data-f="text"]').value.trim();
+      if (title || text) texts[row.dataset.k] = { title, text };
+    });
+    const body = {
+      enabledFor: (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value,
+      roles: [...document.querySelectorAll('#qsRoles input:checked')].map(x => x.value),
+      testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked,
+      buttonFirstDays: $('qsFirstDays').value, awayDays: $('qsAwayDays').value, comebackDays: $('qsComebackDays').value, texts,
+    };
+    $('qsSaveMsg').textContent = 'Saving…';
+    const r = await fetch('/api/admin/quickstart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) { $('qsSaveMsg').textContent = 'Could not save.'; return; }
+    data = await r.json(); fill(); $('qsSaveMsg').textContent = 'Saved.';
+    setTimeout(() => { $('qsSaveMsg').textContent = ''; }, 2500);
+  };
+  async function load() {
+    const r = await fetch('/api/admin/quickstart');
+    if (!r.ok) { $('qsSteps').textContent = 'Admins only.'; return; }
+    data = await r.json(); fill();
+  }
+  document.querySelector('.admin-tab[data-section="quickStartSection"]').addEventListener('click', () => { if (!data) load(); });
+  if (document.querySelector('.admin-tab[data-section="quickStartSection"]').classList.contains('active')) load();
+  setTimeout(() => { if (!data && $('quickStartSection').style.display !== 'none') load(); }, 600);
 })();
 </script>
 </body>

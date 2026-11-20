@@ -1,11 +1,13 @@
-// Gamified app tutorial (floating step panels, coins, athlete silhouettes,
-// fireworks finale). Loaded by chat-header.js -- for now only for the
-// tester ids listed there. Progress lives in localStorage so it survives
-// page changes; "Play again" / ?tutorial=1 restarts it from step 1.
+// Quick Start: gamified walkthrough (floating step panels, coins, athlete
+// silhouettes, fireworks finale). Loaded by chat-header.js when
+// /api/chat/quickstart says this person gets it (Admin Panel > Quick Start).
+// Progress lives in localStorage so it survives page changes; the Quick
+// Start button / ?tutorial=1 restarts it from step 1.
 (function () {
-  if (window.PRATutorial) return;
+  if (window.PRATutorial && !window.PRA_QS_EDITOR) return;
   const KEY = 'praTutorial.v1';
   const me = window.PRA_ME || {};
+  const QS = window.PRA_QS || { enabled: true };
   const path = location.pathname;
 
   // ── Steps ─────────────────────────────────────────────────────────────
@@ -32,6 +34,7 @@
   const STEPS = [
     { figure: 'handstand', subs: [
       { page: 'chat', targets: ['.convo-item[data-own-group]', '.convo-item'], title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
+      { page: 'chat', roles: ['gym'], openGroup: true, targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
     ] },
     { figure: 'flare', subs: [
       iconSub('Your Training Protocol', top('My Training Protocol'), 'Your training plan lives here. Tap it or hit Next.', 'protocol'),
@@ -45,7 +48,7 @@
       { page: 'physique', targets: [hub('physique')], activate: true, title: 'Physique', text: 'Progress photos and body scans.' },
       { page: 'physique', targets: [hub('moves')], activate: true, title: 'Moves', text: 'Post your skill clips and collect hearts.' },
       { page: 'physique', targets: [hub('reports')], activate: true, title: 'Reports', text: 'Your progress, week by week.' },
-      { page: 'physique', targets: [hub('profile')], activate: true, title: 'Profile', text: 'Your stats and goals.' },
+      { page: 'physique', targets: [hub('profile')], activate: true, title: 'Profile', text: 'Enter your details here for accuracy.' },
     ] },
     { figure: 'humanflag', subs: [
       iconSub('Strength Ninjas', bottom('Strength Ninjas'), 'The map of everyone training with us.', 'map'),
@@ -60,8 +63,8 @@
       { page: 'levels', targets: [], title: 'Levels', text: 'Level up each skill from 1 to 10 and grow your Super Level.' },
     ] },
     { figure: 'flare', subs: [
-      iconSub('Clothing', bottom('Shop'), 'PRA gear.', 'shop'),
-      { page: 'shop', targets: [], title: 'Clothing', text: 'Train in the gear. New drops land here first.' },
+      iconSub('Clothing', bottom('Shop'), 'PRA gear. Students get 10% off.', 'shop'),
+      { page: 'shop', targets: [], title: 'Clothing', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' },
     ] },
     { figure: 'flip', subs: [
       iconSub('Retreats', bottom('Retreats'), 'Train with us in person.', 'retreats'),
@@ -69,14 +72,23 @@
     ] },
     { figure: 'humanflag', subs: [
       iconSub('Your profile', top('My profile'), 'Your account and photo.', 'profile'),
-      { page: 'profile', targets: ['.avatar-wrap', '.avatar-lg', '#profileCard'], title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' },
+      { page: 'profile', targets: ['#profileCard .pp-avatar-wrap', '#profileCard .pp-avatar', '.avatar-wrap'], gap: 40, title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' },
     ] },
     { figure: 'aerialhoop', subs: [
       iconSub('Back to chat', top('Chat'), 'Head back to your chat.', 'chat'),
-      { page: 'chat', targets: ['.convo-item[data-self-row] .pra-avatar', '.convo-item[data-own-group] .pra-avatar', '.convo-item .pra-avatar'], clickAdvance: true, title: 'Tap your photo', text: 'It opens your profile panel. Tap it or hit Next.' },
-      { page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
+      { page: 'chat', targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'], clickAdvance: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
+      { page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
     ] },
   ];
+  // Admin Panel > Quick Start loads this file only to read the default wording.
+  if (window.PRA_QS_EDITOR) { window.PRA_QS_STEPS = STEPS; return; }
+  Object.entries(QS.texts || {}).forEach(([k, v]) => {
+    const [si, ui] = k.split('.').map(n => parseInt(n, 10) - 1);
+    const sub = STEPS[si] && STEPS[si].subs[ui];
+    if (sub && v) { if (v.title) sub.title = v.title; if (v.text) sub.text = v.text; }
+  });
+  // Role-only parts (e.g. gym booking) -- testers see every part.
+  STEPS.forEach(st => { st.subs = st.subs.filter(sub => !sub.roles || sub.roles.includes(me.role) || QS.tester); });
   const TOTAL = STEPS.length * 10;
 
   // ── State ─────────────────────────────────────────────────────────────
@@ -87,32 +99,41 @@
 
   // ── Styles ────────────────────────────────────────────────────────────
   const css = `
-  .ptu-panel { position: fixed; z-index: 9600; width: min(330px, calc(100vw - 24px)); background: rgba(14,14,19,.97); border: 1px solid rgba(0,155,255,.45);
-    border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 22px rgba(0,155,255,.18); color: #fff; font-family: var(--font-primary, sans-serif);
+  .ptu-halo { position: fixed; z-index: 9598; pointer-events: none; border-radius: 48px; background: rgba(0,0,0,.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    -webkit-mask-image: radial-gradient(closest-side, #000 72%, transparent 100%); mask-image: radial-gradient(closest-side, #000 72%, transparent 100%);
+    transition: top .25s, left .25s, width .25s, height .25s; }
+  .ptu-panel { position: fixed; z-index: 9600; width: min(330px, calc(100vw - 24px)); background: #fff; border: none;
+    border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 0 50px 18px rgba(0,0,0,.85); color: #0b0b10; font-family: var(--font-primary, sans-serif);
     overflow: hidden; transition: top .25s, left .25s, opacity .2s; }
-  .ptu-prog { height: 5px; background: rgba(255,255,255,.08); }
+  .ptu-prog { height: 6px; background: #e9ecf1; }
   .ptu-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #009bff, #ffd23f); box-shadow: 0 0 8px rgba(255,210,63,.7); transition: width .6s cubic-bezier(.2,.8,.2,1); }
   .ptu-body { padding: 12px 14px 14px; position: relative; }
-  .ptu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .66rem; letter-spacing: .12em; color: #9aa3ad; font-weight: 700; padding-right: 22px; }
-  .ptu-tally { display: flex; align-items: center; gap: 6px; color: #ffd23f; font-size: .8rem; letter-spacing: 0; }
+  .ptu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .66rem; letter-spacing: .12em; color: #6b7280; font-weight: 700; padding-right: 22px; }
+  .ptu-tally { display: flex; align-items: center; gap: 6px; color: #b07f00; font-size: .8rem; letter-spacing: 0; }
   .ptu-coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 1.5px #b07f00; display: inline-block; flex-shrink: 0; }
   .ptu-title { font-weight: 800; font-size: 1.02rem; margin: 8px 0 4px; }
-  .ptu-text { font-size: .84rem; color: #c3cad3; line-height: 1.45; }
-  .ptu-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .ptu-text { font-size: .86rem; color: #374151; line-height: 1.45; }
+  .ptu-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
   .ptu-btn { border: none; border-radius: 9px; padding: 9px 18px; font-weight: 800; font-size: .82rem; cursor: pointer; font-family: inherit; background: #009bff; color: #fff; }
   .ptu-btn:hover { background: #0086e0; box-shadow: 0 0 12px rgba(0,155,255,.6); }
-  .ptu-btn.ghost { background: rgba(255,255,255,.07); color: #c3cad3; }
+  .ptu-btn.ghost { background: #eef0f3; color: #374151; }
+  .ptu-btn.ghost:hover { background: #e2e5ea; box-shadow: none; }
+  .ptu-btn.dark { background: #1f2937; color: #fff; }
+  .ptu-btn.dark:hover { background: #0b0b10; box-shadow: none; }
+  .ptu-back { visibility: hidden; }
+  .ptu-back.on { visibility: visible; }
   .ptu-btn:disabled { opacity: .5; cursor: default; }
-  .ptu-x { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border: none; background: none; color: #6b7480; cursor: pointer; padding: 0; font-size: 15px; line-height: 20px; }
-  .ptu-x:hover { color: #fff; }
-  .ptu-confirm { position: absolute; inset: 0; background: rgba(14,14,19,.98); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 14px; }
+  .ptu-x { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border: none; background: none; color: #9ca3af; cursor: pointer; padding: 0; font-size: 15px; line-height: 20px; }
+  .ptu-x:hover { color: #0b0b10; }
+  .ptu-confirm { position: absolute; inset: 0; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 14px; }
   .ptu-confirm .q { font-weight: 800; font-size: 1rem; }
   .ptu-confirm .r { display: flex; gap: 8px; }
   .ptu-ring { position: fixed; z-index: 9599; pointer-events: none; border: 2px solid #009bff; border-radius: 12px; box-shadow: 0 0 0 4px rgba(0,155,255,.18), 0 0 18px rgba(0,155,255,.7);
     animation: ptuPulse 1.2s ease-in-out infinite; transition: top .25s, left .25s, width .25s, height .25s; }
   @keyframes ptuPulse { 50% { box-shadow: 0 0 0 9px rgba(0,155,255,.06), 0 0 28px rgba(0,155,255,.95); } }
-  .ptu-arrow { position: fixed; z-index: 9601; width: 34px; height: 46px; pointer-events: none; transition: top .25s, left .25s; }
-  .ptu-arrow svg { width: 100%; height: 100%; filter: drop-shadow(0 0 6px rgba(0,155,255,.9)); }
+  .ptu-arrow { position: fixed; z-index: 9601; width: 26px; height: 48px; pointer-events: none; transition: top .25s, left .25s; }
+  .ptu-arrow svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgb(212,255,0)) drop-shadow(0 0 2px rgb(212,255,0)); }
   .ptu-arrow.up svg { animation: ptuBounceUp .8s ease-in-out infinite; }
   .ptu-arrow.down svg { transform: rotate(180deg); animation: ptuBounceDown .8s ease-in-out infinite; }
   @keyframes ptuBounceUp { 50% { transform: translateY(-9px); } }
@@ -125,19 +146,8 @@
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
   .ptu-fig { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; animation: ptuFigIn 1.6s ease-out forwards; }
-  .ptu-fig svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgba(0,155,255,.9)) drop-shadow(0 0 2px #fff); }
+  .ptu-fig img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 0 7px rgba(0,155,255,.95)) drop-shadow(0 0 2px rgba(255,255,255,.9)); }
   @keyframes ptuFigIn { 0% { opacity: 0; transform: scale(.4) translateY(20px); } 15% { opacity: 1; transform: scale(1.05) translateY(0); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.95) translateY(-10px); } }
-  .ptu-fig .sway { transform-box: view-box; transform-origin: 60px 112px; animation: ptuSway .9s ease-in-out infinite; }
-  @keyframes ptuSway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-  .ptu-fig .flare { transform-box: view-box; transform-origin: 60px 60px; animation: ptuFlare .7s linear infinite; }
-  @keyframes ptuFlare { 0% { transform: scaleX(1); } 25% { transform: scaleX(.1); } 50% { transform: scaleX(-1); } 75% { transform: scaleX(-.1); } 100% { transform: scaleX(1); } }
-  .ptu-fig .flip { transform-box: view-box; transform-origin: 60px 62px; animation: ptuFlip 1.1s cubic-bezier(.45,0,.55,1) infinite; }
-  @keyframes ptuFlip { 0% { transform: translateY(18px) rotate(0); } 50% { transform: translateY(-22px) rotate(-180deg); } 100% { transform: translateY(18px) rotate(-360deg); } }
-  .ptu-fig .flag { transform-box: view-box; transform-origin: 26px 55px; animation: ptuFlag 1.2s ease-in-out infinite; }
-  @keyframes ptuFlag { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
-  .ptu-fig .hoop { transform-box: view-box; transform-origin: 60px 0; animation: ptuHoop 1.4s ease-in-out infinite; }
-  @keyframes ptuHoop { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
-  .ptu-fig .hoopspin { transform-box: view-box; transform-origin: 60px 62px; animation: ptuFlare 1.8s linear infinite; }
   .ptu-final { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(4,4,8,.72); }
   .ptu-final canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .ptu-final .box { position: relative; text-align: center; color: #fff; font-family: var(--font-primary, sans-serif); padding: 20px; }
@@ -149,28 +159,21 @@
   .ptu-final .stage .ptu-fig { left: 50%; top: 50%; width: 170px; height: 170px; margin: -85px 0 0 -85px; animation: ptuStage .75s ease-out both; }
   @keyframes ptuStage { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
   .ptu-final .r { display: flex; gap: 10px; justify-content: center; }
-  .ptu-launch { position: fixed; z-index: 2990; right: 14px; bottom: 86px; display: flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,210,63,.6);
-    background: rgba(14,14,19,.92); color: #ffd23f; font-weight: 800; font-size: .76rem; cursor: pointer; font-family: var(--font-primary, sans-serif); box-shadow: 0 0 14px rgba(255,210,63,.25); }
+  .ptu-launch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid rgba(255,210,63,.65);
+    background: rgba(14,14,19,.85); color: #ffd23f; font-weight: 800; font-size: .74rem; cursor: pointer; font-family: var(--font-primary, sans-serif); white-space: nowrap;
+    box-shadow: 0 0 12px rgba(255,210,63,.22); flex-shrink: 0; }
   .ptu-launch:hover { box-shadow: 0 0 18px rgba(255,210,63,.55); }
+  .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   // ── Athlete silhouettes (white line figures, blue glow) ───────────────
-  const LINE = 'stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-  const FIGS = {
-    // Straight handstand balancing on the hands, swaying a little.
-    handstand: `<svg viewBox="0 0 120 120"><g class="sway"><path ${LINE} d="M48 112 L54 80 M72 112 L66 80 M54 80 L66 80 M60 80 L60 44 M60 44 L52 10 M60 44 L68 10"/><circle cx="60" cy="92" r="8" fill="#fff"/></g></svg>`,
-    // Flare: hands down, hips up, legs straddled -- circles round (scaleX).
-    flare: `<svg viewBox="0 0 120 120"><line x1="10" y1="114" x2="110" y2="114" stroke="rgba(0,155,255,.5)" stroke-width="2"/><g class="flare"><path ${LINE} d="M52 112 L56 80 M68 112 L64 80 M56 80 L64 80 M60 80 L84 60 M84 60 L112 42 M84 60 L110 84"/><circle cx="46" cy="76" r="8" fill="#fff"/></g></svg>`,
-    // Tucked back flip: jumps and rotates a full turn.
-    flip: `<svg viewBox="0 0 120 120"><g class="flip"><circle cx="60" cy="36" r="8" fill="#fff"/><path ${LINE} d="M60 46 L60 70 M60 52 L76 62 L72 76 M60 70 L76 72 L66 86 M60 70 L72 66"/></g></svg>`,
-    // Human flag: body horizontal off a vertical pole.
-    humanflag: `<svg viewBox="0 0 120 120"><line x1="22" y1="4" x2="22" y2="118" stroke="rgba(255,255,255,.7)" stroke-width="5" stroke-linecap="round"/><g class="flag"><path ${LINE} d="M22 30 L40 46 M22 78 L40 58 M40 46 L40 58 M40 52 L82 52 M82 52 L112 46 M82 52 L112 60"/><circle cx="34" cy="36" r="7.5" fill="#fff"/></g></svg>`,
-    // Aerial hoop: athlete hanging in a hoop that swings on its rope.
-    aerialhoop: `<svg viewBox="0 0 120 120"><g class="hoop"><line x1="60" y1="0" x2="60" y2="28" stroke="rgba(255,255,255,.7)" stroke-width="3"/><g class="hoopspin"><circle cx="60" cy="62" r="34" stroke="#009bff" stroke-width="5" fill="none"/><path ${LINE} d="M60 28 L48 44 M60 28 L72 44 M48 44 L72 44 M60 44 L62 70 M62 70 L44 88 M62 70 L86 84"/><circle cx="60" cy="54" r="0"/><circle cx="60" cy="36" r="0"/></g><circle cx="60" cy="52" r="0"/></g></svg>`,
-  };
-  // The hoop athlete's head (drawn after the frame so it sits on top).
-  FIGS.aerialhoop = FIGS.aerialhoop.replace('<circle cx="60" cy="54" r="0"/>', '<circle cx="47" cy="52" r="7.5" fill="#fff"/>');
+  // Real moves: white silhouettes cut from Lee's own footage (handstand,
+  // flare, backflip, human flag) and a student's aerial hoop kata, rendered
+  // as transparent animated WebP in /chat-app/assets/quickstart/.
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=1`;
+  const FIGS = new Proxy({}, { get: (_, n) => `<img src="${FIG_SRC(String(n))}" alt="">` });
+  ['handstand', 'flare', 'flip', 'humanflag', 'aerialhoop'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
 
   // ── Sound (Web Audio, all synthesized -- no audio files) ──────────────
   let actx = null;
@@ -244,12 +247,12 @@
   }
 
   // ── Panel / pointer UI ────────────────────────────────────────────────
-  let panel = null, ring = null, arrow = null, posTimer = null, currentTarget = null, busy = false;
-  const ARROW_SVG = '<svg viewBox="0 0 34 46"><path d="M17 2 L32 20 L22 20 L22 44 L12 44 L12 20 L2 20 Z" fill="#009bff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>';
+  let panel = null, ring = null, arrow = null, halo = null, posTimer = null, currentTarget = null, currentSub = null, busy = false;
+  const ARROW_SVG = '<svg viewBox="0 0 26 48"><path d="M13 1 L24 15 L2 15 Z" fill="rgb(212,255,0)"/><rect x="11" y="14" width="4" height="33" rx="2" fill="rgb(212,255,0)"/></svg>';
   function teardown() {
     clearInterval(posTimer); posTimer = null;
-    [panel, ring, arrow].forEach(el => el && el.remove());
-    panel = ring = arrow = null; currentTarget = null;
+    [panel, ring, arrow, halo].forEach(el => el && el.remove());
+    panel = ring = arrow = halo = null; currentTarget = null; currentSub = null;
   }
   const visible = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
   function findTarget(sub) {
@@ -266,9 +269,21 @@
     const t = currentTarget && document.contains(currentTarget) && visible(currentTarget) ? currentTarget.getBoundingClientRect() : null;
     if (!t) {
       panel.style.left = Math.round((vw - pw) / 2) + 'px'; panel.style.top = Math.round((vh - ph) / 2) + 'px';
-      ring.style.display = 'none'; arrow.style.display = 'none'; return;
+      ring.style.display = 'none'; arrow.style.display = 'none'; placeHalo(); return;
     }
-    const pad = 6, gap = 58;
+    const pad = 6, gap = (currentSub && currentSub.gap) || 52;
+    // Tall targets (e.g. the profile panel): panel docks at the bottom of the
+    // screen with the arrow above it, pointing up into the target.
+    if ((currentSub && currentSub.placement === 'bottom') || t.height > vh * 0.55) {
+      ring.style.display = ''; arrow.style.display = '';
+      ring.style.left = (t.left - pad) + 'px'; ring.style.top = (t.top - pad) + 'px';
+      ring.style.width = (t.width + pad * 2) + 'px'; ring.style.height = (t.height + pad * 2) + 'px';
+      const ptop = vh - ph - 16, pleft = Math.max(12, Math.min(vw - pw - 12, t.left + t.width / 2 - pw / 2));
+      panel.style.left = pleft + 'px'; panel.style.top = ptop + 'px';
+      arrow.className = 'ptu-arrow up';
+      arrow.style.left = (pleft + pw / 2 - 13) + 'px'; arrow.style.top = (ptop - 56) + 'px';
+      placeHalo(); return;
+    }
     ring.style.display = ''; arrow.style.display = '';
     ring.style.left = (t.left - pad) + 'px'; ring.style.top = (t.top - pad) + 'px';
     ring.style.width = (t.width + pad * 2) + 'px'; ring.style.height = (t.height + pad * 2) + 'px';
@@ -279,33 +294,43 @@
     const left = Math.max(12, Math.min(vw - pw - 12, cx - pw / 2));
     panel.style.left = left + 'px'; panel.style.top = top + 'px';
     arrow.className = 'ptu-arrow ' + (below ? 'up' : 'down');
-    arrow.style.left = (Math.max(left + 14, Math.min(left + pw - 48, cx - 17))) + 'px';
-    arrow.style.top = (below ? t.bottom + pad + 6 : t.top - pad - 52) + 'px';
+    arrow.style.left = (Math.max(left + 14, Math.min(left + pw - 40, cx - 13))) + 'px';
+    arrow.style.top = (below ? t.bottom + pad + 4 : t.top - pad - 52) + 'px';
+    placeHalo();
+  }
+  function placeHalo() {
+    if (!halo || !panel) return;
+    const r = panel.getBoundingClientRect(), e = 44;
+    halo.style.left = (r.left - e) + 'px'; halo.style.top = (r.top - e) + 'px';
+    halo.style.width = (r.width + e * 2) + 'px'; halo.style.height = (r.height + e * 2) + 'px';
   }
   function cancelConfirm() {
     const body = panel.querySelector('.ptu-body');
     const c = document.createElement('div'); c.className = 'ptu-confirm';
-    c.innerHTML = '<div class="q">Really cancel?</div><div class="ptu-text">You can restart the tutorial any time.</div><div class="r"><button class="ptu-btn ghost" data-a="no">Keep going</button><button class="ptu-btn" data-a="yes">Yes, cancel</button></div>';
+    c.innerHTML = '<div class="q">Really cancel?</div><div class="r"><button class="ptu-btn dark" data-a="yes">Yes, cancel</button><button class="ptu-btn" data-a="no">Keep going</button></div>';
     body.appendChild(c);
     c.querySelector('[data-a="no"]').onclick = () => c.remove();
-    c.querySelector('[data-a="yes"]').onclick = () => { state.active = false; save(state); teardown(); mountLauncher(); };
+    c.querySelector('[data-a="yes"]').onclick = () => { state.active = false; state.cancelled = true; save(state); teardown(); mountLauncher(); };
   }
   function render(sub, opts = {}) {
     teardown();
     const stepNo = state.step + 1;
     panel = document.createElement('div'); panel.className = 'ptu-panel';
     panel.innerHTML = `<div class="ptu-prog"><i></i></div><div class="ptu-body">
-      <button class="ptu-x" title="Cancel tutorial" aria-label="Cancel tutorial">&#x2715;</button>
-      <div class="ptu-head"><span>STEP ${stepNo} / ${STEPS.length}</span><span class="ptu-tally"><span class="ptu-coin"></span><b>${state.coins}</b><span style="color:#6b7480;font-weight:600">/ ${TOTAL}</span></span></div>
+      <button class="ptu-x" title="Close Quick Start" aria-label="Close Quick Start">&#x2715;</button>
+      <div class="ptu-head"><span>STEP ${stepNo} / ${STEPS.length}</span><span class="ptu-tally"><span class="ptu-coin"></span><b>${state.coins}</b><span style="color:#9ca3af;font-weight:600">/ ${TOTAL}</span></span></div>
       <div class="ptu-title"></div><div class="ptu-text"></div>
-      <div class="ptu-foot"><button class="ptu-btn ptu-next">${opts.away ? 'Take me there' : 'Next'}</button></div></div>`;
+      <div class="ptu-foot"><button class="ptu-btn ghost ptu-back${(state.step || state.sub) ? ' on' : ''}">Back</button><button class="ptu-btn ptu-next">${opts.away ? 'Take me there' : 'Next'}</button></div></div>`;
     panel.querySelector('.ptu-title').textContent = sub.title;
     panel.querySelector('.ptu-text').textContent = sub.text;
+    currentSub = sub;
+    halo = document.createElement('div'); halo.className = 'ptu-halo';
     ring = document.createElement('div'); ring.className = 'ptu-ring';
     arrow = document.createElement('div'); arrow.className = 'ptu-arrow up'; arrow.innerHTML = ARROW_SVG;
-    document.body.append(ring, arrow, panel);
+    document.body.append(halo, ring, arrow, panel);
     requestAnimationFrame(() => { const bar = panel && panel.querySelector('.ptu-prog i'); if (bar) bar.style.width = (state.coins / TOTAL * 100) + '%'; });
     panel.querySelector('.ptu-x').onclick = cancelConfirm;
+    panel.querySelector('.ptu-back').onclick = () => { ac(); back(); };
     panel.querySelector('.ptu-next').onclick = () => { ac(); opts.away ? goTo(sub.go || sub.page) : next(); };
     currentTarget = opts.away ? null : findTarget(sub);
     if (currentTarget) {
@@ -350,6 +375,25 @@
     if (sub.closePanel) { const x = document.querySelector('.pp-backdrop.show .pp-close'); if (x) x.click(); }
     advanceSub(false);
   }
+  // Back one sub (or into the previous step, giving its 10 coins back).
+  function back() {
+    if (busy) return;
+    const cur = STEPS[state.step].subs[state.sub];
+    if (cur.closePanel) { const x = document.querySelector('.pp-backdrop.show .pp-close'); if (x) x.click(); }
+    if (state.sub > 0) state.sub--;
+    else if (state.step > 0) { state.step--; state.sub = STEPS[state.step].subs.length - 1; }
+    else return;
+    state.coins = state.step * 10; state.noSkip = true;
+    save(state);
+    const sub = STEPS[state.step].subs[state.sub];
+    // Backing onto a nav-icon sub: show it on the page before (where the icon was tapped).
+    let pageKey = sub.page;
+    if (pageKey === '*') {
+      const prev = state.sub > 0 ? STEPS[state.step].subs[state.sub - 1] : (state.step > 0 ? STEPS[state.step - 1].subs.slice(-1)[0] : null);
+      pageKey = prev && prev.page !== '*' ? prev.page : '*';
+    }
+    if (pageKey === '*' || pageMatches(pageKey)) show(); else goTo(pageKey);
+  }
   function completeStep() {
     busy = true;
     const btn = panel && panel.querySelector('.ptu-next'); if (btn) btn.disabled = true;
@@ -358,7 +402,7 @@
     const bar = panel && panel.querySelector('.ptu-prog i'); if (bar) bar.style.width = (state.coins / TOTAL * 100) + '%';
     if (panel) stepReward(state.step, panel);
     const finished = state.step + 1 >= STEPS.length;
-    if (finished) { state.done = true; state.active = false; } else { state.step++; state.sub = 0; }
+    if (finished) { state.done = true; state.active = false; markComplete(); } else { state.step++; state.sub = 0; }
     save(state);
     setTimeout(() => { busy = false; if (finished) { teardown(); finale(); } else show(); }, 1600);
   }
@@ -367,8 +411,7 @@
   function finale() {
     const wrap = document.createElement('div'); wrap.className = 'ptu-final';
     wrap.innerHTML = `<canvas></canvas><div class="box"><div class="stage"></div><div class="score">${TOTAL} / ${TOTAL}</div>
-      <div class="msg">Tutorial complete!</div><div class="sub">You know your way around. Now go train.</div>
-      <div class="r"><button class="ptu-btn ghost" data-a="again">Play again</button><button class="ptu-btn" data-a="done">Let's go</button></div></div>`;
+      <div class="msg">Quick Start complete!</div><div class="sub">You know your way around. Now go train.</div></div>`;
     document.body.appendChild(wrap);
     victoryTune();
     const stage = wrap.querySelector('.stage');
@@ -407,8 +450,13 @@
       requestAnimationFrame(frame);
     })();
     const close = () => { running = false; clearInterval(burstTimer); clearInterval(figTimer); wrap.remove(); mountLauncher(); };
-    wrap.querySelector('[data-a="done"]').onclick = close;
-    wrap.querySelector('[data-a="again"]').onclick = () => { close(); start(); };
+    // After the 3s show, straight back to the chat.
+    setTimeout(() => { wrap.style.transition = 'opacity .4s'; wrap.style.opacity = '0'; setTimeout(() => { close(); if (!PAGES.chat.test(path)) location.href = PAGES.chat.url; }, 400); }, 3400);
+  }
+
+  function markComplete() {
+    QS.completed = true; QS.showButton = true;
+    fetch('/api/chat/quickstart/complete', { method: 'POST' }).catch(() => {});
   }
 
   // ── Flow control ──────────────────────────────────────────────────────
@@ -419,10 +467,16 @@
     if (!step) return;
     let sub = step.subs[state.sub];
     // A nav icon was followed by hand: the next sub is already on this page.
-    if (sub.page === '*' && sub.go && pageMatches(sub.go) && step.subs[state.sub + 1] && pageMatches(step.subs[state.sub + 1].page)) {
+    const noSkip = state.noSkip; if (noSkip) { delete state.noSkip; save(state); }
+    if (!noSkip && sub.page === '*' && sub.go && pageMatches(sub.go) && step.subs[state.sub + 1] && pageMatches(step.subs[state.sub + 1].page)) {
       state.sub++; save(state); sub = step.subs[state.sub];
     }
     if (!pageMatches(sub.page)) { render(sub, { away: true }); return; }
+    // Open their group chat first when the target lives in the thread header.
+    if (sub.openGroup && !findTarget(sub)) {
+      const row = document.querySelector('.convo-item[data-own-group]') || document.querySelector('.convo-item');
+      if (row) row.click();
+    }
     // Wait (briefly) for the thing to point at to render.
     const t0 = Date.now(), limit = sub.wait || 6000;
     (function wait() {
@@ -433,22 +487,40 @@
   }
   function start() {
     state = fresh(); save(state);
-    const lb = document.querySelector('.ptu-launch'); if (lb) lb.remove();
     if (!PAGES.chat.test(path)) { location.href = PAGES.chat.url; return; }
     show();
   }
+  // Shown once they've finished it, inside the day windows set in Admin Panel.
+  // Phone: right of "Chats" (right of the students count for staff), which
+  // sits centered under the first row of icons. Desktop: centered in the top bar.
   function mountLauncher() {
-    if (!PAGES.chat.test(path) || document.querySelector('.ptu-launch')) return;
-    const b = document.createElement('button'); b.className = 'ptu-launch';
-    b.innerHTML = '<span class="ptu-coin"></span>Tutorial';
-    b.onclick = () => { ac(); start(); };
-    document.body.appendChild(b);
+    if (!QS.showButton) return;
+    let b = document.querySelector('.ptu-launch');
+    if (!b) {
+      b = document.createElement('button'); b.type = 'button'; b.className = 'ptu-launch';
+      b.innerHTML = '<span class="ptu-coin"></span>Quick Start';
+      b.onclick = () => { ac(); start(); };
+    }
+    const wide = window.innerWidth >= 768;
+    const bar = document.getElementById('chat-app-header');
+    const chatsRow = document.getElementById('studentsCountBtn') && document.getElementById('studentsCountBtn').parentElement;
+    if (wide && bar) {
+      b.classList.add('in-bar');
+      if (b.parentElement !== bar) { if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative'; bar.appendChild(b); }
+    } else if (chatsRow) {
+      b.classList.remove('in-bar');
+      if (b.parentElement !== chatsRow) chatsRow.appendChild(b);
+    } else if (b.parentElement) b.remove();
   }
+  window.addEventListener('resize', () => { if (document.querySelector('.ptu-launch')) mountLauncher(); });
 
   window.PRATutorial = { start, reset: () => { try { localStorage.removeItem(KEY); } catch {} } };
   const boot = () => {
     if (new URLSearchParams(location.search).get('tutorial') === '1') { start(); return; }
-    if (state && state.active) show(); else mountLauncher();
+    if (state && state.done && !QS.completed) markComplete();
+    if (state && state.active) { show(); return; }
+    mountLauncher();
+    if (QS.autoStart && !QS.completed && PAGES.chat.test(path) && !(state && (state.cancelled || state.done))) start();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

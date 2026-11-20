@@ -38,6 +38,34 @@ const CONVOS_FILE = "chat_conversations.json";
 // nothing in this file reads or writes it anymore.
 const PUSH_FILE = "chat_push_subscriptions.json";
 const CONFIG_FILE = "chat_admin_config.json";
+
+// ── Quick Start (gamified walkthrough, tutorial.js) ─────────────────────
+// Settings live in Admin Panel > Quick Start. Per-person timing decides when
+// the Quick Start button shows (after they've completed it): the first N days
+// of using the app, and again for M days whenever they come back after K+
+// days away.
+const QS_FILE = "chat_quickstart.json";
+const QS_DAY = 24 * 60 * 60 * 1000;
+const QS_DEFAULTS = {
+  enabledFor: "testers",          // "off" | "testers" | "everyone"
+  testers: ["76f3579b-ed30-46dd-928f-42a32d269dd2"],
+  roles: ["user", "trainee", "online", "gym"], // who "everyone" means
+  autoStart: true,                // opens by itself on chat until finished or closed
+  buttonFirstDays: 3,
+  awayDays: 3,
+  comebackDays: 2,
+  testersAlwaysButton: true,      // testers can replay any time
+  texts: {},                      // "step.sub" -> { title, text } overrides
+};
+function qsRead() {
+  const d = readJson(QS_FILE, {});
+  return { config: { ...QS_DEFAULTS, ...(d.config || {}) }, users: d.users || {} };
+}
+function qsEligible(cfg, user) {
+  if (!user || cfg.enabledFor === "off") return false;
+  if ((cfg.testers || []).includes(user.id)) return true;
+  return cfg.enabledFor === "everyone" && (cfg.roles || []).includes(user.role);
+}
 const RESETS_FILE = "chat_password_resets.json";
 const UPLOAD_COUNTERS_FILE = "chat_upload_counters.json";
 const TRAINING_PROTOCOLS_FILE = "chat_training_protocols.json";
@@ -5205,7 +5233,7 @@ export async function handleChatRequest(req, res, url) {
     if (isTrainee(user)) {
       const own = encodeURIComponent(user.id);
       const allowed = p === "/api/chat/conversations" || p.startsWith("/api/chat/conversations/")
-        || p === "/api/chat/contacts" || p.startsWith("/api/chat/me/")
+        || p === "/api/chat/contacts" || p.startsWith("/api/chat/me/") || p.startsWith("/api/chat/quickstart")
         || p === `/api/chat/training-protocol/${own}` || p === "/api/chat/training-protocol/video-error"
         || p === `/api/chat/protocol-program/${own}`
         || p.startsWith("/api/chat/profile/")
@@ -5701,6 +5729,69 @@ export async function handleChatRequest(req, res, url) {
     }
 
     // ─── Contacts (coach-only visibility for regular users) ───────────────
+    // ─── Quick Start ─────────────────────────────────────────────────────
+    if (p === "/api/chat/quickstart" && req.method === "GET") {
+      const qs = qsRead();
+      const cfg = qs.config;
+      if (!qsEligible(cfg, user)) return sendJson(res, 200, { enabled: false });
+      const now = Date.now();
+      const rec = qs.users[user.id] || {};
+      let changed = false;
+      if (!rec.firstSeenAt) { rec.firstSeenAt = now; rec.showUntil = now + cfg.buttonFirstDays * QS_DAY; changed = true; }
+      else if (rec.lastSeenAt && now - rec.lastSeenAt >= cfg.awayDays * QS_DAY) {
+        rec.showUntil = Math.max(rec.showUntil || 0, now + cfg.comebackDays * QS_DAY); changed = true;
+      }
+      // Last-seen is only written every 30 min (this runs on every page).
+      if (changed || !rec.lastSeenAt || now - rec.lastSeenAt > 30 * 60 * 1000) { rec.lastSeenAt = now; changed = true; }
+      if (changed) { qs.users[user.id] = rec; writeJson(QS_FILE, qs); }
+      const tester = (cfg.testers || []).includes(user.id);
+      const completed = !!rec.completedAt;
+      return sendJson(res, 200, {
+        enabled: true, tester, completed, autoStart: !!cfg.autoStart && !completed,
+        showButton: completed && (now < (rec.showUntil || 0) || (tester && cfg.testersAlwaysButton)),
+        texts: cfg.texts || {},
+      });
+    }
+    if (p === "/api/chat/quickstart/complete" && req.method === "POST") {
+      const qs = qsRead();
+      const rec = qs.users[user.id] || { firstSeenAt: Date.now(), showUntil: Date.now() + qs.config.buttonFirstDays * QS_DAY };
+      rec.completedAt = Date.now(); rec.completions = (rec.completions || 0) + 1;
+      qs.users[user.id] = rec; writeJson(QS_FILE, qs);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (p === "/api/admin/quickstart") {
+      if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
+      const qs = qsRead();
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        const c = qs.config;
+        if (["off", "testers", "everyone"].includes(b.enabledFor)) c.enabledFor = b.enabledFor;
+        if (Array.isArray(b.testers)) c.testers = b.testers.map(String).slice(0, 50);
+        if (Array.isArray(b.roles)) c.roles = b.roles.filter(r => ["user", "trainee", "online", "gym", "coach", "admin", "admin2"].includes(r));
+        for (const k of ["autoStart", "testersAlwaysButton"]) if (b[k] !== undefined) c[k] = !!b[k];
+        for (const k of ["buttonFirstDays", "awayDays", "comebackDays"]) if (b[k] !== undefined) c[k] = Math.max(0, Math.min(60, Number(b[k]) || 0));
+        if (b.texts && typeof b.texts === "object") {
+          const t = {};
+          for (const [k, v] of Object.entries(b.texts)) {
+            if (!/^\d+\.\d+$/.test(k) || !v) continue;
+            const title = String(v.title || "").slice(0, 80), text = String(v.text || "").slice(0, 300);
+            if (title || text) t[k] = { title, text };
+          }
+          c.texts = t;
+        }
+        if (b.resetUserId) { const r = qs.users[String(b.resetUserId)]; if (r) { delete r.completedAt; } }
+        qs.config = c; writeJson(QS_FILE, qs);
+      }
+      const users = readJson(USERS_FILE, []);
+      const byId = new Map(users.map(u => [u.id, u]));
+      const people = Object.entries(qs.users).map(([id, r]) => {
+        const u = byId.get(id);
+        return { id, name: u ? `${u.first} ${u.last}` : id, role: u?.role || "", completedAt: r.completedAt || null, completions: r.completions || 0, firstSeenAt: r.firstSeenAt || null, lastSeenAt: r.lastSeenAt || null, showUntil: r.showUntil || null };
+      }).sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+      const staffAndAll = users.filter(u => !u.archived).map(u => ({ id: u.id, name: `${u.first} ${u.last}`, role: u.role })).sort((a, b) => a.name.localeCompare(b.name));
+      return sendJson(res, 200, { config: qs.config, people, users: staffAndAll });
+    }
+
     if (p === "/api/chat/contacts" && req.method === "GET") {
       // Everyone shows up in everyone's directory now — visibility here is
       // just "who exists," not "who can be messaged." canCreateDm() is the

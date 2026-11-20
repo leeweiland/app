@@ -2497,6 +2497,8 @@ function wireConvoItems(wrap, items) {
       // name/preview still opens the chat. (Students already only ever get
       // the profile for other people's rows.)
       if ((isStaffMe() || item.isSelfRow) && item.avatarUser?.id && e.target.closest('.pra-avatar')) { openLevelsModal(item.avatarUser); return; }
+      // Your own coaching group's photo opens your own profile panel.
+      if (item.isOwnGroup && me && e.target.closest('.pra-avatar')) { openLevelsModal(me); return; }
       // Same click behavior for every contact regardless of role (student,
       // coach, or admin) and regardless of viewer: anyone not already a
       // real conversation opens the Levels panel instead of jumping

@@ -625,10 +625,13 @@ window.PRABack = (function () {
     const allowed = (href) => { const f = featureFor(href); return !myAccess || !f || myAccess[f] !== false; };
     window.PRA_ACCESS = myAccess;
     window.PRA_ME = { id: myId, role: myRole };
-    // Gamified tutorial (tutorial.js) -- only Lee's account while it's being tested.
-    const TUTORIAL_TESTERS = ['76f3579b-ed30-46dd-928f-42a32d269dd2'];
-    if (myId && TUTORIAL_TESTERS.includes(myId) && !document.getElementById('pra-tutorial-js')) {
-      const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=1'; document.body.appendChild(ts);
+    // Quick Start (tutorial.js): who gets it is set in Admin Panel > Quick Start.
+    if (myId && !document.getElementById('pra-tutorial-js')) {
+      fetch('/api/chat/quickstart').then(r => r.ok ? r.json() : null).then(qs => {
+        if (!qs || !qs.enabled) return;
+        window.PRA_QS = qs;
+        const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=2'; document.body.appendChild(ts);
+      }).catch(() => {});
     }
     {
       const f = featureFor(path);
