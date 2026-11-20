@@ -23,9 +23,12 @@
 
   const css = document.createElement('style');
   css.textContent = `
-    .lt-bar { display:flex; align-items:center; gap:10px; margin-top:6px; flex-wrap:wrap; position:relative; }
+    .lt-bar { display:flex; align-items:center; gap:12px; margin:0 0 8px; flex-wrap:wrap; position:relative; }
     .lt-btn { font-size:.74rem; padding:6px 12px; }
-    .lt-hint { font-size:.72rem; color:var(--pra-gray, #8a8a95); }
+    .lt-add { display:inline-flex; align-items:center; gap:8px; background:#009bff; color:#fff; border:0; border-radius:10px; padding:9px 16px; font:inherit; font-size:.85rem; font-weight:700; letter-spacing:.02em; cursor:pointer; box-shadow:0 0 0 1px rgba(0,155,255,.5), 0 4px 14px rgba(0,155,255,.35); }
+    .lt-add:hover { background:#1aa7ff; }
+    .lt-add svg { width:18px; height:18px; flex:0 0 auto; }
+    .lt-hint { font-size:.8rem; color:#b8bcc6; }
     .lt-preview { margin-top:6px; font-size:.82rem; line-height:1.45; color:#cfd3dc; white-space:pre-wrap; word-break:break-word; }
     .lt-preview:empty { display:none; }
     .lt-preview a { color:#009bff; text-decoration:underline; }
@@ -55,16 +58,17 @@
     ta.dataset.ltMounted = '1';
     const bar = document.createElement('div');
     bar.className = 'lt-bar';
-    bar.innerHTML = `<button type="button" class="pra-btn pra-btn-ghost lt-btn">Link</button><span class="lt-hint">Highlight words, then Link.</span>`;
+    bar.innerHTML = `<button type="button" class="lt-add" title="Turn the highlighted words into a link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>Add link</button><span class="lt-hint">Highlight words in the message, then click Add link.</span>`;
     const preview = document.createElement('div');
     preview.className = 'lt-preview';
-    ta.after(bar, preview);
+    ta.before(bar);
+    ta.after(preview);
     renderPreview(ta, preview);
     ta.addEventListener('input', () => renderPreview(ta, preview));
     let sel = { start: 0, end: 0 };
     const remember = () => { sel = { start: ta.selectionStart, end: ta.selectionEnd }; };
     ['select', 'keyup', 'mouseup', 'blur'].forEach(ev => ta.addEventListener(ev, remember));
-    const btn = bar.querySelector('.lt-btn');
+    const btn = bar.querySelector('.lt-add');
     btn.addEventListener('mousedown', remember);
     btn.addEventListener('click', () => {
       const open = bar.querySelector('.lt-pop');
