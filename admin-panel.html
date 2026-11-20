@@ -1715,8 +1715,8 @@ async function saveConfig() {
       onlineLevelTestChannelId: document.getElementById('onlineLevelTestChannelId').value,
       physiqueMontageFolderId: document.getElementById('physiqueMontageFolderId').value.trim(),
       gifApiKey: document.getElementById('gifApiKey').value.trim(),
-      welcomeMessageEnabled: document.getElementById('welcomeMessageEnabled').checked,
-      welcomeMessageText: document.getElementById('welcomeMessageText').value,
+      // welcomeMessageEnabled / welcomeMessageText live in User Management now --
+      // not sent from here, so this tab's page-load copy can't overwrite them.
       dailyCheckinEnabled: document.getElementById('dailyCheckinEnabled').checked,
       dailyCheckinPrompt: document.getElementById('dailyCheckinPrompt').value,
       dailyCheckinTime: document.getElementById('dailyCheckinTime').value,
@@ -2036,6 +2036,39 @@ window.addEventListener('pageshow', () => {
     state = { ...state, ...d };
     return true;
   }
+  // Message boxes save themselves as you type (and when you leave the page),
+  // so an edit -- or a link added with the Link tool -- is never lost on
+  // nav/refresh. The Save buttons still work too.
+  function msgPatch(el) {
+    if (el.id === 'umWelcomeText') return { patch: { welcomeMessageText: el.value }, msg: 'umWelcomeMsg', after: () => { const h = document.getElementById('welcomeMessageText'); if (h) h.value = el.value; } };
+    if (el.id === 'umRenewText') return { patch: { renewalMessageText: el.value }, msg: 'umRenewMsg' };
+    if (el.id === 'umTraineeText') return { patch: { traineeWelcomeText: el.value }, msg: 'umTraineeMsg' };
+    if (el.dataset.welcome) return { patch: { traineeWelcomeByProduct: { [el.dataset.welcome]: el.value } }, msg: 'umWelcomeMsg-' + el.dataset.welcome };
+    if (el.dataset.str === 'renewalStudentText') return { patch: { renewalStudentText: el.value }, msg: 'umMsg-renewalStudentText' };
+    return null;
+  }
+  const msgTimers = new Map();
+  async function autosaveMsg(el) {
+    clearTimeout(msgTimers.get(el)); msgTimers.delete(el);
+    const p = msgPatch(el); if (!p) return;
+    const ok = await save(p.patch);
+    if (ok && p.after) p.after();
+    flash(p.msg, ok);
+  }
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLTextAreaElement) || !el.closest('#umBody') || !msgPatch(el)) return;
+    clearTimeout(msgTimers.get(el));
+    msgTimers.set(el, setTimeout(() => autosaveMsg(el), 700));
+  });
+  document.addEventListener('focusout', (e) => { if (msgTimers.has(e.target)) autosaveMsg(e.target); });
+  window.addEventListener('pagehide', () => {
+    for (const el of msgTimers.keys()) {
+      const p = msgPatch(el);
+      if (p) fetch('/api/admin/user-management', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p.patch) });
+    }
+    msgTimers.clear();
+  });
 
   function wire() {
     document.querySelectorAll('#umBody [data-um]').forEach(el => {
