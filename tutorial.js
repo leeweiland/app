@@ -33,7 +33,7 @@
   const iconSub = (title, sel, text, page) => ({ page: '*', targets: [sel], title, text, go: page, clickGo: true });
   const STEPS = [
     { figure: 'handstand', subs: [
-      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
+      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Play The Quick Start Game To MASTER The App', kickerNote: '2 min.', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
     ] },
     { figure: 'cflip', subs: [
       { page: 'chat', roles: ['gym'], openGroup: 'gym', note: 'Gym students only', targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
@@ -118,7 +118,8 @@
   .ptu-tally { display: flex; align-items: center; gap: 6px; color: #b07f00; font-size: .8rem; letter-spacing: 0; }
   .ptu-coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 1.5px #b07f00; display: inline-block; flex-shrink: 0; }
   .ptu-title { font-weight: 800; font-size: 1.02rem; margin: 8px 0 4px; }
-  .ptu-kicker { margin-top: 10px; font-size: .98rem; font-weight: 900; color: #0077cc; line-height: 1.25; }
+  .ptu-kicker { margin-top: 10px; font-size: .94rem; font-weight: 900; color: #0077cc; line-height: 1.25; }
+  .ptu-kicker-note { font-weight: 300; color: #111; white-space: nowrap; }
   .ptu-kicker + .ptu-title { margin-top: 3px; }
   .ptu-text { font-size: .86rem; color: #374151; line-height: 1.45; }
   .ptu-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
@@ -353,7 +354,10 @@
       <div class="ptu-foot"><button class="ptu-btn ghost ptu-back${(state.step || state.sub) ? ' on' : ''}">Back</button><button class="ptu-btn ptu-next">${opts.away ? 'Take me there' : 'Next'}</button></div></div>`;
     panel.querySelector('.ptu-title').textContent = sub.title;
     const kick = panel.querySelector('.ptu-kicker');
-    if (sub.kicker) kick.textContent = sub.kicker; else kick.remove();
+    if (sub.kicker) {
+      kick.textContent = sub.kicker;
+      if (sub.kickerNote) { const t = document.createElement('span'); t.className = 'ptu-kicker-note'; t.textContent = sub.kickerNote; kick.append(' ', t); }
+    } else kick.remove();
     panel.querySelector('.ptu-text').textContent = sub.text;
     currentSub = sub;
     halo = document.createElement('div'); halo.className = 'ptu-halo';
@@ -545,6 +549,7 @@
   // Shown once they've finished it, inside the day windows set in Admin Panel.
   // Phone: right of "Chats" (right of the students count for staff), which
   // sits centered under the first row of icons. Desktop: centered in the top bar.
+  let launcherTimer = null;
   function mountLauncher() {
     if (!QS.showButton) return;
     let b = document.querySelector('.ptu-launch');
@@ -565,8 +570,12 @@
       b.classList.add('in-bar-right'); b.classList.remove('in-bar');
       const logo = bar.querySelector('.cah-label');
       const br = bar.getBoundingClientRect(), lr = logo ? logo.getBoundingClientRect() : null;
-      b.style.top = (lr && lr.height ? (lr.top - br.top + lr.height / 2) : 24) + 'px';
+      if (lr && lr.height) { b.style.visibility = ''; b.style.top = (lr.top - br.top + lr.height / 2) + 'px'; }
+      else b.style.visibility = 'hidden'; // logo line not on screen right now
     }
+    // The header re-lays itself out (opening/closing a chat, safe areas...):
+    // keep following the logo line instead of measuring once.
+    if (!launcherTimer) launcherTimer = setInterval(() => { if (document.querySelector('.ptu-launch')) mountLauncher(); else { clearInterval(launcherTimer); launcherTimer = null; } }, 400);
   }
   window.addEventListener('resize', () => { if (document.querySelector('.ptu-launch')) mountLauncher(); });
 
