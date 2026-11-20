@@ -152,7 +152,7 @@
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
-  .ptu-fig { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; animation: ptuFigIn 1.6s ease-out forwards; }
+  .ptu-fig { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; animation: ptuFigIn 2.4s ease-out forwards; }
   .ptu-fig { isolation: isolate; }
   .ptu-fig::before { content: ''; position: absolute; inset: -14%; z-index: -1; border-radius: 50%; background: radial-gradient(circle, rgba(0,0,0,.82) 0%, rgba(0,0,0,.6) 52%, rgba(0,0,0,0) 72%);
     backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); -webkit-mask-image: radial-gradient(circle, #000 55%, transparent 72%); mask-image: radial-gradient(circle, #000 55%, transparent 72%); }
@@ -183,9 +183,18 @@
   // handstand, backflip, human flag, airflare, front flip, planche press;
   // Clayton's drop gainer flip; Georgia, Sierra and Sedona on aerial hoop), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=3`;
-  const FIGS = new Proxy({}, { get: (_, n) => `<img src="${FIG_SRC(String(n))}" alt="">` });
-  ['handstand', 'cflip', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'press'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=4`;
+  // Each showing gets a fresh object URL of the downloaded file, so the clip
+  // always plays from its first frame (a reused URL resumes mid-loop).
+  const FIG_BLOBS = {};
+  ['handstand', 'cflip', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'press'].forEach(n => {
+    fetch(FIG_SRC(n)).then(r => r.ok ? r.blob() : null).then(b => { if (b) FIG_BLOBS[n] = b; }).catch(() => {});
+  });
+  const FIGS = new Proxy({}, { get: (_, n) => {
+    const b = FIG_BLOBS[String(n)];
+    const src = b ? URL.createObjectURL(b) : FIG_SRC(String(n)) + '&t=' + Date.now();
+    return `<img src="${src}" alt="">`;
+  } });
 
   // ── Sound (Web Audio, all synthesized -- no audio files) ──────────────
   let actx = null;
@@ -260,7 +269,7 @@
     const plus = document.createElement('div'); plus.className = 'ptu-plus'; plus.textContent = '+10';
     plus.style.left = (x + 92) + 'px'; plus.style.top = (y - 30) + 'px';
     fx.appendChild(plus);
-    setTimeout(() => fx.remove(), 1700);
+    setTimeout(() => fx.remove(), 2500);
   }
 
   // ── Panel / pointer UI ────────────────────────────────────────────────
@@ -281,7 +290,10 @@
   }
   function place() {
     if (!panel) return;
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const vw = window.innerWidth;
+    const bar = document.getElementById('chat-app-bottom-bar');
+    const barTop = bar && visible(bar) ? bar.getBoundingClientRect().top : Infinity;
+    const vh = Math.min(window.visualViewport ? window.visualViewport.height : window.innerHeight, window.innerHeight, barTop);
     const pw = panel.offsetWidth, ph = panel.offsetHeight;
     const t = currentTarget && document.contains(currentTarget) && visible(currentTarget) ? currentTarget.getBoundingClientRect() : null;
     if (!t) {
@@ -429,7 +441,7 @@
     const finished = state.step + 1 >= STEPS.length;
     if (finished) { state.done = true; state.active = false; markComplete(); } else { state.step++; state.sub = 0; }
     save(state);
-    setTimeout(() => { busy = false; if (finished) { teardown(); finale(); } else show(); }, 1600);
+    setTimeout(() => { busy = false; if (finished) { teardown(); finale(); } else show(); }, 2400);
   }
 
   // ── Finale: 100/100, fireworks, athlete performance, victory tune ─────
