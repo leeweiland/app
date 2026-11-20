@@ -3644,6 +3644,18 @@ function findProgramTemplate(templates, enr) {
     || null;
 }
 function findHandstandTemplate(templates) { return findProductTemplate(templates, "hc21"); }
+// Low-ticket products (PRODUCTS) this account still has a program for --
+// Mark Finished drops someone who owns one back to Trainee, not User.
+function ownedLowTicketProducts(userId) {
+  const rec = readJson(TRAINING_PROTOCOLS_FILE, {})[userId];
+  if (!rec || !Array.isArray(rec.programs) || !rec.programs.length) return [];
+  const templates = readJson(PROTOCOL_TEMPLATES_FILE, []);
+  return Object.keys(PRODUCTS).filter(sku => {
+    const ht = findProductTemplate(templates, sku);
+    const name = PRODUCTS[sku].templateName.toLowerCase();
+    return rec.programs.some(e => (ht && e.templateId === ht.id) || String(e.templateName || "").toLowerCase() === name);
+  });
+}
 function findProductTemplate(templates, sku) {
   // User Management > Trainees: which program each product gives buyers.
   const mapped = getConfig().productPrograms?.[sku];
@@ -4860,13 +4872,14 @@ export async function handleChatRequest(req, res, url) {
     if (!me) return sendJson(res, 401, { error: "Not logged in" });
     if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
     const { role } = await readJsonBody(req);
-    if (!["user", "online", "gym"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'online', or 'gym'" });
+    if (!["user", "online", "gym", "trainee"].includes(role)) return sendJson(res, 400, { error: "role must be 'user', 'online', 'gym', or 'trainee'" });
     const users = readJson(USERS_FILE, []);
     const target = users.find(u => u.id === quickRoleMatch[1]);
     if (!target) return sendJson(res, 404, { error: "User not found" });
     if (!["user", "online", "gym", "trainee"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between user/online/gym this way" });
     target.role = role;
     writeJson(USERS_FILE, users);
+    if (role === "trainee") pullFromStaffOnlyChats(target.id, users);
     syncDefaultGroups();
     syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
     return sendJson(res, 200, { ok: true, user: publicUser(target) });
@@ -4917,7 +4930,7 @@ export async function handleChatRequest(req, res, url) {
     const users = readJson(USERS_FILE, []);
     const target = appUserId ? users.find(u => u.id === appUserId) : null;
     if ((action === "make_online" || action === "make_gym") && !target) return sendJson(res, 400, { error: "They don't have an app account yet." });
-    if (target && !["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Only student/user accounts can be changed here." });
+    if (target && !["user", "online", "gym", "trainee"].includes(target.role)) return sendJson(res, 400, { error: "Only student/user accounts can be changed here." });
     const done = [];
     if (target) {
       if (action === "blacklist") {
@@ -4929,12 +4942,15 @@ export async function handleChatRequest(req, res, url) {
         syncDefaultGroups();
         done.push("App account archived");
       } else {
-        target.role = action === "make_user" ? "user" : action === "make_online" ? "online" : "gym";
+        // Mark Finished: someone who still owns a low-ticket program (e.g. the
+        // Handstand Protocol) goes back to Trainee instead of a plain User.
+        const lowTicket = action === "make_user" ? ownedLowTicketProducts(target.id) : [];
+        target.role = action === "make_user" ? (lowTicket.length ? "trainee" : "user") : action === "make_online" ? "online" : "gym";
         writeJson(USERS_FILE, users);
-        if (target.role === "user") pullFromStaffOnlyChats(target.id, users);
+        if (target.role === "user" || target.role === "trainee") pullFromStaffOnlyChats(target.id, users);
         syncDefaultGroups();
         syncAppSheetRole(target).catch(e => console.error("[APP sheet role sync]", e.message)); ensureStudentLevelsRow(target).catch(e => console.error("[levels row]", e.message));
-        done.push(`App role: ${target.role}`);
+        done.push(`App role: ${target.role}${lowTicket.length ? ` (owns ${lowTicket.join(", ")})` : ""}`);
       }
     }
     // CRM side: FINISHED for make_user, BLACKLIST for blacklist.
@@ -4957,7 +4973,7 @@ export async function handleChatRequest(req, res, url) {
         done.push(n ? `Buyers sheet: ${n} row${n === 1 ? "" : "s"} set to ${sheetStatus}` : "Buyers sheet: no rows to change");
       } catch (e) { done.push(`Buyers sheet update failed: ${e.message}`); }
     }
-    return sendJson(res, 200, { ok: true, done });
+    return sendJson(res, 200, { ok: true, done, role: target?.role || null });
   }
 
   // ─── Media streaming proxy (Range-aware) ─────────────────────────────────

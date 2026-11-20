@@ -285,10 +285,12 @@ html, body { background: var(--pra-black); }
 .role-tag-student { background: rgba(57,255,20,0.15); color: #39ff14; }
 
 /* ── Scrollbars ── */
-.pra-root ::-webkit-scrollbar { width: 8px; height: 8px; }
-.pra-root ::-webkit-scrollbar-track { background: transparent; }
-.pra-root ::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 8px; }
-.pra-root ::-webkit-scrollbar-thumb:hover { background: #3a3a45; }
+/* Dark scrollbars everywhere (popups/overlays live outside .pra-root). */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a45; }
+::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
 
 /* ── Utility ── */
 .pra-flex { display: flex; }
