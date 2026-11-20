@@ -20,7 +20,8 @@
   const bottom = (title) => `#chat-app-bottom-bar a.cah-bottom-item[title="${title}"]`;
   const hub = (id) => `.hub-tab[data-hub="${id}"]`;
   const PAGES = {
-    chat: { test: p => p === '/chat-app/chat.html' || p === '/chat-app/' , url: '/chat-app/chat.html' },
+    // The phone app opens at the site root, which serves the chat page.
+    chat: { test: p => p === '/chat-app/chat.html' || p === '/chat-app/' || p === '/', url: '/chat-app/chat.html' },
     protocol: { test: p => p === '/chat-app/training-protocol.html', url: PROTOCOL_URL },
     physique: { test: p => p === '/chat-app/body-scan.html', url: '/chat-app/body-scan.html' },
     map: { test: p => p === '/chat-app/users-map.html', url: '/chat-app/users-map.html' },
@@ -593,7 +594,9 @@
     // First day(s): opens on every app open until finished, even after the X.
     // After that: opens until finished unless they closed it.
     const wantStart = QS.forceStart ? freshOpen : (QS.autoStart && !QS.completed && !(state && (state.cancelled || state.done)));
-    if (wantStart && !QS.completed && PAGES.chat.test(path)) start();
+    // On a fresh open it starts wherever the app landed (trainees open on their
+    // protocol; start() takes them to chat). Later page loads only start on chat.
+    if (wantStart && !QS.completed && (PAGES.chat.test(path) || freshOpen)) start();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
