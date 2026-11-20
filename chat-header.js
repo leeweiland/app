@@ -196,6 +196,13 @@ window.PRABack = (function () {
         backdrop-filter: blur(6px);
         border-top: 1px solid #26262e;
       }
+      /* No access (Access by Role): still shown, dimmed with a lock badge;
+         opening it shows the blurred Locked screen. */
+      #chat-app-header .cah-icon.cah-locked, #chat-app-bottom-bar .cah-bottom-item.cah-locked { position: relative; }
+      #chat-app-header .cah-icon.cah-locked svg, #chat-app-bottom-bar .cah-bottom-item.cah-locked svg { opacity: .45; }
+      .cah-lock-badge { position: absolute; right: 1px; bottom: 1px; width: 13px; height: 13px; border-radius: 50%;
+        background: #101014; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+      #chat-app-header .cah-icon .cah-lock-badge svg, #chat-app-bottom-bar .cah-bottom-item .cah-lock-badge svg { width: 9px; height: 9px; opacity: 1; filter: none; }
       #chat-app-bottom-bar .cah-bottom-group {
         display: flex; align-items: center; gap: 10px;
       }
@@ -550,7 +557,7 @@ window.PRABack = (function () {
   function showAccessLock() {
     if (document.getElementById('pra-access-lock')) return;
     const st = document.createElement('style');
-    st.textContent = `#pra-access-lock { position: fixed; inset: 0; z-index: 480; display: flex; align-items: center; justify-content: center; background: rgba(5,5,8,.86); backdrop-filter: blur(4px); padding: 24px; text-align: center; color: #fff; font-family: var(--font-primary, sans-serif); }
+    st.textContent = `#pra-access-lock { position: fixed; inset: 0; z-index: 480; display: flex; align-items: center; justify-content: center; background: rgba(5,5,8,.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 24px; text-align: center; color: #fff; font-family: var(--font-primary, sans-serif); }
       #pra-access-lock .box { max-width: 340px; } #pra-access-lock svg { width: 46px; height: 46px; margin-bottom: 10px; }
       #pra-access-lock .t { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; } #pra-access-lock .s { color: #9aa3ad; font-size: .9rem; line-height: 1.5; margin-bottom: 16px; }
       #pra-access-lock a { display: inline-block; padding: 10px 18px; border-radius: 9px; background: #009bff; color: #fff; text-decoration: none; font-weight: 700; font-size: .85rem; }`;
@@ -628,7 +635,7 @@ window.PRABack = (function () {
       const f = featureFor(path);
       // The protocol page is only locked on your OWN protocol (staff open others').
       const ownProtocol = f !== 'protocol' || new URLSearchParams(location.search).get('userId') === myId;
-      if (f && f !== 'protocol' && myAccess && myAccess[f] === false && ownProtocol) showAccessLock();
+      if (f && f !== 'protocol' && myAccess && !myAccess[f] && ownProtocol) showAccessLock();
     }
     if (renewalNotice) showRenewalNotice(renewalNotice);
     if (['coach', 'admin', 'admin2'].includes(myRole)) mountStaffAlerts(bar);
@@ -639,9 +646,13 @@ window.PRABack = (function () {
 
     // Handstand Protocol trainees: chat, their protocol and profile only.
     const isTrainee = myRole === 'trainee';
+    // Trainees only get what's switched on for them; everyone else
+    // everything not switched off. No access = shown locked, not hidden.
+    const hasAccess = (href) => { const f = featureFor(href); if (!f) return !isTrainee; return isTrainee ? !!(myAccess && myAccess[f]) : allowed(href); };
+    const LOCK_BADGE = '<span class="cah-lock-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="#fff"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></span>';
     ICONS.forEach(item => {
-      if (item.selfProtocol ? (myAccess && myAccess.protocol === false) : !allowed(item.href)) return;
-      if (isTrainee && !item.trainee && !(myAccess && featureFor(item.href) && myAccess[featureFor(item.href)])) return;
+      if (item.selfProtocol && myAccess && myAccess.protocol === false) return;
+      const locked = !item.selfProtocol && !(isTrainee && item.trainee) && !hasAccess(item.href);
       if (item.adminOnly && !isAdmin) return;
       if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       // Always their own protocol, not a fixed page — skip until we know
@@ -653,10 +664,10 @@ window.PRABack = (function () {
         ? (path === '/chat-app/training-protocol.html' && location.search === `?userId=${myId}`)
         : path === href;
       const a = document.createElement('a');
-      a.className = 'cah-icon' + (isActive ? ' active' : '');
+      a.className = 'cah-icon' + (isActive ? ' active' : '') + (locked ? ' cah-locked' : '');
       a.href = href;
-      a.title = item.title;
-      a.innerHTML = item.icon;
+      a.title = item.title + (locked ? ' (locked)' : '');
+      a.innerHTML = item.icon + (locked ? LOCK_BADGE : '');
       icons.appendChild(a);
     });
 
@@ -760,8 +771,7 @@ window.PRABack = (function () {
     const bottomRightGroup = document.createElement('div');
     bottomRightGroup.className = 'cah-bottom-group';
     BOTTOM_ICONS.forEach(item => {
-      if (!item.external && !allowed(item.href)) return;
-      if (isTrainee && !(myAccess && featureFor(item.href) && myAccess[featureFor(item.href)])) return; // only what's switched on for Trainees
+      const locked = !item.external && !hasAccess(item.href);
       // Apply for Training is only relevant to a plain "user" who hasn't
       // signed up for anything yet — hidden for students (already enrolled),
       // coaches, and admins.
@@ -770,9 +780,9 @@ window.PRABack = (function () {
       // /api/chat/levels* endpoints and levels.html itself.
       if (item.staffOnly && !['coach', 'admin', 'admin2'].includes(myRole)) return;
       const a = document.createElement('a');
-      a.className = 'cah-bottom-item' + (item.label ? ' cah-bottom-label' : '') + (!item.external && path === item.href ? ' active' : '');
+      a.className = 'cah-bottom-item' + (item.label ? ' cah-bottom-label' : '') + (!item.external && path === item.href ? ' active' : '') + (locked ? ' cah-locked' : '');
       a.href = item.href;
-      a.title = item.title;
+      a.title = item.title + (locked ? ' (locked)' : '');
       if (item.external) { a.target = '_blank'; a.rel = 'noopener'; }
       if (item.label) {
         a.textContent = item.label;
@@ -785,6 +795,7 @@ window.PRABack = (function () {
         const iconWrap = document.createElement('span');
         iconWrap.innerHTML = item.icon;
         a.appendChild(iconWrap.firstElementChild);
+        if (locked) a.insertAdjacentHTML('beforeend', LOCK_BADGE);
         bottomLeftGroup.appendChild(a);
       }
     });
