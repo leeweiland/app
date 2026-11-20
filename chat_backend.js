@@ -4033,7 +4033,9 @@ function buildStudentsOverview(crm, crmError, sheet) {
       const u = userByName.get(nameKey(m.first, m.last)) || (base.appUserId ? users.find(x => x.id === base.appUserId) : null);
       return { ...base, name: `${m.first} ${m.last}`, family: c.familyName || "", appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
     });
-  }).filter(i => i.programType === "online" || i.programType === "gym");
+  }).filter(i => i.programType === "online" || i.programType === "gym")
+    // A family member who also has their own CRM contact (the Roviras) counts once.
+    .filter((i, idx, arr) => !i.name || arr.findIndex(x => nameKey(...x.name.split(/ (?=[^ ]+$)/)) === nameKey(...i.name.split(/ (?=[^ ]+$)/))) === idx);
   // Same on the app side: a shared family login is one item per person on it.
   const appItems = users.flatMap(u => {
     const base = fromUser(u);
