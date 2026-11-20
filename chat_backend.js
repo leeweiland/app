@@ -1203,7 +1203,7 @@ async function fetchUserProfileCard(targetUser) {
     location: null, archetypeImage: null, archetypeTitle: null, gender: null, levels: [],
   };
   const levelsPeople = await fetchAllLevels().catch(() => []);
-  card.levels = findLevelsEntries(levelsPeople, targetUser.first, targetUser.last);
+  card.levels = levelsEntriesForUser(targetUser, levelsPeople);
   const accessToken = await getGoogleAccessToken();
   const range = `'${appSheetTab()}'!A:K`;
   const r = await fetch(
@@ -1646,7 +1646,9 @@ async function syncStudentRoles(usersArg, onlyId = null) {
       const em = String(u.email || "").trim().toLowerCase(), ph = last10(u.phone);
       // Name match only when both first and last are filled in (a blank name would match every unnamed contact).
       const key = String(u.first || "").trim() && String(u.last || "").trim() ? nameKey(u.first, u.last) : null;
-      const hits = crm.filter(c => (em && c.email.trim().toLowerCase() === em) || (ph.length === 10 && last10(c.phone) === ph) || (key && nameKey(c.first, c.last) === key));
+      // A family/couple enrollment's other students (CRM FAMILY MEMBERS) count
+      // by name too, so whoever from the family joins later is set up.
+      const hits = crm.filter(c => (em && c.email.trim().toLowerCase() === em) || (ph.length === 10 && last10(c.phone) === ph) || (key && (nameKey(c.first, c.last) === key || c.familyMembers.some(m => nameKey(m.first, m.last) === key))));
       if (hits.some(c => c.programType === "gym")) return "gym";
       if (hits.some(c => c.programType === "online")) return "online";
       return null;
@@ -1968,11 +1970,16 @@ function noPushAlerts() {
 const normName = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
 async function nameMismatchAlerts() {
   const people = await fetchAllLevels();
+  const crm = await crmEnrolledContacts().catch(() => crmEnrolledSnapshot());
   const users = readJson(USERS_FILE, []).filter(u => isClientRole(u.role) && !u.archived);
   const out = [];
   for (const u of users) {
     const f = normName(u.first), l = normName(u.last);
     if (!f || !l) continue;
+    if (people.some(p => normName(p.first) === f && normName(p.last) === l && Object.keys(p.levels || {}).length)) continue;
+    // A family/couple login whose people all have their own rows is fine.
+    const linked = levelsPeopleForUser(u, people, crm);
+    if (linked.length > 1 && linked.every(m => findLevelsEntries(people, m.first, m.last).length)) continue;
     if (people.some(p => normName(p.first) === f && normName(p.last) === l)) continue;
     const near = people.filter(p => {
       const pf = normName(p.first), pl = normName(p.last);
@@ -3860,9 +3867,122 @@ async function crmEnrolledContacts(fresh = false) {
     all.push(...(d.contacts || []));
     if ((d.contacts || []).length < 200) break;
   }
-  const contacts = all.map(c => ({ id: c.id, first: c.first || "", last: c.last || "", email: c.email || "", phone: c.phone || "", programType: (c.programType || "").toLowerCase() }));
+  const contacts = all.map(c => ({
+    id: c.id, first: c.first || "", last: c.last || "", email: c.email || "", phone: c.phone || "", programType: (c.programType || "").toLowerCase(),
+    // Family / couple enrollment (CRM enroll popup "Add names"): every
+    // student on it, and "The Kiriakos". Empty for a one-person enrollment.
+    familyMembers: parseFamilyMembers(c.customFields?.["family-members"], c.last),
+    familyName: String(c.customFields?.["family-name"] || "").trim(),
+  }));
   crmEnrolledCache = { at: Date.now(), contacts };
+  syncFamilyLevelsRows(contacts).catch(e => console.error("[levels] family rows", e.message));
   return contacts;
+}
+// Every student on a CRM family/couple enrollment gets their own Levels row
+// (Foundation, on the enrollment's Gym/Online tab) -- same as a new student
+// does -- so each shows up in the Levels tab. At most every 10 minutes.
+let familyRowsSyncedAt = 0;
+async function syncFamilyLevelsRows(contacts) {
+  if (getConfig().levelsRowOnNewStudent === false || Date.now() - familyRowsSyncedAt < 10 * 60 * 1000) return;
+  familyRowsSyncedAt = Date.now();
+  const families = contacts.filter(c => c.familyMembers.length && (c.programType === "gym" || c.programType === "online"));
+  if (!families.length) return;
+  const people = await fetchAllLevels();
+  for (const c of families) {
+    for (const m of c.familyMembers) {
+      if (findLevelsEntries(people, m.first, m.last).length) continue;
+      const key = nameKey(m.first, m.last);
+      if (familyRowsInFlight.has(key)) continue;
+      familyRowsInFlight.add(key);
+      try {
+        await updateLevelsRow({ first: m.first, last: m.last, program: c.programType === "online" ? "Online" : "Gym", levels: {}, team: false });
+        people.push({ first: m.first, last: m.last, program: c.programType === "online" ? "Online" : "Gym", levels: {}, team: false });
+        console.log("[levels] added Foundation row for family member", m.first, m.last, c.programType);
+      } finally { familyRowsInFlight.delete(key); }
+    }
+  }
+}
+// Whatever CRM list is already in memory (refreshing it in the background
+// when old) -- for request paths like the profile popup that shouldn't wait
+// on several CRM pages. null until the first load finishes.
+function crmEnrolledSnapshot() {
+  if (!crmEnrolledCache || Date.now() - crmEnrolledCache.at >= 2 * 60 * 1000) crmEnrolledContacts().catch(() => {});
+  return crmEnrolledCache?.contacts || null;
+}
+// "Nick Kiriako, Victoria Kiriako" -> [{first,last}...]. Same rules as the
+// CRM's enroll-popup.js parseMemberList: the family's own last name stays
+// whole even when it's several words, otherwise the last word is the last name.
+function parseFamilyMembers(value, familyLast) {
+  const fl = String(familyLast || "").trim();
+  const out = String(value || "").split(/[,\n;]+/).map(s => s.trim().replace(/\s+/g, " ")).filter(Boolean).map(full => {
+    if (fl && full.toLowerCase().endsWith(" " + fl.toLowerCase())) return { first: full.slice(0, -fl.length - 1).trim(), last: full.slice(-fl.length) };
+    const i = full.lastIndexOf(" ");
+    return i > 0 ? { first: full.slice(0, i), last: full.slice(i + 1) } : { first: full, last: "" };
+  }).filter(m => m.first && m.last);
+  return out.length > 1 ? out : [];
+}
+// The CRM enrollment an app account belongs to: by email or phone (a shared
+// family login), else by the account's own name being one of the students.
+function crmEnrollmentFor(u, crm) {
+  if (!crm || !u) return null;
+  const em = String(u.email || "").trim().toLowerCase(), ph = last10(u.phone);
+  const byLogin = crm.find(c => (em && c.email.trim().toLowerCase() === em) || (ph.length === 10 && last10(c.phone) === ph));
+  if (byLogin) return { contact: byLogin, via: "login" };
+  const key = String(u.first || "").trim() && String(u.last || "").trim() ? nameKey(u.first, u.last) : null;
+  if (!key) return null;
+  const byName = crm.find(c => nameKey(c.first, c.last) === key || c.familyMembers.some(m => nameKey(m.first, m.last) === key));
+  return byName ? { contact: byName, via: "name" } : null;
+}
+// Whose Levels rows an app account shows: usually just its own name. A
+// shared family/couple login ("Nick Victoria Kiriako") shows everyone on it:
+//   1. people a coach linked by hand (u.levelsLinks),
+//   2. the CRM enrollment's FAMILY MEMBERS when this is that enrollment's
+//      login (same email/phone),
+//   3. the account's first name split into names that each have a Levels
+//      row with the same last name ("Nick Victoria" -> Nick + Victoria).
+// Returns [{first,last}], always at least the account's own name.
+function levelsPeopleForUser(u, people, crm = crmEnrolledSnapshot()) {
+  const own = [{ first: String(u.first || "").trim(), last: String(u.last || "").trim() }];
+  if (Array.isArray(u.levelsLinks) && u.levelsLinks.length) return u.levelsLinks.map(m => ({ first: m.first, last: m.last }));
+  if (!isClientRole(u.role) && u.role !== "user") return own;
+  const hit = crmEnrollmentFor(u, crm);
+  if (hit && hit.via === "login" && hit.contact.familyMembers.length) {
+    // Anyone on the family who has their own app account now uses that one.
+    const others = new Set(readJson(USERS_FILE, []).filter(x => !x.archived && x.id !== u.id).map(x => nameKey(x.first, x.last)));
+    const mine = hit.contact.familyMembers.filter(m => !others.has(nameKey(m.first, m.last)) || nameKey(m.first, m.last) === nameKey(u.first, u.last));
+    if (mine.length) return mine;
+  }
+  if (people && own[0].first && own[0].last && !findLevelsEntries(people, own[0].first, own[0].last).some(e => Object.keys(e.levels || {}).length)) {
+    const words = own[0].first.split(/\s+|&/).map(w => w.trim()).filter(w => w && !/^and$/i.test(w));
+    if (words.length > 1) {
+      const found = words.filter(w => findLevelsEntries(people, w, own[0].last).length).map(w => ({ first: w, last: own[0].last }));
+      if (found.length > 1) return found;
+    }
+  }
+  return own;
+}
+// Levels entries for an account, each tagged with whose they are. Family
+// members with no Levels row yet get one (Foundation) in the background.
+function levelsEntriesForUser(u, people) {
+  const who = levelsPeopleForUser(u, people);
+  if (who.length > 1) who.forEach(m => { if (!findLevelsEntries(people, m.first, m.last).length) ensureFamilyLevelsRow(m, u).catch(() => {}); });
+  return who.flatMap(m => findLevelsEntries(people, m.first, m.last).map(e => ({ ...e, first: e.first.trim(), last: e.last.trim() })));
+}
+const familyRowsInFlight = new Set();
+async function ensureFamilyLevelsRow(m, u) {
+  if (getConfig().levelsRowOnNewStudent === false) return;
+  const key = nameKey(m.first, m.last);
+  if (familyRowsInFlight.has(key)) return;
+  familyRowsInFlight.add(key);
+  try {
+    levelsCache = null;
+    const people = await fetchAllLevels();
+    if (findLevelsEntries(people, m.first, m.last).length) return;
+    const crmProgram = crmEnrollmentFor(u, crmEnrolledSnapshot())?.contact.programType;
+    const program = (crmProgram || u.role) === "online" ? "Online" : "Gym";
+    await updateLevelsRow({ first: m.first, last: m.last, program, levels: {}, team: false });
+    console.log("[levels] added Foundation row for family member", m.first, m.last, program);
+  } finally { familyRowsInFlight.delete(key); }
 }
 const last10 = (p) => String(p || "").replace(/\D/g, "").slice(-10);
 async function crmFindContactId(email, phone) {
@@ -3899,8 +4019,24 @@ function buildStudentsOverview(crm, crmError, sheet) {
   };
   // Students = ENROLLED with an Online or Gym program; enrolled contacts with
   // no program set aren't counted (Lee: max is online + gym).
-  const crmItems = crm.map(fromCrm).filter(i => i.programType === "online" || i.programType === "gym");
-  const appItems = users.map(fromUser);
+  // A family/couple enrollment counts every student on it (CRM FAMILY
+  // MEMBERS): one item each, on their own app account when they have one,
+  // else on the family's shared login.
+  const userByName = new Map(users.map(u => [nameKey(u.first, u.last), u]));
+  const crmItems = crm.flatMap(c => {
+    const base = fromCrm(c);
+    if (!c.familyMembers?.length) return [base];
+    return c.familyMembers.map(m => {
+      const u = userByName.get(nameKey(m.first, m.last)) || (base.appUserId ? users.find(x => x.id === base.appUserId) : null);
+      return { ...base, name: `${m.first} ${m.last}`, family: c.familyName || "", appUserId: u?.id || null, role: u?.role || null, platforms: [...(u ? platforms.get(u.id) || [] : [])] };
+    });
+  }).filter(i => i.programType === "online" || i.programType === "gym");
+  // Same on the app side: a shared family login is one item per person on it.
+  const appItems = users.flatMap(u => {
+    const base = fromUser(u);
+    const who = levelsPeopleForUser(u, levelsCache?.people || null, crm);
+    return who.length > 1 ? who.map(m => ({ ...base, name: `${m.first} ${m.last}`, family: `${u.first || ""} ${u.last || ""}`.trim() })) : [base];
+  });
   const onPhone = appItems.filter(i => i.platforms.length);
   const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
   // [key, name, source, items] -- the panel lines up the (source) column.
@@ -6225,7 +6361,7 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/levels/me" && req.method === "GET") {
       try {
         const people = await fetchAllLevels();
-        const entries = findLevelsEntries(people, user.first, user.last);
+        const entries = levelsEntriesForUser(user, people);
         return sendJson(res, 200, { entries, categories: LEVELS_CATEGORIES });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
@@ -6290,11 +6426,30 @@ export async function handleChatRequest(req, res, url) {
       const qLast = url.searchParams.get("last");
       try {
         const people = await fetchAllLevels();
-        const entries = findLevelsEntries(people, qFirst, qLast);
+        // ?userId= (chat profile popup): that account's levels, which for a
+        // shared family/couple login is everyone on it (levelsPeopleForUser).
+        const qUser = url.searchParams.get("userId") ? readJson(USERS_FILE, []).find(u => u.id === url.searchParams.get("userId")) : null;
+        const entries = qUser ? levelsEntriesForUser(qUser, people) : findLevelsEntries(people, qFirst, qLast);
         return sendJson(res, 200, { entries, categories: LEVELS_CATEGORIES });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
       }
+    }
+
+    // Coach/admin linking several people's Levels rows to one account (a
+    // family or couple sharing a login). An empty list goes back to automatic
+    // (CRM FAMILY MEMBERS / first-name split -- levelsPeopleForUser).
+    const levelsLinksMatch = p.match(/^\/api\/chat\/users\/([^/]+)\/levels-links$/);
+    if (levelsLinksMatch && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const { links } = await readJsonBody(req);
+      const clean = (Array.isArray(links) ? links : []).map(m => ({ first: String(m?.first || "").trim(), last: String(m?.last || "").trim() })).filter(m => m.first && m.last);
+      const users = readJson(USERS_FILE, []);
+      const target = users.find(u => u.id === levelsLinksMatch[1]);
+      if (!target) return sendJson(res, 404, { error: "User not found" });
+      if (clean.length) target.levelsLinks = clean; else delete target.levelsLinks;
+      writeJson(USERS_FILE, users);
+      return sendJson(res, 200, { ok: true, links: target.levelsLinks || [] });
     }
 
     // Coach/admin editing someone's levels — writes straight to the GYM or

@@ -189,7 +189,7 @@ let profileLevelsCanEdit = false;
 async function loadLevels(u, editable) {
   profileLevelsUser = u;
   profileLevelsCanEdit = !!editable && isStaffMe();
-  const r = await fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(u.first) + '&last=' + encodeURIComponent(u.last));
+  const r = await fetch('/api/chat/levels/lookup?' + (u.id ? 'userId=' + encodeURIComponent(u.id) + '&' : '') + 'first=' + encodeURIComponent(u.first) + '&last=' + encodeURIComponent(u.last));
   const d = await r.json();
   // A real entry always has a program ('Gym'/'Online') -- the backend
   // requires one to save against. The no-entries-yet placeholder used for
@@ -204,7 +204,9 @@ async function loadLevels(u, editable) {
 function renderLevels() {
   const box = document.getElementById('levelsSection');
   const editCls = profileLevelsCanEdit ? ' editable' : '';
+  const multiPerson = new Set(profileLevelsEntries.filter(e => e.first).map(e => (e.first + '|' + e.last).toLowerCase())).size > 1;
   const chipsHtml = profileLevelsEntries.map((e, idx) => `
+    ${multiPerson ? `<div style="font-size:.95rem;font-weight:800;color:#fff;margin:8px 0 4px">${String(e.first).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';')} · ${e.program || ''}</div>` : ''}
     <div class="levels-col">
       <div class="level-chip"><span class="cat">Foundation</span><span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${isChecked(e.levels['FOUNDATION']) ? '✓' : (String(e.levels['FOUNDATION'] || '').trim().toLowerCase() === 'in progress' ? 'In Progress' : '0')}</span></div>
       ${LEVELS_CATS.map(cat => {
@@ -237,7 +239,7 @@ async function saveProfileLevelsField(idx, cat, value) {
   else levels[cat] = value;
   const r = await fetch('/api/chat/levels/update', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ first: profileLevelsUser.first, last: profileLevelsUser.last, program: e.program, levels, team: e.team }),
+    body: JSON.stringify({ first: e.first || profileLevelsUser.first, last: e.last || profileLevelsUser.last, program: e.program, levels, team: e.team }),
   });
   if (!r.ok) return false;
   e.levels = levels;

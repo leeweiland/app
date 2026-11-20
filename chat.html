@@ -938,6 +938,12 @@
      Strength Ninjas map popup and the Levels page (levels.html). */
   .popup-levels-program { margin-bottom: 10px; }
   .popup-super-level { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 6px; }
+  .popup-levels-person { display: flex; align-items: center; gap: 6px; font-size: .95rem; font-weight: 800; color: #fff; margin: 4px 0 4px; }
+  .levels-unlink-btn { background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: 1rem; padding: 0 4px; border-radius: 4px; }
+  .levels-unlink-btn:hover { color: #fff; background: rgba(255,92,92,.2); }
+  .levels-link-row { display: flex; gap: 8px; margin-top: 12px; }
+  .levels-link-row .pra-input { flex: 1; min-width: 0; font-size: .8rem; }
+  .levels-link-row .pra-btn { font-size: .8rem; padding: 6px 12px; }
   .popup-super-level .num { color: #009bff; font-weight: 700; font-size: .8rem; }
   .popup-levels-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
   .popup-level-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--pra-border); border-radius: 7px; padding: 5px 10px; font-size: .72rem; width: 100%; }
@@ -3758,7 +3764,7 @@ async function openLevelsModalLegacy(otherUser) {
 
   const [profileRes, levelsRes] = await Promise.all([
     fetch('/api/chat/profile/' + otherUser.id),
-    fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(otherUser.first) + '&last=' + encodeURIComponent(otherUser.last)),
+    fetch('/api/chat/levels/lookup?userId=' + encodeURIComponent(otherUser.id) + '&first=' + encodeURIComponent(otherUser.first) + '&last=' + encodeURIComponent(otherUser.last)),
   ]);
   const profile = profileRes.ok ? (await profileRes.json()).profile : null;
   levelsModalEntries = levelsRes.ok ? (await levelsRes.json()).entries || [] : [];
@@ -3870,12 +3876,17 @@ function renderLevelsBody() {
   // "editable" class (and its click handler in attachLevelsChipHandlers)
   // and the add-program buttons below are simply omitted for anyone else.
   const canEdit = isStaffMe();
+  // A shared family/couple login shows everyone on it -- each panel says whose it is.
+  const personKey = (e) => `${(e.first || '').toLowerCase()}|${(e.last || '').toLowerCase()}`;
+  const levelsPeople = [...new Map(levelsModalEntries.filter(e => e.first).map(e => [personKey(e), { first: e.first, last: e.last }])).values()];
+  const multiPerson = levelsPeople.length > 1;
   const programsHtml = levelsModalEntries.map((e, idx) => {
     const foundationSet = levelsIsChecked(e.levels['FOUNDATION']);
     const teamChecked = !!e.team;
     const editCls = canEdit ? ' editable' : '';
     return `
     <div class="popup-levels-program">
+      ${multiPerson ? `<div class="popup-levels-person">${escapeHtml(e.first)}${canEdit ? `<button type="button" class="levels-unlink-btn" data-key="${escapeHtml(personKey(e))}" title="Remove from this profile">&times;</button>` : ''}</div>` : ''}
       <div class="popup-super-level">${e.program} — Super Level <span class="num">${LEVELS_NUMERIC_CATS.reduce((s, c) => s + effectiveLevel(e, c), 0)}</span></div>
       <div class="popup-levels-col">
         <div class="popup-level-chip"><span class="cat sized"><span>Foundation</span></span>${levelStripesHtml(foundationSet ? 10 : 0)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundationSet ? '✓' : 'In Progress'}</span></div>
@@ -3892,16 +3903,30 @@ function renderLevelsBody() {
   // A person might not have a row in one or both programs yet — offer to
   // start one instead of just omitting it silently. Staff only (creating a
   // blank entry is itself an edit).
-  const missingPrograms = canEdit ? ['Gym', 'Online'].filter(p => !levelsModalEntries.some(e => e.program === p)) : [];
+  const missingPrograms = canEdit && !multiPerson ? ['Gym', 'Online'].filter(p => !levelsModalEntries.some(e => e.program === p)) : [];
   const addButtons = missingPrograms.map(p =>
     `<button class="pra-btn pra-btn-ghost add-program-btn" data-program="${p}" style="width:100%;margin-bottom:8px;font-size:.8rem">+ Add ${p} Levels</button>`
   ).join('');
+
+  // Coaches: link more people's Levels rows to this profile (a family or
+  // couple sharing one login), or take one off with the x by their name.
+  const linkRow = canEdit && levelsModalUser && levelsModalUser.role !== 'admin' && levelsModalUser.role !== 'coach' && levelsModalUser.role !== 'admin2' ? `
+    <div class="levels-link-row">
+      <input class="pra-input" id="levelsLinkInput" list="levelsLinkNames" placeholder="+ Link another person's levels (family / couple)"/>
+      <datalist id="levelsLinkNames"></datalist>
+      <button type="button" class="pra-btn" id="levelsLinkBtn">Link</button>
+    </div>` : '';
 
   document.getElementById('levelsBody').innerHTML = `
     <div class="popup-levels-col">${personalityRow}</div>
     ${programsHtml}
     ${addButtons}
+    ${linkRow}
   `;
+  if (linkRow) setupLevelsLinking(levelsPeople.length ? levelsPeople : [{ first: levelsModalUser.first, last: levelsModalUser.last }]);
+  document.querySelectorAll('#levelsBody .levels-unlink-btn').forEach(btn => {
+    btn.onclick = () => saveLevelsLinks(levelsPeople.filter(m => personKey(m) !== btn.dataset.key));
+  });
   document.querySelectorAll('#levelsBody .add-program-btn').forEach(btn => {
     btn.onclick = () => {
       levelsModalEntries.push({ program: btn.dataset.program, team: false, levels: {} });
@@ -3911,6 +3936,36 @@ function renderLevelsBody() {
   attachLevelsChipHandlers();
 }
 
+let levelsLinkNamesCache = null;
+async function setupLevelsLinking(current) {
+  const input = document.getElementById('levelsLinkInput'), btn = document.getElementById('levelsLinkBtn');
+  if (!input) return;
+  try {
+    if (!levelsLinkNamesCache) levelsLinkNamesCache = fetch('/api/chat/levels').then(r => r.json()).then(d => [...new Set((d.people || []).map(p => `${(p.first || '').trim()} ${(p.last || '').trim()}`.trim()).filter(Boolean))].sort());
+    const names = await levelsLinkNamesCache;
+    const dl = document.getElementById('levelsLinkNames');
+    if (dl) dl.innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+  } catch {}
+  btn.onclick = () => {
+    const full = input.value.trim().replace(/\s+/g, ' ');
+    const i = full.lastIndexOf(' ');
+    if (i < 1) { document.getElementById('levelsMsg').textContent = 'Type their first and last name.'; return; }
+    const add = { first: full.slice(0, i), last: full.slice(i + 1) };
+    const k = (m) => `${m.first.toLowerCase()}|${m.last.toLowerCase()}`;
+    if (current.some(m => k(m) === k(add))) { input.value = ''; return; }
+    saveLevelsLinks([...current, add]);
+  };
+}
+async function saveLevelsLinks(links) {
+  const r = await fetch('/api/chat/users/' + encodeURIComponent(levelsModalUser.id) + '/levels-links', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links }),
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); document.getElementById('levelsMsg').textContent = d.error || 'Could not save — try again.'; return; }
+  const lr = await fetch('/api/chat/levels/lookup?userId=' + encodeURIComponent(levelsModalUser.id));
+  levelsModalEntries = lr.ok ? (await lr.json()).entries || [] : levelsModalEntries;
+  renderLevelsBody();
+}
+
 async function saveLevelsField(idx, cat, value) {
   const e = levelsModalEntries[idx];
   const levels = { ...e.levels };
@@ -3918,7 +3973,7 @@ async function saveLevelsField(idx, cat, value) {
   else levels[cat] = value;
   const r = await fetch('/api/chat/levels/update', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ first: levelsModalUser.first, last: levelsModalUser.last, program: e.program, levels, team: e.team }),
+    body: JSON.stringify({ first: e.first || levelsModalUser.first, last: e.last || levelsModalUser.last, program: e.program, levels, team: e.team }),
   });
   if (!r.ok) { const d = await r.json().catch(() => ({})); document.getElementById('levelsMsg').textContent = d.error || 'Could not save — try again.'; return false; }
   e.levels = levels;

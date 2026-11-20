@@ -51,6 +51,7 @@
   .pp-archetype { text-decoration: none; display: block; width: 100%; }
   .pp-archetype:hover .pp-chip { border-color: var(--pra-blue); }
   .pp-program { margin-bottom: 10px; }
+  .pp-person { font-size: .95rem; font-weight: 800; color: #fff; margin: 4px 0; }
   .pp-super { font-family: var(--font-secondary); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 6px; }
   .pp-super .num { color: #009bff; font-weight: 700; font-size: .8rem; }
   .pp-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
@@ -243,7 +244,7 @@
     } else {
       const [profileRes, levelsRes] = await Promise.all([
         hasAccount ? fetch('/api/chat/profile/' + encodeURIComponent(user.id)) : Promise.resolve(null),
-        fetch('/api/chat/levels/lookup?first=' + encodeURIComponent(user.first || '') + '&last=' + encodeURIComponent(user.last || '')),
+        fetch('/api/chat/levels/lookup?' + (hasAccount ? 'userId=' + encodeURIComponent(user.id) + '&' : '') + 'first=' + encodeURIComponent(user.first || '') + '&last=' + encodeURIComponent(user.last || '')),
       ]);
       profile = profileRes && profileRes.ok ? (await profileRes.json()).profile : null;
       state.entries = levelsRes.ok ? (await levelsRes.json()).entries || [] : [];
@@ -332,11 +333,14 @@
         </div>
       </a>` : '';
     const editCls = staff ? ' editable' : '';
+    // A shared family/couple login shows everyone on it -- each panel says whose it is.
+    const multiPerson = new Set(state.entries.filter(e => e.first).map(e => (e.first + '|' + e.last).toLowerCase())).size > 1;
     const programs = state.entries.map((e, idx) => {
       const foundation = isChecked(e.levels['FOUNDATION']);
       const team = !!e.team;
       return `
       <div class="pp-program">
+        ${multiPerson ? `<div class="pp-person">${esc(e.first)}</div>` : ''}
         <div class="pp-super">${esc(e.program)} — Super Level <span class="num">${LEVELS_NUMERIC_CATS.reduce((s, c) => s + effectiveLevel(e, c), 0)}</span></div>
         <div class="pp-col">
           <div class="pp-chip"><span class="cat sized"><span>Foundation</span></span>${stripes(foundation ? 10 : 0)}<span class="chip-val${editCls}" data-idx="${idx}" data-cat="FOUNDATION" style="color:#fff">${foundation ? '✓' : 'In Progress'}</span></div>
@@ -390,7 +394,7 @@
     const e = state.entries[idx];
     const levels = { ...e.levels };
     if (cat === 'TEAM') e.team = value; else levels[cat] = value;
-    const r = await fetch('/api/chat/levels/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ first: state.user.first, last: state.user.last, program: e.program, levels, team: e.team }) });
+    const r = await fetch('/api/chat/levels/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ first: e.first || state.user.first, last: e.last || state.user.last, program: e.program, levels, team: e.team }) });
     if (!r.ok) { const d = await r.json().catch(() => ({})); root.querySelector('.pp-msg').textContent = d.error || 'Could not save — try again.'; return false; }
     e.levels = levels;
     return true;
