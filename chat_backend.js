@@ -4864,7 +4864,7 @@ export async function handleChatRequest(req, res, url) {
     const users = readJson(USERS_FILE, []);
     const target = users.find(u => u.id === quickRoleMatch[1]);
     if (!target) return sendJson(res, 404, { error: "User not found" });
-    if (!["user", "online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between user/online/gym this way" });
+    if (!["user", "online", "gym", "trainee"].includes(target.role)) return sendJson(res, 400, { error: "Can only switch between user/online/gym this way" });
     target.role = role;
     writeJson(USERS_FILE, users);
     syncDefaultGroups();

@@ -101,9 +101,9 @@
     return ' role-' + role + (isClientRole(role) ? '-solo' : '');
   }
   function roleBadgeHtml(u) {
-    const map = { admin: 'Admin', admin2: 'Admin', coach: 'Coach', online: 'Online', gym: 'Gym', user: 'User' };
+    const map = { admin: 'Admin', admin2: 'Admin', coach: 'Coach', online: 'Online', gym: 'Gym', user: 'User', trainee: 'Trainee' };
     if (!map[u?.role]) return '';
-    const cls = u.role === 'admin2' ? 'admin' : u.role;
+    const cls = u.role === 'admin2' ? 'admin' : u.role === 'trainee' ? 'user' : u.role;
     return `<span class="role-tag role-tag-${cls}">${map[u.role]}</span>`;
   }
   const slugify = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -148,8 +148,8 @@
       <div class="pp-badges"></div>
       <div class="btn-row pp-actions"></div>
       <div class="pp-body"></div>
+      <div class="btn-row pp-msg-row" style="display:flex;gap:10px;margin:16px 0"><button class="pra-btn pra-btn-ghost pp-message" style="flex:1">Message</button></div>
       <div class="pp-moves"></div>
-      <div class="btn-row pp-msg-row" style="display:flex;gap:10px;margin-top:16px"><button class="pra-btn pra-btn-ghost pp-message" style="flex:1">Message</button></div>
       <div class="pra-muted pp-msg"></div>`;
   }
 
@@ -260,11 +260,12 @@
   function renderAccountActions(root, state, staff) {
     const wrap = root.querySelector('.pp-actions');
     const u = state.user;
-    if (!staff || !u.id || !QUICK_ROLES.includes(u.role)) { wrap.innerHTML = ''; return; }
+    // Trainees (Handstand Protocol buyers) can be promoted to Online/Gym too.
+    if (!staff || !u.id || !(QUICK_ROLES.includes(u.role) || u.role === 'trainee')) { wrap.innerHTML = ''; return; }
     const label = (r) => r === 'user' ? 'a User' : r === 'online' ? 'Online' : 'Gym';
     // "Mark Finished" (role user) also sets their CRM status to FINISHED --
     // same action as the Students panel (chat_backend.js students-overview/action).
-    wrap.innerHTML = QUICK_ROLES.filter(r => r !== u.role).map(r => `<button class="pra-btn pra-btn-ghost pp-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + label(r)}</button>`).join('')
+    wrap.innerHTML = QUICK_ROLES.filter(r => r !== u.role && !(u.role === 'trainee' && r === 'user')).map(r => `<button class="pra-btn pra-btn-ghost pp-role-btn" data-role="${r}" style="flex:1;font-size:.78rem">${r === 'user' ? 'Mark Finished' : 'Make ' + label(r)}</button>`).join('')
       + (u.archived ? `<button class="pra-btn pra-btn-ghost pp-archive-btn" style="flex:1;font-size:.78rem" title="Blacklisted -- let them log in again">Restore account</button>` : '');
     wrap.querySelectorAll('.pp-role-btn').forEach(btn => {
       btn.onclick = async () => {
