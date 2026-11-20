@@ -33,10 +33,11 @@
   const iconSub = (title, sel, text, page) => ({ page: '*', targets: [sel], title, text, go: page, clickGo: true });
   const STEPS = [
     { figure: 'handstand', subs: [
-      { page: 'chat', targets: ['.convo-item[data-own-group]', '.convo-item'], title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
-      { page: 'chat', roles: ['gym'], openGroup: true, targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
+      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
     ] },
-    { figure: 'gainer', subs: [
+    { figure: 'cflip', subs: [
+      { page: 'chat', roles: ['gym'], openGroup: 'gym', note: 'Gym students only', targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
+      { page: 'chat', phoneOnly: true, skipIfMissing: true, clickAdvance: true, note: 'Phones only, when a chat is open', targets: ['#backBtn'], title: 'Back to your chats', text: 'Tap back to return to your chats.' },
       iconSub('Your Training Protocol', top('My Training Protocol'), 'Your training plan lives here. Tap it or hit Next.', 'protocol'),
       { page: 'protocol', targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'], activate: true, title: 'Your Training', text: 'Your custom protocol (or the Handstand Protocol), day by day.' },
       { page: 'protocol', targets: ['#katasViewBtn'], activate: true, title: 'Katas', text: 'Flow routines to learn, film and level up.' },
@@ -74,10 +75,11 @@
       iconSub('Your profile', top('My profile'), 'Your account and photo.', 'profile'),
       { page: 'profile', targets: ['#profileCard .pp-avatar-wrap', '#profileCard .pp-avatar', '.avatar-wrap'], gap: 40, title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' },
     ] },
-    { figure: 'planche', subs: [
+    { figure: 'press', subs: [
       iconSub('Back to chat', top('Chat'), 'Head back to your chat.', 'chat'),
-      { page: 'chat', targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'], clickAdvance: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
+      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'], clickAdvance: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
       { page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
+      { page: 'chat', openGroup: 'own', skipIfMissing: true, targets: ['#textInput'], title: 'Message your coaches', text: 'Now send your coaches a message. Say hi and tell them your goals.' },
     ] },
   ];
   // Admin Panel > Quick Start loads this file only to read the default wording.
@@ -89,6 +91,7 @@
   });
   // Role-only parts (e.g. gym booking) -- testers see every part.
   STEPS.forEach(st => { st.subs = st.subs.filter(sub => !sub.roles || sub.roles.includes(me.role) || QS.tester); });
+  const isPhone = () => window.innerWidth < 768;
   const TOTAL = STEPS.length * 10;
 
   // ── State ─────────────────────────────────────────────────────────────
@@ -159,22 +162,23 @@
   .ptu-final .stage .ptu-fig { left: 50%; top: 50%; width: 170px; height: 170px; margin: -85px 0 0 -85px; animation: ptuStage .75s ease-out both; }
   @keyframes ptuStage { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
   .ptu-final .r { display: flex; gap: 10px; justify-content: center; }
-  .ptu-launch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid rgba(255,210,63,.65);
-    background: rgba(14,14,19,.85); color: #ffd23f; font-weight: 800; font-size: .74rem; cursor: pointer; font-family: var(--font-primary, sans-serif); white-space: nowrap;
-    box-shadow: 0 0 12px rgba(255,210,63,.22); flex-shrink: 0; }
-  .ptu-launch:hover { box-shadow: 0 0 18px rgba(255,210,63,.55); }
+  .ptu-launch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; border: 2px solid rgb(212,255,0);
+    background: #0b0b0f; color: rgb(212,255,0); font-weight: 800; font-size: .74rem; letter-spacing: .03em; cursor: pointer; font-family: var(--font-primary, sans-serif); white-space: nowrap;
+    text-shadow: 0 0 8px rgba(212,255,0,.67); flex-shrink: 0; animation: ptuLaunchPulse 1.6s ease-in-out infinite; }
+  .ptu-launch:hover { animation-play-state: paused; box-shadow: 0 0 24px rgba(212,255,0,.9), inset 0 0 10px rgba(212,255,0,.3); }
+  @keyframes ptuLaunchPulse { 0%, 100% { box-shadow: 0 0 8px rgba(212,255,0,.45), inset 0 0 6px rgba(212,255,0,.15); } 50% { box-shadow: 0 0 22px rgba(212,255,0,.95), inset 0 0 10px rgba(212,255,0,.35); } }
   .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   // ── Athlete silhouettes (white line figures, blue glow) ───────────────
   // Real moves, one per step: white silhouettes cut from real footage (Lee's
-  // handstand, gainer, backflip, straddle flag, airflare, front flip; Georgia,
-  // Sierra and Sedona on aerial hoop; Clayton's planche), rendered
+  // handstand, backflip, human flag, airflare, front flip, planche press;
+  // Clayton's drop gainer flip; Georgia, Sierra and Sedona on aerial hoop), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=2`;
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=3`;
   const FIGS = new Proxy({}, { get: (_, n) => `<img src="${FIG_SRC(String(n))}" alt="">` });
-  ['handstand', 'gainer', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'planche'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
+  ['handstand', 'cflip', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'press'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
 
   // ── Sound (Web Audio, all synthesized -- no audio files) ──────────────
   let actx = null;
@@ -348,6 +352,12 @@
     }
     place();
     posTimer = setInterval(() => {
+      // Chat-list parts: if the app opens a chat on its own (e.g. restoring the
+      // last one on a phone), go back to the list so the arrow has its target.
+      if (sub.sidebar && !opts.away && isPhone()) {
+        const shell = document.querySelector('.chat-shell');
+        if (shell && shell.classList.contains('thread-open')) { const bb = document.getElementById('backBtn'); if (bb) bb.click(); }
+      }
       if (!currentTarget || !document.contains(currentTarget) || !visible(currentTarget)) {
         const t = opts.away ? null : findTarget(sub);
         if (t !== currentTarget) currentTarget = t;
@@ -421,7 +431,7 @@
     document.body.appendChild(wrap);
     victoryTune();
     const stage = wrap.querySelector('.stage');
-    const seq = ['frontflip', 'gainer', 'hoop_sedona', 'handstand'];
+    const seq = ['frontflip', 'cflip', 'hoop_sedona', 'handstand'];
     let k = 0;
     const showFig = () => { stage.innerHTML = `<div class="ptu-fig">${FIGS[seq[k % seq.length]]}</div>`; k++; };
     showFig();
@@ -478,21 +488,31 @@
       state.sub++; save(state); sub = step.subs[state.sub];
     }
     if (!pageMatches(sub.page)) { render(sub, { away: true }); return; }
-    // Open the chat whose header has the calendar: their own group (gym
-    // students), else -- testers -- the first Gym student's group.
+    // Phone-only parts are skipped on bigger screens.
+    if (sub.phoneOnly && !isPhone()) { advanceSub(true); return; }
+    // Parts that live in the chat list: on a phone an open chat hides the
+    // list, so close it first.
+    if (sub.sidebar) {
+      const shell = document.querySelector('.chat-shell');
+      if (shell && shell.classList.contains('thread-open') && isPhone()) { const bb = document.getElementById('backBtn'); if (bb) bb.click(); }
+    }
+    // Open the chat the part points into: their own group, else (testers)
+    // the first Gym student's group for the calendar, or the first chat.
     if (sub.openGroup && !findTarget(sub)) {
-      const gymRow = [...document.querySelectorAll('.convo-item')].find(r => r.querySelector('.role-tag-gym'));
-      const row = document.querySelector('.convo-item[data-own-group]') || gymRow;
+      const rows = [...document.querySelectorAll('.convo-item')];
+      const own = document.querySelector('.convo-item[data-own-group]');
+      const row = own || (sub.openGroup === 'gym' ? rows.find(r => r.querySelector('.role-tag-gym')) : rows.find(r => !r.hasAttribute('data-self-row')) || rows[0]);
       if (row) row.click();
     }
     // Wait (briefly) for the thing to point at to render. A part that can't
     // find its target is skipped instead of floating with no arrow.
-    const t0 = Date.now(), limit = sub.wait || (sub.openGroup ? 2500 : 6000);
+    const skippable = sub.openGroup || sub.skipIfMissing;
+    const t0 = Date.now(), limit = sub.wait || (sub.openGroup ? 2500 : sub.skipIfMissing ? 700 : 6000);
     (function wait() {
       if (!state.active) return;
       if (!sub.targets.length || findTarget(sub)) { render(sub); return; }
-      if (Date.now() - t0 > limit) { if (sub.openGroup) advanceSub(true); else render(sub); return; }
-      setTimeout(wait, 150);
+      if (Date.now() - t0 > limit) { if (skippable) advanceSub(true); else render(sub); return; }
+      setTimeout(wait, 120);
     })();
   }
   function start() {

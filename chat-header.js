@@ -627,7 +627,8 @@ window.PRABack = (function () {
     window.PRA_ME = { id: myId, role: myRole };
     // Quick Start (tutorial.js): who gets it is set in Admin Panel > Quick Start.
     if (myId && !document.getElementById('pra-tutorial-js')) {
-      fetch('/api/chat/quickstart').then(r => r.ok ? r.json() : null).then(qs => {
+      window.PRA_QS_PROMISE = fetch('/api/chat/quickstart').then(r => r.ok ? r.json() : null).catch(() => null);
+      window.PRA_QS_PROMISE.then(qs => {
         if (!qs || !qs.enabled) return;
         window.PRA_QS = qs;
         const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=2'; document.body.appendChild(ts);
@@ -805,7 +806,7 @@ window.PRABack = (function () {
     // Black Friday pointer: a neon callout floating over the main chat panel
     // with an arrow down to the Shop icon. Shows when the app opens (main
     // chat page only) until it's closed with its X; gone after the sale.
-    (function blackFridayPointer() {
+    (async function blackFridayPointer() {
       const SALE_END = Date.parse('2026-12-01T10:00:00Z'); // ~midnight Alaska, Nov 30
       const KEY = 'praBlackFriday2026Closed';
       if (Date.now() > SALE_END) return;
@@ -813,6 +814,13 @@ window.PRABack = (function () {
       if (['coach', 'admin', 'admin2'].includes(myRole)) return;
       if (!/\/chat\.html$/.test(path) && path !== '/chat-app/' && path !== '/') return;
       try { if (sessionStorage.getItem(KEY)) return; } catch {}
+      // Quick Start comes first: no sale pointer until it's finished (Admin
+      // Panel > Quick Start > "Hide the Black Friday pointer...").
+      const qs = await (window.PRA_QS_PROMISE || Promise.resolve(null));
+      if (qs && qs.enabled && qs.hidePromo) {
+        let running = false; try { running = !!(JSON.parse(localStorage.getItem('praTutorial.v1') || 'null') || {}).active; } catch {}
+        if (!qs.completed || running) return;
+      }
       const shop = [...bottomBar.querySelectorAll('a.cah-bottom-item')].find(x => x.title === 'Shop');
       if (!shop) return;
       const NEON = 'rgb(212, 255, 0)';

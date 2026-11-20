@@ -237,6 +237,7 @@
   #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; margin-bottom: 6px; }
   #quickStartSection .qs-step-h span { color: #ffd23f; font-weight: 700; margin-left: 6px; }
   #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(120px, 1fr) minmax(180px, 2fr); gap: 6px; align-items: center; margin-bottom: 6px; }
+  #quickStartSection .qs-tag { margin: 4px 0 3px 28px; font-size: .68rem; font-weight: 700; color: rgb(212,255,0); letter-spacing: .03em; }
   #quickStartSection .qs-sub-row .n { color: var(--pra-dim); font-size: .72rem; text-align: right; }
   #quickStartSection .qs-sub-row input { padding: 6px 8px; font-size: .8rem; }
   @media (max-width: 560px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px 1fr; } #quickStartSection .qs-sub-row input:last-child { grid-column: 2; } }
@@ -661,6 +662,7 @@
       <div class="qs-group">
         <div class="qs-h">Starting</div>
         <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsAutoStart"/> Opens by itself on Chat for anyone who hasn't finished it (closing it with the X stops that on their device)</label>
+        <label class="qs-chk" style="margin-top:8px"><input type="checkbox" class="pra-toggle" id="qsHidePromo"/> Hide the Black Friday pointer until they've finished Quick Start</label>
       </div>
 
       <div class="qs-group">
@@ -673,7 +675,7 @@
 
       <div class="qs-group">
         <div class="qs-h">Steps &amp; wording</div>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Leave a box empty to keep the default (shown faded). Each step is worth 10 coins.</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Leave a box empty to keep the default (shown faded). Each step is worth 10 coins, paid when its last part is done. Parts marked in yellow only show for some people; a part whose button isn't on screen (e.g. no open chat) skips itself.</div>
         <div id="qsSteps">Loading…</div>
       </div>
 
@@ -2214,7 +2216,8 @@ window.addEventListener('pageshow', () => {
     $('qsSteps').innerHTML = steps.map((st, si) => `<div class="qs-step"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
       st.subs.map((sub, ui) => {
         const k = `${si + 1}.${ui + 1}`, o = texts[k] || {};
-        return `<div class="qs-sub-row" data-k="${k}"><div class="n">${ui + 1}</div><input class="pra-input" data-f="title" placeholder="${esc(sub.title)}" value="${esc(o.title || '')}"/><input class="pra-input" data-f="text" placeholder="${esc(sub.text)}" value="${esc(o.text || '')}"/></div>`;
+        const tag = sub.note ? `<div class="qs-tag">${esc(sub.note)}</div>` : '';
+        return tag + `<div class="qs-sub-row" data-k="${k}"><div class="n">${ui + 1}</div><input class="pra-input" data-f="title" placeholder="${esc(sub.title)}" value="${esc(o.title || '')}"/><input class="pra-input" data-f="text" placeholder="${esc(sub.text)}" value="${esc(o.text || '')}"/></div>`;
       }).join('') + `</div>`).join('') || '<span class="pra-muted">Could not load the steps.</span>';
   }
   function fill() {
@@ -2224,6 +2227,7 @@ window.addEventListener('pageshow', () => {
     $('qsAutoStart').checked = !!c.autoStart;
     $('qsFirstDays').value = c.buttonFirstDays; $('qsAwayDays').value = c.awayDays; $('qsComebackDays').value = c.comebackDays;
     $('qsTestersAlways').checked = !!c.testersAlwaysButton;
+    $('qsHidePromo').checked = !!c.hidePromoUntilDone;
     testers = [...(c.testers || [])];
     $('qsUserList').innerHTML = (data.users || []).map(u => `<option value="${esc(u.name)}">${esc(u.role)}</option>`).join('');
     renderTesters(); renderPeople(); renderSteps();
@@ -2242,7 +2246,7 @@ window.addEventListener('pageshow', () => {
     const body = {
       enabledFor: (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value,
       roles: [...document.querySelectorAll('#qsRoles input:checked')].map(x => x.value),
-      testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked,
+      testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked, hidePromoUntilDone: $('qsHidePromo').checked,
       buttonFirstDays: $('qsFirstDays').value, awayDays: $('qsAwayDays').value, comebackDays: $('qsComebackDays').value, texts,
     };
     $('qsSaveMsg').textContent = 'Saving…';

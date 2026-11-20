@@ -55,6 +55,7 @@ const QS_DEFAULTS = {
   awayDays: 3,
   comebackDays: 2,
   testersAlwaysButton: true,      // testers can replay any time
+  hidePromoUntilDone: true,       // no Black Friday pointer until Quick Start is finished
   texts: {},                      // "step.sub" -> { title, text } overrides
 };
 function qsRead() {
@@ -5749,7 +5750,7 @@ export async function handleChatRequest(req, res, url) {
       return sendJson(res, 200, {
         enabled: true, tester, completed, autoStart: !!cfg.autoStart && !completed,
         showButton: completed && (now < (rec.showUntil || 0) || (tester && cfg.testersAlwaysButton)),
-        texts: cfg.texts || {},
+        texts: cfg.texts || {}, hidePromo: !!cfg.hidePromoUntilDone,
       });
     }
     if (p === "/api/chat/quickstart/complete" && req.method === "POST") {
@@ -5768,7 +5769,7 @@ export async function handleChatRequest(req, res, url) {
         if (["off", "testers", "everyone"].includes(b.enabledFor)) c.enabledFor = b.enabledFor;
         if (Array.isArray(b.testers)) c.testers = b.testers.map(String).slice(0, 50);
         if (Array.isArray(b.roles)) c.roles = b.roles.filter(r => ["user", "trainee", "online", "gym", "coach", "admin", "admin2"].includes(r));
-        for (const k of ["autoStart", "testersAlwaysButton"]) if (b[k] !== undefined) c[k] = !!b[k];
+        for (const k of ["autoStart", "testersAlwaysButton", "hidePromoUntilDone"]) if (b[k] !== undefined) c[k] = !!b[k];
         for (const k of ["buttonFirstDays", "awayDays", "comebackDays"]) if (b[k] !== undefined) c[k] = Math.max(0, Math.min(60, Number(b[k]) || 0));
         if (b.texts && typeof b.texts === "object") {
           const t = {};
