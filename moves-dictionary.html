@@ -58,7 +58,7 @@ async function load() {
     if (!r.ok) throw new Error(d.error || 'Failed');
     videos = d.videos || [];
   } catch (e) {
-    grid.innerHTML = '<div class="pra-muted">Couldn't load the videos right now. Try again in a minute.</div>';
+    grid.innerHTML = '<div class="pra-muted">Could not load the videos right now. Try again in a minute.</div>';
     return;
   }
   grid.innerHTML = videos.map(v => `
