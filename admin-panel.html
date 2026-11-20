@@ -202,10 +202,11 @@
   .um-sub { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .78rem; font-weight: 400; color: var(--pra-dim); }
   .um-sub .pra-input, .um-sub .pra-select { max-width: 260px; }
   .um-saved { font-size: .72rem; color: #22c55e; min-height: 1em; margin-left: 6px; }
-  /* Message Save buttons: big and solid; amber while there are unsaved edits. */
-  .um-save { display:inline-flex; align-items:center; justify-content:center; margin-top:10px; min-width:170px; padding:11px 22px; border:0; border-radius:10px; background:#22c55e; color:#06120a; font:inherit; font-size:.9rem; font-weight:800; letter-spacing:.03em; cursor:pointer; box-shadow:0 4px 14px rgba(34,197,94,.3); }
+  /* Message Save buttons: big solid #009bff; glow + "Save changes" while there are unsaved edits. */
+  .um-save { display:inline-flex; align-items:center; justify-content:center; margin-top:10px; min-width:170px; padding:11px 22px; border:0; border-radius:10px; background:#009bff; color:#fff; font:inherit; font-size:.9rem; font-weight:800; letter-spacing:.03em; cursor:pointer; box-shadow:0 4px 14px rgba(0,155,255,.35); }
   .um-save:hover { filter:brightness(1.08); }
-  .um-save.dirty { background:#f59e0b; color:#1a1003; box-shadow:0 0 0 3px rgba(245,158,11,.35), 0 4px 14px rgba(245,158,11,.35); }
+  .um-save.dirty { box-shadow:0 0 0 3px rgba(0,155,255,.45), 0 0 22px rgba(0,155,255,.6); animation: umSavePulse 1.2s ease-in-out infinite; }
+  @keyframes umSavePulse { 50% { box-shadow:0 0 0 6px rgba(0,155,255,.2), 0 0 30px rgba(0,155,255,.8); } }
   .um-save + .um-saved { font-size:.85rem; font-weight:700; margin-left:12px; }
   .um-alert { border-left: 3px solid #ff4d4d; background: rgba(255,77,77,0.06); padding: 8px 10px; border-radius: 6px; margin-top: 6px; font-size: .78rem; }
 
