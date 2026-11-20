@@ -7372,15 +7372,39 @@ async function renderPermsPrompt() {
     <div class="np-t">Turn on ${what}</div>
     <div class="np-s">These are necessary for your private coaching video calls${n ? ', and so your coach\'s calls and messages can reach you' : ''}.</div>
     ${deniedLabels.length ? `<div class="np-how">${howFor(deniedLabels.join(' and '))}</div>` : ''}
-    ${askable.length ? '<button type="button" class="pra-btn np-go">Allow</button>' : (native && ios ? '<button type="button" class="pra-btn np-go np-settings">Open Settings</button>' : '')}
+    ${askable.length ? '<button type="button" class="pra-btn np-go">Allow</button>' : ''}
+    ${deniedLabels.length && native ? '<button type="button" class="pra-btn np-settings">Open Settings</button>' : ''}
     <button type="button" class="np-later">Not now</button></div>`;
   document.body.appendChild(el);
   el.querySelector('.np-later').onclick = () => { try { sessionStorage.setItem(PERM_DISMISS_KEY, '1'); } catch {} hideNotifPrompt(); };
   const go = el.querySelector('.np-go');
   if (go) go.onclick = async () => {
-    if (go.classList.contains('np-settings')) { location.href = 'app-settings:'; return; }
     hideNotifPrompt();
     for (const a of askable) { try { await (a.onEnable && a.onEnable()); } catch {} }
+  };
+  // Straight to the right Settings page (app build 1.4+/1.11+ via PraSteps;
+  // older iPhone builds fall back to the app's Settings page).
+  const settingsBtn = el.querySelector('.np-settings');
+  if (settingsBtn) settingsBtn.onclick = async () => {
+    const plug = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.PraSteps;
+    const onlyNotif = n && n.denied && !(m && m.denied);
+    try {
+      if (!plug) throw new Error('no plugin');
+      await (onlyNotif ? plug.openNotificationSettings() : plug.openAppSettings());
+    } catch {
+      if (ios) { location.href = 'app-settings:'; }
+      else { settingsBtn.textContent = 'Follow the steps above'; settingsBtn.disabled = true; return; }
+    }
+    // Coming back from Settings: check again (the card returns only if still off).
+    const back = () => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', back);
+      hideNotifPrompt();
+      for (const k of Object.keys(permNeeds)) delete permNeeds[k];
+      checkMediaPermissions();
+      if (window.Capacitor && Capacitor.Plugins.PushNotifications) Capacitor.Plugins.PushNotifications.checkPermissions().then(p => { if (p.receive !== 'granted') needPerm('notif', { denied: true }); }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', back);
   };
 }
 // Camera + microphone: only flagged when they're really not allowed -- the

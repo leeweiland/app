@@ -2,6 +2,9 @@ package com.pacificrimathleticsapp.steps;
 
 import android.Manifest;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -346,5 +349,39 @@ public class PraStepsPlugin extends Plugin {
         c.setTimeInMillis(dayStart);
         c.add(Calendar.DAY_OF_MONTH, 1);
         return c.getTimeInMillis();
+    }
+
+    // ── Settings shortcuts (permissions reminder card in chat.html) ──────
+    // Opens this app's own page in the phone's Settings (App info, where
+    // Permissions -> Camera / Microphone live).
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getContext().getPackageName(), null));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Couldn't open Settings: " + e.getMessage());
+        }
+    }
+
+    // Opens this app's Notifications page directly (Android 8+), else App info.
+    @PluginMethod
+    public void openNotificationSettings(PluginCall call) {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+            } else {
+                i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getContext().getPackageName(), null));
+            }
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            openAppSettings(call);
+        }
     }
 }

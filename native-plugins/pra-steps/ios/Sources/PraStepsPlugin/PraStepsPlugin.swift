@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import UIKit
 import CoreMotion
 import HealthKit
 
@@ -21,9 +22,28 @@ public class PraStepsPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "checkPermission", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermission", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDailySteps", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getDailyHealth", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getDailyHealth", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openAppSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openNotificationSettings", returnType: CAPPluginReturnPromise)
     ]
     private let pedometer = CMPedometer()
+    // ── Settings shortcuts (permissions reminder card in chat.html) ──────
+    // The app's own page in Settings (Camera, Microphone, Notifications...).
+    @objc func openAppSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { call.reject("No Settings URL"); return }
+            UIApplication.shared.open(url) { ok in ok ? call.resolve() : call.reject("Couldn't open Settings") }
+        }
+    }
+    // The app's Notifications page directly (iOS 16+), else the app's page.
+    @objc func openNotificationSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            var str = UIApplication.openSettingsURLString
+            if #available(iOS 16.0, *) { str = UIApplication.openNotificationSettingsURLString }
+            guard let url = URL(string: str) else { call.reject("No Settings URL"); return }
+            UIApplication.shared.open(url) { ok in ok ? call.resolve() : call.reject("Couldn't open Settings") }
+        }
+    }
     private let healthStore = HKHealthStore()
 
     private func quantity(_ id: HKQuantityTypeIdentifier) -> HKQuantityType { HKQuantityType.quantityType(forIdentifier: id)! }
