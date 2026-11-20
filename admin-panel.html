@@ -2248,7 +2248,7 @@ window.addEventListener('pageshow', () => {
     });
     const body = {
       enabledFor: (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value,
-      roles: [...document.querySelectorAll('#qsRoles input:checked')].map(x => x.value),
+      roles: [...document.querySelectorAll('#qsRoles input:checked')].flatMap(x => x.value === 'admin' ? ['admin', 'admin2'] : [x.value]),
       testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked, hidePromoUntilDone: $('qsHidePromo').checked,
       forceStartDays: $('qsForceDays').value, buttonFirstDays: $('qsFirstDays').value, awayDays: $('qsAwayDays').value, comebackDays: $('qsComebackDays').value, texts,
     };
