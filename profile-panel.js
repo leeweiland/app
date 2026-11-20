@@ -62,8 +62,9 @@
   .pp-chip .chip-val { font-weight: 700; white-space: nowrap; }
   .pp-chip .chip-val.editable { cursor: pointer; border-radius: 5px; padding: 2px 6px; transition: background .15s; }
   .pp-chip .chip-val.editable:hover { background: rgba(0,155,255,0.15); }
-  .pp-stripes { display: flex; gap: 3px; align-items: center; margin-left: 12px; margin-right: auto; }
-  .pp-stripes i { width: 10px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+  /* Stripes stretch to fill everything between the label and the n/10. */
+  .pp-stripes { display: flex; gap: 6px; align-items: center; margin: 0 20px 0 12px; }
+  .pp-stripes i { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.07); }
   .pp-stripes i.on { background: #009bff; }
   .pp-chip-input { width: 40px; font-size: .72rem; font-weight: 700; background: rgba(255,255,255,0.06); border: 1px solid var(--pra-blue); border-radius: 5px; color: #fff; text-align: center; padding: 2px 4px; }
   .pp-team-box { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--pra-dim); border-radius: 4px; vertical-align: middle; }
@@ -74,12 +75,12 @@
   .pp-chip { min-width: 0; box-sizing: border-box; }
   .pp-chip .cat.sized { min-width: 0; }
   .pp-stripes { flex: 1 1 auto; min-width: 0; }
-  .pp-stripes i { flex: 0 1 10px; min-width: 2px; }
+  .pp-stripes i { flex: 1 1 0; min-width: 2px; }
   @media (max-width: 480px) {
     .pp-backdrop { padding: 10px; }
     .pp-box { padding: 18px 12px; }
     .pp-chip { gap: 6px; padding: 5px 8px; }
-    .pp-stripes { margin-left: 4px; gap: 2px; }
+    .pp-stripes { margin-left: 4px; margin-right: 10px; gap: 3px; }
   }
 `;
   const style = document.createElement('style');
