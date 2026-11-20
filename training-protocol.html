@@ -401,9 +401,9 @@
         </div>
         <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
           <button class="view-mode-btn" id="ownFlowBtn" type="button" style="display:none" title="Your own protocol">Your Flow</button>
-          <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Page</button>
+          <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Training</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
-          <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Page</button>
+          <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Training</button>
           <button class="view-mode-btn" id="programViewBtn" type="button" style="display:none">Handstand Protocol</button>
           <button class="view-mode-btn" id="katasViewBtn" type="button">Your Katas</button>
           <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
@@ -1199,6 +1199,8 @@ async function init() {
     if (params.get('program') || !steps.length || me.role === 'trainee') await showProgramView();
   }
   if (me.role === 'trainee') document.getElementById('backBtn').textContent = 'Group Chat';
+  // Coach/admin on a student's protocol, flow or katas: "Chat With <Name>".
+  else if (canEdit && client && targetUserId !== me.id) document.getElementById('backBtn').textContent = '← Chat With ' + (client.first || 'Student');
   syncCoachMenu();
   // Locked when Protocol is switched off for this role (User Management > Access by Role).
   const myAccess = window.PRA_ACCESS || (await fetch('/api/auth/me').then(r => r.json()).then(d => d.access).catch(() => null));

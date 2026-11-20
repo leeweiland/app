@@ -2428,7 +2428,7 @@ function convoItemHtml(i) {
     ? `<div class="convo-select-checkbox"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`
     : '';
   return `
-    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}">
+    <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}"${i.isOwnGroup ? ' data-own-group="1"' : ''}${i.isSelfRow ? ' data-self-row="1"' : ''}>
       ${checkbox}
       <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}${rn ? ' renew-' + rn.level : ''}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">

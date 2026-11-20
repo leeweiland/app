@@ -624,6 +624,12 @@ window.PRABack = (function () {
     const featureFor = (href) => href && href.startsWith('/personality-quiz/') ? 'quiz' : FEATURE_BY_PATH[(href || '').split('?')[0]];
     const allowed = (href) => { const f = featureFor(href); return !myAccess || !f || myAccess[f] !== false; };
     window.PRA_ACCESS = myAccess;
+    window.PRA_ME = { id: myId, role: myRole };
+    // Gamified tutorial (tutorial.js) -- only Lee's account while it's being tested.
+    const TUTORIAL_TESTERS = ['76f3579b-ed30-46dd-928f-42a32d269dd2'];
+    if (myId && TUTORIAL_TESTERS.includes(myId) && !document.getElementById('pra-tutorial-js')) {
+      const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=1'; document.body.appendChild(ts);
+    }
     {
       const f = featureFor(path);
       // The protocol page is only locked on your OWN protocol (staff open others').
