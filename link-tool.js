@@ -25,10 +25,10 @@
   css.textContent = `
     .lt-bar { display:flex; align-items:center; gap:12px; margin:0 0 8px; flex-wrap:wrap; position:relative; }
     .lt-btn { font-size:.74rem; padding:6px 12px; }
-    .lt-add { display:inline-flex; align-items:center; gap:8px; background:#009bff; color:#fff; border:0; border-radius:10px; padding:9px 16px; font:inherit; font-size:.85rem; font-weight:700; letter-spacing:.02em; cursor:pointer; box-shadow:0 0 0 1px rgba(0,155,255,.5), 0 4px 14px rgba(0,155,255,.35); }
-    .lt-add:hover { background:#1aa7ff; }
-    .lt-add svg { width:18px; height:18px; flex:0 0 auto; }
-    .lt-hint { font-size:.8rem; color:#b8bcc6; }
+    .lt-add { display:inline-flex; align-items:center; gap:6px; background:none; color:#9fd6ff; border:1px solid #2a2a33; border-radius:8px; padding:5px 10px; font:inherit; font-size:.74rem; cursor:pointer; }
+    .lt-add:hover { border-color:#009bff; color:#fff; }
+    .lt-add svg { width:14px; height:14px; flex:0 0 auto; }
+    .lt-hint { font-size:.72rem; color:var(--pra-gray, #8a8a95); }
     .lt-preview { margin-top:6px; font-size:.82rem; line-height:1.45; color:#cfd3dc; white-space:pre-wrap; word-break:break-word; }
     .lt-preview:empty { display:none; }
     .lt-preview a { color:#009bff; text-decoration:underline; }
@@ -58,7 +58,7 @@
     ta.dataset.ltMounted = '1';
     const bar = document.createElement('div');
     bar.className = 'lt-bar';
-    bar.innerHTML = `<button type="button" class="lt-add" title="Turn the highlighted words into a link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>Add link</button><span class="lt-hint">Highlight words in the message, then click Add link.</span>`;
+    bar.innerHTML = `<button type="button" class="lt-add" title="Turn the highlighted words into a link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>Link</button><span class="lt-hint">Highlight words, then Link.</span>`;
     const preview = document.createElement('div');
     preview.className = 'lt-preview';
     ta.before(bar);
