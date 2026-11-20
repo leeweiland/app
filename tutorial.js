@@ -33,7 +33,7 @@
   const iconSub = (title, sel, text, page) => ({ page: '*', targets: [sel], title, text, go: page, clickGo: true });
   const STEPS = [
     { figure: 'handstand', subs: [
-      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Run through Quick Start to set yourself up for success', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
+      { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
     ] },
     { figure: 'cflip', subs: [
       { page: 'chat', roles: ['gym'], openGroup: 'gym', note: 'Gym students only', targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
@@ -118,7 +118,7 @@
   .ptu-tally { display: flex; align-items: center; gap: 6px; color: #b07f00; font-size: .8rem; letter-spacing: 0; }
   .ptu-coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 1.5px #b07f00; display: inline-block; flex-shrink: 0; }
   .ptu-title { font-weight: 800; font-size: 1.02rem; margin: 8px 0 4px; }
-  .ptu-kicker { margin-top: 10px; font-size: .74rem; font-weight: 800; color: #0077cc; line-height: 1.3; }
+  .ptu-kicker { margin-top: 10px; font-size: .98rem; font-weight: 900; color: #0077cc; line-height: 1.25; }
   .ptu-kicker + .ptu-title { margin-top: 3px; }
   .ptu-text { font-size: .86rem; color: #374151; line-height: 1.45; }
   .ptu-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; }
