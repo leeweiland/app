@@ -205,7 +205,9 @@
     // yourself, and for people with no app account.
     const msgRow = q('.pp-msg-row');
     const coachCantDm = QUICK_ROLES.includes(user.role) && !isSelf && staff && !isAdmin(me);
-    msgRow.style.display = (!hasAccount || isSelf || coachCantDm) ? 'none' : 'flex';
+    // Users and Trainees only ever get the profile, never a Message button.
+    const profileOnlyViewer = !!me && (me.role === 'user' || me.role === 'trainee');
+    msgRow.style.display = (!hasAccount || isSelf || coachCantDm || profileOnlyViewer) ? 'none' : 'flex';
     q('.pp-message').onclick = () => {
       if (opts.onMessage) return opts.onMessage(user);
       location.href = '/chat-app/chat.html?dm=' + encodeURIComponent(user.id);

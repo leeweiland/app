@@ -5695,12 +5695,9 @@ export async function handleChatRequest(req, res, url) {
       // (syncDefaultGroups) plus whatever an admin starts with them
       // directly remain the only real conversations a client ever has.
       let users = readJson(USERS_FILE, []).filter(u => u.id !== user.id && !u.archived);
-      // Trainees get an empty directory; nobody but staff
-      // sees trainees in the directory.
-      // (Their group already lists Lee + Alexis; directory rows would offer
-      // DMs a trainee can't start.)
-      if (isTrainee(user)) users = [];
-      else if (!isStaff(user)) users = users.filter(u => !isTrainee(u));
+      // Trainees see the same directory as students (clicking a row only
+      // opens that person's profile panel); nobody but staff sees trainees.
+      if (!isStaff(user)) users = users.filter(u => !isTrainee(u));
       // Staff also get each student's renewal alert (see renewalForStudent) so a student's own
       // row -- often with no conversation yet -- is flagged like their coaching group.
       let renewalEligibility = null;
