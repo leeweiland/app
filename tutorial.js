@@ -583,9 +583,17 @@
   const boot = () => {
     if (new URLSearchParams(location.search).get('tutorial') === '1') { start(); return; }
     if (state && state.done && !QS.completed) markComplete();
+    // A new app open (not just moving between pages): an unfinished game
+    // starts over from step 1.
+    let freshOpen = false;
+    try { freshOpen = !sessionStorage.getItem('praQS.open'); sessionStorage.setItem('praQS.open', '1'); } catch {}
+    if (freshOpen && state && state.active) { state = null; try { localStorage.removeItem(KEY); } catch {} if (QS.autoStart && !QS.completed) { start(); return; } }
     if (state && state.active) { show(); return; }
     mountLauncher();
-    if (QS.autoStart && !QS.completed && PAGES.chat.test(path) && !(state && (state.cancelled || state.done))) start();
+    // First day(s): opens on every app open until finished, even after the X.
+    // After that: opens until finished unless they closed it.
+    const wantStart = QS.forceStart ? freshOpen : (QS.autoStart && !QS.completed && !(state && (state.cancelled || state.done)));
+    if (wantStart && !QS.completed && PAGES.chat.test(path)) start();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

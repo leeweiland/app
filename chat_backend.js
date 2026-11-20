@@ -51,6 +51,7 @@ const QS_DEFAULTS = {
   testers: ["76f3579b-ed30-46dd-928f-42a32d269dd2"],
   roles: ["user", "trainee", "online", "gym"], // who "everyone" means
   autoStart: true,                // opens by itself on chat until finished or closed
+  forceStartDays: 1,              // first N days: opens on EVERY app open until finished (even after X)
   buttonFirstDays: 3,
   awayDays: 3,
   comebackDays: 2,
@@ -5749,6 +5750,7 @@ export async function handleChatRequest(req, res, url) {
       const completed = !!rec.completedAt;
       return sendJson(res, 200, {
         enabled: true, tester, completed, autoStart: !!cfg.autoStart && !completed,
+        forceStart: !!cfg.autoStart && !completed && now - rec.firstSeenAt < (Number(cfg.forceStartDays) || 0) * QS_DAY,
         showButton: completed && (now < (rec.showUntil || 0) || (tester && cfg.testersAlwaysButton)),
         texts: cfg.texts || {}, hidePromo: !!cfg.hidePromoUntilDone,
       });
@@ -5770,7 +5772,7 @@ export async function handleChatRequest(req, res, url) {
         if (Array.isArray(b.testers)) c.testers = b.testers.map(String).slice(0, 50);
         if (Array.isArray(b.roles)) c.roles = b.roles.filter(r => ["user", "trainee", "online", "gym", "coach", "admin", "admin2"].includes(r));
         for (const k of ["autoStart", "testersAlwaysButton", "hidePromoUntilDone"]) if (b[k] !== undefined) c[k] = !!b[k];
-        for (const k of ["buttonFirstDays", "awayDays", "comebackDays"]) if (b[k] !== undefined) c[k] = Math.max(0, Math.min(60, Number(b[k]) || 0));
+        for (const k of ["buttonFirstDays", "awayDays", "comebackDays", "forceStartDays"]) if (b[k] !== undefined) c[k] = Math.max(0, Math.min(60, Number(b[k]) || 0));
         if (b.texts && typeof b.texts === "object") {
           const t = {};
           for (const [k, v] of Object.entries(b.texts)) {

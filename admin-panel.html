@@ -662,6 +662,8 @@
       <div class="qs-group">
         <div class="qs-h">Starting</div>
         <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsAutoStart"/> Opens by itself on Chat for anyone who hasn't finished it (closing it with the X stops that on their device)</label>
+        <div class="qs-row qs-num" style="margin-top:8px">For their first <input class="pra-input" type="number" min="0" max="60" id="qsForceDays"/> day(s), it opens on <b>every</b> app open until they finish, even after the X</div>
+        <div class="pra-muted" style="font-size:.74rem">Closing the app before finishing always restarts it from step 1 on the next open.</div>
         <label class="qs-chk" style="margin-top:8px"><input type="checkbox" class="pra-toggle" id="qsHidePromo"/> Hide the Black Friday pointer until they've finished Quick Start</label>
       </div>
 
@@ -2225,6 +2227,7 @@ window.addEventListener('pageshow', () => {
     document.querySelectorAll('input[name="qsEnabledFor"]').forEach(r => { r.checked = r.value === c.enabledFor; });
     document.querySelectorAll('#qsRoles input').forEach(x => { x.checked = (c.roles || []).includes(x.value); });
     $('qsAutoStart').checked = !!c.autoStart;
+    $('qsForceDays').value = c.forceStartDays ?? 1;
     $('qsFirstDays').value = c.buttonFirstDays; $('qsAwayDays').value = c.awayDays; $('qsComebackDays').value = c.comebackDays;
     $('qsTestersAlways').checked = !!c.testersAlwaysButton;
     $('qsHidePromo').checked = !!c.hidePromoUntilDone;
@@ -2247,7 +2250,7 @@ window.addEventListener('pageshow', () => {
       enabledFor: (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value,
       roles: [...document.querySelectorAll('#qsRoles input:checked')].map(x => x.value),
       testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked, hidePromoUntilDone: $('qsHidePromo').checked,
-      buttonFirstDays: $('qsFirstDays').value, awayDays: $('qsAwayDays').value, comebackDays: $('qsComebackDays').value, texts,
+      forceStartDays: $('qsForceDays').value, buttonFirstDays: $('qsFirstDays').value, awayDays: $('qsAwayDays').value, comebackDays: $('qsComebackDays').value, texts,
     };
     $('qsSaveMsg').textContent = 'Saving…';
     const r = await fetch('/api/admin/quickstart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
