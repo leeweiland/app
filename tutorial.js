@@ -36,7 +36,7 @@
       { page: 'chat', targets: ['.convo-item[data-own-group]', '.convo-item'], title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
       { page: 'chat', roles: ['gym'], openGroup: true, targets: ['#scheduleBtn'], title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
     ] },
-    { figure: 'flare', subs: [
+    { figure: 'gainer', subs: [
       iconSub('Your Training Protocol', top('My Training Protocol'), 'Your training plan lives here. Tap it or hit Next.', 'protocol'),
       { page: 'protocol', targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'], activate: true, title: 'Your Training', text: 'Your custom protocol (or the Handstand Protocol), day by day.' },
       { page: 'protocol', targets: ['#katasViewBtn'], activate: true, title: 'Katas', text: 'Flow routines to learn, film and level up.' },
@@ -54,27 +54,27 @@
       iconSub('Strength Ninjas', bottom('Strength Ninjas'), 'The map of everyone training with us.', 'map'),
       { page: 'map', targets: [], title: 'Strength Ninjas map', text: 'See who is training near you and around the world.' },
     ] },
-    { figure: 'aerialhoop', subs: [
+    { figure: 'hoop_georgia', subs: [
       iconSub('Training Personality', bottom('Training Personality Quiz'), 'Find out how you train best.', 'quiz'),
       { page: 'quiz', targets: [], title: 'Training Personality', text: 'A quick quiz that shapes how we coach you.' },
     ] },
-    { figure: 'handstand', subs: [
+    { figure: 'airflare', subs: [
       iconSub('Levels', bottom('Levels'), 'Your skill progress, every category.', 'levels'),
       { page: 'levels', targets: [], title: 'Levels', text: 'Level up each skill from 1 to 10 and grow your Super Level.' },
     ] },
-    { figure: 'flare', subs: [
+    { figure: 'hoop_sierra', subs: [
       iconSub('Clothing', bottom('Shop'), 'PRA gear. Students get 10% off.', 'shop'),
       { page: 'shop', targets: [], title: 'Clothing', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' },
     ] },
-    { figure: 'flip', subs: [
+    { figure: 'frontflip', subs: [
       iconSub('Retreats', bottom('Retreats'), 'Train with us in person.', 'retreats'),
       { page: 'retreats', targets: [], title: 'Retreats', text: 'Coaching trips with the crew. Come train with us.' },
     ] },
-    { figure: 'humanflag', subs: [
+    { figure: 'hoop_sedona', subs: [
       iconSub('Your profile', top('My profile'), 'Your account and photo.', 'profile'),
       { page: 'profile', targets: ['#profileCard .pp-avatar-wrap', '#profileCard .pp-avatar', '.avatar-wrap'], gap: 40, title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' },
     ] },
-    { figure: 'aerialhoop', subs: [
+    { figure: 'planche', subs: [
       iconSub('Back to chat', top('Chat'), 'Head back to your chat.', 'chat'),
       { page: 'chat', targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'], clickAdvance: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
       { page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
@@ -145,7 +145,7 @@
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
-  .ptu-fig { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; animation: ptuFigIn 1.6s ease-out forwards; }
+  .ptu-fig { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; animation: ptuFigIn 1.6s ease-out forwards; }
   .ptu-fig img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 0 7px rgba(0,155,255,.95)) drop-shadow(0 0 2px rgba(255,255,255,.9)); }
   @keyframes ptuFigIn { 0% { opacity: 0; transform: scale(.4) translateY(20px); } 15% { opacity: 1; transform: scale(1.05) translateY(0); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.95) translateY(-10px); } }
   .ptu-final { position: fixed; inset: 0; z-index: 9700; display: flex; align-items: center; justify-content: center; background: rgba(4,4,8,.72); }
@@ -168,12 +168,13 @@
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   // ── Athlete silhouettes (white line figures, blue glow) ───────────────
-  // Real moves: white silhouettes cut from Lee's own footage (handstand,
-  // flare, backflip, human flag) and a student's aerial hoop kata, rendered
+  // Real moves, one per step: white silhouettes cut from real footage (Lee's
+  // handstand, gainer, backflip, straddle flag, airflare, front flip; Georgia,
+  // Sierra and Sedona on aerial hoop; Clayton's planche), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=1`;
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=2`;
   const FIGS = new Proxy({}, { get: (_, n) => `<img src="${FIG_SRC(String(n))}" alt="">` });
-  ['handstand', 'flare', 'flip', 'humanflag', 'aerialhoop'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
+  ['handstand', 'gainer', 'flip', 'humanflag', 'hoop_georgia', 'airflare', 'hoop_sierra', 'frontflip', 'hoop_sedona', 'planche'].forEach(n => { const im = new Image(); im.src = FIG_SRC(n); });
 
   // ── Sound (Web Audio, all synthesized -- no audio files) ──────────────
   let actx = null;
@@ -233,15 +234,20 @@
   }
   function stepReward(stepIdx, anchor) {
     const r = anchor.getBoundingClientRect();
-    const x = r.left + r.width / 2, y = r.top + 6;
+    // Burst in clear space right above the panel (below it if there's no room),
+    // with the step's arrow + ring hidden so nothing overlaps the athlete.
+    if (ring) ring.style.visibility = 'hidden';
+    if (arrow) arrow.style.visibility = 'hidden';
+    const x = r.left + r.width / 2;
+    const y = r.top > 190 ? r.top - 88 : r.bottom + 88;
     coinSound();
     const fx = coinBurst(x, y);
     const fig = document.createElement('div'); fig.className = 'ptu-fig';
-    fig.style.left = x + 'px'; fig.style.top = Math.max(70, y - 70) + 'px';
+    fig.style.left = x + 'px'; fig.style.top = y + 'px';
     fig.innerHTML = FIGS[STEPS[stepIdx].figure];
     fx.appendChild(fig);
     const plus = document.createElement('div'); plus.className = 'ptu-plus'; plus.textContent = '+10';
-    plus.style.left = (x + 70) + 'px'; plus.style.top = Math.max(40, y - 30) + 'px';
+    plus.style.left = (x + 92) + 'px'; plus.style.top = (y - 30) + 'px';
     fx.appendChild(plus);
     setTimeout(() => fx.remove(), 1700);
   }
@@ -415,7 +421,7 @@
     document.body.appendChild(wrap);
     victoryTune();
     const stage = wrap.querySelector('.stage');
-    const seq = ['handstand', 'flip', 'flare', 'humanflag', 'aerialhoop'];
+    const seq = ['frontflip', 'gainer', 'hoop_sedona', 'handstand'];
     let k = 0;
     const showFig = () => { stage.innerHTML = `<div class="ptu-fig">${FIGS[seq[k % seq.length]]}</div>`; k++; };
     showFig();
