@@ -1817,7 +1817,7 @@ export const ACCESS_FEATURES = [
 export const ACCESS_ROLES = ["user", "trainee", "online", "gym", "coach"];
 const ACCESS_DEFAULTS = {
   user: { chat: true, protocol: false, physique: false, katas: false, videos: true, levels: true, map: true, quiz: true, shop: true, retreats: true },
-  trainee: { chat: true, protocol: true, physique: false, katas: false, videos: false, levels: true, map: true, quiz: true, shop: true, retreats: true },
+  trainee: { chat: true, protocol: true, physique: false, katas: false, videos: true, levels: true, map: true, quiz: true, shop: true, retreats: true },
   online: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
   gym: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),
   coach: Object.fromEntries(ACCESS_FEATURES.map(f => [f.key, true])),

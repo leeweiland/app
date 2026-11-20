@@ -131,8 +131,51 @@ function sendJson(res, status, obj) {
   return true;
 }
 
+// Lee Weiland YouTube channel: every public upload (videos + Shorts),
+// newest first. Read on demand with a 3-hour cache, never polled in the
+// background (shared YouTube quota). API key = public videos only.
+const LW_UPLOADS_PLAYLIST = "UUx7p3BDXwZipPsqqadBj_XQ";
+const YT_FEED_TTL = 3 * 60 * 60 * 1000;
+let ytFeedCache = null, ytFeedAt = 0, ytFeedLoading = null;
+async function fetchChannelFeed() {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) throw new Error("YOUTUBE_API_KEY not set");
+  const videos = [];
+  let pageToken = "";
+  for (let i = 0; i < 40; i++) {
+    const u = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,status&maxResults=50&playlistId=${LW_UPLOADS_PLAYLIST}&key=${key}` + (pageToken ? `&pageToken=${pageToken}` : "");
+    const r = await fetch(u);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error?.message || `YouTube ${r.status}`);
+    for (const it of j.items || []) {
+      if (it.status?.privacyStatus && it.status.privacyStatus !== "public") continue;
+      const sn = it.snippet || {}, th = sn.thumbnails || {};
+      const id = sn.resourceId?.videoId;
+      if (!id) continue;
+      videos.push({ id, title: sn.title || "", publishedAt: sn.publishedAt || "",
+        thumb: (th.high || th.medium || th.default || {}).url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg` });
+    }
+    pageToken = j.nextPageToken;
+    if (!pageToken) break;
+  }
+  videos.sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""));
+  return videos;
+}
+
 export async function handleMovesDictionaryRequest(req, res, url) {
   const p = url.pathname;
+
+  if (req.method === "GET" && p === "/api/moves-dictionary/youtube") {
+    if (!ytFeedCache || Date.now() - ytFeedAt > YT_FEED_TTL) {
+      ytFeedLoading = ytFeedLoading || fetchChannelFeed()
+        .then(v => { ytFeedCache = v; ytFeedAt = Date.now(); })
+        .catch(e => { console.error("[youtube feed]", e.message); })
+        .finally(() => { ytFeedLoading = null; });
+      if (!ytFeedCache) await ytFeedLoading;
+    }
+    if (!ytFeedCache) return sendJson(res, 502, { error: "Couldn't load the videos right now." });
+    return sendJson(res, 200, { videos: ytFeedCache });
+  }
 
   if (req.method === "GET" && p === "/api/moves-dictionary/moves") {
     let moves;

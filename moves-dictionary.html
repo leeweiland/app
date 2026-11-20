@@ -8,22 +8,21 @@
 <style>
   body { margin: 0; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
-  .controls { display: flex; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
-  #searchInput { flex: 1; min-width: 220px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
-  .move-card { overflow: hidden; cursor: pointer; transition: box-shadow .18s, transform .12s; }
-  .move-card:hover { box-shadow: 0 0 18px var(--pra-blue-glow); transform: translateY(-2px); }
-  .move-thumb { position: relative; width: 100%; aspect-ratio: 16/10; background: #000; overflow: hidden; }
-  .move-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-  .move-thumb .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--pra-blue); filter: drop-shadow(0 0 6px var(--pra-blue-glow)); pointer-events: none; }
-  .move-info { padding: 12px 14px; }
-  .move-name { font-weight: 700; font-size: .92rem; }
-  .move-desc { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); margin-top: 4px; }
+  .yt-card { overflow: hidden; cursor: pointer; transition: box-shadow .18s, transform .12s; }
+  .yt-card:hover { box-shadow: 0 0 18px var(--pra-blue-glow); transform: translateY(-2px); }
+  .yt-thumb { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
+  .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .yt-thumb .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--pra-blue); filter: drop-shadow(0 0 6px var(--pra-blue-glow)); pointer-events: none; }
+  .yt-info { padding: 12px 14px; }
+  .yt-title { font-weight: 700; font-size: .92rem; line-height: 1.35; }
+  .yt-date { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); margin-top: 4px; }
 
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
   .modal-backdrop.show { display: flex; }
-  .player-box { width: 100%; max-width: 640px; padding: 20px; }
-  .player-box video { width: 100%; max-height: 70vh; border-radius: 10px; background: #000; display: block; object-fit: contain; }
+  .player-box { width: 100%; max-width: 860px; padding: 20px; }
+  .player-frame { position: relative; width: 100%; aspect-ratio: 16/9; max-height: 70vh; border-radius: 10px; overflow: hidden; background: #000; }
+  .player-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body>
@@ -33,105 +32,58 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:18px;font-family:var(--font-secondary)">Powerbatics Training Videos</div>
-    <div class="controls">
-      <div class="search-clear-wrap" style="flex:1;min-width:220px">
-        <input class="pra-input" id="searchInput" placeholder="Search moves — e.g. 'handstand', 'flexibility', 'core'…"/>
-        <button type="button" class="search-clear-btn" data-clears="searchInput">✕</button>
-      </div>
-      <select class="pra-select" id="categoryFilter"><option value="">All Categories</option></select>
-    </div>
     <div class="grid" id="grid"><div class="pra-muted">Loading…</div></div>
   </div>
 
   <div class="modal-backdrop" id="playerModal">
     <div class="pra-panel player-box">
-      <div class="pra-h2" id="playerTitle" style="margin-bottom:4px"></div>
-      <div class="pra-badge" id="playerCategory" style="margin-bottom:10px"></div>
-      <video id="playerVideo" controls></video>
-      <div class="pra-muted" id="playerDesc" style="margin-top:10px;font-size:.85rem"></div>
+      <div class="pra-h2" id="playerTitle" style="margin-bottom:12px"></div>
+      <div class="player-frame" id="playerFrame"></div>
       <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closePlayer()">Close</button>
     </div>
   </div>
 </div>
 
 <script>
-let allMoves = [];
+// Lee Weiland YouTube channel, one feed, newest first.
+let videos = [];
+const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } };
 
 async function load() {
-  const r = await fetch('/api/moves-dictionary/moves');
-  const d = await r.json();
-  allMoves = d.moves;
-  const catSelect = document.getElementById('categoryFilter');
-  d.categories.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSelect.appendChild(o); });
-  render(allMoves);
-}
-
-// The full catalog renders at once (no pagination here), so a broad/empty
-// search could mean dozens of thumbnails all trying to load simultaneously
-// — lazy-loads via data-src instead, same pattern as the video picker.
-const moveThumbObserver = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (!entry.isIntersecting) return;
-    const video = entry.target;
-    if (video.dataset.src) { video.src = video.dataset.src; video.removeAttribute('data-src'); }
-    moveThumbObserver.unobserve(video);
-  });
-}, { rootMargin: '400px' });
-
-function render(moves) {
   const grid = document.getElementById('grid');
-  grid.innerHTML = moves.map(m => `
-    <div class="pra-card move-card" data-id="${m.id}">
-      <div class="move-thumb">
-        <video data-src="/api/moves-dictionary/media/${m.driveFileId}#t=0.5" preload="metadata" muted playsinline></video>
-        <div class="play-icon">▶</div>
+  try {
+    const r = await fetch('/api/moves-dictionary/youtube');
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    videos = d.videos || [];
+  } catch (e) {
+    grid.innerHTML = '<div class="pra-muted">Couldn't load the videos right now. Try again in a minute.</div>';
+    return;
+  }
+  grid.innerHTML = videos.map(v => `
+    <div class="pra-card yt-card" data-id="${esc(v.id)}">
+      <div class="yt-thumb"><img loading="lazy" src="${esc(v.thumb)}" alt=""><div class="play-icon">▶</div></div>
+      <div class="yt-info">
+        <div class="yt-title">${esc(v.title)}</div>
+        <div class="yt-date">${fmtDate(v.publishedAt)}</div>
       </div>
-      <div class="move-info">
-        <div class="move-name">${m.name}</div>
-        <div class="pra-badge">${m.category}</div>
-        <div class="move-desc">${m.description}</div>
-      </div>
-    </div>
-  `).join('') || '<div class="pra-muted">No moves match.</div>';
-  grid.querySelectorAll('.move-card').forEach(el => el.onclick = () => openPlayer(el.dataset.id));
-  grid.querySelectorAll('video[data-src]').forEach(v => moveThumbObserver.observe(v));
+    </div>`).join('') || '<div class="pra-muted">No videos yet.</div>';
+  grid.querySelectorAll('.yt-card').forEach(el => el.onclick = () => openPlayer(el.dataset.id));
 }
 
 function openPlayer(id) {
-  const move = allMoves.find(m => m.id === id);
-  if (!move) return;
-  document.getElementById('playerTitle').textContent = move.name;
-  document.getElementById('playerCategory').textContent = move.category;
-  document.getElementById('playerDesc').textContent = move.description;
-  const video = document.getElementById('playerVideo');
-  video.src = '/api/moves-dictionary/media/' + move.driveFileId;
+  const v = videos.find(x => x.id === id);
+  if (!v) return;
+  document.getElementById('playerTitle').textContent = v.title;
+  document.getElementById('playerFrame').innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
   document.getElementById('playerModal').classList.add('show');
-  video.play().catch(() => {});
 }
 function closePlayer() {
-  const video = document.getElementById('playerVideo');
-  video.pause(); video.src = '';
+  document.getElementById('playerFrame').innerHTML = '';
   document.getElementById('playerModal').classList.remove('show');
 }
-
-async function search() {
-  const q = document.getElementById('searchInput').value;
-  const category = document.getElementById('categoryFilter').value;
-  const params = new URLSearchParams();
-  if (q) params.set('q', q);
-  if (category) params.set('category', category);
-  const r = await fetch('/api/moves-dictionary/moves?' + params.toString());
-  const d = await r.json();
-  render(d.moves);
-}
-
-let searchTimer;
-document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(search, 250); });
-document.getElementById('categoryFilter').addEventListener('change', search);
-document.querySelectorAll('.search-clear-btn[data-clears]').forEach(btn => {
-  const input = document.getElementById(btn.dataset.clears);
-  btn.onclick = () => { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); };
-});
+document.getElementById('playerModal').addEventListener('click', (e) => { if (e.target.id === 'playerModal') closePlayer(); });
 
 load();
 </script>
