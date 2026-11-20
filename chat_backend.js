@@ -450,6 +450,7 @@ export function getConfig() {
   // User Management tab (admin panel) -- see USER_MANAGEMENT_KEYS.
   if (cfg.signupEnabled === undefined) cfg.signupEnabled = true;
   if (cfg.studentCrosscheckEnabled === undefined) cfg.studentCrosscheckEnabled = false;
+  if (cfg.studentCrosscheckCrm === undefined) cfg.studentCrosscheckCrm = true;
   if (cfg.autoBuildProtocolEnabled === undefined) cfg.autoBuildProtocolEnabled = true;
   if (cfg.levelsRowOnNewStudent === undefined) cfg.levelsRowOnNewStudent = true;
   if (cfg.staffAlertsEnabled === undefined) cfg.staffAlertsEnabled = true;
@@ -1446,6 +1447,7 @@ let studentEligibilityCache = null; // { at, online: Set<nameKey>, gym: Set<name
 // three-Sheets-tab read. Without this, a cold cache meant every one of
 // those callers separately ate the full several-second fetch.
 let studentEligibilityInFlight = null;
+let sheetBlacklistedNames = new Set(); // last-read Blacklist tab (names), used by syncStudentRoles
 async function fetchStudentEligibility() {
   if (studentEligibilityCache && Date.now() - studentEligibilityCache.at < 10 * 60 * 1000) return studentEligibilityCache;
   if (studentEligibilityInFlight) return studentEligibilityInFlight;
@@ -1468,6 +1470,7 @@ async function fetchStudentEligibilityUncached() {
     fetchTab(crosscheckTabs().gym, "A1:G"),
   ]);
   const blacklisted = new Set(blacklistRows.filter(([first, last]) => first || last).map(([first, last]) => nameKey(first, last)));
+  sheetBlacklistedNames = blacklisted;
   function toEligibleSet(rows) {
     const eligible = new Set();
     rows.forEach(([first, last, , , status]) => {
@@ -1623,26 +1626,64 @@ function renewalForStudent(student, viewer, eligibility) {
 // manual admin override to any other role always takes precedence going
 // forward, since this only ever touches accounts still sitting at the plain
 // "user" default.
-async function syncStudentRoles(users) {
+// Second source (switch studentCrosscheckCrm, default on): a CRM contact with
+// status ENROLLED and program type Gym/Online, matched by email, phone, then
+// first+last name. Runs on sign-up, login (plain Users only) and when the
+// admin user list loads. `onlyId` limits it to one account.
+async function syncStudentRoles(usersArg, onlyId = null) {
   // Off by default since 2026-11-12 (Lee): coaches set students up by
   // hand. Switchable in Admin Panel > User Management.
-  if (!getConfig().studentCrosscheckEnabled) return;
+  const cfg = getConfig();
+  if (!cfg.studentCrosscheckEnabled) return [];
   try {
-    const { online, gym } = await fetchStudentEligibility();
-    let changed = false;
+    const [sheet, crm] = await Promise.all([
+      fetchStudentEligibility().catch(e => { console.error("[student role sync] sheets", e.message); return null; }),
+      cfg.studentCrosscheckCrm !== false ? crmEnrolledContacts().catch(e => { console.error("[student role sync] CRM", e.message); return null; }) : null,
+    ]);
+    const blacklisted = sheetBlacklistedNames;
+    const crmRole = (u) => {
+      if (!crm) return null;
+      const em = String(u.email || "").trim().toLowerCase(), ph = last10(u.phone);
+      // Name match only when both first and last are filled in (a blank name would match every unnamed contact).
+      const key = String(u.first || "").trim() && String(u.last || "").trim() ? nameKey(u.first, u.last) : null;
+      const hits = crm.filter(c => (em && c.email.trim().toLowerCase() === em) || (ph.length === 10 && last10(c.phone) === ph) || (key && nameKey(c.first, c.last) === key));
+      if (hits.some(c => c.programType === "gym")) return "gym";
+      if (hits.some(c => c.programType === "online")) return "online";
+      return null;
+    };
+    // Fresh read after the awaits so a write made meanwhile isn't clobbered.
+    const users = readJson(USERS_FILE, []);
+    const upgraded = [];
     users.forEach(u => {
-      if (u.role !== "user") return;
+      if (u.role !== "user" || u.archived || (onlyId && u.id !== onlyId)) return;
       const key = nameKey(u.first, u.last);
-      if (gym.has(key)) { u.role = "gym"; changed = true; }
-      else if (online.has(key)) { u.role = "online"; changed = true; }
+      if (blacklisted.has(key)) return;
+      const fromCrm = crmRole(u);
+      const next = (sheet?.gym.has(key) || fromCrm === "gym") ? "gym" : (sheet?.online.has(key) || fromCrm === "online") ? "online" : null;
+      if (!next) return;
+      u.role = next;
+      upgraded.push(u);
+      console.log(`[student role sync] ${u.first} ${u.last} -> ${next} (${sheet?.[next].has(key) ? "sheet" : "CRM ENROLLED"})`);
     });
-    if (changed) {
+    if (upgraded.length) {
       writeJson(USERS_FILE, users); syncDefaultGroups();
-      users.filter(u => isClientRole(u.role)).forEach(u => ensureStudentLevelsRow(u).catch(() => {}));
+      upgraded.forEach(u => {
+        ensureStudentLevelsRow(u).catch(() => {});
+        syncAppSheetRole(u).catch(e => console.error("[APP sheet role sync]", e.message));
+      });
+      if (Array.isArray(usersArg)) usersArg.forEach(x => { const n = upgraded.find(u => u.id === x.id); if (n) x.role = n.role; });
     }
+    return upgraded;
   } catch (e) {
     console.error("[student role sync]", e.message); // best-effort — never blocks the admin panel from loading
+    return [];
   }
+}
+// Sign-up / login: give the check a few seconds so they land already
+// upgraded; if it's slower, it still finishes in the background.
+async function upgradeOnArrival(userId) {
+  const done = await Promise.race([syncStudentRoles(null, userId), new Promise(r => setTimeout(() => r(null), 6000))]);
+  return done && done.length ? done[0].role : null;
 }
 
 // ── Retreats page content ───────────────────────────────────────────────
@@ -4694,6 +4735,8 @@ export async function handleChatRequest(req, res, url) {
     setSessionCookie(res, token);
     const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
     upsertAppSheetRow({ first, last, email: user.email, phone, ip, location: locationStr }).catch(e => console.error("[APP sheet sync]", e.message));
+    const upgradedRole = await upgradeOnArrival(user.id);
+    if (upgradedRole) user.role = upgradedRole;
     return sendJson(res, 200, { ok: true, user: publicUser(user) });
   }
 
@@ -4758,6 +4801,7 @@ export async function handleChatRequest(req, res, url) {
     if (user.archived) return sendJson(res, 403, { error: "This account has been archived." });
     const token = createSession(user.id);
     setSessionCookie(res, token);
+    if (user.role === "user") { const upgradedRole = await upgradeOnArrival(user.id); if (upgradedRole) user.role = upgradedRole; }
     return sendJson(res, 200, { ok: true, user: publicUser(user) });
   }
 
@@ -5483,7 +5527,7 @@ export async function handleChatRequest(req, res, url) {
     // ── User Management tab (admin panel) ───────────────────────────────
     if (p === "/api/admin/user-management") {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
-      const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentGroupEnabled", "autoBuildProtocolEnabled",
+      const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentCrosscheckCrm", "studentGroupEnabled", "autoBuildProtocolEnabled",
         "levelsRowOnNewStudent", "appSheetTypeEnabled", "staffAlertsEnabled", "defaultProtocolEnabled", "welcomeMessageEnabled", "movesPublicDefault",
         "renewalMessageEnabled", "renewalPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
         "traineeWelcomeEnabled", "traineeRefundMakeUser"];

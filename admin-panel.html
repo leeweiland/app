@@ -1929,8 +1929,10 @@ window.addEventListener('pageshow', () => {
           ['they reset it themselves.', 'only an admin can set a new one.']))}
 
       ${card(3, '3. Student Crosscheck',
-        row('Auto-upgrade from the sales sheets', 'A plain User on the Online or Gym buyers tab becomes Online or Gym. Off since Nov 12.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
+        row('Auto-upgrade from the sales sheets', 'A plain User on the Online or Gym buyers tab becomes Online or Gym. Checked when they sign up, when they log in, and when this panel loads.', toggle('studentCrosscheckEnabled', s.studentCrosscheckEnabled), '',
           ['upgraded automatically (Gym wins, blacklist tab skipped).', 'coaches set students up by hand.']) +
+        row('Also check the CRM', 'A plain User whose CRM contact is <b>ENROLLED</b> with type <b>Gym</b> or <b>Online</b> becomes Gym or Online too. Matched by email, then phone, then first + last name. Needs the switch above on.', toggle('studentCrosscheckCrm', s.studentCrosscheckCrm), '',
+          ['CRM ENROLLED counts, same as the sheets (Gym wins, blacklist tab skipped).', 'only the sheets count.']) +
         `<div class="um-row" style="display:block"><div class="um-name">Sheets used</div><div class="um-desc" style="margin-bottom:8px">Also gives renewal end dates (column D).</div>
           ${sheetField('app-cross', 'Sheet:', 'appSheetId', sh.app.id, [sh.crosscheck.online, sh.crosscheck.gym, sh.crosscheck.blacklist])}
           <div class="um-sub">Online tab <input class="pra-input" data-str="crosscheckOnlineTab" value="${esc(sh.crosscheck.online)}" style="max-width:200px"/> Gym tab <input class="pra-input" data-str="crosscheckGymTab" value="${esc(sh.crosscheck.gym)}" style="max-width:200px"/> Blacklist tab <input class="pra-input" data-str="crosscheckBlacklistTab" value="${esc(sh.crosscheck.blacklist)}" style="max-width:220px"/> ${savedMsg('umMsg-crosscheckTabs')}</div>
