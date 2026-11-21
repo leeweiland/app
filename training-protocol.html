@@ -2434,6 +2434,12 @@ function setupViewModeToggle() {
   document.getElementById('katasViewBtn').onclick = () => showKatas('own');
   document.getElementById('warmupViewBtn').style.display = (targetRole === 'gym' || canEdit) ? '' : 'none'; // gym students + every coach/admin, on any page
   document.getElementById('warmupViewBtn').onclick = () => showWarmup();
+  // Students' menu order (Lee, 2026-11-21): Warmup, Your Training, Your Flow,
+  // Your Katas, then anything else. Coaches/admins get syncCoachMenu's order.
+  if (!canEdit) {
+    document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => { b.style.order = 50; });
+    ['warmupViewBtn', 'pageViewBtn', 'flowViewBtn', 'katasViewBtn'].forEach((id, i) => { document.getElementById(id).style.order = i; });
+  }
   document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
   if (canEdit) {
