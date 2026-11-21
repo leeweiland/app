@@ -158,7 +158,7 @@
   .ptu-flycoin::after { content: "★"; color: #b07a00; font-size: 52%; line-height: 1; text-shadow: 0 1px 0 #fff3b0, 0 -1px 0 #8a5c00; }
   .ptu-flycoin.spin { animation: ptuSpin .6s linear infinite; }
   .ptu-flyemoji { position: absolute; font-size: 44px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 10px rgba(255,210,63,.9)); }
-  .ptu-final-figs { position: absolute; inset: 0; pointer-events: none; }
+  .ptu-final-stage { position: relative; margin: 0 auto 12px; pointer-events: none; }
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
@@ -580,7 +580,7 @@
   // 8-bit fanfare. Back to the chat when it ends.
   function finale(preview = false) {
     const wrap = document.createElement('div'); wrap.className = 'ptu-final';
-    wrap.innerHTML = `<canvas></canvas><div class="ptu-final-figs"></div><div class="box"><div class="score">${TOTAL} / ${TOTAL}</div>
+    wrap.innerHTML = `<canvas></canvas><div class="box"><div class="ptu-final-stage"></div><div class="score">${TOTAL} / ${TOTAL}</div>
       <div class="msg">Quick Start complete!</div><div class="sub">You know your way around. Now go train.</div></div>`;
     document.body.appendChild(wrap);
     const SHOW_MS = 7000;
@@ -590,36 +590,34 @@
     const every = (fn, ms) => { const id = setInterval(fn, ms); timers.push(id); return id; };
 
     // Athletes: every step's move, in the same spread-out order as the
-    // steps (no two flips / aerials / handstands back to back).
-    const figsEl = wrap.querySelector('.ptu-final-figs');
+    // steps, performing side by side in one centered row above the score
+    // (Lee, 2026-11-21), new ones swapping in as others finish.
     const order = STEPS.map(st => st.figure);
-    const box = wrap.querySelector('.box').getBoundingClientRect();
     const W = innerWidth, H = innerHeight;
-    const figSize = Math.max(96, Math.min(160, Math.min(W, H) * 0.3));
-    // Open spots around the score box (centre points), in screen px.
-    const slots = [];
-    const cols = Math.max(2, Math.floor(W / (figSize * 1.05))), rows = Math.max(2, Math.floor(H / (figSize * 1.05)));
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const x = (c + 0.5) * W / cols, y = (r + 0.5) * H / rows;
-      const clear = x + figSize / 2 < box.left - 6 || x - figSize / 2 > box.right + 6 || y + figSize / 2 < box.top - 6 || y - figSize / 2 > box.bottom + 6;
-      if (clear) slots.push({ x, y, busy: false });
-    }
-    if (!slots.length) slots.push({ x: W / 2, y: Math.max(figSize / 2, box.top - figSize / 2), busy: false });
-    const maxLive = Math.min(slots.length, W < 560 ? 3 : 5);
+    const cols = W < 560 ? 3 : 5;
+    const figSize = Math.floor(Math.max(90, Math.min(150, (Math.min(W, 820) - 24) / cols, H * 0.26)));
+    const stage = wrap.querySelector('.ptu-final-stage');
+    stage.style.width = cols * figSize + 'px'; stage.style.height = figSize + 'px';
+    // Middle spots fill first, so even two performers sit centered.
+    const slots = Array.from({ length: cols }, (_, c) => ({ x: (c + 0.5) * figSize, y: figSize / 2, busy: false, d: Math.abs(c - (cols - 1) / 2) }));
+    const box = wrap.querySelector('.box').getBoundingClientRect();
+    const maxLive = cols;
     let live = 0, k = 0;
     const spawnFig = () => {
       if (live >= maxLive) return;
-      const free = slots.filter(s => !s.busy);
+      const free = slots.filter(sl => !sl.busy);
       if (!free.length) return;
-      const s = free[Math.floor(Math.random() * free.length)];
-      s.busy = true; live++;
+      const best = Math.min(...free.map(sl => sl.d));
+      const pick = free.filter(sl => sl.d === best);
+      const sl = pick[Math.floor(Math.random() * pick.length)];
+      sl.busy = true; live++;
       const el = document.createElement('div'); el.className = 'ptu-fig';
       el.style.width = el.style.height = figSize + 'px';
       el.style.margin = `${-figSize / 2}px 0 0 ${-figSize / 2}px`;
-      el.style.left = s.x + (Math.random() - 0.5) * 20 + 'px'; el.style.top = s.y + (Math.random() - 0.5) * 20 + 'px';
+      el.style.left = sl.x + 'px'; el.style.top = sl.y + 'px';
       el.innerHTML = FIGS[order[k++ % order.length]];
-      figsEl.appendChild(el);
-      setTimeout(() => { el.remove(); s.busy = false; live--; }, 2400);
+      stage.appendChild(el);
+      setTimeout(() => { el.remove(); sl.busy = false; live--; }, 2400);
     };
     // Three at once to open, then one more every ~0.4s as spots free up.
     spawnFig(); later(spawnFig, 150); later(spawnFig, 300);
