@@ -1937,6 +1937,8 @@ async function myRenewalNotice(user) {
 // Problems an automation hit that a person needs to fix: auto-build found no
 // custom page / videos missing, a student's name doesn't match the Levels
 // sheet. Stored ones live here; name mismatches are worked out live.
+// Training Protocol's Warmup tab (gym students only) -- same id in training-protocol.html.
+const GYM_WARMUP_VIDEO_ID = "1yOb4fOHH3zDQgorX6atyCV2iAzzqR2PG";
 const STAFF_ALERTS_FILE = "chat_staff_alerts.json"; // { alerts: [...], dismissed: { [id]: { by, at } } }
 function readStaffAlerts() {
   const d = readJson(STAFF_ALERTS_FILE, null) || {};
@@ -5230,6 +5232,8 @@ export async function handleChatRequest(req, res, url) {
     if (!isProfilePic && (isClientRole(mediaUser.role) || isStaff(mediaUser))) {
       try { isKata = (await fetchKataLibrary()).ids.has(fileId); } catch {}
     }
+    // Training Protocol > Warmup tab: one video for every gym student.
+    if (fileId === GYM_WARMUP_VIDEO_ID && (mediaUser.role === "gym" || isStaff(mediaUser))) isKata = true;
     if (!isProfilePic && !isKata) {
       if (msg) {
         const convos = readJson(CONVOS_FILE, []);

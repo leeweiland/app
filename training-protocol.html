@@ -106,6 +106,9 @@
   #protocolTitleInput.tile-val-input { border: none; background: transparent; color: inherit; font: inherit; padding: 0; }
   #protocolTitleInput.tile-val-input:not([readonly]) { border-bottom: 1px dashed var(--pra-blue-dim); cursor: text; }
   #protocolTitleInput.tile-val-input[readonly] { cursor: default; }
+  .warmup-wrap { width: 100%; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .warmup-title { color: #fff; font-size: 1.1rem; text-align: center; }
+  #warmupVideo { width: 100%; max-height: 75vh; border-radius: 12px; background: #000; }
   /* .pra-toggle is admin-panel.html's own locally-defined iOS-style
      checkbox (not in the shared design system -- same situation
      .tile-val-input above was in) -- copied over rather than left to fall
@@ -406,6 +409,7 @@
           <button class="view-mode-btn" id="pageViewBtn" data-mode="page" data-builder="false">Your Training</button>
           <button class="view-mode-btn" id="programViewBtn" type="button" style="display:none">Handstand Protocol</button>
           <button class="view-mode-btn" id="katasViewBtn" type="button">Your Katas</button>
+          <button class="view-mode-btn" id="warmupViewBtn" type="button" style="display:none">Warmup</button>
           <button class="view-mode-btn" id="studentKatasBtn" type="button" style="display:none">Student Katas</button>
           <button class="view-mode-btn" id="programFlowBtn" data-mode="flow" data-builder="program" style="display:none">Student Flow</button>
           <button class="view-mode-btn" id="programPageBtn" data-mode="page" data-builder="program" style="display:none">Student Page</button>
@@ -462,6 +466,10 @@
         <select class="pra-select" id="katasStudentSelect" style="max-width:320px"></select>
       </div>
       <div id="katasList"></div>
+    </div>
+    <!-- Warmup tab: one warmup video for every gym student (showWarmup). -->
+    <div class="protocol-page" id="warmupPage" style="display:none">
+      <div class="warmup-wrap"><div class="warmup-title">Warmup</div><video id="warmupVideo" controls playsinline preload="metadata"></video></div>
     </div>
     </div>
     <div class="pra-muted" id="uploadStatusMsg" style="font-size:.8rem;margin-top:8px;min-height:1em;text-align:center"></div>
@@ -785,6 +793,9 @@ let editingBuilder = false;
 // own workspace so the Flow Builder never holds a student's program.
 let builderMode = 'false';
 let clientLabel = '';
+// Gym students' Warmup tab -- the same video for all of them (Lee, 2026-11-21).
+const GYM_WARMUP_VIDEO_ID = '1yOb4fOHH3zDQgorX6atyCV2iAzzqR2PG';
+let targetRole = '';
 let editingProgram = null; // {id, name, studentName} while builderMode === 'program'
 const programKey = (id) => '__program__' + id;
 // builderMode 'tpl' = a kind:"program" template (e.g. the Powerbatics
@@ -1122,6 +1133,7 @@ async function init() {
   const uRes = await fetch('/api/chat/users/' + targetUserId);
   const client = uRes.ok ? (await uRes.json()).user : null;
   clientLabel = client ? `${client.first} ${client.last}` : 'Unknown client';
+  targetRole = client?.role || '';
   document.getElementById('clientName').textContent = clientLabel;
   if (client && me.role !== 'trainee') PRABadges.mount(document.getElementById('clientBadges'), client.id || targetUserId);
   if (me.role === 'trainee') document.body.classList.add('trainee-mode');
@@ -2165,9 +2177,11 @@ function applyViewModeDisplay() {
   document.getElementById('protocolCanvas').style.display = (hasSteps && viewMode === 'flow') ? 'block' : 'none';
   document.getElementById('protocolPage').style.display = (hasSteps && viewMode === 'page') ? 'flex' : 'none';
   document.getElementById('katasPage').style.display = viewMode === 'katas' ? 'flex' : 'none';
+  document.getElementById('warmupPage').style.display = viewMode === 'warmup' ? 'flex' : 'none';
+  if (viewMode !== 'warmup') { const v = document.getElementById('warmupVideo'); if (v && !v.paused) v.pause(); }
   document.getElementById('programView').style.display = viewMode === 'program' ? 'block' : 'none';
   if (viewMode !== 'program') ['programViewBtn', 'tplStudentViewBtn', 'lowTicketBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
-  document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas' && viewMode !== 'program') ? 'block' : 'none';
+  document.getElementById('emptyHint').style.display = (!hasSteps && viewMode !== 'katas' && viewMode !== 'program' && viewMode !== 'warmup') ? 'block' : 'none';
   // The day-select row also needs at least one <option value="day-id">
   // (see syncPageDaySelectOptions, called from renderPageView) — hidden
   // here regardless of that so it never flashes visible for a beat in
@@ -2193,7 +2207,7 @@ function syncViewLock() {
   const locked = isViewLocked(viewMode);
   const views = { flow: 'protocolCanvas', page: 'protocolPage', katas: 'katasPage' };
   Object.values(views).forEach(id => document.getElementById(id).classList.toggle('view-locked-blur', locked));
-  const hasContent = viewMode === 'katas' ? false : !!steps.length;
+  const hasContent = viewMode === 'katas' || viewMode === 'warmup' ? false : !!steps.length;
   const sample = document.getElementById('lockedSample');
   sample.style.display = locked && !hasContent ? 'flex' : 'none';
   sample.classList.toggle('view-locked-blur', locked);
@@ -2225,7 +2239,7 @@ async function setProtocolMode(mode, builder) {
   const builderChanged = key !== builderMode;
   builderMode = key;
   viewMode = mode;
-  ['katasViewBtn', 'studentKatasBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
+  ['katasViewBtn', 'studentKatasBtn', 'warmupViewBtn'].forEach(id => document.getElementById(id).classList.remove('active'));
   editingBuilder = key !== 'false';
   // Leaving the program editor (any way out) forgets the template.
   if (key !== 'tpl' && editingTemplate) leaveTemplateEditorState();
@@ -2346,6 +2360,15 @@ async function showKatas(which) {
     list.innerHTML = `<div class="kata-empty">${escapeHtml(e.message || 'Could not load katas')}</div>`;
   }
 }
+// Warmup tab: shown on a gym student's page (to them and to staff viewing it).
+function showWarmup() {
+  viewMode = 'warmup';
+  document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('warmupViewBtn').classList.add('active');
+  const v = document.getElementById('warmupVideo');
+  if (!v.getAttribute('src')) v.src = '/api/chat/media/' + GYM_WARMUP_VIDEO_ID + '#t=0.5';
+  applyViewModeDisplay();
+}
 // Coaches/admins see the whole menu, always, in this order (Lee, 2026-11-17):
 // Your Flow, Your Page, Your Katas, Student Flow, Student Page, Student
 // Katas, Flow Builder, Page View, Low Ticket. On your own page Student
@@ -2363,7 +2386,7 @@ function syncCoachMenu() {
   $('lowTicketBtn').style.display = '';
   $('programViewBtn').style.display = 'none';
   const order = [
-    ownPage ? 'flowViewBtn' : 'ownFlowBtn', ownPage ? 'pageViewBtn' : 'ownPageBtn', 'katasViewBtn',
+    ownPage ? 'flowViewBtn' : 'ownFlowBtn', ownPage ? 'pageViewBtn' : 'ownPageBtn', 'katasViewBtn', 'warmupViewBtn',
     programBtns ? 'programFlowBtn' : ownPage ? 'pickStudentFlowBtn' : 'flowViewBtn',
     programBtns ? 'programPageBtn' : ownPage ? 'pickStudentPageBtn' : 'pageViewBtn',
     'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn', 'lowTicketBtn',
@@ -2409,6 +2432,8 @@ function setupViewModeToggle() {
   const ownKatas = !canEdit || targetUserId === me.id;
   document.getElementById('katasViewBtn').style.display = ownKatas ? '' : 'none';
   document.getElementById('katasViewBtn').onclick = () => showKatas('own');
+  document.getElementById('warmupViewBtn').style.display = targetRole === 'gym' ? '' : 'none';
+  document.getElementById('warmupViewBtn').onclick = () => showWarmup();
   document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
   if (canEdit) {
@@ -2423,7 +2448,7 @@ function setupViewModeToggle() {
   // Flow Builder / Page View...) for this same page address. Buttons that
   // open a picker or another page aren't replayed -- their address does it.
   {
-    const REPLAY = ['flowViewBtn', 'pageViewBtn', 'katasViewBtn', 'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn'];
+    const REPLAY = ['flowViewBtn', 'pageViewBtn', 'katasViewBtn', 'warmupViewBtn', 'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn'];
     const key = 'pra-tp-view:' + location.pathname + location.search;
     document.getElementById('viewModeToggle').addEventListener('click', (e) => {
       const b = e.target.closest('button');
