@@ -152,12 +152,12 @@
   .ptu-fx { position: fixed; inset: 0; z-index: 9602; pointer-events: none; overflow: hidden; }
   /* Bigger, clearly-a-coin coins (Lee, 2026-11-21): gold disc, raised rim,
      embossed star, a flip slow enough to read. Size is set per coin in JS. */
-  .ptu-flycoin { position: absolute; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  .ptu-flycoin { position: absolute; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     background: radial-gradient(circle at 32% 28%, #fff8d0 0 14%, #ffe066 32%, #f5b800 62%, #c98a00 100%);
     box-shadow: inset 0 0 0 2.5px #9a6a00, inset 0 0 0 5px #ffd84a, inset 0 0 0 6.5px #b88000, 0 0 12px rgba(255,210,63,.85), 0 2px 4px rgba(0,0,0,.5); }
   .ptu-flycoin::after { content: "★"; color: #b07a00; font-size: 52%; line-height: 1; text-shadow: 0 1px 0 #fff3b0, 0 -1px 0 #8a5c00; }
   .ptu-flycoin.spin { animation: ptuSpin .6s linear infinite; }
-  .ptu-flyemoji { position: absolute; font-size: 36px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 10px rgba(255,210,63,.9)); }
+  .ptu-flyemoji { position: absolute; font-size: 44px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 10px rgba(255,210,63,.9)); }
   .ptu-final-figs { position: absolute; inset: 0; pointer-events: none; }
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
@@ -346,7 +346,7 @@
   function fxLayer() { const d = document.createElement('div'); d.className = 'ptu-fx'; document.body.appendChild(d); return d; }
   // Coins with ninjas and flexed arms mixed in (Lee, 2026-11-21).
   const BURST_EMOJI = ['\u{1F977}', '\u{1F4AA}'];
-  function coinBurst(x, y, n = 26, layer, opts = {}) {
+  function coinBurst(x, y, n = 12, layer, opts = {}) {
     const fx = layer || fxLayer();
     const coins = [];
     const spread = opts.spread ?? 1.25, power = opts.power ?? 1;
@@ -358,8 +358,8 @@
       fx.appendChild(el);
       const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * spread;
       const v = (5 + Math.random() * 7) * power;
-      const c = { el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.85 + Math.random() * 0.35, rot: (Math.random() - 0.5) * 8, r: 0 };
-      if (!emoji) { const px = Math.round(30 * c.s); el.style.width = el.style.height = px + 'px'; el.style.margin = (-px / 2) + 'px 0 0 ' + (-px / 2) + 'px'; }
+      const c = { el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 1, rot: (Math.random() - 0.5) * 8, r: 0 };
+      if (!emoji) { const px = 44; el.style.width = el.style.height = px + 'px'; el.style.margin = (-px / 2) + 'px 0 0 ' + (-px / 2) + 'px'; }
       coins.push(c);
     }
     const t0 = performance.now();
@@ -650,10 +650,10 @@
     plan.forEach(([ms, count, big]) => later(() => { for (let i = 0; i < count; i++) setTimeout(() => launch(big || Math.random() < 0.25), i * 90); }, ms));
     // Coin, ninja and muscle showers from the score, plus from the corners late on.
     const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
-    coinBurst(cx, cy, 45);
-    later(() => coinBurst(cx, cy, 36), 2200);
-    later(() => { coinBurst(W * 0.15, H * 0.85, 30, null, { spread: 0.8 }); coinBurst(W * 0.85, H * 0.85, 30, null, { spread: 0.8 }); }, 4300);
-    later(() => coinBurst(cx, cy, 60, null, { power: 1.3, spread: 1.6 }), 5700);
+    coinBurst(cx, cy, 18);
+    later(() => coinBurst(cx, cy, 14), 2200);
+    later(() => { coinBurst(W * 0.15, H * 0.85, 12, null, { spread: 0.8 }); coinBurst(W * 0.85, H * 0.85, 12, null, { spread: 0.8 }); }, 4300);
+    later(() => coinBurst(cx, cy, 24, null, { power: 1.3, spread: 1.6 }), 5700);
     later(() => { coinBlip(0); coinBlip(0.12); }, 2200);
 
     let running = true, lastT = performance.now();
