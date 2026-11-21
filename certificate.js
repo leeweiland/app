@@ -1,8 +1,8 @@
 // Level-up certificate -- Lee's own "CERTIFICATE OF ADVANCEMENT" (Google
 // Slides "CERTIFICATE OF ADVANCEMENT BLANK", exported once to
 // assets/certificate/template.jpg at 2160x1728) with the blanks filled in:
-// name, level, element and date, written on its lines in Italianno, the
-// script font the template itself uses. Sent by the CRM's "8 CERTIFICATE"
+// name, level, element and date, written on its lines in Caveat, the
+// handwriting font of the template's "Coach Lee" line (Lee: match it). Sent by the CRM's "8 CERTIFICATE"
 // flow to the student's app group, SMS and email (Lee, 2026-11-21).
 //
 // Drawn as SVG over the template image and rendered with resvg; the output
@@ -18,7 +18,7 @@ import ffmpegPath from "ffmpeg-static";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const asset = (p) => join(HERE, "assets", p);
-const FONT_FILES = [asset("fonts/italianno-400-normal.ttf")];
+const FONT_FILES = [asset("fonts/caveat-400-normal.ttf")];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let bgUri = null;
 const background = () => bgUri || (bgUri = "data:image/jpeg;base64," + readFileSync(asset("certificate/template.jpg")).toString("base64"));
@@ -41,8 +41,8 @@ function ordinalDate(d) {
   const day = Number(get("day")), sfx = (day % 100 >= 11 && day % 100 <= 13) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] || "th");
   return `${get("month")} ${day}${sfx}, ${get("year")}`;
 }
-// Italianno is narrow (~0.36 em per character); shrink a long fill to the line.
-const fitSize = (text, size) => Math.min(size, Math.floor(FIT_W / Math.max(1, String(text).length * 0.36)));
+// Caveat runs ~0.39 em per character; shrink a long fill to the line.
+const fitSize = (text, size) => Math.min(size, Math.floor(FIT_W / Math.max(1, String(text).length * 0.39)));
 
 export function certificateSvg({ name, category, level, date }) {
   const cat = String(category || "").toUpperCase();
@@ -53,10 +53,10 @@ export function certificateSvg({ name, category, level, date }) {
     date: date || ordinalDate(new Date()),
   };
   // Sized to sit between the line and the printed words above it (~75px of room).
-  const sizes = { name: 88, level: 86, element: 84, date: 80 };
+  const sizes = { name: 68, level: 66, element: 64, date: 62 };
   const text = (k) => {
     const size = fitSize(fills[k], sizes[k]);
-    return `<text x="${LINE_X}" y="${LINES[k] - 9}" text-anchor="middle" font-family="Italianno" font-size="${size}" fill="#111">${esc(fills[k])}</text>`;
+    return `<text x="${LINE_X}" y="${LINES[k] - 9}" text-anchor="middle" font-family="Caveat" font-size="${size}" fill="#111">${esc(fills[k])}</text>`;
   };
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <image x="0" y="0" width="${W}" height="${H}" xlink:href="${background()}"/>
@@ -66,7 +66,7 @@ export function certificateSvg({ name, category, level, date }) {
 
 // JPEG bytes (quality ~90), 2160x1728.
 export function renderCertificate(opts) {
-  const png = new Resvg(certificateSvg(opts), { font: { fontFiles: FONT_FILES, loadSystemFonts: false, defaultFontFamily: "Italianno" } }).render().asPng();
+  const png = new Resvg(certificateSvg(opts), { font: { fontFiles: FONT_FILES, loadSystemFonts: false, defaultFontFamily: "Caveat" } }).render().asPng();
   const base = join(tmpdir(), "cert-" + randomBytes(6).toString("hex"));
   writeFileSync(base + ".png", png);
   try {
