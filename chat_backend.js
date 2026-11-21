@@ -27,7 +27,7 @@ import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
-import { renderCertificatePng, levelLabel } from "./certificate.js";
+import { renderCertificate, levelLabel } from "./certificate.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1440,11 +1440,13 @@ async function issueCertificate(ev, { postToApp = true, message = "" } = {}) {
   if (!ev.certToken) {
     mkdirSync(CERT_DIR, { recursive: true });
     const token = randomBytes(12).toString("hex");
-    const png = renderCertificatePng({ name: `${ev.first} ${ev.last}`.trim(), category: ev.category, level: ev.to, program: ev.program });
-    writeFileSync(join(CERT_DIR, token + ".png"), png);
-    ev = markLevelEvent(ev.id, { certToken: token, certIssuedAt: new Date().toISOString() }) || { ...ev, certToken: token };
+    // Lee's own Certificate of Advancement template, blanks filled in (JPEG).
+    const jpg = renderCertificate({ name: `${ev.first} ${ev.last}`.trim(), category: ev.category, level: ev.to });
+    writeFileSync(join(CERT_DIR, token + ".jpg"), jpg);
+    ev = markLevelEvent(ev.id, { certToken: token, certExt: "jpg", certIssuedAt: new Date().toISOString() }) || { ...ev, certToken: token, certExt: "jpg" };
   }
-  const url = `${APP_PUBLIC_URL}/cert/${ev.certToken}.png`;
+  const ext = ev.certExt || "png";
+  const url = `${APP_PUBLIC_URL}/cert/${ev.certToken}.${ext}`;
   let posted = !!ev.appPostedAt;
   if (postToApp && !posted && ev.userId) {
     const convo = readJson(CONVOS_FILE, []).find(c => c.autoGroupType === "student" && c.autoGroupUserId === ev.userId);
@@ -1455,10 +1457,11 @@ async function issueCertificate(ev, { postToApp = true, message = "" } = {}) {
       const senderId = (lee && convo.participantIds.includes(lee.id) ? lee.id : null) || convo.participantIds.find(id => staffIds.includes(id));
       if (senderId) {
         const accessToken = await getDriveAccessToken();
-        const name = `${ev.first} ${ev.last} CERTIFICATE ${ev.category} ${ev.to}.png`;
-        const uploaded = await uploadStreamToDrive(createReadStream(join(CERT_DIR, ev.certToken + ".png")), { name, mimeType: "image/png", folderId: getConfig().profilePhotosFolderId, accessToken });
+        const name = `${ev.first} ${ev.last} CERTIFICATE ${ev.category} ${ev.to}.${ext}`;
+        const mime = ext === "jpg" ? "image/jpeg" : "image/png";
+        const uploaded = await uploadStreamToDrive(createReadStream(join(CERT_DIR, ev.certToken + "." + ext)), { name, mimeType: mime, folderId: getConfig().profilePhotosFolderId, accessToken });
         const now = Date.now();
-        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "image", driveFileId: uploaded.id, mimeType: "image/png", name, createdAt: new Date(now).toISOString() });
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "image", driveFileId: uploaded.id, mimeType: mime, name, createdAt: new Date(now).toISOString() });
         if (message) MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text: message, createdAt: new Date(now + 1).toISOString() });
         notifyParticipants(convo.id, senderId, { title: "New message", body: message ? message.slice(0, 120) : "Your certificate", conversationId: convo.id }).catch(() => {});
         markLevelEvent(ev.id, { appPostedAt: new Date().toISOString() });
@@ -4821,11 +4824,11 @@ export async function handleChatRequest(req, res, url) {
   // Online/Gym student a plain User; BLACKLIST archives the account. Each is
   // switchable in User Management.
   // Public certificate image (unguessable link, for SMS/email/sharing).
-  const certMatch = p.match(/^\/cert\/([a-f0-9]{24})\.png$/);
+  const certMatch = p.match(/^\/cert\/([a-f0-9]{24})\.(png|jpg)$/);
   if (certMatch && (req.method === "GET" || req.method === "HEAD")) {
-    const file = join(CERT_DIR, certMatch[1] + ".png");
+    const file = join(CERT_DIR, certMatch[1] + "." + certMatch[2]);
     if (!existsSync(file)) { res.writeHead(404); res.end(); return true; }
-    res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=31536000, immutable" });
+    res.writeHead(200, { "Content-Type": certMatch[2] === "jpg" ? "image/jpeg" : "image/png", "Cache-Control": "public, max-age=31536000, immutable" });
     if (req.method === "HEAD") { res.end(); return true; }
     createReadStream(file).pipe(res); return true;
   }
