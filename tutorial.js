@@ -351,9 +351,9 @@
     const coins = [];
     const spread = opts.spread ?? 1.25, power = opts.power ?? 1;
     for (let i = 0; i < n; i++) {
-      const emoji = i % 3 === 1;
+      const emoji = i % 3 !== 0; // a third each: coin, ninja, muscle (Lee, 2026-11-21)
       const el = document.createElement('div');
-      if (emoji) { el.className = 'ptu-flyemoji'; el.textContent = BURST_EMOJI[(i / 3 | 0) % 2]; }
+      if (emoji) { el.className = 'ptu-flyemoji'; el.textContent = BURST_EMOJI[(i % 3) - 1]; }
       else { el.className = 'ptu-flycoin spin'; el.style.animationDelay = (Math.random() * -0.35) + 's'; }
       fx.appendChild(el);
       const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * spread;
