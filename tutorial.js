@@ -150,10 +150,14 @@
   @keyframes ptuBounceUp { 50% { transform: translateY(-9px); } }
   @keyframes ptuBounceDown { 0%, 100% { transform: rotate(180deg) translateY(0); } 50% { transform: rotate(180deg) translateY(-9px); } }
   .ptu-fx { position: fixed; inset: 0; z-index: 9602; pointer-events: none; overflow: hidden; }
-  .ptu-flycoin { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 2px #b07f00, 0 0 8px rgba(255,210,63,.6); }
-  .ptu-flycoin.spin { animation: ptuSpin .35s linear infinite; }
-  .ptu-flyemoji { position: absolute; font-size: 22px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 6px rgba(255,210,63,.55)); }
+  /* Bigger, clearly-a-coin coins (Lee, 2026-11-21): gold disc, raised rim,
+     embossed star, a flip slow enough to read. Size is set per coin in JS. */
+  .ptu-flycoin { position: absolute; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 32% 28%, #fff8d0 0 14%, #ffe066 32%, #f5b800 62%, #c98a00 100%);
+    box-shadow: inset 0 0 0 2.5px #9a6a00, inset 0 0 0 5px #ffd84a, inset 0 0 0 6.5px #b88000, 0 0 12px rgba(255,210,63,.85), 0 2px 4px rgba(0,0,0,.5); }
+  .ptu-flycoin::after { content: "★"; color: #b07a00; font-size: 52%; line-height: 1; text-shadow: 0 1px 0 #fff3b0, 0 -1px 0 #8a5c00; }
+  .ptu-flycoin.spin { animation: ptuSpin .6s linear infinite; }
+  .ptu-flyemoji { position: absolute; font-size: 36px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 10px rgba(255,210,63,.9)); }
   .ptu-final-figs { position: absolute; inset: 0; pointer-events: none; }
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
@@ -190,7 +194,7 @@
   // handstand, backflip, human flag, airflare, front flip, planche press;
   // Clayton's drop gainer flip; Georgia and Sedona on aerial hoop; Alexis on silks), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=6`;
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=7`;
   // Each showing gets a fresh object URL of the downloaded file, so the clip
   // always plays from its first frame (a reused URL resumes mid-loop).
   const FIG_BLOBS = {};
@@ -354,7 +358,9 @@
       fx.appendChild(el);
       const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * spread;
       const v = (5 + Math.random() * 7) * power;
-      coins.push({ el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.7 + Math.random() * 0.6, rot: (Math.random() - 0.5) * 24, r: 0 });
+      const c = { el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.85 + Math.random() * 0.35, rot: (Math.random() - 0.5) * 8, r: 0 };
+      if (!emoji) { const px = Math.round(30 * c.s); el.style.width = el.style.height = px + 'px'; el.style.margin = (-px / 2) + 'px 0 0 ' + (-px / 2) + 'px'; }
+      coins.push(c);
     }
     const t0 = performance.now();
     let last = t0;
@@ -364,11 +370,10 @@
       coins.forEach(c => {
         c.vy += 0.38 * k; c.x += c.vx * k; c.y += c.vy * k; c.r += c.rot * k;
         c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px';
-        c.el.style.opacity = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.6);
+        c.el.style.opacity = Math.max(0, 1 - Math.max(0, t - 0.9) / 0.7);
         if (c.emoji) c.el.style.transform = `translate(-50%,-50%) rotate(${c.r}deg) scale(${c.s})`;
-        else c.el.style.width = c.el.style.height = (18 * c.s) + 'px';
       });
-      if (t < 1.4) requestAnimationFrame(frame); else if (!layer) fx.remove(); else coins.forEach(c => c.el.remove());
+      if (t < 1.6) requestAnimationFrame(frame); else if (!layer) fx.remove(); else coins.forEach(c => c.el.remove());
     })(t0);
     return fx;
   }
@@ -536,14 +541,15 @@
     advanceSub(false);
   }
   // Back one sub (or into the previous step, giving its 10 coins back).
-  function back() {
+  function back(skipping = false) {
     if (busy) return;
+    if (!skipping) delete state.backing;
     const cur = STEPS[state.step].subs[state.sub];
     if (cur.closePanel) { const x = document.querySelector('.pp-backdrop.show .pp-close'); if (x) x.click(); }
     if (state.sub > 0) state.sub--;
     else if (state.step > 0) { state.step--; state.sub = STEPS[state.step].subs.length - 1; }
     else return;
-    state.coins = state.step * 10; state.noSkip = true;
+    state.coins = state.step * 10; state.noSkip = true; state.backing = true;
     save(state);
     const sub = STEPS[state.step].subs[state.sub];
     // Backing onto a nav-icon sub: show it on the page before (where the icon was tapped).
@@ -681,6 +687,14 @@
 
   // ── Flow control ──────────────────────────────────────────────────────
   function pageMatches(key) { return key === '*' || (PAGES[key] && PAGES[key].test(path)); }
+  // A part that does not apply here (phone-only on a computer, its button not
+  // on screen) is skipped in the direction they were going: Back keeps going
+  // back past it -- it used to skip forward again, so Back at step 2 looked dead.
+  function skipSub() {
+    if (state.backing && (state.step > 0 || state.sub > 0)) { back(true); return; }
+    shown(); advanceSub(true);
+  }
+  function shown() { if (state.backing) { delete state.backing; save(state); } }
   function show() {
     if (!state || !state.active) return;
     const step = STEPS[state.step];
@@ -691,9 +705,9 @@
     if (!noSkip && sub.page === '*' && sub.go && pageMatches(sub.go) && step.subs[state.sub + 1] && pageMatches(step.subs[state.sub + 1].page)) {
       state.sub++; save(state); sub = step.subs[state.sub];
     }
-    if (!pageMatches(sub.page)) { render(sub, { away: true }); return; }
+    if (!pageMatches(sub.page)) { shown(); render(sub, { away: true }); return; }
     // Phone-only parts are skipped on bigger screens.
-    if (sub.phoneOnly && !isPhone()) { advanceSub(true); return; }
+    if (sub.phoneOnly && !isPhone()) { skipSub(); return; }
     // Parts that live in the chat list: on a phone an open chat hides the
     // list, so close it first.
     if (sub.sidebar) {
@@ -714,8 +728,8 @@
     const t0 = Date.now(), limit = sub.wait || (sub.openGroup ? 2500 : sub.skipIfMissing ? 700 : 6000);
     (function wait() {
       if (!state.active) return;
-      if (!sub.targets.length || findTarget(sub)) { render(sub); return; }
-      if (Date.now() - t0 > limit) { if (skippable) advanceSub(true); else render(sub); return; }
+      if (!sub.targets.length || findTarget(sub)) { shown(); render(sub); return; }
+      if (Date.now() - t0 > limit) { if (skippable) skipSub(); else { shown(); render(sub); } return; }
       setTimeout(wait, 120);
     })();
   }
