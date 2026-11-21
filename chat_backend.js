@@ -57,8 +57,24 @@ const QS_DEFAULTS = {
   comebackDays: 2,
   testersAlwaysButton: true,      // testers can replay any time
   hidePromoUntilDone: true,       // no Black Friday pointer until Quick Start is finished
-  texts: {},                      // "step.sub" -> { title, text } overrides
+  texts: {},                      // "step.sub" -> { title, text } overrides (old, before steps)
+  steps: null,                    // Admin Panel step editor: [[{ area, title, text, ...options }]]; null = tutorial.js defaults
+  finishMessage: { text: "", senderId: "" }, // posted in their group the first time they finish
 };
+// Cleans the step editor's save: known option keys only, short strings.
+const QS_BOOL_OPTS = ["gymOnly", "onlineOnly", "traineeOnly", "phoneOnly", "desktopOnly", "mustTap"];
+function qsCleanSteps(steps) {
+  if (!Array.isArray(steps)) return null;
+  const out = steps.slice(0, 20).map(st => (Array.isArray(st) ? st : []).slice(0, 15).map(p => {
+    if (!p || !/^[a-z_]{2,40}$/.test(String(p.area || ""))) return null;
+    const c = { area: String(p.area), title: String(p.title || "").slice(0, 80), text: String(p.text || "").slice(0, 300) };
+    for (const k of QS_BOOL_OPTS) if (p[k]) c[k] = true;
+    if (p.header) c.header = String(p.header).slice(0, 120);
+    if (p.traineeText) c.traineeText = String(p.traineeText).slice(0, 300);
+    return c;
+  }).filter(Boolean)).filter(st => st.length);
+  return out.length ? out : null;
+}
 function qsRead() {
   const d = readJson(QS_FILE, {});
   return { config: { ...QS_DEFAULTS, ...(d.config || {}) }, users: d.users || {} };
@@ -5943,13 +5959,35 @@ export async function handleChatRequest(req, res, url) {
         enabled: true, tester, completed, autoStart: !!cfg.autoStart && !completed,
         forceStart: !!cfg.autoStart && !completed && now - rec.firstSeenAt < (Number(cfg.forceStartDays) || 0) * QS_DAY,
         showButton: completed && (now < (rec.showUntil || 0) || (tester && cfg.testersAlwaysButton)),
-        texts: cfg.texts || {}, hidePromo: !!cfg.hidePromoUntilDone,
+        texts: cfg.texts || {}, steps: cfg.steps || null, hidePromo: !!cfg.hidePromoUntilDone,
       });
     }
     if (p === "/api/chat/quickstart/complete" && req.method === "POST") {
       const qs = qsRead();
       const rec = qs.users[user.id] || { firstSeenAt: Date.now(), showUntil: Date.now() + qs.config.buttonFirstDays * QS_DAY };
       rec.completedAt = Date.now(); rec.completions = (rec.completions || 0) + 1;
+      // Admin Panel's finish message: posted once, the first time they
+      // finish, into their own group, from the chosen staff member (if
+      // they're in that group) or else the first coach/admin in it.
+      const fm = qs.config.finishMessage || {};
+      const fmText = String(fm.text || "").trim();
+      if (fmText && !rec.finishMessageSentAt) {
+        try {
+          const convo = readJson(CONVOS_FILE, []).find(c => c.autoGroupType === "student" && c.autoGroupUserId === user.id);
+          if (convo) {
+            const users = readJson(USERS_FILE, []);
+            const staffIds = users.filter(u => isStaff(u) && !u.archived).map(u => u.id);
+            const senderId = (fm.senderId && convo.participantIds.includes(fm.senderId) && staffIds.includes(fm.senderId) ? fm.senderId : null)
+              || convo.participantIds.find(id => staffIds.includes(id));
+            if (senderId) {
+              const text = fmText.replace(/\{first\}/gi, user.first || "").replace(/\{name\}/gi, `${user.first || ""} ${user.last || ""}`.trim());
+              MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text, createdAt: new Date().toISOString() });
+              notifyParticipants(convo.id, senderId, { title: "New message", body: text.slice(0, 120), conversationId: convo.id }).catch(() => {});
+              rec.finishMessageSentAt = Date.now();
+            }
+          }
+        } catch (e) { console.error("[quickstart] finish message", e.message); }
+      }
       qs.users[user.id] = rec; writeJson(QS_FILE, qs);
       return sendJson(res, 200, { ok: true });
     }
@@ -5973,6 +6011,8 @@ export async function handleChatRequest(req, res, url) {
           }
           c.texts = t;
         }
+        if (b.steps !== undefined) c.steps = b.steps === null ? null : qsCleanSteps(b.steps);
+        if (b.finishMessage && typeof b.finishMessage === "object") c.finishMessage = { text: String(b.finishMessage.text || "").slice(0, 1000), senderId: String(b.finishMessage.senderId || "").slice(0, 80) };
         if (b.resetUserId) { const r = qs.users[String(b.resetUserId)]; if (r) { delete r.completedAt; } }
         qs.config = c; writeJson(QS_FILE, qs);
       }

@@ -240,11 +240,24 @@
   #quickStartSection .qs-step:first-child { border-top: none; padding-top: 0; }
   #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; margin-bottom: 6px; }
   #quickStartSection .qs-step-h span { color: #ffd23f; font-weight: 700; margin-left: 6px; }
-  #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(120px, 1fr) minmax(180px, 2fr); gap: 6px; align-items: center; margin-bottom: 6px; }
+  #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) minmax(110px, 1fr) minmax(170px, 2fr) minmax(120px, .9fr) 52px; gap: 6px; align-items: center; margin-bottom: 6px; }
+  #quickStartSection .qs-sub-row select { padding: 6px 8px; font-size: .78rem; min-width: 0; }
+  #quickStartSection .qs-opt-btn { height: 32px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.03); color: var(--pra-dim); font: inherit; font-size: .74rem; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #quickStartSection .qs-opt-btn.on { border-color: rgb(212,255,0); color: rgb(212,255,0); }
+  #quickStartSection .qs-row-btns { display: flex; gap: 2px; }
+  #quickStartSection .qs-row-btns button { width: 24px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--pra-dim); cursor: pointer; font-size: .9rem; }
+  #quickStartSection .qs-row-btns button:hover { background: rgba(255,255,255,.06); color: #fff; }
+  #quickStartSection .qs-extra { display: grid; grid-template-columns: 22px 130px 1fr; gap: 6px; align-items: center; margin: -2px 0 6px; }
+  #quickStartSection .qs-extra label { font-size: .7rem; font-weight: 700; color: #5cc8ff; text-align: right; }
+  #quickStartSection .qs-extra input { padding: 6px 8px; font-size: .8rem; }
+  #quickStartSection .qs-add { background: none; border: 1px dashed var(--pra-border); color: var(--pra-dim); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: .74rem; cursor: pointer; margin-left: 28px; }
+  #quickStartSection .qs-add:hover { color: #fff; border-color: #009bff; }
+  #quickStartSection .qs-cols { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) minmax(110px, 1fr) minmax(170px, 2fr) minmax(120px, .9fr) 52px; gap: 6px; font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 4px; }
+  @media (max-width: 760px) { #quickStartSection .qs-cols { display: none; } }
   #quickStartSection .qs-tag { margin: 4px 0 3px 28px; font-size: .68rem; font-weight: 700; color: rgb(212,255,0); letter-spacing: .03em; }
   #quickStartSection .qs-sub-row .n { color: var(--pra-dim); font-size: .72rem; text-align: right; }
   #quickStartSection .qs-sub-row input { padding: 6px 8px; font-size: .8rem; }
-  @media (max-width: 560px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px 1fr; } #quickStartSection .qs-sub-row input:last-child { grid-column: 2; } }
+  @media (max-width: 760px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px 1fr 52px; } #quickStartSection .qs-sub-row > :not(.n):not(.qs-row-btns) { grid-column: 2; } #quickStartSection .qs-sub-row .qs-row-btns { grid-column: 3; grid-row: 1; } #quickStartSection .qs-extra { grid-template-columns: 22px 1fr; } #quickStartSection .qs-extra label { text-align: left; grid-column: 2; } #quickStartSection .qs-extra input { grid-column: 2; } }
   #quickStartSection table { width: 100%; border-collapse: collapse; font-size: .78rem; }
   #quickStartSection th, #quickStartSection td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
   #quickStartSection th { color: var(--pra-dim); font-weight: 700; }
@@ -682,8 +695,16 @@
 
       <div class="qs-group">
         <div class="qs-h">Steps &amp; wording</div>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Leave a box empty to keep the default (shown faded). Each step is worth 10 coins, paid when its last part is done. Parts marked in yellow only show for some people; a part whose button isn't on screen (e.g. no open chat) skips itself.</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Each part: pick the area of the app it points at, then its title and text, then any options. Each step is worth 10 coins, paid when its last part is done. A part whose button isn't on screen (e.g. no open chat) skips itself. <a href="#" id="qsResetSteps" style="color:#009bff">Reset all steps to the default</a></div>
+        <div class="qs-cols"><span></span><span>Area of the app</span><span>Title</span><span>Text</span><span>Options</span><span></span></div>
         <div id="qsSteps">Loading…</div>
+      </div>
+
+      <div class="qs-group">
+        <div class="qs-h">After step 10: message in their chat</div>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Posted in their own group the first time they finish (never again on replays). {first} = their first name. Leave it empty to send nothing.</div>
+        <textarea class="pra-input" id="qsFinishText" rows="3" placeholder="e.g. Nice work {first}, you crushed the Quick Start! What's the #1 skill you want to unlock first?" style="width:100%;resize:vertical"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><span style="font-size:.78rem">Sent as</span><select class="pra-select" id="qsFinishSender" style="max-width:260px;padding:6px 10px;font-size:.8rem"></select></div>
       </div>
 
       <button class="pra-btn" id="qsSaveBtn" type="button" style="width:100%;margin-top:6px">Save Quick Start</button>
@@ -2233,15 +2254,29 @@ window.addEventListener('pageshow', () => {
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (ms) => ms ? new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
-  function loadSteps() {
+  function loadDef() {
     return new Promise((resolve) => {
-      if (window.PRA_QS_STEPS) return resolve(window.PRA_QS_STEPS);
+      if (window.PRA_QS_DEF) return resolve(window.PRA_QS_DEF);
       window.PRA_QS_EDITOR = true;
       const sc = document.createElement('script'); sc.src = '/chat-app/tutorial.js?editor=1&v=' + Date.now();
-      sc.onload = () => resolve(window.PRA_QS_STEPS || []); sc.onerror = () => resolve([]);
+      sc.onload = () => resolve(window.PRA_QS_DEF || null); sc.onerror = () => resolve(null);
       document.body.appendChild(sc);
     });
   }
+  let DEF = null, draft = null;
+  const copy = (x) => JSON.parse(JSON.stringify(x));
+  // Saved steps, else the defaults with any old title/text-only overrides.
+  function startDraft() {
+    if (Array.isArray(data.config.steps) && data.config.steps.length) return copy(data.config.steps);
+    const d = copy(DEF.DEFAULT_STEPS);
+    Object.entries(data.config.texts || {}).forEach(([k, v]) => {
+      const [si, ui] = k.split('.').map(n => parseInt(n, 10) - 1);
+      const p = d[si] && d[si][ui];
+      if (p && v) { if (v.title) p.title = v.title; if (v.text) p.text = v.text; }
+    });
+    return d;
+  }
+  const optSummary = (p) => DEF.OPTIONS.filter(o => p[o.key] !== undefined && p[o.key] !== false).map(o => o.label).join(', ');
   function renderTesters() {
     const byId = new Map((data.users || []).map(u => [u.id, u]));
     $('qsTesterChips').innerHTML = testers.map(id => `<span class="qs-chip">${esc(byId.get(id)?.name || id)}<button type="button" data-id="${esc(id)}" title="Remove">&times;</button></span>`).join('') || '<span class="pra-muted" style="font-size:.76rem">No testers.</span>';
@@ -2259,15 +2294,43 @@ window.addEventListener('pageshow', () => {
     });
   }
   async function renderSteps() {
-    const steps = await loadSteps();
-    const texts = data.config.texts || {};
-    $('qsSteps').innerHTML = steps.map((st, si) => `<div class="qs-step"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
-      st.subs.map((sub, ui) => {
-        const k = `${si + 1}.${ui + 1}`, o = texts[k] || {};
-        const tag = (sub.note ? `<div class="qs-tag">${esc(sub.note)}</div>` : '') + (sub.kicker ? `<div class="qs-tag" style="color:#5cc8ff">Header line: ${esc(sub.kicker)}</div>` : '') + (sub.textByRole ? `<div class="qs-tag" style="color:#5cc8ff">${Object.entries(sub.textByRole).map(([r, t]) => esc(r) + 's see: ' + esc(t)).join(' · ')}</div>` : '');
-        return tag + `<div class="qs-sub-row" data-k="${k}"><div class="n">${ui + 1}</div><input class="pra-input" data-f="title" placeholder="${esc(sub.title)}" value="${esc(o.title || '')}"/><input class="pra-input" data-f="text" placeholder="${esc(sub.text)}" value="${esc(o.text || '')}"/></div>`;
-      }).join('') + `</div>`).join('') || '<span class="pra-muted">Could not load the steps.</span>';
+    DEF = DEF || await loadDef();
+    if (!DEF) { $('qsSteps').textContent = 'Could not load the steps.'; return; }
+    if (!draft) draft = startDraft();
+    const areaOpts = (cur) => {
+      const groups = {};
+      Object.entries(DEF.AREAS).forEach(([k, a]) => { const g = a.label.includes(':') ? a.label.split(':')[0] : 'Pages'; (groups[g] = groups[g] || []).push([k, a.label.includes(':') ? a.label.split(':').slice(1).join(':').trim() : a.label]); });
+      return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(([k, l]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('');
+    };
+    $('qsSteps').innerHTML = draft.map((parts, si) => `<div class="qs-step" data-si="${si}"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
+      parts.map((p, ui) => {
+        const extras = DEF.OPTIONS.filter(o => o.text && p[o.key] !== undefined).map(o =>
+          `<div class="qs-extra" data-si="${si}" data-ui="${ui}"><span></span><label>${esc(o.label)}</label><input class="pra-input" data-x="${o.key}" value="${esc(p[o.key] || '')}" placeholder="Type the ${esc(o.label.toLowerCase())}…"/></div>`).join('');
+        return `<div class="qs-sub-row" data-si="${si}" data-ui="${ui}"><div class="n">${ui + 1}</div>
+          <select class="pra-select" data-f="area">${areaOpts(p.area)}</select>
+          <input class="pra-input" data-f="title" value="${esc(p.title || '')}" placeholder="Title"/>
+          <input class="pra-input" data-f="text" value="${esc(p.text || '')}" placeholder="Text"/>
+          <button type="button" class="qs-opt-btn${optSummary(p) ? ' on' : ''}" data-opts>${esc(optSummary(p) || 'Options…')}</button>
+          <div class="qs-row-btns"><button type="button" data-up title="Move up">&uarr;</button><button type="button" data-del title="Remove this part">&times;</button></div></div>` + extras;
+      }).join('') + `<button type="button" class="qs-add" data-add="${si}">+ Add a part</button></div>`).join('');
+    const part = (el) => { const r = el.closest('[data-si][data-ui]'); return { si: +r.dataset.si, ui: +r.dataset.ui, p: draft[+r.dataset.si][+r.dataset.ui] }; };
+    $('qsSteps').querySelectorAll('[data-f]').forEach(el => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { part(el).p[el.dataset.f] = el.value; }));
+    $('qsSteps').querySelectorAll('[data-x]').forEach(el => el.addEventListener('input', () => { part(el).p[el.dataset.x] = el.value; }));
+    $('qsSteps').querySelectorAll('[data-del]').forEach(el => el.onclick = () => { const { si, ui } = part(el); draft[si].splice(ui, 1); if (!draft[si].length) draft[si].push({ area: 'chat_group', title: '', text: '' }); renderSteps(); });
+    $('qsSteps').querySelectorAll('[data-up]').forEach(el => el.onclick = () => { const { si, ui } = part(el); if (ui > 0) { const a = draft[si]; [a[ui - 1], a[ui]] = [a[ui], a[ui - 1]]; renderSteps(); } });
+    $('qsSteps').querySelectorAll('[data-add]').forEach(el => el.onclick = () => { draft[+el.dataset.add].push({ area: 'chat_group', title: '', text: '' }); renderSteps(); });
+    // Options: multi-select. Text options (header line, trainee wording) open their own box under the row.
+    $('qsSteps').querySelectorAll('[data-opts]').forEach(el => el.onclick = () => {
+      const { p } = part(el);
+      const items = () => DEF.OPTIONS.map(o => ({ value: o.key, label: o.label + (o.text ? ' (opens a box)' : ''), selected: p[o.key] !== undefined && p[o.key] !== false }));
+      window.PRAMenu.open(el, { multi: true, items: items(), onClose: () => renderSteps(), onPick: (it) => {
+        const o = DEF.OPTIONS.find(x => x.key === it.value);
+        if (it.selected) delete p[o.key]; else p[o.key] = o.text ? '' : true;
+        return items();
+      } });
+    });
   }
+  $('qsResetSteps').onclick = (e) => { e.preventDefault(); if (!DEF || !confirm('Put every step back to the default areas and wording?')) return; draft = copy(DEF.DEFAULT_STEPS); renderSteps(); };
   function fill() {
     const c = data.config;
     document.querySelectorAll('input[name="qsEnabledFor"]').forEach(r => { r.checked = r.value === c.enabledFor; });
@@ -2279,6 +2342,11 @@ window.addEventListener('pageshow', () => {
     $('qsHidePromo').checked = !!c.hidePromoUntilDone;
     testers = [...(c.testers || [])];
     $('qsUserList').innerHTML = (data.users || []).map(u => `<option value="${esc(u.name)}">${esc(u.role)}</option>`).join('');
+    const fm = c.finishMessage || {};
+    $('qsFinishText').value = fm.text || '';
+    const staff = (data.users || []).filter(u => ['coach', 'admin', 'admin2'].includes(u.role));
+    $('qsFinishSender').innerHTML = '<option value="">First coach/admin in their group</option>' + staff.map(u => `<option value="${esc(u.id)}"${u.id === fm.senderId ? ' selected' : ''}>${esc(u.name)}</option>`).join('');
+    draft = null;
     renderTesters(); renderPeople(); renderSteps();
   }
   $('qsTesterSearch').addEventListener('change', (e) => {
@@ -2287,12 +2355,13 @@ window.addEventListener('pageshow', () => {
     e.target.value = '';
   });
   $('qsSaveBtn').onclick = async () => {
+    // Saved only when it differs from the default, so future default fixes still reach everyone.
+    const clean = (draft || []).map(st => st.map(p => { const c = { ...p }; Object.keys(c).forEach(k => { if (c[k] === false || c[k] === undefined) delete c[k]; }); return c; }));
+    const steps = DEF && JSON.stringify(clean) === JSON.stringify(DEF.DEFAULT_STEPS) ? null : clean;
     const texts = {};
-    document.querySelectorAll('#qsSteps .qs-sub-row').forEach(row => {
-      const title = row.querySelector('[data-f="title"]').value.trim(), text = row.querySelector('[data-f="text"]').value.trim();
-      if (title || text) texts[row.dataset.k] = { title, text };
-    });
+    const finishMessage = { text: $('qsFinishText').value.trim(), senderId: $('qsFinishSender').value };
     const body = {
+      steps, finishMessage,
       enabledFor: (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value,
       roles: [...document.querySelectorAll('#qsRoles input:checked')].flatMap(x => x.value === 'admin' ? ['admin', 'admin2'] : [x.value]),
       testers, autoStart: $('qsAutoStart').checked, testersAlwaysButton: $('qsTestersAlways').checked, hidePromoUntilDone: $('qsHidePromo').checked,
