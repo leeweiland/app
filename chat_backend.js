@@ -27,6 +27,7 @@ import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
+import { renderCertificatePng, levelLabel } from "./certificate.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1346,6 +1347,130 @@ async function fetchAllLevels() {
   levelsCache = { at: Date.now(), people };
   return people;
 }
+// ── Level-up watcher → CRM "8 CERTIFICATE" flow (Lee, 2026-11-21) ──────────
+// Every 2 minutes (and right after a coach saves levels in the app) the
+// Levels sheet is read fresh and compared with the last snapshot. A level
+// that went UP (a higher number, or Foundation newly marked done) becomes a
+// level-up event, sent to the CRM, whose flow waits 5 minutes, asks
+// /api/bridge/level-check whether the coach kept it (not a slip they put
+// back), then gets the certificate from /api/bridge/certificate (posted into
+// the student's app group) and texts/emails its link.
+const LEVEL_EVENTS_FILE = "chat_level_events.json"; // { snapshot: { "Gym|first|last": {CAT: value} }, events: [...] }
+const CERT_DIR = join(DATA_DIR, "certificates");
+const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "https://app-production-3c6a1.up.railway.app";
+const levelNum = (v) => { const n = parseInt(String(v ?? "").trim(), 10); return Number.isFinite(n) ? n : null; };
+const foundationDone = (v) => /^(x|yes|done|complete|completed|✓)$/i.test(String(v ?? "").trim());
+const personKey = (p) => `${p.program}|${nameKey(p.first, p.last)}`;
+function readLevelEvents() {
+  const d = readJson(LEVEL_EVENTS_FILE, null) || {};
+  return { snapshot: d.snapshot || null, events: Array.isArray(d.events) ? d.events : [] };
+}
+// What level they're at now in one category (fresh from the sheet).
+async function currentLevelFor(ev) {
+  const tab = await fetchLevelsTab(ev.program === "Online" ? "ONLINE" : "GYM", ev.program);
+  const p = tab.find(x => nameKey(x.first, x.last) === nameKey(ev.first, ev.last));
+  return p ? (p.levels || {})[ev.category] : undefined;
+}
+function stillAdvanced(ev, cur) {
+  if (ev.category === "FOUNDATION") return foundationDone(cur);
+  const n = levelNum(cur);
+  return n !== null && n >= Number(ev.to);
+}
+function appUserForName(first, last) {
+  const k = nameKey(first, last);
+  return readJson(USERS_FILE, []).find(u => !u.archived && nameKey(u.first, u.last) === k) || null;
+}
+let levelWatchRunning = false;
+async function checkLevelUps() {
+  if (levelWatchRunning) return;
+  levelWatchRunning = true;
+  try {
+    const [gym, online] = await Promise.all([fetchLevelsTab("GYM", "Gym"), fetchLevelsTab("ONLINE", "Online")]);
+    const people = [...gym, ...online];
+    if (people.length < 20) return; // a failed/empty read must never look like everyone changed
+    const d = readLevelEvents();
+    const next = {};
+    for (const p of people) next[personKey(p)] = { ...(p.levels || {}) };
+    if (!d.snapshot) { d.snapshot = next; writeJson(LEVEL_EVENTS_FILE, d); return; } // first run: baseline only
+    const fresh = [];
+    for (const p of people) {
+      const prev = d.snapshot[personKey(p)];
+      if (!prev) continue; // a brand-new row is someone being added, not leveling up
+      for (const cat of LEVELS_CATEGORIES) {
+        const a = prev[cat], b = (p.levels || {})[cat];
+        let up = false;
+        if (cat === "FOUNDATION") up = !foundationDone(a) && foundationDone(b);
+        else { const na = levelNum(a), nb = levelNum(b); up = nb !== null && nb > (na ?? 0) && nb > 0; }
+        if (!up) continue;
+        const u = appUserForName(p.first, p.last);
+        const ev = {
+          id: randomUUID(), first: p.first, last: p.last, program: p.program, category: cat,
+          from: a ?? "", to: cat === "FOUNDATION" ? String(b) : levelNum(b), label: levelLabel(cat, levelNum(b)),
+          userId: u?.id || null, email: u?.email || "", phone: u?.phone || "",
+          detectedAt: new Date().toISOString(), status: "detected",
+        };
+        d.events.push(ev); fresh.push(ev);
+        console.log(`[level-up] ${p.first} ${p.last} ${cat} ${a || "-"} -> ${b} (${p.program})`);
+      }
+    }
+    d.snapshot = next;
+    d.events = d.events.slice(-500);
+    writeJson(LEVEL_EVENTS_FILE, d);
+    for (const ev of fresh) await sendLevelUpToCrm(ev);
+  } catch (e) {
+    console.error("[level-up] watch", e.message);
+  } finally { levelWatchRunning = false; }
+}
+async function sendLevelUpToCrm(ev) {
+  try {
+    const r = await crmFetch("/api/bridge/level-up", { method: "POST", body: JSON.stringify(ev) });
+    const out = await r.json().catch(() => ({}));
+    markLevelEvent(ev.id, r.ok ? { status: "sent-to-crm", crm: out } : { status: "crm-error", crmError: out.error || r.status });
+  } catch (e) { markLevelEvent(ev.id, { status: "crm-error", crmError: e.message }); }
+}
+function markLevelEvent(id, patch) {
+  const d = readLevelEvents();
+  const ev = d.events.find(e => e.id === id);
+  if (ev) { Object.assign(ev, patch); writeJson(LEVEL_EVENTS_FILE, d); }
+  return ev;
+}
+// Makes the PNG once per event (same file on every retry), and posts it into
+// the student's own group with the congrats text.
+async function issueCertificate(ev, { postToApp = true, message = "" } = {}) {
+  if (!ev.certToken) {
+    mkdirSync(CERT_DIR, { recursive: true });
+    const token = randomBytes(12).toString("hex");
+    const png = renderCertificatePng({ name: `${ev.first} ${ev.last}`.trim(), category: ev.category, level: ev.to, program: ev.program });
+    writeFileSync(join(CERT_DIR, token + ".png"), png);
+    ev = markLevelEvent(ev.id, { certToken: token, certIssuedAt: new Date().toISOString() }) || { ...ev, certToken: token };
+  }
+  const url = `${APP_PUBLIC_URL}/cert/${ev.certToken}.png`;
+  let posted = !!ev.appPostedAt;
+  if (postToApp && !posted && ev.userId) {
+    const convo = readJson(CONVOS_FILE, []).find(c => c.autoGroupType === "student" && c.autoGroupUserId === ev.userId);
+    if (convo) {
+      const users = readJson(USERS_FILE, []);
+      const staffIds = users.filter(u => isStaff(u) && !u.archived).map(u => u.id);
+      const lee = users.find(u => isAdmin(u) && /^lee$/i.test(u.first || "") && /weiland/i.test(u.last || ""));
+      const senderId = (lee && convo.participantIds.includes(lee.id) ? lee.id : null) || convo.participantIds.find(id => staffIds.includes(id));
+      if (senderId) {
+        const accessToken = await getDriveAccessToken();
+        const name = `${ev.first} ${ev.last} CERTIFICATE ${ev.category} ${ev.to}.png`;
+        const uploaded = await uploadStreamToDrive(createReadStream(join(CERT_DIR, ev.certToken + ".png")), { name, mimeType: "image/png", folderId: getConfig().profilePhotosFolderId, accessToken });
+        const now = Date.now();
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "image", driveFileId: uploaded.id, mimeType: "image/png", name, createdAt: new Date(now).toISOString() });
+        if (message) MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text: message, createdAt: new Date(now + 1).toISOString() });
+        notifyParticipants(convo.id, senderId, { title: "New message", body: message ? message.slice(0, 120) : "Your certificate", conversationId: convo.id }).catch(() => {});
+        markLevelEvent(ev.id, { appPostedAt: new Date().toISOString() });
+        posted = true;
+      }
+    }
+  }
+  return { url, posted, appUser: !!ev.userId };
+}
+setInterval(() => { checkLevelUps().catch(() => {}); }, 2 * 60 * 1000);
+setTimeout(() => { checkLevelUps().catch(() => {}); }, 20 * 1000);
+
 // ── Katas ────────────────────────────────────────────────────────────────
 // Kata videos live in Drive under "KATAS BY ELEMENT" (one subfolder per
 // element), each copy renamed "LEVEL <n> - <original name>". A student's
@@ -4695,6 +4820,41 @@ export async function handleChatRequest(req, res, url) {
   // CRM status changes (crm-app contacts PATCH / flows): FINISHED makes an
   // Online/Gym student a plain User; BLACKLIST archives the account. Each is
   // switchable in User Management.
+  // Public certificate image (unguessable link, for SMS/email/sharing).
+  const certMatch = p.match(/^\/cert\/([a-f0-9]{24})\.png$/);
+  if (certMatch && (req.method === "GET" || req.method === "HEAD")) {
+    const file = join(CERT_DIR, certMatch[1] + ".png");
+    if (!existsSync(file)) { res.writeHead(404); res.end(); return true; }
+    res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=31536000, immutable" });
+    if (req.method === "HEAD") { res.end(); return true; }
+    createReadStream(file).pipe(res); return true;
+  }
+  // CRM "8 CERTIFICATE" flow: is the level still up (not put back), and the certificate.
+  if ((p === "/api/bridge/level-check" || p === "/api/bridge/certificate") && req.method === "POST") {
+    if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
+    const b = await readJsonBody(req);
+    let ev = readLevelEvents().events.find(e => e.id === b.eventId);
+    // A test fired from the CRM builder has no real event: make a throwaway one.
+    if (!ev && b.test && b.first && b.category) {
+      const u = appUserForName(b.first, b.last);
+      ev = { id: randomUUID(), test: true, first: b.first, last: b.last || "", program: b.program || "Gym", category: String(b.category).toUpperCase(), to: b.level ?? 1, userId: u?.id || null, detectedAt: new Date().toISOString(), status: "test" };
+      const d = readLevelEvents(); d.events.push(ev); writeJson(LEVEL_EVENTS_FILE, d);
+    }
+    if (!ev) return sendJson(res, 404, { error: "Unknown level-up event" });
+    try {
+      if (p === "/api/bridge/level-check") {
+        const cur = ev.test ? ev.to : await currentLevelFor(ev);
+        const still = ev.test ? true : stillAdvanced(ev, cur);
+        markLevelEvent(ev.id, { checkedAt: new Date().toISOString(), still, currentAtCheck: cur ?? "" });
+        return sendJson(res, 200, { ok: true, still, current: cur ?? null, label: ev.label || levelLabel(ev.category, ev.to) });
+      }
+      const out = await issueCertificate(ev, { postToApp: b.postToApp !== false, message: String(b.message || "") });
+      return sendJson(res, 200, { ok: true, ...out, label: ev.label || levelLabel(ev.category, ev.to), eventId: ev.id });
+    } catch (e) {
+      console.error("[level-up] bridge", e.message);
+      return sendJson(res, 500, { error: e.message });
+    }
+  }
   if (p === "/api/bridge/student-status" && req.method === "POST") {
     const key = req.headers["x-pra-app-key"];
     if (!process.env.PRA_APP_BRIDGE_KEY || key !== process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 401, { error: "Bad key" });
@@ -6511,6 +6671,7 @@ export async function handleChatRequest(req, res, url) {
       if (!["Gym", "Online"].includes(program)) return sendJson(res, 400, { error: "program must be 'Gym' or 'Online'" });
       try {
         await updateLevelsRow({ first, last, program, levels: levels || {}, team: !!team });
+        setTimeout(() => { checkLevelUps().catch(() => {}); }, 1500); // level-ups -> CRM certificate flow
         return sendJson(res, 200, { ok: true });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
