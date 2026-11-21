@@ -27,7 +27,7 @@ import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
-import { renderCertificate, levelLabel } from "./certificate.js";
+import { renderCertificate, renderDiscountCard, levelLabel } from "./certificate.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1465,6 +1465,39 @@ async function issueCertificate(ev, { postToApp = true, message = "" } = {}) {
         if (message) MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text: message, createdAt: new Date(now + 1).toISOString() });
         notifyParticipants(convo.id, senderId, { title: "New message", body: message ? message.slice(0, 120) : "Your certificate", conversationId: convo.id }).catch(() => {});
         markLevelEvent(ev.id, { appPostedAt: new Date().toISOString() });
+        posted = true;
+      }
+    }
+  }
+  return { url, posted, appUser: !!ev.userId };
+}
+// Level-up clothing discount card (CRM "Level-Up Discount" step): made once
+// per event, posted into their group right under the certificate.
+async function issueDiscountCard(ev, { code, percent, storeUrl, postToApp = true, message = "" }) {
+  if (!ev.discToken) {
+    mkdirSync(CERT_DIR, { recursive: true });
+    const token = randomBytes(12).toString("hex");
+    writeFileSync(join(CERT_DIR, token + ".jpg"), renderDiscountCard({ first: ev.first, code, percent, storeUrl }));
+    ev = markLevelEvent(ev.id, { discToken: token, discCode: code }) || { ...ev, discToken: token };
+  }
+  const url = `${APP_PUBLIC_URL}/cert/${ev.discToken}.jpg`;
+  let posted = !!ev.discPostedAt;
+  if (postToApp && !posted && ev.userId) {
+    const convo = readJson(CONVOS_FILE, []).find(c => c.autoGroupType === "student" && c.autoGroupUserId === ev.userId);
+    if (convo) {
+      const users = readJson(USERS_FILE, []);
+      const staffIds = users.filter(u => isStaff(u) && !u.archived).map(u => u.id);
+      const lee = users.find(u => isAdmin(u) && /^lee$/i.test(u.first || "") && /weiland/i.test(u.last || ""));
+      const senderId = (lee && convo.participantIds.includes(lee.id) ? lee.id : null) || convo.participantIds.find(id => staffIds.includes(id));
+      if (senderId) {
+        const accessToken = await getDriveAccessToken();
+        const name = `${ev.first} ${ev.last} LEVEL UP DISCOUNT ${code}.jpg`;
+        const uploaded = await uploadStreamToDrive(createReadStream(join(CERT_DIR, ev.discToken + ".jpg")), { name, mimeType: "image/jpeg", folderId: getConfig().profilePhotosFolderId, accessToken });
+        const now = Date.now() + 5; // lands just after the certificate
+        MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "image", driveFileId: uploaded.id, mimeType: "image/jpeg", name, createdAt: new Date(now).toISOString() });
+        if (message) MessagesDB.insertMessage({ id: randomUUID(), conversationId: convo.id, senderId, type: "text", text: message, createdAt: new Date(now + 1).toISOString() });
+        notifyParticipants(convo.id, senderId, { title: "New message", body: message ? message.slice(0, 120) : "Your level-up reward", conversationId: convo.id }).catch(() => {});
+        markLevelEvent(ev.id, { discPostedAt: new Date().toISOString() });
         posted = true;
       }
     }
@@ -4833,7 +4866,7 @@ export async function handleChatRequest(req, res, url) {
     createReadStream(file).pipe(res); return true;
   }
   // CRM "8 CERTIFICATE" flow: is the level still up (not put back), and the certificate.
-  if ((p === "/api/bridge/level-check" || p === "/api/bridge/certificate") && req.method === "POST") {
+  if ((p === "/api/bridge/level-check" || p === "/api/bridge/certificate" || p === "/api/bridge/discount-card") && req.method === "POST") {
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
     const b = await readJsonBody(req);
     let ev = readLevelEvents().events.find(e => e.id === b.eventId);
@@ -4850,6 +4883,12 @@ export async function handleChatRequest(req, res, url) {
         const still = ev.test ? true : stillAdvanced(ev, cur);
         markLevelEvent(ev.id, { checkedAt: new Date().toISOString(), still, currentAtCheck: cur ?? "" });
         return sendJson(res, 200, { ok: true, still, current: cur ?? null, label: ev.label || levelLabel(ev.category, ev.to) });
+      }
+      if (p === "/api/bridge/discount-card") {
+        const code = String(b.code || "").trim();
+        if (!code) return sendJson(res, 400, { error: "No discount code set on the step" });
+        const out = await issueDiscountCard(ev, { code, percent: Number(b.percent) || 30, storeUrl: String(b.storeUrl || "https://www.pacificrimathletics.com/shop"), postToApp: b.postToApp !== false, message: String(b.message || "") });
+        return sendJson(res, 200, { ok: true, ...out, eventId: ev.id });
       }
       const out = await issueCertificate(ev, { postToApp: b.postToApp !== false, message: String(b.message || "") });
       return sendJson(res, 200, { ok: true, ...out, label: ev.label || levelLabel(ev.category, ev.to), eventId: ev.id });

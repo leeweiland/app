@@ -77,3 +77,52 @@ export function renderCertificate(opts) {
     try { unlinkSync(base + ".jpg"); } catch {}
   }
 }
+
+// ── Level-up clothing discount card (Lee, 2026-11-21) ────────────────────
+// Website shop styling: black with blue/teal glow, neon-lime accents, white
+// glowing heading, real product photos (assets/certificate/shop_*.jpg from
+// the Shopify store). 1080x1350 (phone/IG portrait). JPEG.
+const CARD_FONTS = ["montserrat-400-normal.ttf", "montserrat-700-normal.ttf", "montserrat-800-normal.ttf"].map(f => asset("fonts/" + f));
+const jpgUri = (p) => "data:image/jpeg;base64," + readFileSync(asset(p)).toString("base64");
+const pngUri = (p) => "data:image/png;base64," + readFileSync(asset(p)).toString("base64");
+export function discountCardSvg({ first, code, percent = 30, storeUrl = "pacificrimathletics.com/shop" }) {
+  const CW = 1080, CH = 1350, LIME = "rgb(212,255,0)";
+  const shop = String(storeUrl || "").replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+  const prods = [1, 2, 3].map(i => jpgUri(`certificate/shop_${i}.jpg`));
+  const codeSize = Math.min(96, Math.floor(820 / Math.max(6, String(code).length * 0.72)));
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CW}" height="${CH}" viewBox="0 0 ${CW} ${CH}">
+  <defs>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="90"/></filter>
+    <filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="c1"><rect x="0" y="0" width="290" height="290" rx="18"/></clipPath>
+  </defs>
+  <rect width="${CW}" height="${CH}" fill="#000"/>
+  <circle cx="120" cy="300" r="300" fill="#2f8fd8" opacity="0.55" filter="url(#blur)"/>
+  <circle cx="1000" cy="520" r="260" fill="#0fb8a0" opacity="0.45" filter="url(#blur)"/>
+  <circle cx="540" cy="1250" r="300" fill="#1a5fb0" opacity="0.35" filter="url(#blur)"/>
+  <image x="${CW / 2 - 150}" y="48" width="300" height="107" xlink:href="${pngUri("pra-logo.png")}"/>
+  <text x="${CW / 2}" y="236" text-anchor="middle" font-family="Montserrat Thin" font-weight="800" font-size="64" letter-spacing="4" fill="#fff" filter="url(#glow)">LEVEL UP REWARD</text>
+  <text x="${CW / 2}" y="296" text-anchor="middle" font-family="Montserrat Thin" font-weight="400" font-size="34" fill="#d6dde6">${esc(first ? `Congrats ${first}! You passed your level test.` : "You passed your level test.")}</text>
+  <text x="${CW / 2}" y="500" text-anchor="middle" font-family="Montserrat Thin" font-weight="800" font-size="200" fill="${LIME}" filter="url(#glow)">${esc(percent)}% OFF</text>
+  <text x="${CW / 2}" y="568" text-anchor="middle" font-family="Montserrat Thin" font-weight="700" font-size="40" letter-spacing="3" fill="#fff">YOUR ENTIRE CLOTHING ORDER</text>
+  ${prods.map((src, i) => `<g transform="translate(${70 + i * 320} 620)"><rect width="290" height="290" rx="18" fill="#fff"/><image width="290" height="290" preserveAspectRatio="xMidYMid slice" clip-path="url(#c1)" xlink:href="${src}"/></g>`).join("")}
+  <rect x="120" y="960" width="840" height="190" rx="22" fill="rgba(212,255,0,0.08)" stroke="${LIME}" stroke-width="4" stroke-dasharray="18 12"/>
+  <text x="${CW / 2}" y="1010" text-anchor="middle" font-family="Montserrat Thin" font-weight="700" font-size="28" letter-spacing="6" fill="${LIME}">USE CODE AT CHECKOUT</text>
+  <text x="${CW / 2}" y="${1012 + codeSize}" text-anchor="middle" font-family="Montserrat Thin" font-weight="800" font-size="${codeSize}" letter-spacing="6" fill="#fff">${esc(code)}</text>
+  <rect x="100" y="1190" width="880" height="76" rx="38" fill="${LIME}"/>
+  <text x="${CW / 2}" y="1240" text-anchor="middle" font-family="Montserrat Thin" font-weight="800" font-size="${shop.length > 26 ? 27 : 32}" letter-spacing="1" fill="#000">SHOP: ${esc(shop.toUpperCase())}</text>
+  <text x="${CW / 2}" y="1310" text-anchor="middle" font-family="Montserrat Thin" font-weight="400" font-size="24" fill="#9aa6b2">One-time use · Pacific Rim Athletics</text>
+</svg>`;
+}
+export function renderDiscountCard(opts) {
+  const png = new Resvg(discountCardSvg(opts), { font: { fontFiles: CARD_FONTS, loadSystemFonts: false, defaultFontFamily: "Montserrat Thin" } }).render().asPng();
+  const base = join(tmpdir(), "disc-" + randomBytes(6).toString("hex"));
+  writeFileSync(base + ".png", png);
+  try {
+    execFileSync(ffmpegPath, ["-v", "error", "-y", "-i", base + ".png", "-q:v", "3", base + ".jpg"]);
+    return readFileSync(base + ".jpg");
+  } finally {
+    try { unlinkSync(base + ".png"); } catch {}
+    try { unlinkSync(base + ".jpg"); } catch {}
+  }
+}
