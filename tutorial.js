@@ -357,10 +357,12 @@
       coins.push({ el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.7 + Math.random() * 0.6, rot: (Math.random() - 0.5) * 24, r: 0 });
     }
     const t0 = performance.now();
+    let last = t0;
     (function frame(now) {
       const t = (now - t0) / 1000;
+      const k = Math.min(4, Math.max(0, (now - last) / 16.67)); last = now; // 60fps steps, so slow phones keep real speed
       coins.forEach(c => {
-        c.vy += 0.38; c.x += c.vx; c.y += c.vy; c.r += c.rot;
+        c.vy += 0.38 * k; c.x += c.vx * k; c.y += c.vy * k; c.r += c.rot * k;
         c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px';
         c.el.style.opacity = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.6);
         if (c.emoji) c.el.style.transform = `translate(-50%,-50%) rotate(${c.r}deg) scale(${c.s})`;
@@ -627,7 +629,7 @@
       const x = W * (0.1 + Math.random() * 0.8), ty = H * (0.1 + Math.random() * 0.38);
       const col = COLORS[Math.floor(Math.random() * COLORS.length)], col2 = COLORS[Math.floor(Math.random() * COLORS.length)];
       const up = fireworkSound(0, big);
-      rockets.push({ x, y: H + 10, ty, vy: -(H + 10 - ty) / (up * 60), col, col2, big });
+      rockets.push({ x, y: H + 10, y0: H + 10, ty, t0: performance.now(), up: up * 1000, col, col2, big });
     };
     const explode = (rk) => {
       const n = rk.big ? 130 : 70, ring = Math.random() < 0.35;
@@ -648,17 +650,18 @@
     later(() => coinBurst(cx, cy, 60, null, { power: 1.3, spread: 1.6 }), 5700);
     later(() => { coinBlip(0); coinBlip(0.12); }, 2200);
 
-    let running = true;
-    (function frame() {
+    let running = true, lastT = performance.now();
+    (function frame(now = performance.now()) {
       if (!running) return;
-      ctx.fillStyle = 'rgba(4,4,8,0.2)'; ctx.fillRect(0, 0, W, H);
+      const k = Math.min(4, Math.max(0, (now - lastT) / 16.67)); lastT = now;
+      ctx.fillStyle = `rgba(4,4,8,${Math.min(0.6, 0.2 * k)})`; ctx.fillRect(0, 0, W, H);
       for (let i = rockets.length - 1; i >= 0; i--) {
-        const rk = rockets[i]; rk.y += rk.vy;
+        const rk = rockets[i]; const f = Math.min(1, (now - rk.t0) / rk.up); rk.y = rk.y0 + (rk.ty - rk.y0) * (1 - (1 - f) * (1 - f));
         ctx.globalAlpha = 1; ctx.fillStyle = '#fff6c2'; ctx.beginPath(); ctx.arc(rk.x, rk.y, 2, 0, Math.PI * 2); ctx.fill();
-        if (rk.y <= rk.ty) { explode(rk); rockets.splice(i, 1); }
+        if (f >= 1) { explode(rk); rockets.splice(i, 1); }
       }
       for (let i = parts.length - 1; i >= 0; i--) {
-        const p = parts[i]; p.vy += 0.045; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy; p.life -= 0.011;
+        const p = parts[i]; const drag = Math.pow(0.985, k); p.vy += 0.045 * k; p.vx *= drag; p.vy *= drag; p.x += p.vx * k; p.y += p.vy * k; p.life -= 0.011 * k;
         if (p.life <= 0) { parts.splice(i, 1); continue; }
         ctx.globalAlpha = p.twinkle ? p.life * (0.4 + Math.random() * 0.6) : p.life; ctx.fillStyle = p.col;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
