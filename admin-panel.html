@@ -240,7 +240,8 @@
   #quickStartSection .qs-step:first-child { border-top: none; padding-top: 0; }
   #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; margin-bottom: 6px; }
   #quickStartSection .qs-step-h span { color: #ffd23f; font-weight: 700; margin-left: 6px; }
-  #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) minmax(110px, 1fr) minmax(170px, 2fr) minmax(120px, .9fr) 52px; gap: 6px; align-items: center; margin-bottom: 6px; }
+  #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.4fr) 52px; grid-template-areas: "n area opts btns" ". title text text"; gap: 6px; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,.06); }
+  #quickStartSection .qs-sub-row .n { grid-area: n; } #quickStartSection .qs-sub-row [data-f=area] { grid-area: area; } #quickStartSection .qs-sub-row [data-opts] { grid-area: opts; } #quickStartSection .qs-sub-row .qs-row-btns { grid-area: btns; } #quickStartSection .qs-sub-row [data-f=title] { grid-area: title; } #quickStartSection .qs-sub-row [data-f=text] { grid-area: text; }
   #quickStartSection .qs-sub-row select { padding: 6px 8px; font-size: .78rem; min-width: 0; }
   #quickStartSection .qs-opt-btn { height: 32px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.03); color: var(--pra-dim); font: inherit; font-size: .74rem; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   #quickStartSection .qs-opt-btn.on { border-color: rgb(212,255,0); color: rgb(212,255,0); }
@@ -252,12 +253,11 @@
   #quickStartSection .qs-extra input { padding: 6px 8px; font-size: .8rem; }
   #quickStartSection .qs-add { background: none; border: 1px dashed var(--pra-border); color: var(--pra-dim); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: .74rem; cursor: pointer; margin-left: 28px; }
   #quickStartSection .qs-add:hover { color: #fff; border-color: #009bff; }
-  #quickStartSection .qs-cols { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) minmax(110px, 1fr) minmax(170px, 2fr) minmax(120px, .9fr) 52px; gap: 6px; font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; color: var(--pra-dim); margin-bottom: 4px; }
-  @media (max-width: 760px) { #quickStartSection .qs-cols { display: none; } }
+
   #quickStartSection .qs-tag { margin: 4px 0 3px 28px; font-size: .68rem; font-weight: 700; color: rgb(212,255,0); letter-spacing: .03em; }
   #quickStartSection .qs-sub-row .n { color: var(--pra-dim); font-size: .72rem; text-align: right; }
   #quickStartSection .qs-sub-row input { padding: 6px 8px; font-size: .8rem; }
-  @media (max-width: 760px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px 1fr 52px; } #quickStartSection .qs-sub-row > :not(.n):not(.qs-row-btns) { grid-column: 2; } #quickStartSection .qs-sub-row .qs-row-btns { grid-column: 3; grid-row: 1; } #quickStartSection .qs-extra { grid-template-columns: 22px 1fr; } #quickStartSection .qs-extra label { text-align: left; grid-column: 2; } #quickStartSection .qs-extra input { grid-column: 2; } }
+  @media (max-width: 560px) { #quickStartSection .qs-sub-row { grid-template-columns: 22px minmax(0, 1fr) 52px; grid-template-areas: "n area btns" ". opts opts" ". title title" ". text text"; } #quickStartSection .qs-extra { grid-template-columns: 22px 1fr; } #quickStartSection .qs-extra label { text-align: left; grid-column: 2; } #quickStartSection .qs-extra input { grid-column: 2; } }
   #quickStartSection table { width: 100%; border-collapse: collapse; font-size: .78rem; }
   #quickStartSection th, #quickStartSection td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pra-border); white-space: nowrap; }
   #quickStartSection th { color: var(--pra-dim); font-weight: 700; }
@@ -696,8 +696,7 @@
       <div class="qs-group">
         <div class="qs-h">Steps &amp; wording</div>
         <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Each part: pick the area of the app it points at, then its title and text, then any options. Each step is worth 10 coins, paid when its last part is done. A part whose button isn't on screen (e.g. no open chat) skips itself. <a href="#" id="qsResetSteps" style="color:#009bff">Reset all steps to the default</a></div>
-        <div class="qs-cols"><span></span><span>Area of the app</span><span>Title</span><span>Text</span><span>Options</span><span></span></div>
-        <div id="qsSteps">Loading…</div>
+                <div id="qsSteps">Loading…</div>
       </div>
 
       <div class="qs-group">
@@ -2299,7 +2298,7 @@ window.addEventListener('pageshow', () => {
     if (!draft) draft = startDraft();
     const areaOpts = (cur) => {
       const groups = {};
-      Object.entries(DEF.AREAS).forEach(([k, a]) => { const g = a.label.includes(':') ? a.label.split(':')[0] : 'Pages'; (groups[g] = groups[g] || []).push([k, a.label.includes(':') ? a.label.split(':').slice(1).join(':').trim() : a.label]); });
+      Object.entries(DEF.AREAS).forEach(([k, a]) => { const g = a.label.includes(':') ? a.label.split(':')[0] : 'Pages'; const l = a.label.includes(':') ? a.label.split(':').slice(1).join(':').trim() : a.label; (groups[g] = groups[g] || []).push([k, l.charAt(0).toUpperCase() + l.slice(1)]); });
       return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(([k, l]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('');
     };
     $('qsSteps').innerHTML = draft.map((parts, si) => `<div class="qs-step" data-si="${si}"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
@@ -2308,7 +2307,7 @@ window.addEventListener('pageshow', () => {
           `<div class="qs-extra" data-si="${si}" data-ui="${ui}"><span></span><label>${esc(o.label)}</label><input class="pra-input" data-x="${o.key}" value="${esc(p[o.key] || '')}" placeholder="Type the ${esc(o.label.toLowerCase())}…"/></div>`).join('');
         return `<div class="qs-sub-row" data-si="${si}" data-ui="${ui}"><div class="n">${ui + 1}</div>
           <select class="pra-select" data-f="area">${areaOpts(p.area)}</select>
-          <input class="pra-input" data-f="title" value="${esc(p.title || '')}" placeholder="Title"/>
+          <input class="pra-input" data-f="title" value="${esc(p.title || '')}" placeholder="Title" title="Title"/>
           <input class="pra-input" data-f="text" value="${esc(p.text || '')}" placeholder="Text"/>
           <button type="button" class="qs-opt-btn${optSummary(p) ? ' on' : ''}" data-opts>${esc(optSummary(p) || 'Options…')}</button>
           <div class="qs-row-btns"><button type="button" data-up title="Move up">&uarr;</button><button type="button" data-del title="Remove this part">&times;</button></div></div>` + extras;
