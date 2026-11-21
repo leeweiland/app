@@ -45,7 +45,7 @@
 </div>
 
 <script>
-// Lee Weiland YouTube channel, one feed, newest first.
+// Lee Weiland YouTube channel, long-form videos only (no Shorts), newest first.
 let videos = [];
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } };

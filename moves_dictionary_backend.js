@@ -131,10 +131,12 @@ function sendJson(res, status, obj) {
   return true;
 }
 
-// Lee Weiland YouTube channel: every public upload (videos + Shorts),
-// newest first. Read on demand with a 3-hour cache, never polled in the
-// background (shared YouTube quota). API key = public videos only.
-const LW_UPLOADS_PLAYLIST = "UUx7p3BDXwZipPsqqadBj_XQ";
+// Lee Weiland YouTube channel: public LONG-FORM uploads only, no Shorts
+// (Lee, 2026-11-21) -- "UULF" + channel id is YouTube's own long-form-only
+// uploads list ("UU" = everything, "UUSH" = Shorts only). Newest first.
+// Read on demand with a 3-hour cache, never polled in the background
+// (shared YouTube quota). API key = public videos only.
+const LW_UPLOADS_PLAYLIST = "UULFx7p3BDXwZipPsqqadBj_XQ";
 const YT_FEED_TTL = 3 * 60 * 60 * 1000;
 let ytFeedCache = null, ytFeedAt = 0, ytFeedLoading = null;
 async function fetchChannelFeed() {
