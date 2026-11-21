@@ -2360,7 +2360,7 @@ async function showKatas(which) {
     list.innerHTML = `<div class="kata-empty">${escapeHtml(e.message || 'Could not load katas')}</div>`;
   }
 }
-// Warmup tab: shown on a gym student's page (to them and to staff viewing it).
+// Warmup tab: gym students, plus coaches/admins on any page.
 function showWarmup() {
   viewMode = 'warmup';
   document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
@@ -2432,7 +2432,7 @@ function setupViewModeToggle() {
   const ownKatas = !canEdit || targetUserId === me.id;
   document.getElementById('katasViewBtn').style.display = ownKatas ? '' : 'none';
   document.getElementById('katasViewBtn').onclick = () => showKatas('own');
-  document.getElementById('warmupViewBtn').style.display = targetRole === 'gym' ? '' : 'none';
+  document.getElementById('warmupViewBtn').style.display = (targetRole === 'gym' || canEdit) ? '' : 'none'; // gym students + every coach/admin, on any page
   document.getElementById('warmupViewBtn').onclick = () => showWarmup();
   document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
