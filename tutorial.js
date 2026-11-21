@@ -32,6 +32,8 @@
     profile: { test: p => p === '/chat-app/profile.html', url: '/chat-app/profile.html' },
   };
   const iconSub = (title, sel, text, page) => ({ page: '*', targets: [sel], title, text, go: page, clickGo: true });
+  // Figure order (Lee, 2026-11-21): no two flips, two aerial (hoop/silks) or
+  // two handstands back to back -- flips at 2/5/8, aerial at 3/6/9, handstands at 1/10.
   const STEPS = [
     { figure: 'handstand', subs: [
       { page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'], kicker: 'Play The Quick Start Game To MASTER The App', kickerNote: '2 min.', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' },
@@ -43,7 +45,7 @@
       { page: 'protocol', targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'], activate: true, title: 'Your Training', text: 'Your custom training protocol, day by day.', textByRole: { trainee: 'Your Handstand Protocol, day by day.' } },
       { page: 'protocol', targets: ['#katasViewBtn'], activate: true, title: 'Katas', text: 'Flow routines to learn, film and level up.' },
     ] },
-    { figure: 'flip', subs: [
+    { figure: 'hoop_georgia', subs: [
       iconSub('Physique Builder', bottom('Powerbatics Body Mastery Builder'), 'Fuel, health, physique and progress in one place.', 'physique'),
       { page: 'physique', targets: [hub('nutrition')], activate: true, title: 'Fuel', text: 'Log your meals and hit your targets.' },
       { page: 'physique', targets: [hub('health')], activate: true, title: 'Health', text: 'Connect your devices for steps, sleep and heart rate.' },
@@ -56,15 +58,15 @@
       iconSub('Strength Ninjas', bottom('Strength Ninjas'), 'The map of everyone training with us.', 'map'),
       { page: 'map', targets: [], title: 'Strength Ninjas map', text: 'See who is training near you and around the world.' },
     ] },
-    { figure: 'hoop_georgia', subs: [
+    { figure: 'flip', subs: [
       iconSub('Training Personality', bottom('Training Personality Quiz'), 'Find out how you train best.', 'quiz'),
       { page: 'quiz', targets: [], title: 'Training Personality', text: 'A quick quiz that shapes how we coach you.' },
     ] },
-    { figure: 'airflare', subs: [
+    { figure: 'silks_alexis', subs: [
       iconSub('Levels', bottom('Levels'), 'Your skill progress, every category.', 'levels'),
       { page: 'levels', targets: [], title: 'Levels', text: 'Level up each skill from 1 to 10 and grow your Super Level.' },
     ] },
-    { figure: 'silks_alexis', subs: [
+    { figure: 'airflare', subs: [
       iconSub('Clothing', bottom('Shop'), 'PRA gear. Students get 10% off.', 'shop'),
       { page: 'shop', targets: [], title: 'Clothing', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' },
     ] },
@@ -151,6 +153,8 @@
   .ptu-flycoin { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd23f 38%, #d49b00 100%); box-shadow: inset 0 0 0 2px #b07f00, 0 0 8px rgba(255,210,63,.6); }
   .ptu-flycoin.spin { animation: ptuSpin .35s linear infinite; }
+  .ptu-flyemoji { position: absolute; font-size: 22px; line-height: 1; transform: translate(-50%,-50%); filter: drop-shadow(0 0 6px rgba(255,210,63,.55)); }
+  .ptu-final-figs { position: absolute; inset: 0; pointer-events: none; }
   @keyframes ptuSpin { 50% { transform: scaleX(.15); } }
   .ptu-plus { position: absolute; font-weight: 900; font-size: 1.4rem; color: #ffd23f; text-shadow: 0 0 10px rgba(255,210,63,.8), 0 2px 0 #7a5600; animation: ptuPlus 1.3s ease-out forwards; transform: translate(-50%, 0); }
   @keyframes ptuPlus { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -10px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -60px) scale(1); } }
@@ -186,7 +190,7 @@
   // handstand, backflip, human flag, airflare, front flip, planche press;
   // Clayton's drop gainer flip; Georgia and Sedona on aerial hoop; Alexis on silks), rendered
   // as transparent animated WebP in /chat-app/assets/quickstart/.
-  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=5`;
+  const FIG_SRC = (n) => `/chat-app/assets/quickstart/${n}.webp?v=6`;
   // Each showing gets a fresh object URL of the downloaded file, so the clip
   // always plays from its first frame (a reused URL resumes mid-loop).
   const FIG_BLOBS = {};
@@ -200,57 +204,168 @@
   } });
 
   // ── Sound (Web Audio, all synthesized -- no audio files) ──────────────
-  let actx = null;
+  // 8-bit console style (Lee, 2026-11-21: "more like Mario Bros 1 or Sonic
+  // 1"): NES-like pulse waves with a set duty cycle, triangle bass, a noise
+  // channel for drums and fireworks. All melodies are original.
+  let actx = null, master = null;
+  const pulseWaves = {};
+  const NOTE = (n) => { // 'C5', 'F#4', 'Bb3' -> Hz
+    const m = /^([A-G])([#b]?)(\d)$/.exec(n); if (!m) return 0;
+    const semi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+    return 440 * Math.pow(2, (semi - 9) / 12 + (Number(m[3]) - 4));
+  };
   function ac() {
-    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch {}
+    try {
+      if (!actx) {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        master = actx.createGain(); master.gain.value = 0.9;
+        const comp = actx.createDynamicsCompressor();
+        master.connect(comp).connect(actx.destination);
+      }
+      if (actx.state === 'suspended') actx.resume();
+    } catch {}
     return actx;
   }
-  function tone(freq, start, dur, type = 'square', vol = 0.12) {
-    const c = ac(); if (!c) return;
+  // Pulse wave with a given duty (0.125 / 0.25 / 0.5) -- the NES's lead sound.
+  function pulse(duty) {
+    const c = ac(); if (!c) return null;
+    if (pulseWaves[duty]) return pulseWaves[duty];
+    const n = 48, re = new Float32Array(n), im = new Float32Array(n);
+    for (let k = 1; k < n; k++) im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+    return (pulseWaves[duty] = c.createPeriodicWave(re, im));
+  }
+  // One note. type: 'p12' | 'p25' | 'p50' (pulse) or any OscillatorType.
+  // opts.slide: end frequency (pitch bend), opts.release: tail after dur.
+  function tone(freq, start, dur, type = 'p25', vol = 0.12, opts = {}) {
+    const c = ac(); if (!c || !freq) return;
+    const t0 = c.currentTime + start, rel = opts.release ?? 0.04, sus = opts.sustain ?? 0.85;
     const o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.setValueAtTime(freq, c.currentTime + start);
-    g.gain.setValueAtTime(0.0001, c.currentTime + start);
-    g.gain.exponentialRampToValueAtTime(vol, c.currentTime + start + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + start + dur);
-    o.connect(g).connect(c.destination); o.start(c.currentTime + start); o.stop(c.currentTime + start + dur + 0.02);
+    if (/^p(12|25|50)$/.test(type)) o.setPeriodicWave(pulse({ p12: 0.125, p25: 0.25, p50: 0.5 }[type]));
+    else o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (opts.slide) o.frequency.exponentialRampToValueAtTime(opts.slide, t0 + dur);
+    if (opts.vibrato) { const l = c.createOscillator(), lg = c.createGain(); l.frequency.value = 6; lg.gain.value = freq * 0.012; l.connect(lg).connect(o.frequency); l.start(t0 + dur * 0.4); l.stop(t0 + dur + rel); }
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.004);
+    g.gain.setValueAtTime(vol * sus, t0 + Math.max(0.005, dur * 0.3));
+    g.gain.linearRampToValueAtTime(vol * sus * 0.7, t0 + dur);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + rel);
+    o.connect(g).connect(master);
+    o.start(t0); o.stop(t0 + dur + rel + 0.02);
   }
-  // A handful of coins clinking: bright metallic pings in quick succession.
+  let noiseBuf = null;
+  // Noise channel: drums, sparkle, fireworks. lp: low-pass cutoff (Hz), lpEnd: sweep to.
+  function noise(start, dur, vol = 0.1, lp = 8000, lpEnd = null) {
+    const c = ac(); if (!c) return;
+    if (!noiseBuf) { noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const t0 = c.currentTime + start;
+    const src = c.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(lp, t0);
+    if (lpEnd) f.frequency.exponentialRampToValueAtTime(lpEnd, t0 + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f).connect(g).connect(master);
+    src.start(t0, Math.random()); src.stop(t0 + dur + 0.02);
+  }
+  const kick = (t, v = 0.5) => tone(150, t, 0.11, 'triangle', v, { slide: 40, release: 0.02, sustain: 1 });
+  const snare = (t, v = 0.12) => { noise(t, 0.12, v, 6000, 1500); tone(220, t, 0.05, 'triangle', v * 0.8, { slide: 120 }); };
+  const hat = (t, v = 0.035) => noise(t, 0.04, v, 12000);
+  // Coin pickup: a quick two-note jump up with a ringing tail.
+  function coinBlip(t) {
+    tone(NOTE('A5'), t, 0.06, 'p25', 0.09, { release: 0.01 });
+    tone(NOTE('E6'), t + 0.06, 0.32, 'p25', 0.09, { release: 0.12, sustain: 0.6 });
+  }
+  // Ring-style sparkle: high tones a hair apart, detuned for shine.
+  function sparkle(t) {
+    [[NOTE('E7'), 0], [NOTE('B6'), 0.05], [NOTE('G#7'), 0.1]].forEach(([f, d]) => { tone(f, t + d, 0.09, 'sine', 0.05, { release: 0.15 }); tone(f * 1.006, t + d, 0.09, 'sine', 0.03, { release: 0.15 }); });
+  }
+  // Step reward: coins clinking in, sparkle, then a fast power-up run.
   function coinSound() {
-    const pings = [[2093, 0], [2637, .05], [3136, .1], [2349, .17], [3520, .22], [2794, .3]];
-    pings.forEach(([f, t]) => { tone(f, t, 0.22, 'triangle', 0.09); tone(f * 2.01, t, 0.08, 'sine', 0.03); });
+    coinBlip(0); coinBlip(0.11); sparkle(0.2);
+    ['C5', 'G5', 'E5', 'C6', 'G5', 'E6', 'C6', 'G6'].forEach((n, i) => tone(NOTE(n), 0.42 + i * 0.045, 0.05, 'p12', 0.06, { release: 0.01 }));
+    tone(NOTE('C7'), 0.42 + 8 * 0.045, 0.28, 'p25', 0.07, { vibrato: true, release: 0.1 });
+    noise(0.42, 0.4, 0.025, 14000, 3000);
   }
-  // Original 8-bit victory tune (~3.4s): square lead + triangle bass.
+  // Original 8-bit "stage clear" fanfare (~5s): pulse lead, pulse harmony a
+  // third below, triangle bass, noise-channel drums, big arpeggio finish.
+  // Returns its length in seconds.
   function victoryTune() {
-    const N = { C3: 130.81, F2: 87.31, G2: 98, A2: 110, C4: 261.63, E4: 329.63, G4: 392, C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880, B5: 987.77, C6: 1046.5 };
-    const e = 0.15; // eighth note
-    const lead = [['G4', 1], ['C5', 1], ['E5', 1], ['G5', 2], ['E5', 1], ['G5', 3],
-      ['A5', 1], ['G5', 1], ['E5', 1], ['F5', 1], ['D5', 1], ['G5', 3],
-      ['E5', 1], ['G5', 1], ['B5', 1], ['C6', 5]];
-    let t = 0;
-    lead.forEach(([n, len]) => { tone(N[n], t, e * len * 0.95, 'square', 0.07); t += e * len; });
-    const bass = [['C3', 4], ['A2', 4], ['F2', 4], ['G2', 4], ['C3', 6]];
-    t = 0;
-    bass.forEach(([n, len]) => { tone(N[n], t, e * len * 0.9, 'triangle', 0.16); t += e * len; });
-    [0, 0.6, 1.2, 1.8, 2.4].forEach(x => tone(60, x, 0.08, 'sine', 0.25)); // kick
+    const b = 0.2; // one beat
+    const lead = [
+      ['G4', .5], ['C5', .5], ['E5', .5], ['G5', 1], ['E5', .5], ['G5', 1],
+      ['A5', .5], ['F5', .5], ['A5', .5], ['C6', 1], ['A5', .5], ['C6', 1],
+      ['B5', .5], ['G5', .5], ['B5', .5], ['D6', 1], ['B5', .5], ['F6', .5], ['E6', .5],
+      ['D6', .5], ['C6', .5], ['D6', .5], ['E6', 1], ['G6', 1], ['C7', 3],
+    ];
+    const harm = { G4: 'E4', C5: 'G4', E5: 'C5', G5: 'E5', A5: 'F5', F5: 'C5', C6: 'A5', B5: 'G5', D6: 'B5', F6: 'D6', E6: 'C6', G6: 'E6', C7: 'G6' };
+    let t = 0.15;
+    lead.forEach(([n, len]) => {
+      const d = b * len;
+      tone(NOTE(n), t, d * 0.9, 'p25', 0.075, { vibrato: len >= 1, release: 0.03 });
+      tone(NOTE(harm[n]), t, d * 0.85, 'p12', 0.04, { release: 0.03 });
+      t += d;
+    });
+    const end = t;
+    // Bass: bouncing octaves under each bar (C, F, G, C).
+    const bars = [['C3', 'C4'], ['F2', 'F3'], ['G2', 'G3'], ['C3', 'C4']];
+    for (let i = 0, bt = 0.15; bt < end - 0.05; i++, bt += b / 2) {
+      const bar = bars[Math.min(bars.length - 1, Math.floor((bt - 0.15) / (b * 4)))];
+      tone(NOTE(bar[i % 2]), bt, b / 2 * 0.8, 'triangle', 0.22, { release: 0.02, sustain: 1 });
+    }
+    // Drums: kick on the beat, snare on 2 and 4, hats every half beat.
+    for (let i = 0, dt = 0.15; dt < end - 0.05; i++, dt += b / 2) {
+      if (i % 4 === 0) kick(dt);
+      if (i % 4 === 2) snare(dt);
+      hat(dt);
+    }
+    // Lead-in drum roll, then the big finish: sweep up + held chord + crash.
+    for (let i = 0; i < 6; i++) snare(i * 0.025, 0.05 + i * 0.012);
+    ['C5', 'E5', 'G5', 'C6', 'E6', 'G6', 'C7', 'E7'].forEach((n, i) => tone(NOTE(n), end + i * 0.04, 0.06, 'p12', 0.06));
+    tone(NOTE('C6'), end + 0.34, 0.9, 'p25', 0.06, { vibrato: true, release: 0.4 });
+    tone(NOTE('E6'), end + 0.34, 0.9, 'p12', 0.045, { vibrato: true, release: 0.4 });
+    tone(NOTE('G6'), end + 0.34, 0.9, 'p12', 0.04, { vibrato: true, release: 0.4 });
+    tone(NOTE('C3'), end + 0.34, 0.9, 'triangle', 0.25, { release: 0.3, sustain: 1 });
+    kick(end + 0.34, 0.6); noise(end + 0.34, 1.4, 0.09, 12000, 2000);
+    return end + 1.6;
+  }
+  // Firework: rising whistle, then a crackling boom.
+  function fireworkSound(delay = 0, big = false) {
+    const up = 0.32 + Math.random() * 0.2;
+    tone(500 + Math.random() * 300, delay, up, 'sine', 0.025, { slide: 1800 + Math.random() * 900, release: 0.02 });
+    noise(delay + up, big ? 0.9 : 0.6, big ? 0.16 : 0.1, 3500, 120);
+    kick(delay + up, big ? 0.35 : 0.2);
+    for (let i = 0; i < (big ? 7 : 4); i++) noise(delay + up + 0.12 + Math.random() * 0.45, 0.03, 0.05, 9000);
+    return up;
   }
 
   // ── Effects ───────────────────────────────────────────────────────────
   function fxLayer() { const d = document.createElement('div'); d.className = 'ptu-fx'; document.body.appendChild(d); return d; }
-  function coinBurst(x, y, n = 26, layer) {
+  // Coins with ninjas and flexed arms mixed in (Lee, 2026-11-21).
+  const BURST_EMOJI = ['\u{1F977}', '\u{1F4AA}'];
+  function coinBurst(x, y, n = 26, layer, opts = {}) {
     const fx = layer || fxLayer();
     const coins = [];
+    const spread = opts.spread ?? 1.25, power = opts.power ?? 1;
     for (let i = 0; i < n; i++) {
-      const el = document.createElement('div'); el.className = 'ptu-flycoin spin';
-      el.style.animationDelay = (Math.random() * -0.35) + 's';
+      const emoji = i % 3 === 1;
+      const el = document.createElement('div');
+      if (emoji) { el.className = 'ptu-flyemoji'; el.textContent = BURST_EMOJI[(i / 3 | 0) % 2]; }
+      else { el.className = 'ptu-flycoin spin'; el.style.animationDelay = (Math.random() * -0.35) + 's'; }
       fx.appendChild(el);
-      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.25;
-      const v = 5 + Math.random() * 7;
-      coins.push({ el, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.7 + Math.random() * 0.6 });
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * spread;
+      const v = (5 + Math.random() * 7) * power;
+      coins.push({ el, emoji, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, s: 0.7 + Math.random() * 0.6, rot: (Math.random() - 0.5) * 24, r: 0 });
     }
     const t0 = performance.now();
     (function frame(now) {
       const t = (now - t0) / 1000;
-      coins.forEach(c => { c.vy += 0.38; c.x += c.vx; c.y += c.vy; c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px'; c.el.style.opacity = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.6); c.el.style.width = c.el.style.height = (18 * c.s) + 'px'; });
+      coins.forEach(c => {
+        c.vy += 0.38; c.x += c.vx; c.y += c.vy; c.r += c.rot;
+        c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px';
+        c.el.style.opacity = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.6);
+        if (c.emoji) c.el.style.transform = `translate(-50%,-50%) rotate(${c.r}deg) scale(${c.s})`;
+        else c.el.style.width = c.el.style.height = (18 * c.s) + 'px';
+      });
       if (t < 1.4) requestAnimationFrame(frame); else if (!layer) fx.remove(); else coins.forEach(c => c.el.remove());
     })(t0);
     return fx;
@@ -450,51 +565,110 @@
     setTimeout(() => { busy = false; if (finished) { teardown(); finale(); } else show(); }, 2400);
   }
 
-  // ── Finale: 100/100, fireworks, athlete performance, victory tune ─────
-  function finale() {
+  // ── Finale: 100/100 fireworks show ────────────────────────────────────
+  // Like a fireworks finale (Lee, 2026-11-21): several athletes performing at
+  // once around the score, new ones swapping in as others finish, fireworks
+  // building to a rapid-fire crescendo, coin + ninja + muscle showers, and the
+  // 8-bit fanfare. Back to the chat when it ends.
+  function finale(preview = false) {
     const wrap = document.createElement('div'); wrap.className = 'ptu-final';
-    wrap.innerHTML = `<canvas></canvas><div class="box"><div class="stage"></div><div class="score">${TOTAL} / ${TOTAL}</div>
+    wrap.innerHTML = `<canvas></canvas><div class="ptu-final-figs"></div><div class="box"><div class="score">${TOTAL} / ${TOTAL}</div>
       <div class="msg">Quick Start complete!</div><div class="sub">You know your way around. Now go train.</div></div>`;
     document.body.appendChild(wrap);
+    const SHOW_MS = 7000;
     victoryTune();
-    const stage = wrap.querySelector('.stage');
-    const seq = ['frontflip', 'cflip', 'hoop_sedona', 'handstand'];
-    let k = 0;
-    const showFig = () => { stage.innerHTML = `<div class="ptu-fig">${FIGS[seq[k % seq.length]]}</div>`; k++; };
-    showFig();
-    const figTimer = setInterval(() => { if (k >= 4) { clearInterval(figTimer); return; } showFig(); }, 750);
+    const timers = [];
+    const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+    const every = (fn, ms) => { const id = setInterval(fn, ms); timers.push(id); return id; };
+
+    // Athletes: every step's move, in the same spread-out order as the
+    // steps (no two flips / aerials / handstands back to back).
+    const figsEl = wrap.querySelector('.ptu-final-figs');
+    const order = STEPS.map(st => st.figure);
+    const box = wrap.querySelector('.box').getBoundingClientRect();
+    const W = innerWidth, H = innerHeight;
+    const figSize = Math.max(96, Math.min(160, Math.min(W, H) * 0.3));
+    // Open spots around the score box (centre points), in screen px.
+    const slots = [];
+    const cols = Math.max(2, Math.floor(W / (figSize * 1.05))), rows = Math.max(2, Math.floor(H / (figSize * 1.05)));
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = (c + 0.5) * W / cols, y = (r + 0.5) * H / rows;
+      const clear = x + figSize / 2 < box.left - 6 || x - figSize / 2 > box.right + 6 || y + figSize / 2 < box.top - 6 || y - figSize / 2 > box.bottom + 6;
+      if (clear) slots.push({ x, y, busy: false });
+    }
+    if (!slots.length) slots.push({ x: W / 2, y: Math.max(figSize / 2, box.top - figSize / 2), busy: false });
+    const maxLive = Math.min(slots.length, W < 560 ? 3 : 5);
+    let live = 0, k = 0;
+    const spawnFig = () => {
+      if (live >= maxLive) return;
+      const free = slots.filter(s => !s.busy);
+      if (!free.length) return;
+      const s = free[Math.floor(Math.random() * free.length)];
+      s.busy = true; live++;
+      const el = document.createElement('div'); el.className = 'ptu-fig';
+      el.style.width = el.style.height = figSize + 'px';
+      el.style.margin = `${-figSize / 2}px 0 0 ${-figSize / 2}px`;
+      el.style.left = s.x + (Math.random() - 0.5) * 20 + 'px'; el.style.top = s.y + (Math.random() - 0.5) * 20 + 'px';
+      el.innerHTML = FIGS[order[k++ % order.length]];
+      figsEl.appendChild(el);
+      setTimeout(() => { el.remove(); s.busy = false; live--; }, 2400);
+    };
+    // Three at once to open, then one more every ~0.4s as spots free up.
+    spawnFig(); later(spawnFig, 150); later(spawnFig, 300);
+    every(spawnFig, 420);
+
+    // Fireworks canvas.
     const cv = wrap.querySelector('canvas'), ctx = cv.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
-    const size = () => { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
-    size();
-    const parts = [];
-    const COLORS = ['#009bff', '#ffd23f', '#ffffff', '#5cc8ff', '#ffb000'];
-    const burst = () => {
-      const x = innerWidth * (0.15 + Math.random() * 0.7), y = innerHeight * (0.12 + Math.random() * 0.4);
-      const col = COLORS[Math.floor(Math.random() * COLORS.length)];
-      for (let i = 0; i < 60; i++) { const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 4.5; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, col }); }
-      tone(80 + Math.random() * 40, 0, 0.18, 'sine', 0.18);
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const parts = [], rockets = [];
+    const COLORS = ['#009bff', '#ffd23f', '#ffffff', '#5cc8ff', '#ffb000', '#d4ff00', '#ff4fa3'];
+    const launch = (big = false) => {
+      const x = W * (0.1 + Math.random() * 0.8), ty = H * (0.1 + Math.random() * 0.38);
+      const col = COLORS[Math.floor(Math.random() * COLORS.length)], col2 = COLORS[Math.floor(Math.random() * COLORS.length)];
+      const up = fireworkSound(0, big);
+      rockets.push({ x, y: H + 10, ty, vy: -(H + 10 - ty) / (up * 60), col, col2, big });
     };
-    let bursts = 0;
-    const burstTimer = setInterval(() => { burst(); if (++bursts >= 9) clearInterval(burstTimer); }, 380);
-    burst();
-    const r = wrap.querySelector('.box').getBoundingClientRect();
-    coinBurst(r.left + r.width / 2, r.top + r.height / 2, 40);
+    const explode = (rk) => {
+      const n = rk.big ? 130 : 70, ring = Math.random() < 0.35;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + Math.random() * 0.1, v = ring ? (rk.big ? 5.2 : 3.8) : (1.2 + Math.random() * (rk.big ? 6 : 4.5));
+        parts.push({ x: rk.x, y: rk.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, col: i % 2 ? rk.col : rk.col2, size: rk.big ? 2.6 : 2.1, twinkle: Math.random() < 0.3 });
+      }
+    };
+    // Build-up: a few at a time, then a rapid-fire finale.
+    launch(true);
+    const plan = [[300, 1], [800, 2], [1400, 1], [1900, 2], [2500, 2], [3000, 3], [3500, 2], [4000, 3], [4400, 3], [4800, 4], [5150, 4], [5450, 5], [5700, 6, true]];
+    plan.forEach(([ms, count, big]) => later(() => { for (let i = 0; i < count; i++) setTimeout(() => launch(big || Math.random() < 0.25), i * 90); }, ms));
+    // Coin, ninja and muscle showers from the score, plus from the corners late on.
+    const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    coinBurst(cx, cy, 45);
+    later(() => coinBurst(cx, cy, 36), 2200);
+    later(() => { coinBurst(W * 0.15, H * 0.85, 30, null, { spread: 0.8 }); coinBurst(W * 0.85, H * 0.85, 30, null, { spread: 0.8 }); }, 4300);
+    later(() => coinBurst(cx, cy, 60, null, { power: 1.3, spread: 1.6 }), 5700);
+    later(() => { coinBlip(0); coinBlip(0.12); }, 2200);
+
     let running = true;
     (function frame() {
       if (!running) return;
-      ctx.fillStyle = 'rgba(4,4,8,0.22)'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+      ctx.fillStyle = 'rgba(4,4,8,0.2)'; ctx.fillRect(0, 0, W, H);
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const rk = rockets[i]; rk.y += rk.vy;
+        ctx.globalAlpha = 1; ctx.fillStyle = '#fff6c2'; ctx.beginPath(); ctx.arc(rk.x, rk.y, 2, 0, Math.PI * 2); ctx.fill();
+        if (rk.y <= rk.ty) { explode(rk); rockets.splice(i, 1); }
+      }
       for (let i = parts.length - 1; i >= 0; i--) {
-        const p = parts[i]; p.vy += 0.05; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy; p.life -= 0.012;
+        const p = parts[i]; p.vy += 0.045; p.vx *= 0.985; p.vy *= 0.985; p.x += p.vx; p.y += p.vy; p.life -= 0.011;
         if (p.life <= 0) { parts.splice(i, 1); continue; }
-        ctx.globalAlpha = p.life; ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = p.twinkle ? p.life * (0.4 + Math.random() * 0.6) : p.life; ctx.fillStyle = p.col;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 1;
       requestAnimationFrame(frame);
     })();
-    const close = () => { running = false; clearInterval(burstTimer); clearInterval(figTimer); wrap.remove(); mountLauncher(); window.dispatchEvent(new Event('pra-quickstart-done')); };
-    // After the 3s show, straight back to the chat.
-    setTimeout(() => { wrap.style.transition = 'opacity .4s'; wrap.style.opacity = '0'; setTimeout(() => { close(); if (!PAGES.chat.test(path)) location.href = PAGES.chat.url; }, 400); }, 3400);
+    const close = () => { running = false; timers.forEach(id => { clearTimeout(id); clearInterval(id); }); wrap.remove(); if (preview) return; mountLauncher(); window.dispatchEvent(new Event('pra-quickstart-done')); };
+    // After the show, straight back to the chat.
+    later(() => { wrap.style.transition = 'opacity .5s'; wrap.style.opacity = '0'; setTimeout(() => { close(); if (!preview && !PAGES.chat.test(path)) location.href = PAGES.chat.url; }, 500); }, SHOW_MS);
   }
 
   function markComplete() {
@@ -580,7 +754,12 @@
   }
   window.addEventListener('resize', () => { if (document.querySelector('.ptu-launch')) mountLauncher(); });
 
-  window.PRATutorial = { start, reset: () => { try { localStorage.removeItem(KEY); } catch {} } };
+  // Preview the celebrations without touching anyone's progress:
+  // PRATutorial.previewReward(0..9) / PRATutorial.previewFinale().
+  const previewAnchor = () => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:50%;top:62%;width:1px;height:1px'; document.body.appendChild(d); setTimeout(() => d.remove(), 3000); return d; };
+  window.PRATutorial = { start, reset: () => { try { localStorage.removeItem(KEY); } catch {} },
+    previewReward: (i = 0) => stepReward(Math.max(0, Math.min(STEPS.length - 1, i)), previewAnchor()),
+    previewFinale: () => finale(true) };
   const boot = () => {
     if (new URLSearchParams(location.search).get('tutorial') === '1') { start(); return; }
     if (state && state.done && !QS.completed) markComplete();

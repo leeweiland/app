@@ -78,6 +78,7 @@
   .bulk-select-bar { display: none; flex-direction: column; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--pra-border); background: rgba(0,155,255,0.06); }
   .bulk-select-bar.show { display: flex; }
   .bulk-select-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bulk-pick-btn { flex: 1 1 auto; width: auto; max-width: 100%; }
   .bulk-select-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .bulk-select-count { font-size: .8rem; color: var(--pra-dim); white-space: nowrap; }
   .bulk-select-actions { display: flex; gap: 8px; }
@@ -1031,9 +1032,7 @@
       </div>
       <div class="bulk-select-bar" id="bulkSelectBar">
         <div class="bulk-select-presets">
-          <button class="convo-fav-toggle" id="bulkPresetStudentGroups">All Student Groups</button>
-          <button class="convo-fav-toggle" id="bulkPresetStaff">All Coaches &amp; Admin</button>
-          <button class="convo-fav-toggle" id="bulkPresetAll">All Groups &amp; Staff</button>
+          <button type="button" class="chat-type-btn bulk-pick-btn" id="bulkPickBtn" title="Select everyone in a category"><span id="bulkPickLabel">Select a category…</span><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <div class="bulk-select-bottom-row">
           <span class="bulk-select-count" id="bulkSelectCount">0 selected</span>
@@ -2691,20 +2690,53 @@ function selectBulkItems(items) {
   updateBulkSelectBar();
   renderConvoList();
 }
-document.getElementById('bulkPresetStudentGroups').onclick = () => {
-  selectBulkItems(lastConvoItems.filter(i => i.isGroup && i.hasClient));
-};
-document.getElementById('bulkPresetStaff').onclick = () => {
-  selectBulkItems(lastConvoItems.filter(i => !i.isGroup && i.avatarUser && ['coach', 'admin', 'admin2'].includes(i.avatarUser.role)));
-};
-document.getElementById('bulkPresetAll').onclick = () => {
-  selectBulkItems(lastConvoItems.filter(i =>
-    (i.isGroup && i.hasClient) || (!i.isGroup && i.avatarUser && ['coach', 'admin', 'admin2'].includes(i.avatarUser.role))
-  ));
+// Category dropdown (replaced the three preset pills, Lee 2026-11-21): tick
+// one or more categories and every chat in them is selected; untick to take
+// them back out. Same "only what's on screen" rule as clicking rows by hand.
+const isStaffRole = (r) => r === 'coach' || r === 'admin' || r === 'admin2';
+const BULK_CATEGORIES = [
+  { key: 'student-groups', label: 'All student groups', test: i => i.isGroup && i.hasClient },
+  { key: 'online-groups', label: 'Online student groups', test: i => i.isGroup && i.avatarUser?.role === 'online' },
+  { key: 'gym-groups', label: 'Gym student groups', test: i => i.isGroup && i.avatarUser?.role === 'gym' },
+  { key: 'trainee-groups', label: 'Trainee groups', test: i => i.isGroup && i.avatarUser?.role === 'trainee' },
+  { sep: true },
+  { key: 'online', label: 'Online students', test: i => !i.isGroup && i.avatarUser?.role === 'online' },
+  { key: 'gym', label: 'Gym students', test: i => !i.isGroup && i.avatarUser?.role === 'gym' },
+  { key: 'trainee', label: 'Trainees', test: i => !i.isGroup && i.avatarUser?.role === 'trainee' },
+  { key: 'user', label: 'Users', test: i => !i.isGroup && i.avatarUser?.role === 'user' },
+  { sep: true },
+  { key: 'coach', label: 'Coaches', test: i => !i.isGroup && i.avatarUser?.role === 'coach' },
+  { key: 'admin', label: 'Admins', test: i => !i.isGroup && ['admin', 'admin2'].includes(i.avatarUser?.role) },
+  { key: 'staff', label: 'All coaches & admins', test: i => !i.isGroup && isStaffRole(i.avatarUser?.role) },
+  { sep: true },
+  { key: 'all', label: 'All student groups & staff', test: i => (i.isGroup && i.hasClient) || (!i.isGroup && isStaffRole(i.avatarUser?.role)) },
+];
+function bulkCategoryItems() {
+  return BULK_CATEGORIES.map(c => {
+    if (c.sep) return { separator: true };
+    const rows = lastConvoItems.filter(c.test);
+    return { value: c.key, label: `${c.label} (${rows.length})`, disabled: !rows.length, selected: rows.length > 0 && rows.every(r => bulkSelected.has(r.key)) };
+  });
+}
+document.getElementById('bulkPickBtn').onclick = () => {
+  const btn = document.getElementById('bulkPickBtn');
+  window.PRAMenu?.open(btn, {
+    multi: true,
+    items: bulkCategoryItems(),
+    onPick: (it) => {
+      const rows = lastConvoItems.filter(BULK_CATEGORIES.find(c => c.key === it.value).test);
+      if (it.selected) { rows.forEach(r => bulkSelected.delete(r.key)); updateBulkSelectBar(); renderConvoList(); }
+      else selectBulkItems(rows);
+      return bulkCategoryItems();
+    },
+  });
 };
 
 function updateBulkSelectBar() {
   document.getElementById('bulkSelectCount').textContent = bulkSelected.size + ' selected';
+  const picked = BULK_CATEGORIES.filter(c => !c.sep && c.key !== 'all' && c.key !== 'staff' && c.key !== 'student-groups').filter(c => { const rows = lastConvoItems.filter(c.test); return rows.length && rows.every(r => bulkSelected.has(r.key)); });
+  const lbl = document.getElementById('bulkPickLabel');
+  if (lbl) { lbl.textContent = picked.length ? picked.map(c => c.label).join(', ') : 'Select a category…'; document.getElementById('bulkPickBtn').classList.toggle('on', picked.length > 0); }
   document.getElementById('bulkSelectMessageBtn').disabled = bulkSelected.size === 0;
 }
 

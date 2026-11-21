@@ -7,6 +7,15 @@
 // itself gets hidden.
 
 
+// Dark dropdown menus everywhere (pra-select.js): every <select> opens the
+// app's own menu instead of the browser's gray list.
+(() => {
+  if (window.PRAMenu || document.querySelector('script[src*="pra-select.js"]')) return;
+  const s = document.createElement('script');
+  s.src = '/chat-app/pra-select.js';
+  (document.head || document.documentElement).appendChild(s);
+})();
+
 // ── Back button (Android hardware/gesture back) ──────────────────────────
 // The native app's back button walks the WebView's history and exits the app
 // when there's none -- so popups/threads that only toggled a class never gave
