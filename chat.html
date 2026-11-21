@@ -2011,12 +2011,21 @@ function setupSearchClearButtons() {
 
 // Drag the handle between the chat list and the thread to resize the
 // sidebar; width persists across visits.
+// The saved width goes on right away (this runs as the page parses), not
+// after the chats load -- otherwise the list first drew at the default
+// 320px, wrapping # CHANNELS onto a second line, then jumped wider.
+const SIDEBAR_MIN_W = 220, SIDEBAR_MAX_W = 520;
+(() => {
+  try {
+    const saved = Number(localStorage.getItem('pra-chat-sidebar-width'));
+    const sb = document.querySelector('.sidebar');
+    if (saved && sb) sb.style.width = Math.min(SIDEBAR_MAX_W, Math.max(SIDEBAR_MIN_W, saved)) + 'px';
+  } catch {}
+})();
 function setupSidebarResize() {
   const sidebar = document.querySelector('.sidebar');
   const resizer = document.getElementById('sidebarResizer');
-  const MIN = 220, MAX = 520;
-  const saved = Number(localStorage.getItem('pra-chat-sidebar-width'));
-  if (saved) sidebar.style.width = Math.min(MAX, Math.max(MIN, saved)) + 'px';
+  const MIN = SIDEBAR_MIN_W, MAX = SIDEBAR_MAX_W;
 
   let dragging = false, startX = 0, startWidth = 0;
   resizer.addEventListener('mousedown', (e) => {
