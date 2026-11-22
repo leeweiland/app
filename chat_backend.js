@@ -5594,10 +5594,14 @@ export async function handleChatRequest(req, res, url) {
       // (lopsided: 7 J/P vs 2 T/F) to balanced { text, dim, agree } items
       // scored like 16Personalities. A Volume copy still on the old format
       // gets the bundled question set; its settings/archetypes are kept.
-      if (!Array.isArray(cfg.questions) || cfg.questions.some(q => q && q.values)) {
-        const bundled = readAppJson(PERSONALITY_CONFIG_FILE, {});
+      // A higher bundled questionsVersion replaces the Volume's questions the
+      // same way (v3 = 56 training-flavored items, 2026-11-21).
+      const bundled = readAppJson(PERSONALITY_CONFIG_FILE, {});
+      const outdated = (bundled.questionsVersion || 0) > (cfg.questionsVersion || 0);
+      if (!Array.isArray(cfg.questions) || cfg.questions.some(q => q && q.values) || outdated) {
         if (Array.isArray(bundled.questions) && bundled.questions.length && !bundled.questions.some(q => q && q.values)) {
           cfg.questions = bundled.questions;
+          cfg.questionsVersion = bundled.questionsVersion || 0;
           if (cfg.settings && cfg.archetypes) writeJson(PERSONALITY_CONFIG_FILE, cfg);
         }
       }

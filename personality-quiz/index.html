@@ -231,6 +231,8 @@ async function submitAndShowResults() {
     identity,
     code,
     traits,
+    // Raw answers, so a surprising result can be traced to the exact questions.
+    answers: questions.map((q, i) => ({ dim: q.dim, agree: q.agree, value: responses[i], text: q.text })),
     standard: result?.standard || "",
     archetype: result?.title || "",
     summary: result?.summary || "",
