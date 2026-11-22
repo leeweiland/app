@@ -84,6 +84,8 @@ tr:last-child td{border-bottom:none}
 <body>
 
 <script src="/nav.js"></script>
+<script src="/personality-quiz/quiz-core.js"></script>
+<script src="/personality-quiz/questions-editor.js"></script>
 
 <div class="topbar">
   <h1>PERSONALITY QUIZ ADMIN</h1>
@@ -167,28 +169,8 @@ function renderSettings() {
 // ── Questions ───────────────────────────────────────────────────────────
 function renderQuestions() {
   const el = document.getElementById('panel-questions');
-  el.innerHTML = `<div class="card"><div class="card-title">Quiz Questions (${CONFIG.questions.length})</div><div id="qList"></div></div><button class="add-q-btn" id="addQBtn">+ Add Question</button>`;
-  const list = document.getElementById('qList');
-  CONFIG.questions.forEach((q, i) => {
-    const row = document.createElement('div');
-    row.className = 'q-row';
-    row.innerHTML = `
-      <div class="q-num">${i + 1}.</div>
-      <div class="q-fields">
-        <input type="text" class="q-text" value="${q.text.replace(/"/g,'&quot;')}" placeholder="Question text">
-        <input type="text" class="q-values" value="${q.values.join(',')}" placeholder="Strongly Agree,Agree,Neutral,Disagree,Strongly Disagree codes (advanced — MBTI dimension:weight pairs)">
-      </div>
-      <button class="q-del">Remove</button>
-    `;
-    row.querySelector('.q-text').addEventListener('input', e => { CONFIG.questions[i].text = e.target.value; });
-    row.querySelector('.q-values').addEventListener('input', e => { CONFIG.questions[i].values = e.target.value.split(',').map(s => s.trim()).filter(Boolean); });
-    row.querySelector('.q-del').addEventListener('click', () => { CONFIG.questions.splice(i, 1); renderQuestions(); });
-    list.appendChild(row);
-  });
-  document.getElementById('addQBtn').addEventListener('click', () => {
-    CONFIG.questions.push({ text: 'New question text', values: ['E5I1','E4I2','E3I3','E2I4','E1I5'] });
-    renderQuestions();
-  });
+  el.innerHTML = `<div class="card"><div class="card-title">Quiz Questions</div><div class="card-body" id="qEditor"></div></div>`;
+  PRAQuizQuestionsEditor.render(document.getElementById('qEditor'), CONFIG, () => {});
 }
 
 // ── Archetypes ──────────────────────────────────────────────────────────
@@ -290,7 +272,7 @@ async function loadLeads() {
       <td>${(l.firstName||'')} ${(l.lastName||'')}</td>
       <td>${l.email||''}</td>
       <td>${l.phone||''}</td>
-      <td>${l.mbti||''}</td>
+      <td>${l.code||l.mbti||""}</td>
       <td>${l.archetype||''}</td>
       <td>${l.gender||''}</td>
     </tr>

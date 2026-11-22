@@ -19,204 +19,194 @@
   },
   "questions": [
     {
-      "text": "I prefer training with others rather than alone.",
-      "values": [
-        "E5I1",
-        "E4I2",
-        "E3I3",
-        "E2I4",
-        "E1I5"
-      ]
+      "text": "You feel energized after a busy group class or a crowded training session.",
+      "dim": "EI",
+      "agree": "E"
     },
     {
-      "text": "I want to master handstands with perfect technique.",
-      "values": [
-        "J5P1",
-        "J4P2",
-        "J3P3",
-        "J2P4",
-        "J1P5"
-      ]
+      "text": "You prefer clear, practical instructions over big-picture explanations.",
+      "dim": "SN",
+      "agree": "S"
     },
     {
-      "text": "I feel recharged after solo training sessions.",
-      "values": [
-        "I5E1",
-        "I4E2",
-        "I3E3",
-        "I2E4",
-        "I1E5"
-      ]
+      "text": "When making a decision, logic matters more to you than how people will feel about it.",
+      "dim": "TF",
+      "agree": "T"
     },
     {
-      "text": "Freerunning and dynamic movement excite me.",
-      "values": [
-        "P5J1",
-        "P4J2",
-        "P3J3",
-        "P2J4",
-        "P1J5"
-      ]
+      "text": "You like to have your week planned out, including when you'll train.",
+      "dim": "JP",
+      "agree": "J"
     },
     {
-      "text": "I enjoy imagining new possibilities for my training.",
-      "values": [
-        "N5S1",
-        "N4S2",
-        "N3S3",
-        "N2S4",
-        "N1S5"
-      ]
+      "text": "You rarely second-guess a decision once you've made it.",
+      "dim": "AT",
+      "agree": "A"
     },
     {
-      "text": "Seeing advanced calisthenics inspires me to train harder.",
-      "values": [
-        "E5I1",
-        "E4I2",
-        "E3I3",
-        "E2I4",
-        "E1I5"
-      ]
+      "text": "After a long day around people, you need time alone to recharge.",
+      "dim": "EI",
+      "agree": "I"
     },
     {
-      "text": "I prefer objective feedback over subjective encouragement.",
-      "values": [
-        "T5F1",
-        "T4F2",
-        "T3F3",
-        "T2F4",
-        "T1F5"
-      ]
+      "text": "You often get lost in thought about ideas and possibilities instead of what's right in front of you.",
+      "dim": "SN",
+      "agree": "N"
     },
     {
-      "text": "I prefer training that feels artistic and flowing.",
-      "values": [
-        "N5S1",
-        "N4S2",
-        "N3S3",
-        "N2S4",
-        "N1S5"
-      ]
+      "text": "You're easily moved by other people's stories and struggles.",
+      "dim": "TF",
+      "agree": "F"
     },
     {
-      "text": "I feel most comfortable when my schedule is decided in advance.",
-      "values": [
-        "J5P1",
-        "J4P2",
-        "J3P3",
-        "J2P4",
-        "J1P5"
-      ]
+      "text": "You prefer to keep your options open rather than commit to a fixed plan.",
+      "dim": "JP",
+      "agree": "P"
     },
     {
-      "text": "I value the Powerbatics Elements like strength, control, and creativity.",
-      "values": [
-        "N5S1",
-        "S5N1",
-        "T5F1",
-        "F5T1",
-        "J5P1"
-      ]
+      "text": "You often worry that you're falling behind other people.",
+      "dim": "AT",
+      "agree": "T"
     },
     {
-      "text": "I enjoy spontaneous workouts without a fixed plan.",
-      "values": [
-        "P5J1",
-        "P4J2",
-        "P3J3",
-        "P2J4",
-        "P1J5"
-      ]
+      "text": "You'd rather start a conversation with someone new at the gym than keep to yourself.",
+      "dim": "EI",
+      "agree": "E"
     },
     {
-      "text": "Achieving high-level powermoves is important to me.",
-      "values": [
-        "T5F1",
-        "T4F2",
-        "T3F3",
-        "T2F4",
-        "T1F5"
-      ]
+      "text": "You trust what you've experienced firsthand more than theories.",
+      "dim": "SN",
+      "agree": "S"
     },
     {
-      "text": "I often reflect deeply about the purpose of my training.",
-      "values": [
-        "I5E1",
-        "I4E2",
-        "I3E3",
-        "I2E4",
-        "I1E5"
-      ]
+      "text": "You'd rather get blunt, honest feedback than gentle encouragement.",
+      "dim": "TF",
+      "agree": "T"
     },
     {
-      "text": "I plan each step carefully when learning new skills.",
-      "values": [
-        "J5P1",
-        "J4P2",
-        "J3P3",
-        "J2P4",
-        "J1P5"
-      ]
+      "text": "You usually finish tasks well before the deadline.",
+      "dim": "JP",
+      "agree": "J"
     },
     {
-      "text": "I am energized by interacting with other athletes.",
-      "values": [
-        "E5I1",
-        "E4I2",
-        "E3I3",
-        "E2I4",
-        "E1I5"
-      ]
+      "text": "You stay calm under pressure, even when a skill isn't going your way.",
+      "dim": "AT",
+      "agree": "A"
     },
     {
-      "text": "Training outdoors feels exciting and motivating.",
-      "values": [
-        "P5J1",
-        "P4J2",
-        "P3J3",
-        "P2J4",
-        "P1J5"
-      ]
+      "text": "You usually prefer training alone or with one partner over a big group.",
+      "dim": "EI",
+      "agree": "I"
     },
     {
-      "text": "I trust tried-and-true techniques over experimenting.",
-      "values": [
-        "S5N1",
-        "S4N2",
-        "S3N3",
-        "S2N4",
-        "S1N5"
-      ]
+      "text": "You're more interested in the \"why\" behind a movement than the step-by-step how.",
+      "dim": "SN",
+      "agree": "N"
     },
     {
-      "text": "My ideal session has clear structure and goals.",
-      "values": [
-        "J5P1",
-        "J4P2",
-        "J3P3",
-        "J2P4",
-        "J1P5"
-      ]
+      "text": "You go out of your way to make sure everyone in a group feels included.",
+      "dim": "TF",
+      "agree": "F"
     },
     {
-      "text": "I love brainstorming new training methods.",
-      "values": [
-        "N5S1",
-        "N4S2",
-        "N3S3",
-        "N2S4",
-        "N1S5"
-      ]
+      "text": "You often decide what to train once you're already warmed up.",
+      "dim": "JP",
+      "agree": "P"
     },
     {
-      "text": "Combining disciplines like calisthenics and freerunning interests me.",
-      "values": [
-        "N5S1",
-        "N4S2",
-        "N3S3",
-        "N2S4",
-        "N1S5"
-      ]
+      "text": "Your mood can swing a lot depending on how a session went.",
+      "dim": "AT",
+      "agree": "T"
+    },
+    {
+      "text": "You tend to think out loud and talk problems through with others.",
+      "dim": "EI",
+      "agree": "E"
+    },
+    {
+      "text": "You notice small physical details like form, angles and posture that others miss.",
+      "dim": "SN",
+      "agree": "S"
+    },
+    {
+      "text": "In a disagreement, being right matters more to you than keeping the peace.",
+      "dim": "TF",
+      "agree": "T"
+    },
+    {
+      "text": "You keep your space, gear and schedule organized.",
+      "dim": "JP",
+      "agree": "J"
+    },
+    {
+      "text": "You feel confident in your abilities most of the time.",
+      "dim": "AT",
+      "agree": "A"
+    },
+    {
+      "text": "You like to think things through quietly before you say anything.",
+      "dim": "EI",
+      "agree": "I"
+    },
+    {
+      "text": "You enjoy conversations about abstract ideas, theories or what the future could look like.",
+      "dim": "SN",
+      "agree": "N"
+    },
+    {
+      "text": "You often make decisions based on what feels right rather than what the numbers say.",
+      "dim": "TF",
+      "agree": "F"
+    },
+    {
+      "text": "You work best in bursts of energy, often close to a deadline.",
+      "dim": "JP",
+      "agree": "P"
+    },
+    {
+      "text": "Small setbacks can stick with you for days.",
+      "dim": "AT",
+      "agree": "T"
+    },
+    {
+      "text": "At social events you're usually the one introducing yourself to people.",
+      "dim": "EI",
+      "agree": "E"
+    },
+    {
+      "text": "You prefer proven methods over experimenting with something untested.",
+      "dim": "SN",
+      "agree": "S"
+    },
+    {
+      "text": "You judge a training program by its results, not by how much fun it is.",
+      "dim": "TF",
+      "agree": "T"
+    },
+    {
+      "text": "You feel uneasy when plans change at the last minute.",
+      "dim": "JP",
+      "agree": "J"
+    },
+    {
+      "text": "You find being the center of attention draining.",
+      "dim": "EI",
+      "agree": "I"
+    },
+    {
+      "text": "You'd rather invent your own variation of a skill than repeat the standard version.",
+      "dim": "SN",
+      "agree": "N"
+    },
+    {
+      "text": "You can usually sense how someone is feeling without them saying it.",
+      "dim": "TF",
+      "agree": "F"
+    },
+    {
+      "text": "You'd rather improvise than follow a strict routine.",
+      "dim": "JP",
+      "agree": "P"
     }
   ],
   "archetypes": {

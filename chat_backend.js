@@ -5541,6 +5541,15 @@ export async function handleChatRequest(req, res, url) {
     if (!user || !isStaff(user)) return sendJson(res, 403, { error: "Not allowed" });
     return sendJson(res, 200, readJson(PERSONALITY_LEADS_FILE, []));
   }
+  // The signed-in user's own latest result (type code + trait %s) for the
+  // results page's "Your Traits" bars.
+  if (p === "/api/personality-quiz/my-result" && req.method === "GET") {
+    const user = getSessionUser(req);
+    if (!user) return sendJson(res, 401, { error: "Not logged in" });
+    const email = (user.email || "").toLowerCase();
+    const lead = email ? readJson(PERSONALITY_LEADS_FILE, []).find(l => (l.email || "").toLowerCase() === email) : null;
+    return sendJson(res, 200, { result: lead ? { mbti: lead.mbti || "", code: lead.code || lead.mbti || "", traits: lead.traits || null, archetype: lead.archetype || "" } : null });
+  }
   if (p === "/api/personality-quiz/lead" && req.method === "POST") {
     const user = getSessionUser(req);
     if (!user) return sendJson(res, 401, { error: "Not logged in" });
@@ -5557,7 +5566,7 @@ export async function handleChatRequest(req, res, url) {
         try {
           const accessToken = await getGoogleAccessToken();
           const personality = [
-            contact.mbti ? `MBTI: ${contact.mbti} ${contact.standard || ""}`.trim() : "",
+            contact.mbti ? `MBTI: ${contact.code || contact.mbti} ${contact.standard || ""}`.trim() : "",
             contact.archetype ? `PRA: ${contact.archetype} ${contact.summary || ""}`.trim() : "",
           ].filter(Boolean).join(" ");
           const row = [contact.email || "", contact.firstName || "", contact.lastName || "", contact.phone || "", new Date().toLocaleString("en-US"), personality];
@@ -5580,13 +5589,29 @@ export async function handleChatRequest(req, res, url) {
   const PERSONALITY_CONFIG_FILE = "personality-quiz/config.json";
   if (p === "/api/personality-quiz/config") {
     if (req.method === "GET") {
-      return sendJson(res, 200, readJson(PERSONALITY_CONFIG_FILE, {}));
+      const cfg = readJson(PERSONALITY_CONFIG_FILE, {});
+      // 2026-11-21: questions moved from the old "E5I1"-style answer codes
+      // (lopsided: 7 J/P vs 2 T/F) to balanced { text, dim, agree } items
+      // scored like 16Personalities. A Volume copy still on the old format
+      // gets the bundled question set; its settings/archetypes are kept.
+      if (!Array.isArray(cfg.questions) || cfg.questions.some(q => q && q.values)) {
+        const bundled = readAppJson(PERSONALITY_CONFIG_FILE, {});
+        if (Array.isArray(bundled.questions) && bundled.questions.length && !bundled.questions.some(q => q && q.values)) {
+          cfg.questions = bundled.questions;
+          if (cfg.settings && cfg.archetypes) writeJson(PERSONALITY_CONFIG_FILE, cfg);
+        }
+      }
+      return sendJson(res, 200, cfg);
     }
     if (req.method === "POST") {
       const user = getSessionUser(req);
       if (!user || !isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const cfg = await readJsonBody(req);
-      if (!cfg.settings || !cfg.questions || !cfg.archetypes) return sendJson(res, 400, { error: "invalid config shape" });
+      if (!cfg.settings || !Array.isArray(cfg.questions) || !cfg.archetypes) return sendJson(res, 400, { error: "invalid config shape" });
+      const DIMS = { EI: "EI", SN: "SN", TF: "TF", JP: "JP", AT: "AT" };
+      if (cfg.questions.some(q => !q || typeof q.text !== "string" || !DIMS[q.dim] || !DIMS[q.dim].includes(q.agree))) {
+        return sendJson(res, 400, { error: "each question needs text, a trait (EI/SN/TF/JP/AT) and which letter agreeing points to" });
+      }
       writeJson(PERSONALITY_CONFIG_FILE, cfg);
       return sendJson(res, 200, { ok: true });
     }

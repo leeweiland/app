@@ -270,6 +270,8 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <script src="/chat-app/link-tool.js"></script>
+  <script src="/personality-quiz/quiz-core.js"></script>
+  <script src="/personality-quiz/questions-editor.js"></script>
   <div class="wrap">
     <!-- No "Admin Panel" heading here on purpose -- the tab bar below is
          position:fixed (see its own comment), so static in-flow content
@@ -718,6 +720,10 @@
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
       <div class="pra-muted" style="font-size:.78rem;margin-bottom:6px">The 16 MBTI-based archetypes shown throughout the app (profiles, map, chat) and on the quiz results pages. Every field saves itself — no Save button.</div>
       <div class="save-msg" id="archSaveMsg"></div>
+      <details class="um-card" id="quizQuestionsCard" style="margin-top:12px">
+        <summary><h3>Quiz Questions</h3><span class="um-count" id="quizQCount"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div id="quizQuestionsEditor">Loading…</div>
+      </details>
       <div id="archGrid" class="arch-grid">Loading…</div>
     </div>
   </div>
@@ -792,18 +798,22 @@ let archSaveTimer;
 function scheduleArchetypeSave() { clearTimeout(archSaveTimer); archSaveTimer = setTimeout(saveArchetypes, 500); }
 async function saveArchetypes() {
   if (!ARCH_CONFIG) return;
-  await fetch('/api/personality-quiz/config', {
+  const r = await fetch('/api/personality-quiz/config', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ARCH_CONFIG),
   });
   const msg = document.getElementById('archSaveMsg');
-  msg.textContent = 'Saved.';
-  setTimeout(() => msg.textContent = '', 2000);
+  const j = await r.json().catch(() => ({}));
+  msg.textContent = r.ok ? 'Saved.' : ('Not saved: ' + (j.error || r.status));
+  setTimeout(() => msg.textContent = '', r.ok ? 2000 : 6000);
 }
 
 async function loadArchetypes() {
   const r = await fetch('/api/personality-quiz/config');
   if (!r.ok) { document.getElementById('archGrid').textContent = 'Could not load.'; return; }
   ARCH_CONFIG = await r.json();
+  const qCount = () => { document.getElementById('quizQCount').textContent = `${(ARCH_CONFIG.questions || []).length} questions`; };
+  PRAQuizQuestionsEditor.render(document.getElementById('quizQuestionsEditor'), ARCH_CONFIG, () => { qCount(); scheduleArchetypeSave(); });
+  qCount();
   renderArchetypeCards();
 }
 

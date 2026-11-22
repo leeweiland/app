@@ -25,6 +25,16 @@
   .result-section { text-align: left; margin: 1.8em 0; padding-top: 1.2em; border-top: 1px solid rgba(255,255,255,0.12); }
   .result-section h2 { color: var(--accent, #4da3ff); font-size: 1.15em; margin: 0 0 0.5em; }
   .result-section p { font-size: 1em; line-height: 1.5; margin: 0; }
+  .type-code { color: #aaa; font-size: .95em; letter-spacing: .06em; margin: 0 0 .8em; }
+  .traits { text-align: left; margin: 1.6em 0 .4em; padding-top: 1.2em; border-top: 1px solid rgba(255,255,255,0.12); }
+  .traits h2 { color: var(--accent, #4da3ff); font-size: 1.15em; margin: 0 0 .9em; }
+  .trait { margin: 0 0 1em; }
+  .trait-top { display: flex; justify-content: space-between; font-size: .8em; color: #aaa; margin-bottom: .35em; }
+  .trait-top b { color: #fff; font-weight: normal; }
+  .trait-bar { position: relative; height: 10px; border-radius: 5px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .trait-fill { position: absolute; top: 0; bottom: 0; background: var(--accent, #4da3ff); box-shadow: 0 0 8px var(--accent, #4da3ff); }
+  .trait-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(255,255,255,0.35); }
+  .trait-pct { text-align: center; font-size: .85em; margin-top: .35em; }
   .not-found { padding: 3em 1em; text-align: center; }
   .not-found a { color: var(--accent, #4da3ff); }
   .explore-section { margin: 1.8em 0 0.5em; padding-top: 1.2em; border-top: 1px solid rgba(255,255,255,0.12); }
@@ -45,6 +55,7 @@
 <body>
 <link rel="stylesheet" href="/chat-app/pra-design-system.css"/>
 <script src="/chat-app/chat-header.js"></script>
+<script src="/personality-quiz/quiz-core.js"></script>
 
 <div id="app"></div>
 
@@ -80,11 +91,43 @@ async function main() {
 
   const app = document.getElementById('app');
 
+  // Trait percentages: straight from the quiz redirect (?code=&p=), else the
+  // viewer's own latest saved result -- shown only on their own type's page.
+  let myCode = params.get('code') || '';
+  let myTraits = null;
+  const pParam = (params.get('p') || '').split(',').map(Number);
+  if (pParam.length === PRAQuiz.DIMENSIONS.length && pParam.every(Number.isFinite)) {
+    myTraits = {}; PRAQuiz.DIMENSIONS.forEach((d, i) => { myTraits[d.key] = pParam[i]; });
+  } else {
+    try {
+      const r = await fetch('/api/personality-quiz/my-result');
+      if (r.ok) { const j = await r.json(); if (j.result?.traits) { myTraits = j.result.traits; myCode = j.result.code || ''; } }
+    } catch {}
+  }
+
   if (!result) {
     app.innerHTML = `<div class="container not-found"><h1>Result Not Found</h1><p>Sorry, we couldn't find a result for this type.</p>
       <p><a href="/personality-quiz/index.html?retake=1">Take The Quiz</a></p></div>`;
     return;
   }
+
+  const isMine = myTraits && myCode.slice(0, 4).toUpperCase() === mbti;
+  const codeLine = (isMine ? myCode.toUpperCase() : mbti) + (result.standard ? ' · ' + result.standard : '');
+  const traitsHtml = isMine ? `
+    <div class="traits">
+      <h2>Your Traits</h2>
+      ${PRAQuiz.DIMENSIONS.map(d => {
+        const pa = Math.max(0, Math.min(100, Math.round(myTraits[d.key])));
+        const leanA = pa >= 50;
+        const pct = leanA ? pa : 100 - pa;
+        const fill = leanA ? `right:50%;width:${pa - 50}%` : `left:50%;width:${50 - pa}%`;
+        return `<div class="trait">
+          <div class="trait-top"><span>${leanA ? '<b>' + d.aName + '</b>' : d.aName}</span><span>${d.name}</span><span>${leanA ? d.bName : '<b>' + d.bName + '</b>'}</span></div>
+          <div class="trait-bar"><div class="trait-fill" style="${fill}"></div><div class="trait-mid"></div></div>
+          <div class="trait-pct">${pct}% ${leanA ? d.aName : d.bName}</div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
 
   const imageUrl = genderParam === 'female' ? result.images.female : result.images.male;
 
@@ -137,9 +180,11 @@ async function main() {
   app.innerHTML = `
     <div class="container">
       <h1>${result.title}</h1>
+      <div class="type-code">${codeLine}</div>
       <p>${result.summary}</p>
       <img class="result-image" src="${imageUrl}" alt="${result.title}">
       <a class="take-quiz-btn" href="/personality-quiz/index.html?retake=1">Take Quiz</a>
+      ${traitsHtml}
       ${sectionsHtml}
       <div class="explore-section">
         <h2>Explore All Training Personality Types</h2>
