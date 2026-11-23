@@ -2033,7 +2033,7 @@ window.addEventListener('pageshow', () => {
           ['sent once per end date.', 'not sent.']))}
 
       ${card(12, '11. On Hold',
-        row('How a hold works', 'Put a student on hold from the CRM (status ON HOLD) or here (long-press their chat &rarr; Put on hold). A resume date is required, or a reconnect date when there isn't a clear one. Their end date moves out by the length of the hold, a task lands on that date, and the CRM flows &quot;9 ON HOLD&quot; / &quot;10 OFF HOLD&quot; update the buyers sheet and CALLS TRACKING. To end a hold, pick Enrolled in the CRM &rarr; Resume.', '') +
+        row('How a hold works', 'Put a student on hold from the CRM (status ON HOLD) or here (long-press their chat &rarr; Put on hold). A resume date is required, or a reconnect date when there is no clear one. Their end date moves out by the length of the hold, a task lands on that date, and the CRM flows &quot;9 ON HOLD&quot; / &quot;10 OFF HOLD&quot; update the buyers sheet and CALLS TRACKING. To end a hold, pick Enrolled in the CRM &rarr; Resume.', '') +
         row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), `<div>${umPill('#ffd60a', 'Resumes Dec 6')}${umPill('#ffd60a', 'Reconnect Dec 6')}</div>`,
           ['shown to coaches.', 'hidden.']))}
 
