@@ -2024,8 +2024,6 @@ window.addEventListener('pageshow', () => {
       ${card(10, '10. Renewals',
         row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1. Goes away on its own once a later End Date is on their ONLINE/GYM BUYERS row (a renewal or a hold moving it out). The "R" badge clears once a coach opens their chat; the color stays until the date moves.', toggle('renewalPillsStaff', s.renewalPillsStaff), `<div>${umPill('#ff9f1c', 'Renew by Jan 22 &middot; within 2 months')}${umPill('#ff4fa3', 'Renew by Dec 22 &middot; within 1 month')}</div>`,
           ['shown to coaches.', 'hidden.']) +
-        row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), `<div>${umPill('#ffd60a', 'Resumes Dec 6')}${umPill('#ffd60a', 'Reconnect Dec 6')}</div>`,
-          ['shown to coaches.', 'hidden.']) +
         row('Renewal notice for students', 'Their own notice at the top of the app. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
           `<div class="um-sub" style="display:block"><textarea class="pra-input" data-str="renewalStudentText" rows="2" style="width:100%;max-width:none">${esc(s.renewalStudentText)}</textarea><button class="pra-btn um-save" type="button" data-str-save="renewalStudentText">Save text</button>${savedMsg('umMsg-renewalStudentText')}</div>`,
           ['shown inside 2 months.', 'never shown.']) +
@@ -2034,7 +2032,12 @@ window.addEventListener('pageshow', () => {
            <div class="um-sub" style="display:block"><textarea class="pra-input" id="umRenewText" data-linktool rows="3" style="width:100%;max-width:none">${esc(s.renewalMessageText)}</textarea><button class="pra-btn um-save" type="button" id="umRenewSave">Save message</button>${savedMsg('umRenewMsg')}</div>`,
           ['sent once per end date.', 'not sent.']))}
 
-      ${card(11, '11. Problems Banner',
+      ${card(12, '11. On Hold',
+        row('How a hold works', 'Put a student on hold from the CRM (status ON HOLD) or here (long-press their chat &rarr; Put on hold). A resume date is required, or a reconnect date when there isn't a clear one. Their end date moves out by the length of the hold, a task lands on that date, and the CRM flows &quot;9 ON HOLD&quot; / &quot;10 OFF HOLD&quot; update the buyers sheet and CALLS TRACKING. To end a hold, pick Enrolled in the CRM &rarr; Resume.', '') +
+        row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), `<div>${umPill('#ffd60a', 'Resumes Dec 6')}${umPill('#ffd60a', 'Reconnect Dec 6')}</div>`,
+          ['shown to coaches.', 'hidden.']))}
+
+      ${card(11, '12. Problems Banner',
         row('Red banner for coaches &amp; admins', 'Missing program pages or videos, name mismatches, phones that can\'t be rung.', toggle('staffAlertsEnabled', s.staffAlertsEnabled), '<div id="umAlerts"></div>',
           ['shown.', 'hidden (still listed here).']))}
     `;
