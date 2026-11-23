@@ -393,6 +393,7 @@
      positioned via positionPickerNear next to whichever bubble it's for. */
   .msg-action-bar { display: none; position: fixed; z-index: 30; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 14px; padding: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
   .msg-action-bar.show { display: block; }
+  .msg-action-bar.over-modal, .msg-more-menu.over-modal { z-index: 650; }
   .mab-row { display: flex; align-items: center; gap: 6px; }
   .mab-emoji-row { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--pra-border); }
   .mab-emoji { background: none; border: none; cursor: pointer; font-size: 1.35rem; line-height: 1; padding: 4px; border-radius: 50%; transition: background .15s, transform .1s; }
@@ -4720,10 +4721,10 @@ function msgGridCellHtml(m, moreCount) {
   // multi-file sends loaded every tile in every one of them immediately on
   // open rather than only the ones actually scrolled into view, which is
   // what made a media-heavy thread feel very slow to open.
-  if (m.type === 'video' && !m.driveFileId) return `<div class="msg-grid-item">${videoProcessingHtml(m, true)}${overlay}</div>`;
+  if (m.type === 'video' && !m.driveFileId) return `<div class="msg-grid-item" data-mid="${m.id}">${videoProcessingHtml(m, true)}${overlay}</div>`;
   return m.type === 'video'
     ? `<div class="msg-grid-item" data-type="video" data-src="${src}" data-mid="${m.id}"><video data-src="${src}#t=0.5" muted playsinline preload="metadata"></video>${moreCount ? '' : `<div class="msg-grid-play">${svgGridPlay()}</div>`}${overlay}</div>`
-    : `<div class="msg-grid-item" data-type="image" data-src="${src}"><img data-src="${src}"/>${overlay}</div>`;
+    : `<div class="msg-grid-item" data-type="image" data-src="${src}" data-mid="${m.id}"><img data-src="${src}"/>${overlay}</div>`;
 }
 
 // One bubble for a whole multi-file send (see sendFilesImmediately /
@@ -4744,6 +4745,7 @@ function renderGridBubble(group, convo) {
   return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${first.feedGroupId}">
     <div>
       <div class="bubble-wrap"><div class="bubble media">${senderLabel}<div class="msg-grid" data-group-ids="${group.map(m => m.id).join(',')}">${cellsHtml}</div></div></div>
+      ${group.map(m => { const c = renderReactionChips(m); return c ? `<div data-chip-mid="${m.id}">${c}</div>` : ''; }).join('')}
       <div class="bubble-time" style="text-align:${mine ? 'right' : 'left'}">${time}${readReceiptTicksHtml(last, mine)}</div>
     </div>
   </div>`;
@@ -5038,8 +5040,7 @@ function linkifyUrls(escapedText) {
       // list; toggling the reaction on top of it would be an unintended
       // side effect of what was meant as a "show me who" press.
       if (suppressNextChipClick) { suppressNextChipClick = false; return; }
-      const row = chip.closest('.bubble-row');
-      sendReaction(row.dataset.mid, chip.dataset.emoji);
+      sendReaction(chipMessageId(chip), chip.dataset.emoji);
       return;
     }
     const deleteBtn = e.target.closest('.delete-btn, .appt-delete-btn');
@@ -5072,9 +5073,8 @@ function linkifyUrls(escapedText) {
   threadBodyEl.addEventListener('touchstart', (e) => {
     const chip = e.target.closest('.reaction-chip');
     if (chip) {
-      const row = chip.closest('.bubble-row');
       longPressTimer = setTimeout(() => {
-        const m = currentThreadMessages.find(x => x.id === row.dataset.mid);
+        const m = currentThreadMessages.find(x => x.id === chipMessageId(chip));
         if (m) showReactorList(chip, m);
         suppressNextChipClick = true;
         longPressTimer = null;
@@ -5083,7 +5083,8 @@ function linkifyUrls(escapedText) {
     }
     const row = e.target.closest('.bubble-row');
     if (!row) return;
-    longPressTimer = setTimeout(() => { openMsgActionBar(row, row.dataset.mid); longPressTimer = null; }, 450);
+    const t = rowActionTarget(e.target, row);
+    longPressTimer = setTimeout(() => { openMsgActionBar(row, t.mid, t.positionEl); longPressTimer = null; }, 450);
   }, { passive: true });
   const cancelLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
   threadBodyEl.addEventListener('touchmove', cancelLongPress, { passive: true });
@@ -5093,15 +5094,15 @@ function linkifyUrls(escapedText) {
     const chip = e.target.closest('.reaction-chip');
     if (chip) {
       e.preventDefault();
-      const row = chip.closest('.bubble-row');
-      const m = currentThreadMessages.find(x => x.id === row.dataset.mid);
+      const m = currentThreadMessages.find(x => x.id === chipMessageId(chip));
       if (m) showReactorList(chip, m);
       return;
     }
     const row = e.target.closest('.bubble-row');
     if (!row) return;
     e.preventDefault();
-    openMsgActionBar(row, row.dataset.mid);
+    const t = rowActionTarget(e.target, row);
+    openMsgActionBar(row, t.mid, t.positionEl);
   });
 
   // Desktop: ctrl+wheel to zoom (also how trackpad pinch is reported in Chrome/Firefox)
@@ -6677,12 +6678,33 @@ function clearActionSelection() {
   moreMenuMessageId = null;
   hideReactorList();
 }
-function openMsgActionBar(anchorEl, mid) {
+// A multi-file send renders as ONE bubble-row whose data-mid is the batch's
+// feedGroupId (not a message) -- so a right-click/long-press there acts on
+// the tile under the pointer (each tile carries its own data-mid), or the
+// batch's first item when it lands on the bubble around the tiles.
+function rowActionTarget(target, row) {
+  const cell = target.closest('.msg-grid-item[data-mid]');
+  if (cell) return { mid: cell.dataset.mid, positionEl: cell };
+  const grid = row.querySelector('.msg-grid');
+  if (grid && !currentThreadMessages.some(x => x.id === row.dataset.mid)) return { mid: grid.dataset.groupIds.split(',')[0], positionEl: grid };
+  return { mid: row.dataset.mid, positionEl: null };
+}
+function chipMessageId(chip) {
+  return chip.closest('[data-chip-mid]')?.dataset.chipMid || chip.closest('.bubble-row')?.dataset.mid;
+}
+// The thread row that shows a message -- its own bubble, or the cluster it sits in.
+function threadRowForMessage(mid) {
+  const body = document.getElementById('threadBody');
+  return body.querySelector(`.bubble-row[data-mid="${mid}"]`) || body.querySelector(`.msg-grid-item[data-mid="${mid}"]`)?.closest('.bubble-row') || null;
+}
+function openMsgActionBar(anchorEl, mid, positionEl, overModal) {
   const m = currentThreadMessages.find(x => x.id === mid);
   if (!m) return;
   clearActionSelection();
   actionBarMessageId = mid;
   setActionSelectedRow(anchorEl);
+  document.getElementById('msgActionBar').classList.toggle('over-modal', !!overModal);
+  document.getElementById('msgMoreMenu').classList.toggle('over-modal', !!overModal);
   const mine = m.senderId === me.id;
   const canAct = isStaffMe() && mine;
   const canReplyForward = m.type !== 'appointment' && m.type !== 'call';
@@ -6721,9 +6743,35 @@ function openMsgActionBar(anchorEl, mid) {
     menu.classList.remove('show');
     menu.style.visibility = '';
   }
-  positionMessagePopupNear(bar, anchorEl, moreMenuReserve);
+  positionMessagePopupNear(bar, positionEl || anchorEl, moreMenuReserve);
   bar.classList.add('show');
 }
+// Right-click on the video in "Reply with Timestamped Notes" opens the same
+// action bar, above the panel, at the pointer. Quick reactions keep the panel
+// open; any other action (reply, forward, star, delete, ...) closes it first
+// so whatever that action opens isn't stuck underneath.
+(() => {
+  const bar = document.getElementById('msgActionBar');
+  const menu = document.getElementById('msgMoreMenu');
+  // Body-level so they can stack above the modal backdrop.
+  document.body.appendChild(menu);
+  document.body.appendChild(bar);
+  document.getElementById('videoReplyPlayer').addEventListener('contextmenu', (e) => {
+    if (!videoReplyTargetId) return;
+    e.preventDefault();
+    const x = e.clientX, y = e.clientY;
+    const point = { getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) };
+    openMsgActionBar(threadRowForMessage(videoReplyTargetId), videoReplyTargetId, point, true);
+  });
+  const closePanelFirst = (e) => {
+    if (!bar.classList.contains('over-modal')) return;
+    const btn = e.target.closest('button');
+    if (!btn || btn.classList.contains('mab-emoji') || btn.id === 'mabMoreBtn') return;
+    closeModal('videoReplyModal');
+  };
+  bar.addEventListener('click', closePanelFirst, true);
+  menu.addEventListener('click', closePanelFirst, true);
+})();
 document.querySelectorAll('.mab-emoji').forEach(btn => {
   btn.onclick = () => {
     const mid = actionBarMessageId;
