@@ -42,8 +42,9 @@
     const vw = vv ? vv.width : window.innerWidth, vh = vv ? vv.height : window.innerHeight;
     const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight, m = 8, gap = 8;
     let top = opts.below ? r.bottom + gap : r.top - gap - h;
-    if (top < m) top = r.bottom + gap;
-    if (top + h > vh - m) top = Math.max(m, r.top - gap - h);
+    if (top < m && !opts.above) top = r.bottom + gap;
+    if (top + h > vh - m && !opts.below) top = Math.max(m, r.top - gap - h);
+    top = Math.max(m, Math.min(vh - h - m, top));
     const left = Math.max(m, Math.min(vw - w - m, r.left + r.width / 2 - w / 2));
     tip.style.left = left + 'px'; tip.style.top = top + 'px';
     requestAnimationFrame(() => tip && tip.classList.add('on'));
