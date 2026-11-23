@@ -633,13 +633,17 @@ window.PRABack = (function () {
     const allowed = (href) => { const f = featureFor(href); return !myAccess || !f || myAccess[f] !== false; };
     window.PRA_ACCESS = myAccess;
     window.PRA_ME = { id: myId, role: myRole };
+    // Long-press any icon on a phone to see its label (icon-tips.js).
+    if (!document.getElementById('pra-icon-tips-js')) {
+      const it = document.createElement('script'); it.id = 'pra-icon-tips-js'; it.src = '/chat-app/icon-tips.js?v=1'; document.body.appendChild(it);
+    }
     // Quick Start (tutorial.js): who gets it is set in Admin Panel > Quick Start.
     if (myId && !document.getElementById('pra-tutorial-js')) {
       window.PRA_QS_PROMISE = fetch('/api/chat/quickstart').then(r => r.ok ? r.json() : null).catch(() => null);
       window.PRA_QS_PROMISE.then(qs => {
         if (!qs || !qs.enabled) return;
         window.PRA_QS = qs;
-        const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=2'; document.body.appendChild(ts);
+        const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=3'; document.body.appendChild(ts);
       }).catch(() => {});
     }
     {

@@ -35,10 +35,16 @@
   // Each part = one area + its wording + options. The area says which page it
   // lives on and what it points at; 'nav' areas are the top/bottom bar icons
   // (any page), whose Next goes to that page.
-  const nav = (label, sel, page) => ({ label, page: '*', targets: [sel], go: page, clickGo: true });
+  // On a phone an open chat hides the top/bottom bars, so nav parts close it first.
+  const nav = (label, sel, page) => ({ label, page: '*', targets: [sel], go: page, clickGo: true, closeChat: true });
   const AREAS = {
     chat_group: { label: 'Chat: their private group', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'] },
     gym_calendar: { label: 'Chat: gym booking calendar', page: 'chat', openGroup: 'gym', targets: ['#scheduleBtn'] },
+    // Demo of the icon labels: shows the label on their gym booking calendar
+    // (gym students) or their My Training Protocol icon (everyone else).
+    icon_tip: me.role === 'gym'
+      ? { label: 'Icon labels demo (gym calendar / protocol icon)', page: 'chat', openGroup: 'gym', tipDemo: true, noArrow: true, targets: ['#scheduleBtn'] }
+      : { label: 'Icon labels demo (gym calendar / protocol icon)', page: 'chat', closeChat: true, tipDemo: true, noArrow: true, targets: [top('My Training Protocol'), '#chat-app-header a.cah-icon[title]'] },
     back_to_chats: { label: 'Chat: back to chats button (phones)', page: 'chat', skipIfMissing: true, targets: ['#backBtn'] },
     chat_photo: { label: 'Chat: their group photo', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'] },
     profile_panel: { label: 'Chat: profile panel (after the photo)', page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom' },
@@ -89,8 +95,8 @@
   const DEFAULT_STEPS = [
     [{ area: 'chat_group', header: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' }],
     [
+      { area: 'icon_tip', header: 'The most important thing to know', title: 'Long press any icon', text: 'Long press any icon in the app (or hover over it on a computer) and it shows you what it means.' },
       { area: 'gym_calendar', gymOnly: true, title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
-      { area: 'back_to_chats', phoneOnly: true, mustTap: true, title: 'Back to your chats', text: 'Tap back to return to your chats.' },
       { area: 'nav_protocol', title: 'Your Training Protocol', text: 'Your training plan lives here. Tap it or hit Next.' },
       { area: 'protocol_training', title: 'Your Training', text: 'Your custom training protocol, day by day.', traineeText: 'Your Handstand Protocol, day by day.' },
       { area: 'protocol_katas', title: 'Katas', text: 'Flow routines to learn, film and level up.' },
@@ -447,10 +453,11 @@
   }
 
   // ── Panel / pointer UI ────────────────────────────────────────────────
-  let panel = null, ring = null, arrow = null, halo = null, posTimer = null, currentTarget = null, currentSub = null, busy = false;
+  let panel = null, ring = null, arrow = null, halo = null, posTimer = null, tipTimer = null, currentTarget = null, currentSub = null, busy = false;
   const ARROW_SVG = '<svg viewBox="0 0 26 48"><path d="M13 1 L24 15 L2 15 Z" fill="rgb(212,255,0)"/><rect x="11" y="14" width="4" height="33" rx="2" fill="rgb(212,255,0)"/></svg>';
   function teardown() {
     clearInterval(posTimer); posTimer = null;
+    clearInterval(tipTimer); tipTimer = null; if (window.PRAIconTip) window.PRAIconTip.hide();
     [panel, ring, arrow, halo].forEach(el => el && el.remove());
     panel = ring = arrow = halo = null; currentTarget = null; currentSub = null;
   }
@@ -541,6 +548,13 @@
     panel.querySelector('.ptu-back').onclick = () => { ac(); back(); };
     panel.querySelector('.ptu-next').onclick = () => { ac(); opts.away ? goTo(sub.go || sub.page) : next(); };
     currentTarget = opts.away ? null : findTarget(sub);
+    if (sub.noArrow) arrow.style.visibility = 'hidden';
+    if (sub.tipDemo && !opts.away) {
+      // Show the icon's label the way a long press / hover does, over and over.
+      const demo = () => { if (currentSub === sub && currentTarget && visible(currentTarget) && window.PRAIconTip) window.PRAIconTip.show(currentTarget, { ms: 2400 }); };
+      setTimeout(demo, 500);
+      tipTimer = setInterval(demo, 3200);
+    }
     if (currentTarget) {
       try { currentTarget.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch {}
       if (sub.activate) { try { currentTarget.click(); } catch {} }
@@ -552,7 +566,7 @@
     posTimer = setInterval(() => {
       // Chat-list parts: if the app opens a chat on its own (e.g. restoring the
       // last one on a phone), go back to the list so the arrow has its target.
-      if (sub.sidebar && !opts.away && isPhone()) {
+      if ((sub.sidebar || sub.closeChat) && !opts.away && isPhone()) {
         const shell = document.querySelector('.chat-shell');
         if (shell && shell.classList.contains('thread-open')) { const bb = document.getElementById('backBtn'); if (bb) bb.click(); }
       }
@@ -758,7 +772,7 @@
     if (sub.desktopOnly && isPhone()) { skipSub(); return; }
     // Parts that live in the chat list: on a phone an open chat hides the
     // list, so close it first.
-    if (sub.sidebar) {
+    if (sub.sidebar || sub.closeChat) {
       const shell = document.querySelector('.chat-shell');
       if (shell && shell.classList.contains('thread-open') && isPhone()) { const bb = document.getElementById('backBtn'); if (bb) bb.click(); }
     }
