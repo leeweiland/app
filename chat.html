@@ -164,6 +164,10 @@
   .renew-pill { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 10px; border: 1px solid currentColor; font-family: var(--font-secondary); font-size: .68rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }
   .renew-pill.renew-orange { color: #ff9f1c; background: rgba(255,159,28,.13); }
   .renew-pill.renew-pink { color: #ff4fa3; background: rgba(255,79,163,.13); }
+  /* On hold (Lee, 2026-11-22): yellow from 2 weeks before the resume/reconnect date until they're off hold. */
+  .pra-avatar[class*="role-"].renew-yellow, .pra-avatar.renew-yellow { border-color: #ffd60a; box-shadow: 0 0 0 2px rgba(255,214,10,.35), 0 0 10px 2px rgba(255,214,10,.65); }
+  .renew-tag.renew-yellow { color: #ffd60a; }
+  .renew-pill.renew-yellow { color: #ffd60a; background: rgba(255,214,10,.13); }
   /* A read-receipt tick standing in for the count once there's nothing to
      count — same slot, but it's not a count, so the green pill background
      has to go or it'd look like an unread badge that just failed to show
@@ -2150,6 +2154,9 @@ function fmtRenewDate(iso) {
   const [y, m, d] = String(iso).split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+function holdPillHtml(hd) {
+  return hd ? `<span class="renew-pill renew-yellow" title="On hold">${hd.kind === 'reconnect' ? 'Reconnect' : 'Resumes'} ${fmtRenewDate(hd.date)}</span>` : '';
+}
 function renewPillHtml(rn) {
   return rn ? `<span class="renew-pill renew-${rn.level}" title="Enrolled student -- end date ${fmtRenewDate(rn.endDate)}">Renew by ${fmtRenewDate(rn.endDate)}</span>` : '';
 }
@@ -2363,6 +2370,7 @@ function buildDirectory() {
       unread: !!c.unread,
       unreadCount: c.unreadCount || 0,
       renewal: c.renewal || null,
+      hold: c.hold || null,
       // Only ever set when the last message was mine (see the backend's
       // lastMessage.status) — used to show a read-receipt tick in the
       // unread-count badge's slot once there's nothing left to count.
@@ -2379,7 +2387,7 @@ function buildDirectory() {
       // c.lastMessage?.createdAt || c.createdAt line above) -- the
       // contact's own account creation date stands in until pinning/
       // favoriting (or a real message) creates the conversation for real.
-      key: 'u:' + c.id, contactId: c.id, virtual: true, renewal: c.renewal || null,
+      key: 'u:' + c.id, contactId: c.id, virtual: true, renewal: c.renewal || null, hold: c.hold || null,
       name: isStaffMe() ? (c.first + ' ' + c.last) : c.first, avatarUser: c,
       preview: (isClientRole(c.role) && !isStaffMe()) ? EMPTY_CLIENT_PREVIEW : 'No messages yet',
       timestamp: c.createdAt,
@@ -2439,6 +2447,7 @@ function convoItemHtml(i) {
   // takes over that same slot, so "did they read it" is visible at a
   // glance from the sidebar without opening the thread.
   const rn = i.renewal || null;
+  const hd = i.hold || null;
   // "R" for an unhandled renewal alert when there's nothing unread (the real count wins once a message arrives).
   const showR = !!rn && rn.unhandled && !(i.unreadCount > 0); // virtual (no-conversation-yet) rows have no count at all
   const showReceiptTick = i.unreadCount === 0 && i.lastMessageStatus && !showR;
@@ -2464,7 +2473,7 @@ function convoItemHtml(i) {
   return `
     <div class="convo-item ${i.convoId === activeConvoId ? 'active' : ''} ${i.unread ? 'has-unread' : ''} ${i.pinned ? 'pinned-row' : ''} ${bulkSelectMode ? 'select-mode' : ''} ${isSelected ? 'selected' : ''}" data-key="${i.key}"${i.isOwnGroup ? ' data-own-group="1"' : ''}${i.isSelfRow ? ' data-self-row="1"' : ''}>
       ${checkbox}
-      <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}${rn ? ' renew-' + rn.level : ''}">${avatarHtml(i.avatarUser)}</div>
+      <div class="pra-avatar${avatarRoleClass(i.avatarUser, i.isGroup)}${hd ? ' renew-yellow' : rn ? ' renew-' + rn.level : ''}">${avatarHtml(i.avatarUser)}</div>
       <div class="convo-meta">
         <div class="convo-row">
           <div class="convo-name">${pinnedMark}${i.name}${quotaBadge}</div>
@@ -2474,7 +2483,7 @@ function convoItemHtml(i) {
           </div>
         </div>
         <div class="convo-row">
-          <div class="convo-preview">${rn ? `<span class="renew-tag renew-${rn.level}">Renew by ${fmtRenewDate(rn.endDate)}</span> ` : ''}${i.preview}</div>
+          <div class="convo-preview">${hd ? `<span class="renew-tag renew-yellow">${hd.kind === 'reconnect' ? 'Reconnect' : 'Resumes'} ${fmtRenewDate(hd.date)}</span> ` : ''}${rn ? `<span class="renew-tag renew-${rn.level}">Renew by ${fmtRenewDate(rn.endDate)}</span> ` : ''}${i.preview}</div>
           <div class="convo-actions-row">
             ${channelBtn}
             ${pinBtn}
@@ -3206,7 +3215,7 @@ async function openConvo(id, { restoreScrollTop } = {}) {
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
-  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser) + renewPillHtml(convo.renewal);
+  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser) + holdPillHtml(convo.hold) + renewPillHtml(convo.renewal);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {

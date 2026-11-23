@@ -2021,7 +2021,9 @@ window.addEventListener('pageshow', () => {
           ['blacklisted here too.', 'left alone.']))}
 
       ${card(10, '10. Renewals',
-        row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
+        row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1. Goes away on its own once a later End Date is on their ONLINE/GYM BUYERS row (a renewal or a hold moving it out). The "R" badge clears once a coach opens their chat; the color stays until the date moves.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
+          ['shown to coaches.', 'hidden.']) +
+        row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), '',
           ['shown to coaches.', 'hidden.']) +
         row('Renewal notice for students', 'Their own notice at the top of the app. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
           `<div class="um-sub" style="display:block"><textarea class="pra-input" data-str="renewalStudentText" rows="2" style="width:100%;max-width:none">${esc(s.renewalStudentText)}</textarea><button class="pra-btn um-save" type="button" data-str-save="renewalStudentText">Save text</button>${savedMsg('umMsg-renewalStudentText')}</div>`,

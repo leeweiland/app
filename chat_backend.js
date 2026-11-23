@@ -490,6 +490,7 @@ export function getConfig() {
   if (cfg.crmFinishedSync === undefined) cfg.crmFinishedSync = true;
   if (cfg.crmBlacklistArchive === undefined) cfg.crmBlacklistArchive = true;
   if (cfg.renewalPillsStaff === undefined) cfg.renewalPillsStaff = true;
+  if (cfg.holdPillsStaff === undefined) cfg.holdPillsStaff = true;
   if (cfg.renewalStudentNotice === undefined) cfg.renewalStudentNotice = false;
   if (!cfg.renewalStudentText) cfg.renewalStudentText = "Your training wraps up on {{endDate}}. Message your coach to keep going.";
   cfg.access = mergeAccessDefaults(cfg.access);
@@ -4038,6 +4039,36 @@ function crmFetch(path, opts = {}) {
   if (!key) return Promise.reject(new Error("CRM link not configured (PRA_APP_BRIDGE_KEY)"));
   return fetch(CRM_BASE_URL + path, { ...opts, headers: { ...(opts.headers || {}), "x-pra-app-key": key, "Content-Type": "application/json" } });
 }
+// ON HOLD students (Lee, 2026-11-22): yellow glow from 2 weeks before their
+// resume / reconnect date until they're taken off hold (no longer ON HOLD
+// in the CRM). Staff only, cached 2 minutes like the enrolled list.
+let crmHoldCache = null; // { at, holds }
+async function crmOnHoldContacts() {
+  if (crmHoldCache && Date.now() - crmHoldCache.at < 2 * 60 * 1000) return crmHoldCache.holds;
+  const all = [];
+  for (let offset = 0; offset < 5000; offset += 200) {
+    const r = await crmFetch(`/api/contacts?status=${encodeURIComponent("ON HOLD")}&limit=200&offset=${offset}`);
+    if (!r.ok) throw new Error(`CRM returned ${r.status}`);
+    const d = await r.json();
+    all.push(...(d.contacts || []));
+    if ((d.contacts || []).length < 200) break;
+  }
+  const holds = all.map(c => {
+    const cf = c.customFields || {};
+    const kind = cf.holdReconnectDate && !cf.holdResumeDate ? "reconnect" : "resume";
+    return { email: String(c.email || "").trim().toLowerCase(), phone: last10(c.phone), key: c.first && c.last ? nameKey(c.first, c.last) : null, kind, ms: parseSheetDateMs(cf.holdResumeDate || cf.holdReconnectDate || "") };
+  });
+  crmHoldCache = { at: Date.now(), holds };
+  return holds;
+}
+function holdForStudent(student, viewer, holds) {
+  if (!holds || !student || !isStaff(viewer) || !isClientRole(student.role)) return null;
+  if (getConfig().holdPillsStaff === false) return null;
+  const em = String(student.email || "").trim().toLowerCase(), ph = last10(student.phone), key = nameKey(student.first, student.last);
+  const h = holds.find(x => (em && x.email === em) || (ph && x.phone === ph) || (x.key && x.key === key));
+  if (!h || h.ms == null || h.ms - alaskaTodayMs() > 14 * 86400000) return null;
+  return { level: "yellow", kind: h.kind, date: new Date(h.ms).toISOString().slice(0, 10) };
+}
 let crmEnrolledCache = null; // { at, contacts }
 async function crmEnrolledContacts(fresh = false) {
   if (!fresh && crmEnrolledCache && Date.now() - crmEnrolledCache.at < 2 * 60 * 1000) return crmEnrolledCache.contacts;
@@ -5970,7 +6001,7 @@ export async function handleChatRequest(req, res, url) {
       if (!isAdmin(user)) return sendJson(res, 403, { error: "Admins only" });
       const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentCrosscheckCrm", "studentGroupEnabled", "autoBuildProtocolEnabled",
         "levelsRowOnNewStudent", "appSheetTypeEnabled", "staffAlertsEnabled", "defaultProtocolEnabled", "welcomeMessageEnabled", "movesPublicDefault",
-        "renewalMessageEnabled", "renewalPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
+        "renewalMessageEnabled", "renewalPillsStaff", "holdPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
         "traineeWelcomeEnabled", "traineeRefundMakeUser"];
       const NUM_KEYS = { loginSessionDays: [1, 365, 30], resetLinkMinutes: [5, 1440, 60], minPasswordLength: [4, 64, 8], renewalMessageDaysBefore: [1, 90, 14] };
       const STR_KEYS = ["welcomeMessageText", "renewalMessageText", "renewalMessageSenderId", "renewalStudentText", "traineeWelcomeText",
@@ -6321,9 +6352,13 @@ export async function handleChatRequest(req, res, url) {
       // row -- often with no conversation yet -- is flagged like their coaching group.
       let renewalEligibility = null;
       if (isStaff(user)) { try { renewalEligibility = await fetchStudentEligibility(); } catch { renewalEligibility = null; } }
+      let holds = null;
+      if (isStaff(user)) { try { holds = await crmOnHoldContacts(); } catch { holds = null; } }
       return sendJson(res, 200, { contacts: users.map(u => {
         const rn = renewalForStudent(u, user, renewalEligibility);
-        return rn ? { ...publicUser(u), renewal: { level: rn.level, endDate: rn.endDate, unhandled: rn.unhandled } } : publicUser(u);
+        const hd = holdForStudent(u, user, holds);
+        const base = rn ? { ...publicUser(u), renewal: { level: rn.level, endDate: rn.endDate, unhandled: rn.unhandled } } : publicUser(u);
+        return hd ? { ...base, hold: hd } : base;
       }) });
     }
 
@@ -7971,6 +8006,8 @@ export async function handleChatRequest(req, res, url) {
       // Staff only; best-effort (a Sheets hiccup just means no alerts this poll).
       let renewalEligibility = null;
       if (isStaff(user)) { try { renewalEligibility = await fetchStudentEligibility(); } catch { renewalEligibility = null; } }
+      let holds = null;
+      if (isStaff(user)) { try { holds = await crmOnHoldContacts(); } catch { holds = null; } }
       const enriched = convos.map(c => {
         const last = lastByConvo.get(c.id) || null;
         const lastReadAt = readState[c.id];
@@ -7989,6 +8026,7 @@ export async function handleChatRequest(req, res, url) {
           unreadCount,
           unread: unreadCount > 0,
           renewal: (() => { const r = renewalForConvo(c, users, user, renewalEligibility); return r ? { level: r.level, endDate: r.endDate, unhandled: r.unhandled } : null; })(),
+          hold: isStaff(user) ? holdForStudent(renewalStudentFor(c, users, user.id), user, holds) : null,
         };
       }).sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
