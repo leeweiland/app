@@ -1911,6 +1911,7 @@ window.addEventListener('pageshow', () => {
   const toggle = (key, on) => `<input type="checkbox" class="pra-toggle" data-um="${key}" ${on ? 'checked' : ''}/>`;
   const info = '<span class="um-always">Info</span>';
   // onOff: [what ON does, what OFF does] -- shown under the description.
+  const umPill = (c, t) => `<span style="display:inline-block;margin:6px 6px 0 0;padding:2px 9px;border-radius:10px;border:1px solid ${c};color:${c};background:${c}22;font-size:.68rem;font-weight:700;white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 6px 1px ${c};margin-right:6px;vertical-align:-1px"></span>${t}</span>`;
   const row = (name, desc, control, extra = '', onOff = null) => `<div class="um-row"><div class="um-txt"><div class="um-name">${name}</div><div class="um-desc">${desc}</div>${onOff ? `<div class="um-onoff"><span><b>On:</b> ${onOff[0]}</span><span><b>Off:</b> ${onOff[1]}</span></div>` : ''}${extra}</div><div>${control}</div></div>`;
   const card = (k, title, body) => `<details class="um-card" data-k="${k}"><summary><h3>${title}</h3><span class="um-count"></span>${CHEV}</summary><div class="um-card-body">${body}</div></details>`;
   const savedMsg = (id) => `<span class="um-saved" id="${id}"></span>`;
@@ -2021,9 +2022,9 @@ window.addEventListener('pageshow', () => {
           ['blacklisted here too.', 'left alone.']))}
 
       ${card(10, '10. Renewals',
-        row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1. Goes away on its own once a later End Date is on their ONLINE/GYM BUYERS row (a renewal or a hold moving it out). The "R" badge clears once a coach opens their chat; the color stays until the date moves.', toggle('renewalPillsStaff', s.renewalPillsStaff), '',
+        row('Renewal pills for coaches', 'Orange within 2 months of their end date, pink within 1. Goes away on its own once a later End Date is on their ONLINE/GYM BUYERS row (a renewal or a hold moving it out). The "R" badge clears once a coach opens their chat; the color stays until the date moves.', toggle('renewalPillsStaff', s.renewalPillsStaff), `<div>${umPill('#ff9f1c', 'Renew by Jan 22 &middot; within 2 months')}${umPill('#ff4fa3', 'Renew by Dec 22 &middot; within 1 month')}</div>`,
           ['shown to coaches.', 'hidden.']) +
-        row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), '',
+        row('On-hold pills for coaches', 'Yellow "Resumes" / "Reconnect" pill from 2 weeks before the resume or reconnect date set when they were put On Hold (CRM status or the chat long-press). Stays until they are taken off hold (no longer ON HOLD in the CRM).', toggle('holdPillsStaff', s.holdPillsStaff), `<div>${umPill('#ffd60a', 'Resumes Dec 6')}${umPill('#ffd60a', 'Reconnect Dec 6')}</div>`,
           ['shown to coaches.', 'hidden.']) +
         row('Renewal notice for students', 'Their own notice at the top of the app. Use {{firstName}} and {{endDate}}.', toggle('renewalStudentNotice', s.renewalStudentNotice),
           `<div class="um-sub" style="display:block"><textarea class="pra-input" data-str="renewalStudentText" rows="2" style="width:100%;max-width:none">${esc(s.renewalStudentText)}</textarea><button class="pra-btn um-save" type="button" data-str-save="renewalStudentText">Save text</button>${savedMsg('umMsg-renewalStudentText')}</div>`,
