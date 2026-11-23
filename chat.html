@@ -6753,9 +6753,11 @@ function openMsgActionBar(anchorEl, mid, positionEl, overModal) {
 (() => {
   const bar = document.getElementById('msgActionBar');
   const menu = document.getElementById('msgMoreMenu');
-  // Body-level so they can stack above the modal backdrop.
-  document.body.appendChild(menu);
-  document.body.appendChild(bar);
+  // Direct children of .pra-root (not body): that's where they inherit the
+  // app's text color/fonts from, and where they can stack above the modal.
+  const root = document.querySelector('.pra-root') || document.body;
+  root.appendChild(menu);
+  root.appendChild(bar);
   document.getElementById('videoReplyPlayer').addEventListener('contextmenu', (e) => {
     if (!videoReplyTargetId) return;
     e.preventDefault();
