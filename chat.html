@@ -6758,8 +6758,11 @@ function openMsgActionBar(anchorEl, mid, positionEl, overModal) {
   const root = document.querySelector('.pra-root') || document.body;
   root.appendChild(menu);
   root.appendChild(bar);
-  document.getElementById('videoReplyPlayer').addEventListener('contextmenu', (e) => {
+  // Anywhere on the panel except the note box (that keeps the normal
+  // copy/paste menu).
+  document.getElementById('videoReplyModal').addEventListener('contextmenu', (e) => {
     if (!videoReplyTargetId) return;
+    if (e.target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
     e.preventDefault();
     const x = e.clientX, y = e.clientY;
     const point = { getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) };
