@@ -5358,6 +5358,53 @@ export async function handleChatRequest(req, res, url) {
     const sheet = await fetchStudentEligibility().catch(() => null);
     return sendJson(res, 200, buildStudentsOverview(crm, crmError, sheet));
   }
+  // "Put on hold" from the sidebar long-press menu (Lee, 2026-11-22). Same
+  // result as picking ON HOLD in the CRM: the CRM contact goes to ON HOLD with
+  // the hold dates, the end date moves out by the length of the hold, and a
+  // task lands on the resume/reconnect date. The CRM's "9 ON HOLD" flow then
+  // updates the buyers sheet + CALLS TRACKING end date.
+  if (p === "/api/chat/students/hold" && req.method === "POST") {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isStaff(me)) return sendJson(res, 403, { error: "Coaches and admins only" });
+    const { appUserId, startDate, kind, date } = await readJsonBody(req);
+    const ymd = /^\d{4}-\d{2}-\d{2}$/;
+    if (!["resume", "reconnect"].includes(kind)) return sendJson(res, 400, { error: "Pick a resume date or a reconnect date" });
+    if (!ymd.test(String(startDate || "")) || !ymd.test(String(date || ""))) return sendJson(res, 400, { error: kind === "resume" ? "A resume date is required" : "A reconnect date is required" });
+    if (date <= startDate) return sendJson(res, 400, { error: "That date has to be after the hold starts" });
+    const target = readJson(USERS_FILE, []).find(u => u.id === appUserId);
+    if (!target || !["online", "gym"].includes(target.role)) return sendJson(res, 400, { error: "Only online or gym students can be put on hold." });
+    const END_FIELD = "d49b092b-3054-4d5c-b7fa-d4ac32e9df3b";
+    const long = (d) => d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+    const asUtc = (v) => { const [y, m, d] = v.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+    const parseAny = (v) => { v = String(v || "").trim(); if (!v) return null; let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(v); if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(v); if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(Date.UTC(y, +m[1] - 1, +m[2])); } const d = new Date(v + " UTC"); return isNaN(d) ? null : d; };
+    try {
+      let contact = null;
+      for (const q of [target.email, last10(target.phone)].filter(Boolean)) {
+        const r = await crmFetch(`/api/contacts?q=${encodeURIComponent(q)}&limit=5`);
+        if (!r.ok) continue;
+        contact = ((await r.json()).contacts || []).find(c => (target.email && (c.email || "").toLowerCase() === target.email.toLowerCase()) || (last10(target.phone) && last10(c.phone) === last10(target.phone)));
+        if (contact) break;
+      }
+      if (!contact) return sendJson(res, 404, { error: "No matching CRM contact" });
+      const cf = contact.customFields || {};
+      const prevEndRaw = cf[END_FIELD] || cf.enrollEndDate || "";
+      const prevEnd = parseAny(prevEndRaw);
+      const start = asUtc(startDate), back = asUtc(date);
+      const patch = { holdActive: "yes", holdKind: kind, holdStartDate: long(start), holdResumeDate: kind === "resume" ? long(back) : "", holdReconnectDate: kind === "reconnect" ? long(back) : "", holdPrevEndDate: prevEndRaw };
+      let newEnd = "";
+      if (prevEnd) { const d = new Date(prevEnd.getTime() + (back - start)); newEnd = long(d); patch.enrollEndDate = newEnd; patch[END_FIELD] = newEnd; }
+      const r = await crmFetch(`/api/contacts/${encodeURIComponent(contact.id)}`, { method: "PATCH", body: JSON.stringify({ status: "ON HOLD", customFieldsPatch: patch }) });
+      if (!r.ok) return sendJson(res, 502, { error: `CRM update failed (${r.status})` });
+      const name = `${contact.first || ""} ${contact.last || ""}`.trim() || "Student";
+      await crmFetch("/api/tasks", { method: "POST", body: JSON.stringify({
+        contactId: contact.id, type: "task", dueAt: new Date(date + "T18:00:00Z").toISOString(),
+        title: kind === "resume" ? `${name} resumes training today (on hold since ${long(start)}) -- set status back to Enrolled` : `Reconnect with ${name} about resuming training (on hold since ${long(start)})`,
+      }) }).catch(() => {});
+      crmEnrolledCache = null;
+      return sendJson(res, 200, { ok: true, newEndDate: newEnd, prevEndDate: prevEndRaw });
+    } catch (e) { return sendJson(res, 502, { error: `CRM update failed: ${e.message}` }); }
+  }
   if (p === "/api/chat/students-overview/action" && req.method === "POST") {
     const me = getSessionUser(req);
     if (!me) return sendJson(res, 401, { error: "Not logged in" });

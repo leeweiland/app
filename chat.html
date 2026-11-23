@@ -1049,6 +1049,7 @@
     <div class="msg-more-menu" id="convoActionMenu">
       <button class="msg-more-menu-item" id="convoActionPinBtn">Pin</button>
       <button class="msg-more-menu-item" id="convoActionFavBtn">Star</button>
+      <button class="msg-more-menu-item" id="convoActionHoldBtn" style="display:none">Put on hold</button>
       <button class="msg-more-menu-item" id="convoActionReportBtn">Report</button>
       <button class="msg-more-menu-item" id="convoActionBlockBtn" style="color:#ff5c5c">Block</button>
     </div>
@@ -1351,6 +1352,24 @@
        log: each Add Note posts one structured session entry (same fields as
        the ZOOM session table in the source doc), never overwrites a prior
        one, matching the paired Drive doc which prepends the same way. -->
+  <div class="modal-backdrop" id="holdModal">
+    <div class="pra-panel modal-box">
+      <div class="pra-h2" style="margin-bottom:4px">Put on Hold</div>
+      <div class="pra-muted" id="holdSubtitle" style="font-size:.8rem;margin-bottom:10px"></div>
+      <label class="pra-label">Hold Starts</label>
+      <input class="pra-input" type="date" id="holdStart" style="margin-bottom:10px"/>
+      <label class="pra-label">When do they come back?</label>
+      <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input type="radio" name="holdKind" value="resume" checked/> Clear resume date</label>
+      <label style="display:flex;align-items:center;gap:8px;margin:0 0 10px"><input type="radio" name="holdKind" value="reconnect"/> No clear resume date &mdash; reconnect date</label>
+      <label class="pra-label" id="holdDateLabel">Resume Date (required)</label>
+      <input class="pra-input" type="date" id="holdDate"/>
+      <div class="pra-muted" style="font-size:.74rem;margin-top:8px">Their end date moves out by the length of the hold, in the CRM and the buyers sheet.</div>
+      <div class="pra-muted" id="holdStatus" style="font-size:.78rem;margin-top:8px;min-height:1em"></div>
+      <button class="pra-btn" style="margin-top:10px;width:100%" id="holdSaveBtn">Put on Hold</button>
+      <button class="pra-btn pra-btn-ghost" style="margin-top:8px;width:100%" onclick="closeModal('holdModal')">Cancel</button>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="staffNotesModal">
     <div class="pra-panel modal-box modal-box-wide">
       <div class="pra-h2" style="margin-bottom:4px">Coach Notes</div>
@@ -2576,6 +2595,7 @@ function openConvoActionMenu(anchorEl, item) {
   document.getElementById('convoActionPinBtn').textContent = item.pinned ? 'Unpin' : 'Pin';
   document.getElementById('convoActionFavBtn').textContent = item.favorite ? 'Unstar' : 'Star';
   document.getElementById('convoActionReportBtn').style.display = targetUser ? '' : 'none';
+  document.getElementById('convoActionHoldBtn').style.display = (targetUser && isStaffMe() && ['online', 'gym'].includes(targetUser.role)) ? '' : 'none';
   const blockBtn = document.getElementById('convoActionBlockBtn');
   blockBtn.style.display = targetUser ? '' : 'none';
   if (targetUser) blockBtn.textContent = blockedUserIds.has(targetUser.id) ? 'Unblock' : 'Block';
@@ -2598,6 +2618,43 @@ document.getElementById('convoActionPinBtn').onclick = () => {
 document.getElementById('convoActionFavBtn').onclick = () => {
   const item = convoActionItem; closeConvoActionMenu();
   if (item) toggleConvoFavorite(item);
+};
+// Put on hold (Lee, 2026-11-22): same as picking ON HOLD in the CRM.
+let holdTargetUser = null;
+document.getElementById('convoActionHoldBtn').onclick = () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  const u = convoActionTargetUser(item);
+  if (!u) return;
+  holdTargetUser = u;
+  const d = new Date(), pad = n => String(n).padStart(2, '0');
+  document.getElementById('holdStart').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  document.getElementById('holdDate').value = '';
+  document.querySelector('input[name="holdKind"][value="resume"]').checked = true;
+  document.getElementById('holdDateLabel').textContent = 'Resume Date (required)';
+  document.getElementById('holdSubtitle').textContent = `${u.first || ''} ${u.last || ''}`.trim();
+  document.getElementById('holdStatus').textContent = '';
+  document.getElementById('holdSaveBtn').disabled = false;
+  document.getElementById('holdModal').classList.add('show');
+};
+document.querySelectorAll('input[name="holdKind"]').forEach(r => r.onchange = () => {
+  document.getElementById('holdDateLabel').textContent = r.value === 'resume' && r.checked ? 'Resume Date (required)' : 'Reconnect Date (required)';
+});
+document.getElementById('holdSaveBtn').onclick = async () => {
+  const u = holdTargetUser; if (!u) return;
+  const status = document.getElementById('holdStatus'), btn = document.getElementById('holdSaveBtn');
+  const kind = document.querySelector('input[name="holdKind"]:checked').value;
+  const startDate = document.getElementById('holdStart').value, date = document.getElementById('holdDate').value;
+  if (!startDate) { status.textContent = 'Pick the date the hold starts'; return; }
+  if (!date) { status.textContent = kind === 'resume' ? 'A resume date is required' : 'A reconnect date is required'; return; }
+  if (date <= startDate) { status.textContent = 'That date has to be after the hold starts'; return; }
+  btn.disabled = true; status.textContent = 'Saving...';
+  try {
+    const r = await fetch('/api/chat/students/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appUserId: u.id, startDate, kind, date }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { btn.disabled = false; status.textContent = d.error || 'Could not put them on hold'; return; }
+    closeModal('holdModal');
+    await alertDialog(`${u.first || 'They'} ${u.first ? 'is' : 'are'} on hold.${d.newEndDate ? ` New end date: ${d.newEndDate}.` : ' (No end date was on file to move.)'}`);
+  } catch { btn.disabled = false; status.textContent = 'Could not reach the server'; }
 };
 document.getElementById('convoActionReportBtn').onclick = async () => {
   const item = convoActionItem; closeConvoActionMenu();
