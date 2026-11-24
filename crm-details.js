@@ -7,10 +7,12 @@
 // form (window.praOpenHold), Enrolled points to the CRM's Enrolled popup.
 window.PRADetails = (function () {
   const css = `
-  .pdt-box { width: min(760px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; }
+  .modal-box.pdt-box { width: min(760px, 100%); max-width: 760px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; }
+  .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: inherit; }
   .pdt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   .pdt-name { font-weight: 800; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pdt-head select { width: auto; min-width: 120px; }
+  .pdt-head select { width: auto; min-width: 120px; flex: 0 0 auto; }
+  .pdt-head a.pra-btn { flex: 0 0 auto; white-space: nowrap; }
   .pdt-x { background: none; border: 0; color: var(--pra-dim, #9aa0aa); font-size: 1.3rem; cursor: pointer; padding: 0 4px; line-height: 1; }
   .pdt-sec { border: 1px solid #383842; border-radius: 12px; padding: 12px 12px 4px; margin-bottom: 12px; }
   .pdt-sec-head { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--pra-dim, #9aa0aa); margin-bottom: 10px; }
