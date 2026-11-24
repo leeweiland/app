@@ -184,7 +184,8 @@ window.PRABack = (function () {
       }
       #chat-app-header .cah-icon {
         width: 36px; height: 36px; border-radius: 8px;
-        border: 1px solid #26262e;
+        /* Button outlines a touch brighter than the bar's own lines (#26262e). */
+        border: 1px solid #383842;
         background: transparent;
         display: flex; align-items: center; justify-content: center;
         text-decoration: none; transition: border-color .15s, background .15s;
@@ -199,11 +200,13 @@ window.PRABack = (function () {
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active { color: #fff; }
+      /* Bottom words: same outlined boxes as the top row, a bit bigger. */
       #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
-        width: auto; padding: 0 8px;
-        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .78rem;
+        width: auto; padding: 0 14px; border-color: #383842;
+        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .86rem;
         color: #cfd6dc; white-space: nowrap;
       }
+      #chat-app-bottom-bar div.cah-bottom-group { gap: 8px; }
       #chat-app-bottom-bar .cah-bottom-text:hover, #chat-app-bottom-bar .cah-bottom-text.active { color: #fff; }
       /* Phone width: six words must fit one row in ~390px. Selectors are
          doubled up to outrank the bar/group rules further down. */
@@ -228,7 +231,7 @@ window.PRABack = (function () {
           width: 100%; gap: 0; justify-content: space-evenly; flex-wrap: wrap;
         }
         #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
-          flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 clamp(2px, 1.2cqi, 6px);
+          flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 clamp(2px, 1.2cqi, 6px); border-color: transparent;
           font-size: clamp(9.5px, 3.2cqi, 13px);
         }
       }
