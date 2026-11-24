@@ -138,7 +138,16 @@ window.PRABack = (function () {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 16px;
+        gap: 16px;
+        /* The phone's own bars: status bar on top, and a phone held sideways
+           puts its camera notch / Android buttons on the left or right. The
+           Android app reports them as --safe-area-inset-* (Capacitor), iOS
+           as env(). Without them a sideways phone drew the clock over the
+           logo and the nav buttons over Profile. */
+        padding: calc(10px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))
+                 calc(16px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px)))
+                 10px
+                 calc(16px + var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-bottom: 1px solid #26262e;
@@ -166,7 +175,7 @@ window.PRABack = (function () {
              env(safe-area-inset-top) takes over and pushes it further on
              phones with a bigger notch/punch-hole/Dynamic Island than
              that guess accounts for. */
-          padding-top: max(48px, env(safe-area-inset-top));
+          padding-top: max(48px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
         }
         #chat-app-header .cah-label { align-self: center; }
         #chat-app-header .cah-logo { width: 100px; }
@@ -237,10 +246,13 @@ window.PRABack = (function () {
         z-index: 500;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        /* Words centered on the row at every size (was hugging the left on
+           sideways phones / tablets / computers). */
+        justify-content: center;
         gap: 10px;
-        padding: 10px 16px;
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        padding: 10px calc(16px + var(--safe-area-inset-right, env(safe-area-inset-right, 0px)))
+                 calc(10px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))
+                 calc(16px + var(--safe-area-inset-left, env(safe-area-inset-left, 0px)));
         background: rgba(16,16,20,0.7);
         backdrop-filter: blur(6px);
         border-top: 1px solid #26262e;
@@ -870,7 +882,10 @@ window.PRABack = (function () {
         }
       };
       const topItems = [...icons.querySelectorAll('a.cah-icon')];
-      fit(topItems, () => topItems.some(a => a.scrollWidth > a.clientWidth + 1)
+      // Wide layouts (logo · Quick Start · words in one row): the whole row
+      // must fit too, or the words ran into the logo / off the edge.
+      fit(topItems, () => bar.scrollWidth > bar.clientWidth + 1
+        || topItems.some(a => a.scrollWidth > a.clientWidth + 1)
         || new Set(topItems.map(a => Math.round(a.getBoundingClientRect().top))).size > 1);
       const botItems = [...bottomLeftGroup.querySelectorAll('a.cah-bottom-text')];
       fit(botItems, () => bottomLeftGroup.scrollWidth > bottomLeftGroup.clientWidth + 1
@@ -878,6 +893,7 @@ window.PRABack = (function () {
         || new Set(botItems.map(a => Math.round(a.getBoundingClientRect().top))).size > 1);
       requestReflow();
     }
+    window.PRAFitNav = fitNavWords;
     requestAnimationFrame(fitNavWords);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNavWords);
     let fitTimer = null;

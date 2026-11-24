@@ -817,13 +817,22 @@
       b.innerHTML = '<span class="ptu-coin"></span>Quick Start';
       b.onclick = () => { ac(); start(); };
     }
-    const wide = window.innerWidth >= 768;
     const bar = document.getElementById('chat-app-header');
     if (!bar) { if (b.parentElement) b.remove(); return; }
+    // Same switch the header itself uses: one row (logo · words) vs the
+    // phone's stacked logo-over-words layout.
+    const wide = getComputedStyle(bar).flexDirection !== 'column';
     if (b.parentElement !== bar) { if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative'; bar.appendChild(b); }
     if (wide) {
-      // Desktop: centered in the top bar.
-      b.classList.add('in-bar'); b.classList.remove('in-bar-right'); b.style.top = '';
+      // Desktop / tablet / phone held sideways: centered in the open space
+      // between the logo and the nav words -- dead center of the bar sat on
+      // top of "Chat" when the bar was narrower than a computer screen.
+      // It's a real item in the bar's row (logo · Quick Start · nav), so it
+      // can never overlap; if the row runs out of room the header's fit step
+      // (PRAFitNav) shrinks the nav words.
+      b.classList.remove('in-bar', 'in-bar-right'); b.style.top = ''; b.style.visibility = '';
+      const nav = bar.querySelector('.cah-icons');
+      if (nav && b.nextSibling !== nav) { bar.insertBefore(b, nav); if (window.PRAFitNav) window.PRAFitNav(); }
     } else {
       // Phone: top-right corner, on the same line as the logo.
       b.classList.add('in-bar-right'); b.classList.remove('in-bar');
