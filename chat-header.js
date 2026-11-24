@@ -183,6 +183,23 @@ window.PRABack = (function () {
       #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active {
         border-color: #009bff; background: rgba(0,155,255,0.1);
       }
+      /* Word buttons (no icons since 2026-11-24). */
+      #chat-app-header .cah-icon {
+        width: auto; padding: 0 12px;
+        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .82rem;
+        color: #cfd6dc; white-space: nowrap;
+      }
+      #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active { color: #fff; }
+      #chat-app-bottom-bar .cah-bottom-text {
+        width: auto; padding: 0 6px;
+        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .78rem;
+        color: #cfd6dc; white-space: nowrap;
+      }
+      #chat-app-bottom-bar .cah-bottom-text:hover, #chat-app-bottom-bar .cah-bottom-text.active { color: #fff; }
+      @container pra-app (max-width: 640px) {
+        #chat-app-header .cah-icons { gap: 6px; }
+        #chat-app-bottom-bar .cah-bottom-group { gap: 4px; }
+      }
       #chat-app-header .cah-icon svg {
         width: 19px; height: 19px; overflow: visible;
         filter: drop-shadow(0 0 3px rgba(255,255,255,.7));
@@ -360,27 +377,28 @@ window.PRABack = (function () {
   };
 
   const ICONS = [
-    { href: '/chat-app/chat.html', icon: ICON_SVG.chat, title: 'Chat', trainee: true },
-    { href: '/chat-app/chat.html?gymCapture=1', icon: ICON_SVG.gymCapture, title: 'Gym Capture', staffOnly: true },
-    { selfProtocol: true, icon: ICON_SVG.protocol, title: 'My Training Protocol', trainee: true },
-    { href: '/chat-app/moves-dictionary.html', icon: ICON_SVG.video, title: 'Powerbatics Training Videos' },
-    { href: '/chat-app/admin-panel.html', icon: ICON_SVG.settings, title: 'Admin panel', adminOnly: true },
-    { href: '/chat-app/profile.html', icon: ICON_SVG.profile, title: 'My profile', trainee: true },
+    // Bars show words, not icons (2026-11-24). `title` stays as-is: tutorial.js
+    // and the Black Friday pointer find these links by title.
+    { href: '/chat-app/chat.html', name: 'Chat', title: 'Chat', trainee: true },
+    { selfProtocol: true, name: 'Train', title: 'My Training Protocol', trainee: true },
+    { href: '/chat-app/moves-dictionary.html', name: 'Videos', title: 'Powerbatics Training Videos' },
+    { href: '/chat-app/admin-panel.html', name: 'Admin', title: 'Admin panel', adminOnly: true },
+    { href: '/chat-app/profile.html', name: 'Profile', title: 'My profile', trainee: true },
   ];
 
   // Second, bottom-anchored bar for the newer content sections — kept
   // separate from the top bar's core app nav.
   const BOTTOM_ICONS = [
-    { href: '/chat-app/body-scan.html', icon: ICON_SVG.bodyScan, title: 'Powerbatics Body Mastery Builder' },
-    { href: '/chat-app/users-map.html', icon: ICON_SVG.map, title: 'Strength Ninjas' },
-    { href: '/personality-quiz/index.html', icon: ICON_SVG.brain, title: 'Training Personality Quiz' },
-    { href: '/chat-app/levels.html', icon: ICON_SVG.levels, title: 'Levels' },
+    { href: '/chat-app/body-scan.html', name: 'Physique', title: 'Powerbatics Body Mastery Builder' },
+    { href: '/chat-app/users-map.html', name: 'Map', title: 'Strength Ninjas' },
+    { href: '/personality-quiz/index.html', name: 'Personality', title: 'Training Personality Quiz' },
+    { href: '/chat-app/levels.html', name: 'Levels', title: 'Levels' },
     // Shop = the website's /shop page (clothing) inside the app, in app mode.
-    { href: '/chat-app/shop.html', icon: ICON_SVG.shop, title: 'Shop' },
-    // Retreats (plane) shows the website's retreats page inside the app, in
-    // the site's "app mode" (?app=1 hides the site's own logo, menu, promo
-    // bar and footer).
-    { href: '/chat-app/retreats.html', icon: ICON_SVG.retreats, title: 'Retreats' },
+    { href: '/chat-app/shop.html', name: 'Clothes', title: 'Shop' },
+    // Retreats shows the website's retreats page inside the app, in the
+    // site's "app mode" (?app=1 hides the site's own logo, menu, promo bar
+    // and footer).
+    { href: '/chat-app/retreats.html', name: 'Travel', title: 'Retreats' },
     { href: 'https://pacificrimathletics.com/online-app', label: 'APPLY FOR TRAINING', title: 'Apply for Training', external: true, plainUserOnly: true },
   ];
 
@@ -678,7 +696,7 @@ window.PRABack = (function () {
       a.className = 'cah-icon' + (isActive ? ' active' : '');
       a.href = href;
       a.title = item.title;
-      a.innerHTML = item.icon;
+      a.textContent = item.name;
       icons.appendChild(a);
     });
 
@@ -802,9 +820,8 @@ window.PRABack = (function () {
         a.textContent = item.glyph;
         bottomLeftGroup.appendChild(a);
       } else {
-        const iconWrap = document.createElement('span');
-        iconWrap.innerHTML = item.icon;
-        a.appendChild(iconWrap.firstElementChild);
+        a.classList.add('cah-bottom-text');
+        a.textContent = item.name;
         bottomLeftGroup.appendChild(a);
       }
     });
