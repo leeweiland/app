@@ -73,6 +73,21 @@
   .protocol-controls-row > .protocol-head-controls-left { grid-area: left; }
   .protocol-controls-row > .protocol-head-controls-right { grid-area: right; }
   .view-mode-btn { white-space: nowrap; }
+  /* Tab row on top, then ONE row of word buttons (Undo ... Low Ticket
+     Protocols, Delete) -- both scroll sideways, centered on what's selected,
+     with the ends fading out so it's clear there's more (Lee, 2026-11-24). */
+  .protocol-head-row.protocol-controls-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "menu" "tools"; row-gap: 10px; }
+  .protocol-controls-row > .protocol-tools { grid-area: tools; justify-self: stretch; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; justify-content: safe center; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
+  .protocol-tools::-webkit-scrollbar { display: none; }
+  .protocol-tools > .protocol-head-controls-left, .protocol-tools > .protocol-head-controls-right { flex-shrink: 0; display: flex; align-items: center; gap: 8px; overflow: visible; }
+  .protocol-tools .tpl-bar { overflow: visible; }
+  .icon-btn.text-btn { width: auto; height: 32px; padding: 0 12px; border-color: #383842; font-family: var(--font-primary); font-weight: 700; font-size: .74rem; color: #cfd6dc; white-space: nowrap; }
+  @media (hover: hover) { .icon-btn.text-btn:not(:disabled):hover { color: #fff; border-color: var(--pra-blue); } }
+  .protocol-controls-row > .view-mode-toggle.hscroll { scrollbar-width: none; padding-bottom: 2px; }
+  .view-mode-toggle.hscroll::-webkit-scrollbar { display: none; }
+  .hscroll { --fade-l: 0px; --fade-r: 0px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%); }
   .sp-modal { font-family: var(--font-primary, sans-serif); color: var(--pra-white, #fff); }
   .sp-modal .template-item-title { font-family: var(--font-primary, sans-serif); }
   .page-group { display: flex; flex-direction: column; gap: 16px; }
@@ -387,22 +402,7 @@
            open for editing (openTemplateEditor). Edits go straight into the
            template, never the Flow Builder draft. -->
       <div class="protocol-head-row protocol-controls-row">
-        <div class="protocol-head-controls-left">
-          <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
-          <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
-          <div class="tpl-bar" id="tplBar">
-            <div class="tpl-bar-title">Editing program<b id="tplBarName" style="display:none"></b></div>
-            <div class="tpl-bar-actions">
-              <button class="pra-btn" id="tplPreviewBtn" type="button" style="display:none">Preview as student</button>
-              <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button" style="display:none">Add-ons &amp; goal</button>
-              <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
-              <button class="pra-btn" id="tplSaveBtn" type="button" disabled title="Publish your changes to everyone in this program">Save</button>
-              <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button" style="display:none">Exit program editor</button>
-            </div>
-            <div class="tpl-save-status" id="tplSaveStatus"></div>
-          </div>
-        </div>
-        <div class="view-mode-toggle" id="viewModeToggle" style="display:none">
+        <div class="view-mode-toggle hscroll" id="viewModeToggle" style="display:none">
           <button class="view-mode-btn" id="ownFlowBtn" type="button" style="display:none" title="Your own protocol">Your Flow</button>
           <button class="view-mode-btn" id="ownPageBtn" type="button" style="display:none" title="Your own protocol">Your Training</button>
           <button class="view-mode-btn active" id="flowViewBtn" data-mode="flow" data-builder="false">Your Flow</button>
@@ -423,15 +423,33 @@
           <button class="view-mode-btn" id="lowTicketBtn" type="button" style="display:none" title="The Handstand Protocol (low-ticket program)">Low Ticket</button>
           <button class="view-mode-btn" id="protocolSettingsBtn" type="button" style="display:none" title="Admin: folders searched for move videos">Settings</button>
         </div>
+        <!-- One sideways-scrolling row of word buttons (Lee, 2026-11-24). -->
+        <div class="protocol-tools hscroll" id="protocolTools">
+        <div class="protocol-head-controls-left">
+          <button class="icon-btn text-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>Undo</button>
+          <button class="icon-btn text-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>Redo</button>
+          <div class="tpl-bar" id="tplBar">
+            <div class="tpl-bar-title">Editing program<b id="tplBarName" style="display:none"></b></div>
+            <div class="tpl-bar-actions">
+              <button class="pra-btn" id="tplPreviewBtn" type="button" style="display:none">Preview as student</button>
+              <button class="pra-btn pra-btn-ghost" id="tplBumpsBtn" type="button" style="display:none">Add-ons &amp; goal</button>
+              <button class="pra-btn pra-btn-ghost" id="tplSettingsBtn" type="button">Drip settings</button>
+              <button class="pra-btn" id="tplSaveBtn" type="button" disabled title="Publish your changes to everyone in this program">Save</button>
+              <button class="pra-btn pra-btn-ghost" id="tplExitBtn" type="button" style="display:none">Exit program editor</button>
+            </div>
+            <div class="tpl-save-status" id="tplSaveStatus"></div>
+          </div>
+        </div>
         <div class="protocol-head-controls-right">
-          <button class="icon-btn" id="resetFlowBtn" title="Reset: clear this whole flow" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M4 4.5v4h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 9.5l5 5M14.5 9.5l-5 5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn" id="aiGenerateBtn" title="AI: build a workout plan from a description" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.5l1.4 3.6 3.6 1.4-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4L12 3.5Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/><path d="M18.5 13.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
-          <button class="icon-btn" id="applyProtocolBtn" title="Apply this protocol to a student (or everyone without one)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="7" r="3" stroke="#fff" stroke-width="1.6"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M16.5 3.5l1.3 1.3L21 1.5" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <button class="icon-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4.5h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 4.5v5h7v-5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><rect x="8.5" y="13.5" width="7" height="5" rx=".5" stroke="#009bff" stroke-width="1.5"/></svg></button>
-          <button class="icon-btn" id="loadTemplateBtn" title="Saved protocols (edit in the Flow Builder, or apply)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 13.5h8" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn" id="studentProtocolsBtn" title="Student custom protocols (built from their old custom pages)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" stroke="#fff" stroke-width="1.6"/><circle cx="9" cy="10" r="2" stroke="#009bff" stroke-width="1.5"/><path d="M5.8 16.5c.5-1.8 1.7-2.8 3.2-2.8s2.7 1 3.2 2.8" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/><path d="M14 9.5h3.5M14 13h3.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn" id="lowTicketFolderBtn" title="Low-ticket programs (Handstand Protocol...)" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 6.5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-12Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10.2l1.1 2.3 2.5.3-1.8 1.7.5 2.5-2.3-1.2-2.3 1.2.5-2.5-1.8-1.7 2.5-.3 1.1-2.3Z" fill="#d4ff00"/></svg></button>
+          <button class="icon-btn text-btn" id="resetFlowBtn" title="Reset: clear this whole flow" style="display:none">Reset</button>
+          <button class="icon-btn text-btn" id="aiGenerateBtn" title="AI: build a workout plan from a description" style="display:none">Generate</button>
+          <button class="icon-btn text-btn" id="applyProtocolBtn" title="Apply this protocol to a student (or everyone without one)" style="display:none">Apply</button>
+          <button class="icon-btn text-btn" id="saveTemplateBtn" title="Save this protocol as a reusable template" style="display:none">Save</button>
+          <button class="icon-btn text-btn" id="loadTemplateBtn" title="Saved protocols (edit in the Flow Builder, or apply)" style="display:none">Saved Protocols</button>
+          <button class="icon-btn text-btn" id="studentProtocolsBtn" title="Student custom protocols (built from their old custom pages)" style="display:none">Student Protocols</button>
+          <button class="icon-btn text-btn" id="lowTicketFolderBtn" title="Low-ticket programs (Handstand Protocol...)" style="display:none">Low Ticket Protocols</button>
           <button class="icon-btn" id="deleteProtocolBtn" title="Delete this protocol" style="display:none;color:#ff5c5c"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="#ff5c5c" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+        </div>
         </div>
       </div>
     </div>
@@ -2317,6 +2335,46 @@ function setupMenuDragScroll(el) {
     el.scrollLeft += e.deltaY;
   }, { passive: false });
 }
+// Sideways rows (tab row + word-button row): the ends fade out only on a side
+// that has more buttons past the edge, and the row keeps what matters in the
+// middle -- the selected tab, or (for the button row, which has no selection)
+// its own middle so buttons hang off both sides. Re-centers when the selected
+// tab changes or the row's buttons appear/resize, until the person scrolls it
+// themselves.
+function setupHScroll(el, pickCenter) {
+  if (!el || el.dataset.hscroll) return;
+  el.dataset.hscroll = '1';
+  const FADE = 36;
+  const fades = () => {
+    const max = el.scrollWidth - el.clientWidth;
+    el.style.setProperty('--fade-l', (max > 1 && el.scrollLeft > 1 ? FADE : 0) + 'px');
+    el.style.setProperty('--fade-r', (max > 1 && el.scrollLeft < max - 1 ? FADE : 0) + 'px');
+  };
+  let userMoved = false, lastTarget = null;
+  const center = (force) => {
+    if (el.scrollWidth <= el.clientWidth) { fades(); return; }
+    const target = pickCenter();
+    if (!force && userMoved && target === lastTarget) { fades(); return; }
+    lastTarget = target;
+    if (target) {
+      const e = el.getBoundingClientRect(), r = target.getBoundingClientRect();
+      el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2;
+    } else el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    userMoved = false;
+    fades();
+  };
+  el.addEventListener('scroll', fades, { passive: true });
+  ['pointerdown', 'wheel', 'touchstart'].forEach(ev => el.addEventListener(ev, () => { userMoved = true; }, { passive: true }));
+  // A different tab selected / buttons shown or hidden -> back to center.
+  // (Its own fade style is set on the row itself -- ignored, or it would loop.)
+  new MutationObserver((muts) => {
+    if (!muts.some(m => m.target !== el)) return;
+    requestAnimationFrame(() => center(pickCenter() !== lastTarget));
+  }).observe(el, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+  if (window.ResizeObserver) new ResizeObserver(() => center(false)).observe(el);
+  window.addEventListener('resize', () => center(false));
+  requestAnimationFrame(() => center(true));
+}
 // Katas tab: the kata video for each level the student is at (katas.js).
 // Students (and a coach on their own page) get "Katas"; coaches/admins get
 // "Student Katas" with a dropdown of every student.
@@ -2470,6 +2528,9 @@ function setupViewModeToggle() {
     }
   }
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
+  setupMenuDragScroll(document.getElementById('protocolTools'));
+  setupHScroll(document.getElementById('viewModeToggle'), () => document.querySelector('#viewModeToggle .view-mode-btn.active'));
+  setupHScroll(document.getElementById('protocolTools'), () => null);
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, ['program', 'tpl'].includes(btn.dataset.builder) ? btn.dataset.builder : btn.dataset.builder === 'true');
   });
