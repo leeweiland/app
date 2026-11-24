@@ -8583,8 +8583,8 @@ async function loadStudents(fresh) {
   const r = await fetch('/api/chat/students-overview' + (fresh ? '?fresh=1' : ''));
   if (!r.ok) return null;
   studentsData = await r.json();
-  // The button shows active app students (installed on iPhone/Android).
-  const total = studentsData.buckets.find(b => b.key === 'app_students');
+  // The button shows everyone with the app on their phone, staff to Rogues.
+  const total = studentsData.buckets.find(b => b.key === 'app_everyone');
   document.getElementById('studentsCountNum').textContent = total ? total.count : '0';
   return studentsData;
 }
@@ -8616,12 +8616,14 @@ function renderStudentsList(key) {
   const q = search.value.trim().toLowerCase();
   const items = q ? bucket.items.filter(i => `${i.name} ${i.email} ${i.phone}`.toLowerCase().includes(q)) : bucket.items;
   document.getElementById('studentsBody').innerHTML = items.length ? items.map((i, idx) => {
+    const roleName = { user: 'Rogue', admin2: 'admin' }[i.role] || i.role;
     const tags = [
-      i.role ? `<span class="tag">App: ${escapeHtml(i.role)}</span>` : '<span class="tag">No app account</span>',
+      i.role ? `<span class="tag">App: ${escapeHtml(roleName)}</span>` : '<span class="tag">No app account</span>',
       ...i.platforms.map(p => `<span class="tag on">${p === 'ios' ? 'iPhone' : 'Android'}</span>`),
       i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : '<span class="tag">Not enrolled in CRM</span>',
     ].join('');
-    const acts = [
+    // Staff accounts are only counted here -- never finished/blacklisted from this list.
+    const acts = ['coach', 'admin', 'admin2'].includes(i.role) ? '' : [
       (i.appUserId && i.role !== 'user') || (!i.appUserId && i.enrolled) ? `<button class="pra-btn pra-btn-ghost" data-act="make_user" data-i="${idx}">Mark Finished</button>` : '',
       i.appUserId && i.role !== 'online' ? `<button class="pra-btn pra-btn-ghost" data-act="make_online" data-i="${idx}">Make Online</button>` : '',
       i.appUserId && i.role !== 'gym' ? `<button class="pra-btn pra-btn-ghost" data-act="make_gym" data-i="${idx}">Make Gym</button>` : '',
