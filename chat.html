@@ -77,11 +77,11 @@
   /* One row, always: on a phone the buttons share the width and the words
      shrink to fit (fitThreadButtons measures on the device, so a big phone
      font setting can't push them onto a 2nd line). */
-  .thread-head-icons { flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
+  #threadHeadIconsRow.thread-head-icons { flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
   .thr-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; justify-content: safe flex-end; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
   .thr-row.thr-empty { display: none; }
   @container pra-app (max-width: 640px) {
-    .thread-head-icons { align-items: stretch; width: 100%; }
+    #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; }
     .thr-row { gap: 4px; justify-content: safe flex-end; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
     .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
