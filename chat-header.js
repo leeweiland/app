@@ -49,6 +49,74 @@ window.PRALinkify = (function () {
   };
 })();
 
+// ── Sideways tab rows ─────────────────────────────────────────────────────
+// PRAHScroll(rowOrSelector, activeSelector) -- a row of tabs/buttons that
+// scrolls sideways (Lee, 2026-11-24): no scrollbar, the selected one kept in
+// the middle (or the row's own middle if nothing is selected), and each end
+// fades out only when there's more past that edge. Mouse: drag or wheel.
+// Re-centers when the selection changes or the row is re-rendered, unless
+// the person scrolled it by hand since.
+window.PRAHScroll = (function () {
+  const css = `.pra-hscroll { scrollbar-width: none !important; --fade-l: 0px; --fade-r: 0px;
+      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+      mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%); }
+    .pra-hscroll::-webkit-scrollbar { display: none !important; }`;
+  let styled = false;
+  function setup(el, activeSel) {
+    if (!el || el.dataset.praHscroll) return;
+    el.dataset.praHscroll = '1';
+    if (!styled) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); styled = true; }
+    el.classList.add('pra-hscroll');
+    const FADE = 36;
+    const pick = () => (activeSel ? el.querySelector(activeSel) : null);
+    const fades = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      el.style.setProperty('--fade-l', (max > 1 && el.scrollLeft > 1 ? FADE : 0) + 'px');
+      el.style.setProperty('--fade-r', (max > 1 && el.scrollLeft < max - 1 ? FADE : 0) + 'px');
+    };
+    let userMoved = false, last = null;
+    const center = (force) => {
+      if (el.scrollWidth <= el.clientWidth + 1) { fades(); return; }
+      const t = pick();
+      if (!force && userMoved && t === last) { fades(); return; }
+      last = t;
+      if (t) { const e = el.getBoundingClientRect(), r = t.getBoundingClientRect(); el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2; }
+      else el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+      userMoved = false;
+      fades();
+    };
+    el.addEventListener('scroll', fades, { passive: true });
+    // Mouse drag + wheel (touch already swipes). A drag never clicks.
+    let down = false, moved = false, sx = 0, sl = 0;
+    el.addEventListener('pointerdown', e => { userMoved = true; if (e.pointerType !== 'mouse' || el.scrollWidth <= el.clientWidth) return; down = true; moved = false; sx = e.clientX; sl = el.scrollLeft; });
+    el.addEventListener('pointermove', e => { if (!down) return; const dx = e.clientX - sx; if (!moved && Math.abs(dx) > 5) moved = true; if (moved) el.scrollLeft = sl - dx; });
+    const end = () => { down = false; };
+    el.addEventListener('pointerup', end); el.addEventListener('pointerleave', end);
+    el.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    el.addEventListener('wheel', e => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault(); userMoved = true; el.scrollLeft += e.deltaY;
+    }, { passive: false });
+    el.addEventListener('touchstart', () => { userMoved = true; }, { passive: true });
+    new MutationObserver((muts) => {
+      if (!muts.some(m => m.target !== el || m.type === 'childList')) return;
+      requestAnimationFrame(() => center(pick() !== last));
+    }).observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    if (window.ResizeObserver) new ResizeObserver(() => center(false)).observe(el);
+    window.addEventListener('resize', () => center(false));
+    requestAnimationFrame(() => center(true));
+  }
+  const api = function (row, activeSel) {
+    const go = () => setup(typeof row === 'string' ? document.querySelector(row) : row, activeSel);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+  };
+  // The app's own tab rows (pages without them just skip): Body Mastery's
+  // hub tabs and the Admin Panel's section tabs.
+  api('#hubTabsBar', '.hub-tab.active');
+  api('.admin-tab-bar-inner', '.admin-tab.active');
+  return api;
+})();
+
 window.PRABack = (function () {
   const stack = [];
   let skip = 0;

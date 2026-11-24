@@ -40,6 +40,8 @@
   .field { margin-bottom: 14px; }
   .field label { display:block; margin-bottom: 6px; }
   .btn-row { display: flex; gap: 10px; margin-top: 22px; }
+  /* New + Confirm password match: Change Password glows green. */
+  #changePwBtn.pw-match { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,.1); box-shadow: 0 0 14px rgba(34,197,94,.55), inset 0 0 8px rgba(34,197,94,.2); text-shadow: 0 0 8px rgba(34,197,94,.6); transition: box-shadow .2s, border-color .2s, color .2s; }
   .archetype-link { text-decoration: none; display: block; }
   .archetype-link:hover .level-chip { border-color: var(--pra-blue); }
   .section-title { text-align: left; font-weight: 700; font-size: .95rem; margin: 28px 0 12px; padding-top: 20px; border-top: 1px solid var(--pra-border); }
@@ -135,11 +137,6 @@ function render(u, editable) {
     </div>
     ${editable ? '<div class="save-msg" id="locationMsg"></div>' : ''}
     ${editable ? `
-      <div class="btn-row">
-        <button class="pra-btn" id="saveBtn" style="flex:1">SAVE CHANGES</button>
-        <button class="pra-btn pra-btn-ghost" id="logoutBtn">LOG OUT</button>
-      </div>
-
       <div class="section-title">Change Password</div>
       <div class="field"><label class="pra-label">Current Password</label>
         <input class="pra-input" type="password" id="fCurrentPw" autocomplete="current-password"/></div>
@@ -149,6 +146,12 @@ function render(u, editable) {
         <input class="pra-input" type="password" id="fConfirmPw" autocomplete="new-password"/></div>
       <button class="pra-btn pra-btn-outline" id="changePwBtn" style="width:100%">CHANGE PASSWORD</button>
       <div class="save-msg" id="pwMsg"></div>
+
+      <!-- Save + Log Out at the very bottom (Lee, 2026-11-24). -->
+      <div class="btn-row" style="margin-top:22px">
+        <button class="pra-btn" id="saveBtn" style="flex:1">SAVE CHANGES</button>
+        <button class="pra-btn pra-btn-ghost" id="logoutBtn">LOG OUT</button>
+      </div>
     ` : `<div class="btn-row"><a class="pra-btn" style="flex:1;text-decoration:none;text-align:center" href="/chat-app/chat.html">MESSAGE</a></div>`}
   `;
   PRAProfile.renderInline(document.getElementById('profilePanelInline'), u);
@@ -157,6 +160,13 @@ function render(u, editable) {
   if (editable) {
     document.getElementById('saveBtn').onclick = save;
     document.getElementById('logoutBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/chat-app/login.html'; };
+    // Change Password glows green once New and Confirm match (8+ characters,
+    // the same rule the button checks).
+    {
+      const nw = document.getElementById('fNewPw'), cf = document.getElementById('fConfirmPw'), btn = document.getElementById('changePwBtn');
+      const sync = () => btn.classList.toggle('pw-match', nw.value.length >= 8 && nw.value === cf.value);
+      nw.addEventListener('input', sync); cf.addEventListener('input', sync);
+    }
     document.getElementById('changePwBtn').onclick = changePassword;
   }
 }

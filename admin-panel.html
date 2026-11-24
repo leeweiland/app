@@ -670,7 +670,7 @@
 
     <div class="pra-panel section" id="quickStartSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:6px">Quick Start</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:16px">The coin-collecting walkthrough of the app (10 steps, 100 coins). Changes save with the button at the bottom. Tap a section to open it.</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:16px">The coin-collecting walkthrough of the app (10 steps, 100 coins). Every change saves itself. Tap a section to open it.</div>
 
 <details class="um-card qs-acc" data-k="who">
         <summary><h3>Who gets it</h3><span class="um-count" id="qsSum-who"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
@@ -2398,14 +2398,14 @@ window.addEventListener('pageshow', () => {
     $('qsSteps').querySelectorAll('[data-opts]').forEach(el => el.onclick = () => {
       const { p } = part(el);
       const items = () => DEF.OPTIONS.map(o => ({ value: o.key, label: o.label + (o.text ? ' (opens a box)' : ''), selected: p[o.key] !== undefined && p[o.key] !== false }));
-      window.PRAMenu.open(el, { multi: true, items: items(), onClose: () => renderSteps(), onPick: (it) => {
+      window.PRAMenu.open(el, { multi: true, items: items(), onClose: () => { renderSteps(); scheduleQsSave(); }, onPick: (it) => {
         const o = DEF.OPTIONS.find(x => x.key === it.value);
         if (it.selected) delete p[o.key]; else p[o.key] = o.text ? '' : true;
         return items();
       } });
     });
   }
-  $('qsResetSteps').onclick = (e) => { e.preventDefault(); if (!DEF || !confirm('Put every step back to the default areas and wording?')) return; draft = copy(DEF.DEFAULT_STEPS); renderSteps(); };
+  $('qsResetSteps').onclick = (e) => { e.preventDefault(); if (!DEF || !confirm('Put every step back to the default areas and wording?')) return; draft = copy(DEF.DEFAULT_STEPS); renderSteps(); scheduleQsSave(); };
   function fill() {
     const c = data.config;
     document.querySelectorAll('input[name="qsEnabledFor"]').forEach(r => { r.checked = r.value === c.enabledFor; });
@@ -2427,10 +2427,30 @@ window.addEventListener('pageshow', () => {
   }
   $('qsTesterSearch').addEventListener('change', (e) => {
     const u = (data.users || []).find(x => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
-    if (u && !testers.includes(u.id)) { testers.push(u.id); renderTesters(); }
+    if (u && !testers.includes(u.id)) { testers.push(u.id); renderTesters(); scheduleQsSave(); }
     e.target.value = '';
   });
-  $('qsSaveBtn').onclick = async () => {
+  // No Save button (Lee, 2026-11-24): every change saves itself shortly after
+  // you stop typing/clicking. The inputs are NOT re-filled after an autosave
+  // (that would yank the box you're typing in); only Progress and the
+  // section summaries refresh.
+  let qsSaveTimer = null;
+  function scheduleQsSave() {
+    if (!data) return;
+    clearTimeout(qsSaveTimer);
+    $('qsSaveMsg').textContent = 'Saving…';
+    qsSaveTimer = setTimeout(() => saveQs(true), 600);
+  }
+  $('quickStartSection').addEventListener('input', (e) => { if (e.target.id !== 'qsTesterSearch') scheduleQsSave(); });
+  $('quickStartSection').addEventListener('change', (e) => { if (e.target.id !== 'qsTesterSearch') scheduleQsSave(); });
+  $('quickStartSection').addEventListener('click', (e) => {
+    if (e.target.closest('[data-del], [data-up], [data-add], #qsTesterChips button')) setTimeout(scheduleQsSave, 0);
+  });
+  window.addEventListener('beforeunload', () => { if (qsSaveTimer) { clearTimeout(qsSaveTimer); saveQs(true); } });
+  $('qsSaveBtn').style.display = 'none';
+  $('qsSaveBtn').onclick = () => saveQs(false);
+  async function saveQs(auto) {
+    qsSaveTimer = null;
     // Saved only when it differs from the default, so future default fixes still reach everyone.
     const clean = (draft || []).map(st => st.map(p => { const c = { ...p }; Object.keys(c).forEach(k => { if (c[k] === false || c[k] === undefined) delete c[k]; }); return c; }));
     const steps = DEF && JSON.stringify(clean) === JSON.stringify(DEF.DEFAULT_STEPS) ? null : clean;
@@ -2445,10 +2465,13 @@ window.addEventListener('pageshow', () => {
     };
     $('qsSaveMsg').textContent = 'Saving…';
     const r = await fetch('/api/admin/quickstart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) { $('qsSaveMsg').textContent = 'Could not save.'; return; }
-    data = await r.json(); fill(); $('qsSaveMsg').textContent = 'Saved.';
-    setTimeout(() => { $('qsSaveMsg').textContent = ''; }, 2500);
-  };
+    if (!r.ok) { $('qsSaveMsg').textContent = 'Could not save — check your connection.'; return; }
+    data = await r.json();
+    if (auto) { renderPeople(); updateQsSummaries(); } else fill();
+    if (qsSaveTimer) return; // more changes came in while saving
+    $('qsSaveMsg').textContent = 'Saved.';
+    setTimeout(() => { if (!qsSaveTimer && $('qsSaveMsg').textContent === 'Saved.') $('qsSaveMsg').textContent = ''; }, 2500);
+  }
   async function load() {
     const r = await fetch('/api/admin/quickstart');
     if (!r.ok) { $('qsSteps').textContent = 'Admins only.'; return; }
