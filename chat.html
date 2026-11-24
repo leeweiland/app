@@ -74,7 +74,15 @@
   .icon-btn.text-btn.on { border-color: var(--pra-blue); }
   .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
   #startCallBtn.call-live { color: #fff; }
-  .thread-head-icons { flex-wrap: wrap; row-gap: 6px; }
+  /* One row, always: on a phone the buttons share the width and the words
+     shrink to fit (fitThreadButtons measures on the device, so a big phone
+     font setting can't push them onto a 2nd line). */
+  .thread-head-icons { flex-wrap: nowrap; min-width: 0; max-width: 100%; }
+  @container pra-app (max-width: 640px) {
+    .thread-head-icons { gap: 4px; justify-content: center; width: 100%; }
+    .thread-head-icons .icon-btn { flex-shrink: 0; }
+    .thread-head-icons .icon-btn.text-btn { flex: 0 1 auto; min-width: 0; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
+  }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
   .convo-list { flex: 1; overflow-y: auto; }
@@ -8655,6 +8663,33 @@ function setupCallUI() {
     fetch(`/api/chat/conversations/${call.conversationId}/call/${call.id}/decline`, { method: 'POST' }).catch(() => {});
   };
 }
+
+// Chat panel word buttons (Video Call, Group, Channel, Media, Favorites,
+// Search + staff icons) stay on ONE row: shrink the words until they fit.
+// Re-checked whenever buttons show/hide or the row changes width.
+(function fitThreadButtons() {
+  const row = document.getElementById('threadHeadIconsRow');
+  if (!row) return;
+  let busy = false;
+  const fit = () => {
+    if (busy) return; busy = true;
+    const btns = [...row.querySelectorAll('.icon-btn.text-btn')];
+    btns.forEach(b => { b.style.fontSize = ''; });
+    let fs = btns[0] ? parseFloat(getComputedStyle(btns[0]).fontSize) || 12 : 0;
+    for (let i = 0; i < 20 && btns.length && row.scrollWidth > row.clientWidth + 1; i++) {
+      fs *= 0.94; btns.forEach(b => { b.style.fontSize = fs + 'px'; });
+    }
+    requestAnimationFrame(() => { busy = false; });
+  };
+  if (window.ResizeObserver) new ResizeObserver(() => fit()).observe(row);
+  // Buttons shown/hidden for this chat -> refit. (Its own font-size writes land
+  // while `busy` is still set, so they don't loop.)
+  new MutationObserver(() => { if (!busy) fit(); })
+    .observe(row, { subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+  window.addEventListener('resize', fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  fit();
+})();
 
 // Magnifier next to multi-select: shows / hides the search box + chat-type
 // row. Hidden by default to give the chat list the room; the choice is
