@@ -18,11 +18,17 @@
   .yt-title { font-weight: 700; font-size: .92rem; line-height: 1.35; }
   .yt-date { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); margin-top: 4px; }
 
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
-  .modal-backdrop.show { display: flex; }
-  .player-box { width: 100%; max-width: 860px; padding: 20px; }
-  .player-frame { position: relative; width: 100%; aspect-ratio: 16/9; max-height: 70vh; border-radius: 10px; overflow: hidden; background: #000; }
-  .player-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  /* Plays right in the feed (no popup): the tapped card's thumbnail becomes
+     the YouTube player. */
+  .yt-card.playing { cursor: default; transform: none !important; box-shadow: 0 0 18px var(--pra-blue-glow); }
+  .yt-thumb iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  /* Phone turned sideways while a video plays: the player fills the screen.
+     Real fullscreen when the phone allows it; otherwise this black layer over
+     everything (iPhones don't let a YouTube embed go fullscreen from code). */
+  .yt-thumb.yt-fs { position: fixed !important; inset: 0; width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; z-index: 100000; background: #000; }
+  html.yt-fs-on, html.yt-fs-on body { overflow: hidden !important; }
+  html.yt-fs-on .yt-card { transform: none !important; }
+  .yt-thumb:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; background: #000; }
 </style>
 </head>
 <body>
@@ -33,14 +39,6 @@
   <div class="wrap">
     <div class="pra-h1 pra-glow" style="margin-bottom:18px;font-family:var(--font-secondary)">Powerbatics Training Videos</div>
     <div class="grid" id="grid"><div class="pra-muted">Loading…</div></div>
-  </div>
-
-  <div class="modal-backdrop" id="playerModal">
-    <div class="pra-panel player-box">
-      <div class="pra-h2" id="playerTitle" style="margin-bottom:12px"></div>
-      <div class="player-frame" id="playerFrame"></div>
-      <button class="pra-btn pra-btn-ghost" style="margin-top:14px;width:100%" onclick="closePlayer()">Close</button>
-    </div>
   </div>
 </div>
 
@@ -69,21 +67,76 @@ async function load() {
         <div class="yt-date">${fmtDate(v.publishedAt)}</div>
       </div>
     </div>`).join('') || '<div class="pra-muted">No videos yet.</div>';
-  grid.querySelectorAll('.yt-card').forEach(el => el.onclick = () => openPlayer(el.dataset.id));
+  grid.querySelectorAll('.yt-card').forEach(el => el.onclick = () => playInFeed(el));
 }
 
-function openPlayer(id) {
-  const v = videos.find(x => x.id === id);
-  if (!v) return;
-  document.getElementById('playerTitle').textContent = v.title;
-  document.getElementById('playerFrame').innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
-  document.getElementById('playerModal').classList.add('show');
+// ── Play in the feed ────────────────────────────────────────────────────
+// One video at a time: starting another puts the last one back to its
+// thumbnail (which also stops it).
+let playingCard = null;
+function stopPlaying() {
+  if (!playingCard) return;
+  exitFullscreen();
+  const v = videos.find(x => x.id === playingCard.dataset.id);
+  playingCard.querySelector('.yt-thumb').innerHTML = v ? `<img src="${esc(v.thumb)}" alt=""><div class="play-icon">▶</div>` : '';
+  playingCard.classList.remove('playing');
+  playingCard = null;
 }
-function closePlayer() {
-  document.getElementById('playerFrame').innerHTML = '';
-  document.getElementById('playerModal').classList.remove('show');
+function playInFeed(card) {
+  if (card === playingCard) return;
+  stopPlaying();
+  const id = card.dataset.id;
+  card.querySelector('.yt-thumb').innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  card.classList.add('playing');
+  playingCard = card;
 }
-document.getElementById('playerModal').addEventListener('click', (e) => { if (e.target.id === 'playerModal') closePlayer(); });
+
+// ── Sideways = fullscreen ───────────────────────────────────────────────
+// Phones only (not tablets/computers, which are often landscape anyway), and
+// only on an actual rotation while a video is playing. Real fullscreen when
+// the phone allows it (a rotation counts as the user's go-ahead on Android);
+// otherwise the player is pinned over the whole screen. Turning back upright
+// (or Android's back button) leaves fullscreen and the video keeps playing.
+const isPhone = () => Math.min(screen.width, screen.height) < 600 && matchMedia('(pointer: coarse)').matches;
+const isLandscape = () => (screen.orientation && screen.orientation.type) ? screen.orientation.type.startsWith('landscape') : Math.abs(window.orientation || 0) === 90;
+let fsThumb = null, rootContainer = null;
+function enterFullscreen() {
+  if (!playingCard || fsThumb) return;
+  const thumb = playingCard.querySelector('.yt-thumb');
+  fsThumb = thumb;
+  // The pinned layer must cover the screen, not just the page box around it:
+  // .pra-root is a size container, which would otherwise trap position:fixed.
+  const root = document.querySelector('.pra-root');
+  if (root) { rootContainer = root.style.containerType; root.style.containerType = 'normal'; }
+  document.documentElement.classList.add('yt-fs-on');
+  thumb.classList.add('yt-fs');
+  const req = thumb.requestFullscreen || thumb.webkitRequestFullscreen;
+  if (req) { try { const p = req.call(thumb); if (p && p.catch) p.catch(() => {}); } catch {} }
+  if (window.PRABack) PRABack.push('yt-fs', () => exitFullscreen(true));
+}
+function exitFullscreen(fromBack) {
+  if (!fsThumb) return;
+  const thumb = fsThumb;
+  fsThumb = null;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl) { try { const p = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (p && p.catch) p.catch(() => {}); } catch {} }
+  thumb.classList.remove('yt-fs');
+  document.documentElement.classList.remove('yt-fs-on');
+  const root = document.querySelector('.pra-root');
+  if (root) root.style.containerType = rootContainer || '';
+  if (!fromBack && window.PRABack) PRABack.closed('yt-fs');
+  // Back where it was in the feed.
+  if (playingCard) playingCard.scrollIntoView({ block: 'center' });
+}
+function onRotate() {
+  if (!isPhone()) return;
+  if (isLandscape()) enterFullscreen(); else exitFullscreen();
+}
+if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onRotate);
+else window.addEventListener('orientationchange', onRotate);
+// Left real fullscreen some other way (e.g. YouTube's own button) while
+// still sideways: drop the pinned layer too only when they're upright.
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && fsThumb && !isLandscape()) exitFullscreen(); });
 
 load();
 </script>
