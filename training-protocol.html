@@ -2348,7 +2348,7 @@ function setupMenuDragScroll(el) {
 // its own middle so buttons hang off both sides. Re-centers when the selected
 // tab changes or the row's buttons appear/resize, until the person scrolls it
 // themselves.
-function setupHScroll(el, pickCenter) {
+function setupHScroll(el, pickCenter, opts = {}) {
   if (!el || el.dataset.hscroll) return;
   el.dataset.hscroll = '1';
   const FADE = 36;
@@ -2366,7 +2366,7 @@ function setupHScroll(el, pickCenter) {
     if (target) {
       const e = el.getBoundingClientRect(), r = target.getBoundingClientRect();
       el.scrollLeft += (r.left - e.left) - (e.width - r.width) / 2;
-    } else el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    } else el.scrollLeft = opts.start ? 0 : (el.scrollWidth - el.clientWidth) / 2;
     userMoved = false;
     fades();
   };
@@ -2557,7 +2557,18 @@ function setupViewModeToggle() {
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   setupMenuDragScroll(document.getElementById('protocolTools'));
   setupHScroll(document.getElementById('viewModeToggle'), () => document.querySelector('#viewModeToggle .view-mode-btn.active'));
-  setupHScroll(document.getElementById('protocolTools'), () => null);
+  // Tool row starts with Undo / Redo in view, and slides back to them
+  // whenever an edit makes Undo or Redo available (Lee, 2026-11-24).
+  setupHScroll(document.getElementById('protocolTools'), () => null, { start: true });
+  {
+    const tools = document.getElementById('protocolTools');
+    const reveal = () => { if (tools.scrollLeft > 1) tools.scrollTo({ left: 0, behavior: 'smooth' }); };
+    ['undoBtn', 'redoBtn'].forEach(id => {
+      const b = document.getElementById(id);
+      let was = b.disabled;
+      new MutationObserver(() => { if (was && !b.disabled) reveal(); was = b.disabled; }).observe(b, { attributes: true, attributeFilter: ['disabled'] });
+    });
+  }
   document.querySelectorAll('.view-mode-btn[data-mode]').forEach(btn => {
     btn.onclick = () => setProtocolMode(btn.dataset.mode, ['program', 'tpl'].includes(btn.dataset.builder) ? btn.dataset.builder : btn.dataset.builder === 'true');
   });
