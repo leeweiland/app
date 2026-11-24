@@ -46,6 +46,9 @@ const CONFIG_FILE = "chat_admin_config.json";
 // of using the app, and again for M days whenever they come back after K+
 // days away.
 const QS_FILE = "chat_quickstart.json";
+// Every Online/Gym buyer on record, built from CRM + sheets + GoTeamUp emails
+// (Students panel "All"). Not login accounts -- see buildStudentsOverview.
+const HISTORY_STUDENTS_FILE = "chat_history_students.json";
 const QS_DAY = 24 * 60 * 60 * 1000;
 const QS_DEFAULTS = {
   enabledFor: "testers",          // "off" | "testers" | "everyone"
@@ -4251,7 +4254,7 @@ async function crmFindContactId(email, phone) {
 }
 // Buckets for the Students panel. "On iPhone/Android" = the app is installed
 // on their phone (an iPhone/Android push registration exists).
-function buildStudentsOverview(crm, crmError, sheet) {
+function buildStudentsOverview(crm, crmError, sheet, levelsPeople = null) {
   // Every live account; the student/rogue/trainee buckets work off `users`,
   // staff only ever count toward "All App Users" (Lee, 2026-11-24).
   const allAccounts = readJson(USERS_FILE, []).filter(u => !u.archived);
@@ -4297,13 +4300,27 @@ function buildStudentsOverview(crm, crmError, sheet) {
     return who.length > 1 ? who.map(m => ({ ...base, name: `${m.first} ${m.last}`, family: `${u.first || ""} ${u.last || ""}`.trim() })) : [base];
   });
   const onPhone = appItems.filter(i => i.platforms.length);
-  const staffOnPhone = allAccounts.filter(u => isStaff(u)).map(fromUser).filter(i => i.platforms.length);
+  // "All" (Lee, 2026-11-24): every Online/Gym buyer on record -- CRM, buyer
+  // sheets, old buyer sheets, kickoff calls, rosters, GoTeamUp emails
+  // (chat_history_students.json, blacklist already left out) -- plus every
+  // app account, staff included. A history person who already has an app
+  // account counts once, as that account.
+  const levelsMatch = (name) => { if (!levelsPeople || !name) return false; const parts = name.split(/ (?=[^ ]+$)/); return parts.length === 2 && findLevelsEntries(levelsPeople, parts[0], parts[1]).length > 0; };
+  const everyAccount = allAccounts.map(fromUser);
+  const acctEmail = new Set(allAccounts.map(u => String(u.email || "").toLowerCase()).filter(Boolean));
+  const acctPhone = new Set(allAccounts.map(u => last10(u.phone)).filter(p => p.length === 10));
+  const acctName = new Set(allAccounts.filter(u => u.first && u.last).map(u => nameKey(u.first, u.last)));
+  const historyItems = (readJson(HISTORY_STUDENTS_FILE, { people: [] }).people || [])
+    .filter(h => !((h.email && acctEmail.has(h.email)) || (h.phone && acctPhone.has(h.phone)) || (h.first && h.last && acctName.has(nameKey(h.first, h.last)))))
+    .map(h => ({ name: `${h.first || ""} ${h.last || ""}`.trim(), email: h.email || "", phone: h.phone || "", appUserId: null, role: null, platforms: [],
+      crmContactId: h.crmContactId || null, programType: (h.programs || [])[0] || null, enrolled: h.crmStatus === "ENROLLED", history: true, sources: h.sources || [] }));
+  const allItems = [...everyAccount, ...historyItems].map(i => ({ ...i, levels: levelsMatch(i.name) }));
   const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
   // [key, name, source, items] -- the panel lines up the (source) column.
   // "On App" = the app is installed on their phone (iPhone/Android).
   // "Rogues" = accounts with the plain "user" role (Lee's name for them).
   const buckets = [
-    ["app_everyone", "All App Users", "", [...onPhone, ...staffOnPhone]],
+    ["all", "All", "", allItems],
     ["crm_all", "All Students", "CRM", crmItems],
     ["app_students", "All Students on App", "", onPhone.filter(i => i.role === "online" || i.role === "gym")],
     ["crm_online", "Online Students", "CRM", crmItems.filter(i => i.programType === "online")],
@@ -5436,7 +5453,8 @@ export async function handleChatRequest(req, res, url) {
     let crm = [], crmError = null;
     try { crm = await crmEnrolledContacts(url.searchParams.get("fresh") === "1"); } catch (e) { crmError = e.message; }
     const sheet = await fetchStudentEligibility().catch(() => null);
-    return sendJson(res, 200, buildStudentsOverview(crm, crmError, sheet));
+    const levelsPeople = await fetchAllLevels().catch(() => null);
+    return sendJson(res, 200, buildStudentsOverview(crm, crmError, sheet, levelsPeople));
   }
   // "Put on hold" from the sidebar long-press menu (Lee, 2026-11-22). Same
   // result as picking ON HOLD in the CRM: the CRM contact goes to ON HOLD with

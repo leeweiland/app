@@ -8583,8 +8583,8 @@ async function loadStudents(fresh) {
   const r = await fetch('/api/chat/students-overview' + (fresh ? '?fresh=1' : ''));
   if (!r.ok) return null;
   studentsData = await r.json();
-  // The button shows everyone with the app on their phone, staff to Rogues.
-  const total = studentsData.buckets.find(b => b.key === 'app_everyone');
+  // The button shows "All": every buyer on record plus every app account.
+  const total = studentsData.buckets.find(b => b.key === 'all');
   document.getElementById('studentsCountNum').textContent = total ? total.count : '0';
   return studentsData;
 }
@@ -8620,7 +8620,8 @@ function renderStudentsList(key) {
     const tags = [
       i.role ? `<span class="tag">App: ${escapeHtml(roleName)}</span>` : '<span class="tag">No app account</span>',
       ...i.platforms.map(p => `<span class="tag on">${p === 'ios' ? 'iPhone' : 'Android'}</span>`),
-      i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : '<span class="tag">Not enrolled in CRM</span>',
+      i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : (i.history ? `<span class="tag">Past ${escapeHtml(i.programType || 'student')}</span>` : '<span class="tag">Not enrolled in CRM</span>'),
+      i.levels ? '<span class="tag on">Levels</span>' : '',
     ].join('');
     // Staff accounts are only counted here -- never finished/blacklisted from this list.
     const acts = ['coach', 'admin', 'admin2'].includes(i.role) ? '' : [
