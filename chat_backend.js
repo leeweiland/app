@@ -3243,19 +3243,54 @@ function enqueueChatVideo(job) {
   chatVideoQueue = run.catch(() => {});
   return run;
 }
+// How far a file's video / audio track actually runs, in seconds (reads the
+// packets without decoding -- fast). null = no such track / unreadable.
+function streamEndSec(path, sel) {
+  return new Promise((resolve) => {
+    execFile(FFMPEG_EXE, ["-hide_banner", "-i", path, "-map", sel, "-c", "copy", "-f", "null", "-"], { timeout: 120000, maxBuffer: 32 * 1024 * 1024 }, (e, _out, stderr) => {
+      const m = String(stderr || "").match(/time=(\d+):(\d+):([\d.]+)/g);
+      if (!m) return resolve(null);
+      const [h, mi, s] = m[m.length - 1].slice(5).split(":");
+      resolve(+h * 3600 + +mi * 60 + +s);
+    });
+  });
+}
+// Picture track ends more than 1s before the sound? (Nov 24: three of
+// Gabriel Almanza's clips came out of the 30fps-cap encode with the picture
+// frozen at 4-14s while the sound ran 31-42s -- the conversion silently
+// dropped every frame after some point in his phone's timestamps.)
+async function videoCutShort(path) {
+  const [v, a] = await Promise.all([streamEndSec(path, "0:v:0"), streamEndSec(path, "0:a:0")]);
+  return { short: v != null && a != null && v < a - 1, v, a };
+}
 async function processChatVideo({ msgId, tempPath, ext, mimeType, trim, user, folderId }) {
   const webPath = tempPath + "-web.mp4";
   let sourcePath = tempPath, outExt = ext, outMime = mimeType;
   try {
-    const args = ["-y"];
-    if (trim) args.push("-ss", String(Math.max(0, trim.start)));
-    args.push("-i", tempPath);
-    if (trim) args.push("-t", String(Math.max(0.1, trim.end - trim.start)));
-    args.push("-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-fpsmax", "30",
-      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "-f", "mp4", webPath);
+    const encodeArgs = (frameArgs) => {
+      const args = ["-y"];
+      if (trim) args.push("-ss", String(Math.max(0, trim.start)));
+      args.push("-i", tempPath);
+      if (trim) args.push("-t", String(Math.max(0.1, trim.end - trim.start)));
+      args.push("-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", ...frameArgs,
+        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "-f", "mp4", webPath);
+      return args;
+    };
     try {
-      await runFfmpegAsync(args, 15 * 60 * 1000);
-      sourcePath = webPath; outExt = ".mp4"; outMime = "video/mp4";
+      await runFfmpegAsync(encodeArgs(["-fpsmax", "30"]), 15 * 60 * 1000);
+      let check = await videoCutShort(webPath);
+      if (check.short) {
+        // Again without the frame-rate cap, keeping the phone's own frame timing.
+        console.warn("[chat video] picture cut short", msgId, `video ${check.v}s / audio ${check.a}s -- re-encoding without the 30fps cap`);
+        await runFfmpegAsync(encodeArgs(["-vsync", "passthrough"]), 15 * 60 * 1000);
+        check = await videoCutShort(webPath);
+      }
+      if (check.short && !(await videoCutShort(tempPath)).short) {
+        // Still short, but the original isn't: post the original untouched.
+        console.warn("[chat video] still cut short", msgId, `video ${check.v}s / audio ${check.a}s -- sending the original file`);
+      } else {
+        sourcePath = webPath; outExt = ".mp4"; outMime = "video/mp4";
+      }
     } catch (e) {
       console.error("[chat video convert]", e.message); // fall back to the original file
     }
