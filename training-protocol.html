@@ -2384,30 +2384,13 @@ async function showKatas(which) {
   document.querySelectorAll('#viewModeToggle .view-mode-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(which === 'students' ? 'studentKatasBtn' : 'katasViewBtn').classList.add('active');
   applyViewModeDisplay();
-  const row = document.getElementById('katasStudentRow');
-  const sel = document.getElementById('katasStudentSelect');
-  row.style.display = which === 'students' ? 'flex' : 'none';
+  // Student Katas = the page's student, picked the same way as Student Flow /
+  // Student Page (the picker), never an inline dropdown (Lee, 2026-11-24).
+  document.getElementById('katasStudentRow').style.display = 'none';
   let userId = targetUserId;
   if (which === 'students') {
-    if (!katasStudentsLoaded) {
-      const d = await fetch('/api/chat/katas/students').then(r => r.ok ? r.json() : { students: [] }).catch(() => ({ students: [] }));
-      const fill = (q) => {
-        const keep = sel.value;
-        const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-        const hits = d.students.filter(st => words.every(w => `${st.first} ${st.last}`.toLowerCase().includes(w)));
-        sel.innerHTML = `<option value="">${words.length ? `${hits.length} match${hits.length === 1 ? '' : 'es'}…` : 'Choose a student…'}</option>` + hits.map(st => `<option value="${escapeHtml(st.id)}">${escapeHtml(st.first + ' ' + st.last)}</option>`).join('');
-        if (hits.some(st => st.id === keep)) sel.value = keep;
-        return hits;
-      };
-      fill('');
-      sel.onchange = () => showKatas('students');
-      const search = document.getElementById('katasStudentSearch');
-      search.oninput = () => { const hits = fill(search.value); if (hits.length === 1 && sel.value !== hits[0].id) { sel.value = hits[0].id; showKatas('students'); } };
-      katasStudentsLoaded = true;
-      if (targetUserId !== me.id && d.students.some(st => st.id === targetUserId)) sel.value = targetUserId;
-    }
-    userId = sel.value;
-    if (!userId) { document.getElementById('katasList').innerHTML = '<div class="kata-empty">Pick a student to see their katas.</div>'; return; }
+    userId = targetUserId !== me.id ? targetUserId : '';
+    if (!userId) { document.getElementById('katasList').innerHTML = '<div class="kata-empty">Pick a student to see their katas.</div>'; openStudentPicker('katas'); return; }
   }
   const list = document.getElementById('katasList');
   list.innerHTML = '<div class="kata-empty">Loading katas…</div>';
@@ -2462,10 +2445,10 @@ async function openStudentPicker(view) {
   }
   const wrap = document.createElement('div');
   wrap.className = 'sp-modal';
-  wrap.innerHTML = `<div class="sp-box"><h3>Open a student's ${view === 'page' ? 'page' : 'flow'}</h3><input class="pra-input" placeholder="Search students…" autocomplete="off" style="width:100%"/><div class="sp-list"></div></div>`;
+  wrap.innerHTML = `<div class="sp-box"><h3>Open a student's ${view === 'page' ? 'page' : view === 'katas' ? 'katas' : 'flow'}</h3><input class="pra-input" placeholder="Search students…" autocomplete="off" style="width:100%"/><div class="sp-list"></div></div>`;
   document.body.appendChild(wrap);
   const input = wrap.querySelector('input'), list = wrap.querySelector('.sp-list');
-  const go = id => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(id) + '&view=' + view; };
+  const go = id => { rememberPick(PICK_STUDENT, id); location.href = studentUrl(id, view); };
   let hits = [];
   const draw = () => {
     const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -2479,13 +2462,36 @@ async function openStudentPicker(view) {
   draw();
   input.focus();
 }
+// ── Sticky picks (Lee, 2026-11-24) ──
+// The student and the low-ticket program you last picked stay picked as you
+// move between tabs: Student Flow / Student Page / Student Katas all open that
+// same student, and Low Ticket reopens that same program. Tapping the tab
+// you're already on opens the picker to switch. Per device.
+const PICK_STUDENT = 'pra-tp-student', PICK_PROGRAM = 'pra-tp-program';
+function rememberPick(key, id) { try { if (id) localStorage.setItem(key, id); } catch {} }
+function rememberedPick(key) { try { return localStorage.getItem(key) || ''; } catch { return ''; } }
+function studentUrl(id, view) { return 'training-protocol.html?userId=' + encodeURIComponent(id) + '&view=' + view; }
+function openPickedStudent(view) {
+  const s = rememberedPick(PICK_STUDENT);
+  if (s && s !== me.id) location.href = studentUrl(s, view); else openStudentPicker(view);
+}
 async function openLowTicket() {
-  // On a trainee's page (or a preview), their program view is right here.
+  // Coaches/admins: always the editing screen for the program they last
+  // picked (Handstand Protocol until they pick another).
+  if (canEdit) {
+    if (programPreviewTemplateId && targetUserId === me.id) { await showProgramView(); return; }
+    let id = rememberedPick(PICK_PROGRAM);
+    if (!id) {
+      const d = await fetch('/api/chat/protocol-templates').then(r => r.ok ? r.json() : { templates: [] }).catch(() => ({ templates: [] }));
+      const t = (d.templates || []).filter(x => x.isProgram).find(x => /handstand/i.test(x.name || '')) || (d.templates || []).find(x => x.isProgram);
+      if (!t) { alert('No low-ticket program is set up yet.'); return; }
+      id = t.id;
+    }
+    location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(id);
+    return;
+  }
+  // A trainee's own program view is right here.
   if (programPreviewTemplateId || enrolledPrograms.length) { await showProgramView(); return; }
-  const d = await fetch('/api/chat/protocol-templates').then(r => r.ok ? r.json() : { templates: [] }).catch(() => ({ templates: [] }));
-  const t = (d.templates || []).filter(x => x.isProgram).find(x => /handstand/i.test(x.name || '')) || (d.templates || []).find(x => x.isProgram);
-  if (!t) { alert('No low-ticket program is set up yet.'); return; }
-  location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&programTemplate=' + encodeURIComponent(t.id);
 }
 function setupViewModeToggle() {
   const ownKatas = !canEdit || targetUserId === me.id;
@@ -2502,18 +2508,32 @@ function setupViewModeToggle() {
   document.getElementById('studentKatasBtn').style.display = canEdit ? '' : 'none';
   document.getElementById('studentKatasBtn').onclick = () => showKatas('students');
   if (canEdit) {
+    // This page's student / program becomes the sticky pick (see openPickedStudent).
+    if (targetUserId !== me.id) rememberPick(PICK_STUDENT, targetUserId);
+    if (programPreviewTemplateId) rememberPick(PICK_PROGRAM, programPreviewTemplateId);
     // Your Katas from a student's page goes back to your own katas.
     if (targetUserId !== me.id) document.getElementById('katasViewBtn').onclick = () => { location.href = 'training-protocol.html?userId=' + encodeURIComponent(me.id) + '&view=katas'; };
-    document.getElementById('pickStudentFlowBtn').onclick = () => openStudentPicker('flow');
-    document.getElementById('pickStudentPageBtn').onclick = () => openStudentPicker('page');
+    document.getElementById('pickStudentFlowBtn').onclick = () => openPickedStudent('flow');
+    document.getElementById('pickStudentPageBtn').onclick = () => openPickedStudent('page');
+    // On your own page, Student Katas opens the picked student's katas too.
+    if (targetUserId === me.id) document.getElementById('studentKatasBtn').onclick = () => openPickedStudent('katas');
     document.getElementById('lowTicketBtn').onclick = () => openLowTicket();
+    // Tapping the Student tab you're already on = switch student.
+    document.getElementById('viewModeToggle').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      const view = b && b.classList.contains('active') && { programFlowBtn: 'flow', programPageBtn: 'page', flowViewBtn: 'flow', pageViewBtn: 'page', studentKatasBtn: 'katas' }[b.id];
+      if (!view || targetUserId === me.id) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      openStudentPicker(view);
+    }, true);
   }
   if (params.get('view') === 'katas') setTimeout(() => showKatas(ownKatas ? 'own' : 'students'), 0);
   // A refresh comes back to the view you were on (Flow / Page / Katas /
   // Flow Builder / Page View...) for this same page address. Buttons that
   // open a picker or another page aren't replayed -- their address does it.
   {
-    const REPLAY = ['flowViewBtn', 'pageViewBtn', 'katasViewBtn', 'warmupViewBtn', 'studentKatasBtn', 'flowBuilderBtn', 'pageBuilderBtn'];
+    // (Student Katas isn't replayed: on your own page it opens a student's page.)
+    const REPLAY = ['flowViewBtn', 'pageViewBtn', 'katasViewBtn', 'warmupViewBtn', 'flowBuilderBtn', 'pageBuilderBtn'];
     const key = 'pra-tp-view:' + location.pathname + location.search;
     document.getElementById('viewModeToggle').addEventListener('click', (e) => {
       const b = e.target.closest('button');
