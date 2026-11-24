@@ -199,12 +199,29 @@ window.PRABack = (function () {
       /* Phone width: six words must fit one row in ~390px. Selectors are
          doubled up to outrank the bar/group rules further down. */
       @container pra-app (max-width: 640px) {
-        #chat-app-header .cah-icons { gap: 6px; }
-        /* Words sat low on Android (nav bar below): 4px less on top, 4px more
-           underneath lifts them to the middle of the row. */
-        div#chat-app-bottom-bar { padding-left: 8px; padding-right: 8px; padding-top: 6px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
-        #chat-app-bottom-bar div.cah-bottom-group { gap: 2px; }
-        #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text { padding: 0 5px; }
+        /* Phones: both rows fill the width and the words scale with it (cqi =
+           1% of the app's width), so a small phone shrinks the text instead
+           of cutting words off; a very narrow screen wraps as a last resort. */
+        #chat-app-header .cah-icons { width: 100%; gap: 1.6cqi; flex-wrap: nowrap; }
+        #chat-app-header .cah-icon {
+          flex: 1 1 0; min-width: 0; max-width: 88px; padding: 0 2px;
+          font-size: clamp(10px, 3.4cqi, 14px);
+        }
+        /* The Android app draws behind the phone's own nav bar and reports its
+           height as --safe-area-inset-bottom (Capacitor), not env() -- without
+           it the bottom of this bar hid under the nav bar and the words looked
+           low. Equal room above and below the words, plus that inset. */
+        div#chat-app-bottom-bar {
+          padding: 8px 6px;
+          padding-bottom: calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+        }
+        #chat-app-bottom-bar div.cah-bottom-group {
+          width: 100%; gap: 0; justify-content: space-evenly; flex-wrap: wrap;
+        }
+        #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
+          flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 clamp(2px, 1.2cqi, 6px);
+          font-size: clamp(9.5px, 3.2cqi, 13px);
+        }
       }
       #chat-app-header .cah-icon svg {
         width: 19px; height: 19px; overflow: visible;
