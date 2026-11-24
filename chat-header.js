@@ -284,7 +284,7 @@ window.PRABack = (function () {
            of cutting words off; a very narrow screen wraps as a last resort. */
         #chat-app-header .cah-icons { width: 100%; gap: 1.6cqi; flex-wrap: nowrap; }
         #chat-app-header .cah-icon {
-          flex: 1 1 0; min-width: 0; max-width: 88px; padding: 0 2px;
+          flex: 1 1 0; min-width: 0; max-width: 88px; padding: 0 2px; height: 30px;
           font-size: clamp(10px, 3.4cqi, 14px);
         }
         /* The Android app draws behind the phone's own nav bar and reports its
@@ -299,7 +299,7 @@ window.PRABack = (function () {
           width: 100%; gap: clamp(3px, 1cqi, 6px); justify-content: center; flex-wrap: wrap;
         }
         #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
-          flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 clamp(3px, 1.4cqi, 7px); border-color: #383842;
+          flex: 0 1 auto; min-width: 0; height: 28px; padding: 0 clamp(3px, 1.4cqi, 7px); border-color: #383842;
           font-size: clamp(9.5px, 3.2cqi, 13px);
         }
       }

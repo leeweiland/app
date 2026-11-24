@@ -81,10 +81,10 @@
   .thr-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; justify-content: safe flex-end; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
   .thr-row.thr-empty { display: none; }
   @container pra-app (max-width: 640px) {
-    #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; }
-    .thr-row { gap: 4px; justify-content: safe flex-end; }
+    #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; gap: 4px; }
+    .thr-row { gap: 4px; justify-content: safe flex-end; padding: 1px 0; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
-    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
+    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 24px; border-radius: 7px; padding: 0 clamp(4px, 1.4cqi, 8px); font-size: clamp(9px, 2.7cqi, .7rem); }
   }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
