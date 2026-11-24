@@ -66,8 +66,8 @@
   .protocol-controls-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 12px; }
   /* All the view buttons on ONE line, scrolling sideways when they don't fit
      (swipe, mouse wheel, or drag) -- centered when they do (Lee, 2026-11-17). */
-  .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; flex-wrap: nowrap; justify-content: safe center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--pra-border) transparent; -webkit-overflow-scrolling: touch; padding: 2px 0 6px; cursor: grab; }
-  .protocol-controls-row > .view-mode-toggle .view-mode-btn { flex-shrink: 0; }
+  .protocol-controls-row .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; flex-wrap: nowrap; justify-content: safe center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--pra-border) transparent; -webkit-overflow-scrolling: touch; padding: 2px 0 6px; cursor: grab; }
+  .protocol-controls-row .view-mode-toggle .view-mode-btn { flex-shrink: 0; }
   .view-mode-toggle::-webkit-scrollbar { height: 4px; }
   .view-mode-toggle::-webkit-scrollbar-thumb { background: var(--pra-border); border-radius: 4px; }
   .protocol-controls-row > .protocol-head-controls-left { grid-area: left; }
@@ -77,14 +77,24 @@
      Protocols, Delete) -- both scroll sideways, centered on what's selected,
      with the ends fading out so it's clear there's more (Lee, 2026-11-24). */
   .protocol-head-row.protocol-controls-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "menu" "tools"; row-gap: 10px; }
-  .protocol-controls-row > .protocol-tools { grid-area: tools; justify-self: stretch; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; justify-content: safe center; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
+  .protocol-controls-row .protocol-tools { grid-area: tools; justify-self: stretch; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; justify-content: safe center; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
   .protocol-tools::-webkit-scrollbar { display: none; }
   .protocol-tools > .protocol-head-controls-left, .protocol-tools > .protocol-head-controls-right { flex-shrink: 0; display: flex; align-items: center; gap: 8px; overflow: visible; }
   .protocol-tools .tpl-bar { overflow: visible; }
   .icon-btn.text-btn { width: auto; height: 32px; padding: 0 12px; border-radius: 8px; border-color: #383842; font-family: var(--font-primary); font-weight: 500; font-size: .76rem; color: #fff; white-space: nowrap; }
   @media (hover: hover) { .icon-btn.text-btn:not(:disabled):hover { color: #fff; border-color: var(--pra-blue); } }
-  .protocol-controls-row > .view-mode-toggle.hscroll { scrollbar-width: none; padding-bottom: 2px; }
+  .protocol-controls-row .view-mode-toggle.hscroll { scrollbar-width: none; padding-bottom: 2px; }
   .view-mode-toggle.hscroll::-webkit-scrollbar { display: none; }
+  /* ‹ row › arrows beside each sideways row, never on top of a button
+     (Lee, 2026-11-24): grey when that way is fully scrolled, hidden when
+     the whole row fits. */
+  .hs-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .hs-wrap > .hscroll { flex: 1 1 auto; min-width: 0; }
+  .hs-chev { flex: 0 0 auto; width: 22px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #cfd6dc; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color .15s, opacity .15s, background .15s; }
+  .hs-chev svg { width: 16px; height: 16px; }
+  .hs-chev:not(:disabled):hover { color: #fff; background: rgba(255,255,255,.06); }
+  .hs-chev:disabled { opacity: .25; cursor: default; }
+  .hs-wrap.hs-fits > .hs-chev { display: none; }
   .hscroll { --fade-l: 0px; --fade-r: 0px;
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
     mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%); }
@@ -143,10 +153,10 @@
     .protocol-name-row > .client-name { justify-self: end; text-align: right; }
     .protocol-name-row > span:last-child { display: none; }
     .protocol-controls-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "menu menu" "left right"; row-gap: 10px; }
-    .protocol-controls-row > .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
+    .protocol-controls-row .view-mode-toggle { grid-area: menu; justify-self: stretch; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; cursor: grab; }
     .view-mode-toggle::-webkit-scrollbar { display: none; }
     .view-mode-toggle .view-mode-btn { flex-shrink: 0; white-space: nowrap; padding: 4px 10px; font-size: .68rem; }
-    .protocol-controls-row > .view-mode-toggle { gap: 4px; }
+    .protocol-controls-row .view-mode-toggle { gap: 4px; }
     .protocol-head-controls-left { grid-area: left; gap: 6px; }
     .protocol-controls-row > .protocol-head-controls-right { grid-area: right; justify-self: stretch; justify-content: flex-end; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
     .protocol-head-controls-right::-webkit-scrollbar { display: none; }
@@ -2352,10 +2362,26 @@ function setupHScroll(el, pickCenter, opts = {}) {
   if (!el || el.dataset.hscroll) return;
   el.dataset.hscroll = '1';
   const FADE = 36;
+  // ‹ › arrows on either side of the row (in a wrapper that takes the row's
+  // grid slot), so they never cover a button.
+  const wrap = document.createElement('div');
+  wrap.className = 'hs-wrap';
+  wrap.style.gridArea = opts.area || getComputedStyle(el).gridArea;
+  const chev = (dir) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'hs-chev hs-' + dir; b.title = dir === 'left' ? 'Scroll left' : 'Scroll right'; b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${dir === 'left' ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'}"/></svg>`; return b; };
+  const leftBtn = chev('left'), rightBtn = chev('right');
+  el.parentNode.insertBefore(wrap, el);
+  wrap.append(leftBtn, el, rightBtn);
+  const step = (sign) => { userMoved = true; el.scrollBy({ left: sign * Math.max(120, el.clientWidth * 0.7), behavior: 'smooth' }); };
+  leftBtn.onclick = () => step(-1);
+  rightBtn.onclick = () => step(1);
   const fades = () => {
     const max = el.scrollWidth - el.clientWidth;
     el.style.setProperty('--fade-l', (max > 1 && el.scrollLeft > 1 ? FADE : 0) + 'px');
     el.style.setProperty('--fade-r', (max > 1 && el.scrollLeft < max - 1 ? FADE : 0) + 'px');
+    // Hidden when it all fits; greyed out once scrolled all the way that side.
+    wrap.classList.toggle('hs-fits', max <= 1);
+    leftBtn.disabled = el.scrollLeft <= 1;
+    rightBtn.disabled = el.scrollLeft >= max - 1;
   };
   let userMoved = false, lastTarget = null;
   const center = (force) => {
@@ -2556,10 +2582,10 @@ function setupViewModeToggle() {
   }
   setupMenuDragScroll(document.getElementById('viewModeToggle'));
   setupMenuDragScroll(document.getElementById('protocolTools'));
-  setupHScroll(document.getElementById('viewModeToggle'), () => document.querySelector('#viewModeToggle .view-mode-btn.active'));
+  setupHScroll(document.getElementById('viewModeToggle'), () => document.querySelector('#viewModeToggle .view-mode-btn.active'), { area: 'menu' });
   // Tool row starts with Undo / Redo in view, and slides back to them
   // whenever an edit makes Undo or Redo available (Lee, 2026-11-24).
-  setupHScroll(document.getElementById('protocolTools'), () => null, { start: true });
+  setupHScroll(document.getElementById('protocolTools'), () => null, { start: true, area: 'tools' });
   {
     const tools = document.getElementById('protocolTools');
     const reveal = () => { if (tools.scrollLeft > 1) tools.scrollTo({ left: 0, behavior: 'smooth' }); };
