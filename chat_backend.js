@@ -564,6 +564,9 @@ function publicUser(u) {
   // participant of every chat, which is what made Chat hang on phones
   // (2026-11-24).
   const { passwordHash, passwordSalt, ip, geo, readState, renewAck, pinnedConvoIds, favoriteConvoIds, ...rest } = u;
+  // No media (CRM Enroll popup, 2026-11-24): the app is public, so they show
+  // as first name + last initial everywhere.
+  if (u.noMedia && rest.last) rest.last = String(rest.last).trim().charAt(0).toUpperCase() + ".";
   return rest;
 }
 
@@ -1318,6 +1321,10 @@ async function enrichLevelsPeople(people) {
 }
 
 let levelsCache = null; // { at, people } — 10-minute cache, same idea as the geo caches below
+// No-media students' rows live on "<PROGRAM> NO MEDIA" tabs (ONLINE NO MEDIA
+// already existed; GYM NO MEDIA is created the first time it's needed).
+const LEVELS_TABS = [["GYM", "Gym"], ["ONLINE", "Online"], ["GYM NO MEDIA", "Gym"], ["ONLINE NO MEDIA", "Online"]];
+const levelsBaseTab = (program) => program === "Online" ? "ONLINE" : "GYM";
 async function fetchLevelsTab(tabName, program) {
   const accessToken = await getGoogleAccessToken();
   const range = `'${tabName}'!A1:J`;
@@ -1343,17 +1350,14 @@ async function fetchLevelsTab(tabName, program) {
       if (v) levels[cat] = v;
     });
     const team = teamIdx >= 0 ? !!String(row[teamIdx] || "").trim() : false;
-    people.push({ first, last: row[lastIdx] || "", program, levels, team });
+    people.push({ first, last: row[lastIdx] || "", program, levels, team, ...(/NO MEDIA/.test(tabName) ? { noMedia: true, tab: tabName } : {}) });
   }
   return people;
 }
 async function fetchAllLevels() {
   if (levelsCache && Date.now() - levelsCache.at < 10 * 60 * 1000) return levelsCache.people;
-  const [gym, online] = await Promise.all([
-    fetchLevelsTab("GYM", "Gym"),
-    fetchLevelsTab("ONLINE", "Online"),
-  ]);
-  const people = [...gym, ...online];
+  const tabs = await Promise.all(LEVELS_TABS.map(([t, prog]) => fetchLevelsTab(t, prog)));
+  const people = tabs.flat();
   levelsCache = { at: Date.now(), people };
   return people;
 }
@@ -1377,7 +1381,8 @@ function readLevelEvents() {
 }
 // What level they're at now in one category (fresh from the sheet).
 async function currentLevelFor(ev) {
-  const tab = await fetchLevelsTab(ev.program === "Online" ? "ONLINE" : "GYM", ev.program);
+  const base = levelsBaseTab(ev.program);
+  const tab = [...await fetchLevelsTab(base, ev.program), ...await fetchLevelsTab(base + " NO MEDIA", ev.program)];
   const p = tab.find(x => nameKey(x.first, x.last) === nameKey(ev.first, ev.last));
   return p ? (p.levels || {})[ev.category] : undefined;
 }
@@ -1395,8 +1400,7 @@ async function checkLevelUps() {
   if (levelWatchRunning) return;
   levelWatchRunning = true;
   try {
-    const [gym, online] = await Promise.all([fetchLevelsTab("GYM", "Gym"), fetchLevelsTab("ONLINE", "Online")]);
-    const people = [...gym, ...online];
+    const people = (await Promise.all(LEVELS_TABS.map(([t, prog]) => fetchLevelsTab(t, prog)))).flat();
     if (people.length < 20) return; // a failed/empty read must never look like everyone changed
     const d = readLevelEvents();
     const next = {};
@@ -2020,9 +2024,15 @@ async function fetchRetreatsPage() {
 // it (or appends a new row if they're not on the sheet yet) with the given
 // levels/team values. Column positions are read from the header each time
 // rather than hardcoded, so reordering columns in the sheet doesn't break this.
-async function updateLevelsRow({ first, last, program, levels, team }) {
-  const tabName = program === "Online" ? "ONLINE" : "GYM";
+async function updateLevelsRow({ first, last, program, levels, team, noMedia }) {
   const accessToken = await getGoogleAccessToken();
+  // A no-media student's row is on the NO MEDIA tab: edit it there; a new
+  // row goes there too when they're flagged no media.
+  const base = levelsBaseTab(program);
+  const nmRows = await fetchLevelsTab(base + " NO MEDIA", program).catch(() => []);
+  const onNm = nmRows.some(x => nameKey(x.first, x.last) === nameKey(first, last));
+  const flagged = noMedia ?? !!readJson(USERS_FILE, []).find(u => !u.archived && u.noMedia && nameKey(u.first, u.last) === nameKey(first, last));
+  const tabName = onNm || (flagged && await ensureLevelsTab(base + " NO MEDIA", base)) ? base + " NO MEDIA" : base;
   const range = `'${tabName}'!A1:J`;
   const getRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
@@ -2075,6 +2085,58 @@ async function updateLevelsRow({ first, last, program, levels, team }) {
     throw new Error(`Could not save to the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
   }
   levelsCache = null; // next read should reflect the write immediately
+}
+
+// Creates a "<X> NO MEDIA" tab (same header as its regular tab) when it
+// doesn't exist yet. Returns true when the tab is there.
+async function ensureLevelsTab(tabName, copyHeaderFrom) {
+  const accessToken = await getGoogleAccessToken();
+  const H = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  const meta = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}?fields=sheets.properties(title,sheetId)`, { headers: H })).json();
+  if ((meta.sheets || []).some(x => x.properties.title === tabName)) return true;
+  const hdr = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(`'${copyHeaderFrom}'!1:1`)}`, { headers: H })).json();
+  const add = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}:batchUpdate`, { method: "POST", headers: H, body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }) });
+  if (!add.ok) throw new Error(`Could not create the ${tabName} levels tab`);
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(`'${tabName}'!A1`)}?valueInputOption=RAW`, { method: "PUT", headers: H, body: JSON.stringify({ values: [(hdr.values || [[]])[0]] }) });
+  return true;
+}
+// No media on/off: moves the person's Levels row between their program tab
+// and its NO MEDIA tab (columns matched by header name; the old row is
+// removed so there are no gaps). Returns what happened.
+async function moveLevelsRowNoMedia({ first, last, program, noMedia }) {
+  const base = levelsBaseTab(program), from = noMedia ? base : base + " NO MEDIA", to = noMedia ? base + " NO MEDIA" : base;
+  const accessToken = await getGoogleAccessToken();
+  const H = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  const id = levelsSheetId();
+  const meta = await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties(title,sheetId)`, { headers: H })).json();
+  const src = (meta.sheets || []).find(x => x.properties.title === from);
+  if (!src) return "not on " + from;
+  const read = async (t) => (await (await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(`'${t}'!A1:J`)}`, { headers: H })).json()).values || [];
+  const rows = await read(from);
+  const hdr = rows[0] || [], fi = hdr.indexOf("FIRST NAME"), li = hdr.indexOf("LAST NAME");
+  const idx = rows.findIndex((r, i) => i > 0 && nameKey(r[fi], r[li]) === nameKey(first, last));
+  if (idx <= 0) return "not on " + from;
+  if (noMedia) await ensureLevelsTab(to, base);
+  const destHdr = (await read(to))[0] || hdr;
+  const out = destHdr.map(h => { const j = hdr.indexOf(h); return j >= 0 ? (rows[idx][j] ?? "") : ""; });
+  const ap = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(`'${to}'!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, { method: "POST", headers: H, body: JSON.stringify({ values: [out] }) });
+  if (!ap.ok) throw new Error(`Could not add them to ${to}`);
+  const del = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`, { method: "POST", headers: H, body: JSON.stringify({ requests: [{ deleteDimension: { range: { sheetId: src.properties.sheetId, dimension: "ROWS", startIndex: idx, endIndex: idx + 1 } } }] }) });
+  if (!del.ok) throw new Error(`Added to ${to} but could not remove the ${from} row`);
+  levelsCache = null;
+  return `moved ${from} -> ${to}`;
+}
+// CRM No Media flag for people who aren't on the app yet: applied at sign-up.
+const NO_MEDIA_FILE = "chat_no_media.json"; // { pending: { "e:email" | "p:phone10": true } }
+function applyPendingNoMedia(u) {
+  const pend = readJson(NO_MEDIA_FILE, { pending: {} }).pending || {};
+  const em = String(u.email || "").trim().toLowerCase(), ph = last10(u.phone);
+  if ((em && pend["e:" + em]) || (ph.length === 10 && pend["p:" + ph])) applyNoMedia(u, true);
+}
+function applyNoMedia(u, on) {
+  u.noMedia = !!on;
+  if (on) u.showMoves = false; // their video feed off
+  else delete u.showMoves;     // back to the app default
 }
 
 // ── Access by role (User Management > Access) ───────────────────────────
@@ -2324,13 +2386,14 @@ async function renameLevelsRows({ first, last, newFirst, newLast }) {
   const f = first.trim().toLowerCase(), l = last.trim().toLowerCase();
   const colLetter = (idx) => String.fromCharCode(65 + idx);
   const updatedTabs = [];
-  for (const tabName of ["GYM", "ONLINE"]) {
+  for (const [tabName] of LEVELS_TABS) {
     const range = `'${tabName}'!A1:J`;
     const getRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${levelsSheetId()}/values/${encodeURIComponent(range)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const getData = await getRes.json();
+    if (!getRes.ok && /NO MEDIA/.test(tabName)) continue;
     if (!getRes.ok) throw new Error(`Could not read the ${tabName} levels sheet: ` + (getData.error?.message || getRes.status));
     const rows = getData.values || [];
     const header = rows[0] || [];
@@ -2661,7 +2724,9 @@ async function getPublicLevels() {
   // account get zeros, like in the app.
   const idByName = new Map(readJson(USERS_FILE, []).filter(u => !u.archived).map(u => [nameKey(u.first, u.last), u.id]));
   const ranked = rankBadgesFor({ id: "public", role: "online" }, computeBadges()).users;
-  const people = enriched.map(p => {
+  // No-media students never appear on the public website board.
+  const noMediaNames = new Set(readJson(USERS_FILE, []).filter(u => u.noMedia).map(u => nameKey(u.first, u.last)));
+  const people = enriched.filter(p => !p.noMedia && !noMediaNames.has(nameKey(p.first, p.last))).map(p => {
     const uid = idByName.get(nameKey(p.first, p.last));
     return {
       // Last initial only on the public website.
@@ -5047,6 +5112,28 @@ export async function handleChatRequest(req, res, url) {
     console.log(`[bridge student-status] ${u.first} ${u.last} ${st} -> ${action}`);
     return sendJson(res, 200, { ok: true, matched: true, action });
   }
+  // CRM Enroll popup "No media" checkbox (2026-11-24): name shown as First L.
+  // (publicUser), video feed off, Levels row moved to the NO MEDIA tab. Not on
+  // the app yet -> remembered and applied when they sign up.
+  if (p === "/api/bridge/no-media" && req.method === "POST") {
+    if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
+    const { email, phone, first, last, programType, noMedia } = await readJsonBody(req);
+    const em = String(email || "").trim().toLowerCase(), ph = last10(phone);
+    const users = readJson(USERS_FILE, []);
+    const hits = users.filter(x => !x.archived && ((em && String(x.email || "").trim().toLowerCase() === em) || (ph.length === 10 && last10(x.phone) === ph)));
+    const pend = readJson(NO_MEDIA_FILE, { pending: {} }); pend.pending = pend.pending || {};
+    for (const k of [em && "e:" + em, ph.length === 10 && "p:" + ph].filter(Boolean)) { if (noMedia) pend.pending[k] = true; else delete pend.pending[k]; }
+    writeJson(NO_MEDIA_FILE, pend);
+    hits.forEach(u => applyNoMedia(u, !!noMedia));
+    if (hits.length) writeJson(USERS_FILE, users);
+    const who = hits[0] || { first, last, role: String(programType || "").toLowerCase() === "gym" ? "gym" : "online" };
+    let levels = "";
+    try { levels = await moveLevelsRowNoMedia({ first: who.first || first, last: who.last || last, program: who.role === "gym" ? "Gym" : "Online", noMedia: !!noMedia }); }
+    catch (e) { levels = "levels: " + e.message; console.error("[bridge no-media] levels", e.message); }
+    publicLevelsCache = null;
+    console.log(`[bridge no-media] ${first} ${last} -> ${noMedia ? "on" : "off"} | app users ${hits.length} | ${levels}`);
+    return sendJson(res, 200, { ok: true, appUsers: hits.length, action: `${hits.length ? "app account updated" : "saved for sign-up"}; ${levels}` });
+  }
   if (p === "/api/bridge/trainee/revoke") {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
@@ -5212,6 +5299,7 @@ export async function handleChatRequest(req, res, url) {
       termsAcceptedAt: new Date().toISOString(),
     };
     applyRogueRecord(user, findRogueRecord({ email: user.email, phone, first, last }));
+    applyPendingNoMedia(user);
     users.push(user);
     writeJson(USERS_FILE, users);
     syncDefaultGroups();
@@ -5241,6 +5329,7 @@ export async function handleChatRequest(req, res, url) {
         const { salt, hash } = hashPassword(randomBytes(24).toString("hex")); // unguessable until they set their own
         user = { id: randomUUID(), first: rogue.first, last: rogue.last, email: emailNorm, phone: rogue.phone || "", role: "user", createdAt: new Date().toISOString(), passwordSalt: salt, passwordHash: hash };
         applyRogueRecord(user, rogue);
+        applyPendingNoMedia(user);
         users.push(user);
         writeJson(USERS_FILE, users);
         console.log("[password reset] made account for migrated rogue", emailNorm.replace(/^(.).*(@.*)$/, "$1***$2"));
@@ -5540,6 +5629,55 @@ export async function handleChatRequest(req, res, url) {
       crmEnrolledCache = null;
       return sendJson(res, 200, { ok: true, newEndDate: newEnd, prevEndDate: prevEndRaw });
     } catch (e) { return sendJson(res, 502, { error: `CRM update failed: ${e.message}` }); }
+  }
+  // Admin "Details" (Lee, 2026-11-24): the student's CRM contact card --
+  // contact info, status, every custom field in the CRM popup's groups and
+  // the color-coded enrollment / renewal / hold history -- read live from
+  // the CRM each time and edited straight back into it, so both apps always
+  // show the same record. Enrolled / On Hold keep their own popups (sale
+  // recording / end-date move), so this panel never sets those directly.
+  if (p === "/api/chat/crm-details" && (req.method === "GET" || req.method === "PATCH")) {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isAdmin(me)) return sendJson(res, 403, { error: "Admins only" });
+    try {
+      if (req.method === "GET") {
+        const target = readJson(USERS_FILE, []).find(u => u.id === url.searchParams.get("appUserId"));
+        if (!target) return sendJson(res, 404, { error: "No such app user" });
+        let found = null;
+        for (const q of [target.email, last10(target.phone)].filter(Boolean)) {
+          const r = await crmFetch(`/api/contacts?q=${encodeURIComponent(q)}&limit=5`);
+          if (!r.ok) continue;
+          found = ((await r.json()).contacts || []).find(c => (target.email && (c.email || "").toLowerCase() === target.email.toLowerCase()) || (last10(target.phone) && last10(c.phone) === last10(target.phone)));
+          if (found) break;
+        }
+        if (!found) return sendJson(res, 404, { error: `No CRM contact matches ${target.email || target.phone || "this user"}` });
+        const [cr, fr, sr] = await Promise.all([crmFetch(`/api/contacts/${encodeURIComponent(found.id)}`), crmFetch("/api/custom-fields?entityType=contact"), crmFetch("/api/statuses").catch(() => null)]);
+        const contact = cr.ok ? ((await cr.json()).contact || found) : found;
+        const fields = fr.ok ? ((await fr.json()).fields || []) : [];
+        const statuses = sr && sr.ok ? ((await sr.json()).statuses || []).map(s => s.label) : ["FINISHED", "POTENTIAL", "APPLICATION", "BOOKED", "CANCELLED", "RSVP'ed", "ENROLLED", "BLACKLIST", "LOW TICKET", "ON HOLD"];
+        return sendJson(res, 200, { contact, fields, statuses, crmUrl: `${CRM_BASE_URL}/contact-detail.html?id=${encodeURIComponent(contact.id)}` });
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.contactId || "");
+      if (!/^[\w-]{8,}$/.test(id)) return sendJson(res, 400, { error: "Missing contact" });
+      const patch = {};
+      for (const k of ["first", "last", "email", "phone", "accountName", "emailOptOut", "smsOptOut"]) if (k in body) patch[k] = body[k];
+      if ("status" in body) {
+        if (/^(ENROLLED|ON HOLD)$/i.test(String(body.status))) return sendJson(res, 400, { error: "Enrolled and On Hold have their own popups" });
+        patch.status = String(body.status || "");
+      }
+      if (body.customFieldsPatch && typeof body.customFieldsPatch === "object") {
+        patch.customFieldsPatch = {};
+        for (const [k, v] of Object.entries(body.customFieldsPatch)) if (k !== "__proto__" && (v == null || typeof v === "string")) patch.customFieldsPatch[k] = v ?? "";
+      }
+      if (!Object.keys(patch).length) return sendJson(res, 400, { error: "Nothing to save" });
+      const r = await crmFetch(`/api/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+      if (!r.ok) return sendJson(res, 502, { error: `CRM save failed (${r.status})` });
+      crmEnrolledCache = null; crmHoldCache = null;
+      const d = await r.json().catch(() => ({}));
+      return sendJson(res, 200, { ok: true, contact: d.contact || null });
+    } catch (e) { return sendJson(res, 502, { error: `CRM unreachable: ${e.message}` }); }
   }
   if (p === "/api/chat/students-overview/action" && req.method === "POST") {
     const me = getSessionUser(req);
@@ -6148,7 +6286,9 @@ export async function handleChatRequest(req, res, url) {
         levels: { id: levelsSheetId(), isDefault: !extractSheetId(cfg.levelsSheetId) },
         crosscheck: crosscheckTabs(),
       };
-      return sendJson(res, 200, { settings, staff, counts, defaultProtocol, sheets, accessFeatures: ACCESS_FEATURES, accessRoles: ACCESS_ROLES,
+      const noMedia = users.filter(u => u.noMedia && !u.archived).map(u => ({ id: u.id, name: `${u.first} ${u.last}`, role: u.role }));
+      const noMediaPending = Object.keys(readJson(NO_MEDIA_FILE, { pending: {} }).pending || {}).length;
+      return sendJson(res, 200, { settings, staff, counts, defaultProtocol, sheets, noMedia, noMediaPending, accessFeatures: ACCESS_FEATURES, accessRoles: ACCESS_ROLES,
         defaultRenewalMessage: DEFAULT_RENEWAL_MESSAGE, defaultTraineeWelcome: DEFAULT_TRAINEE_WELCOME });
     }
     // Products sold in the CRM (Products tab), what a purchase does there, and
@@ -8041,6 +8181,14 @@ export async function handleChatRequest(req, res, url) {
     if (p === "/api/chat/badges" && req.method === "GET") {
       if (!badgesCache || Date.now() - badgesCache.at > 5 * 60 * 1000) badgesCache = { at: Date.now(), data: computeBadges() };
       return sendJson(res, 200, rankBadgesFor(user, badgesCache.data));
+    }
+    // Quick Start (Lee, 2026-11-24): another student whose moves feed is
+    // public, to show what a feed looks like -- one of the 5 with the most clips.
+    if (p === "/api/chat/moves/showcase" && req.method === "GET") {
+      const cands = readJson(USERS_FILE, []).filter(u => !u.archived && u.id !== user.id && ["online", "gym"].includes(u.role) && !u.noMedia && movesVisible(u))
+        .map(u => ({ id: u.id, n: movesForUser(u).length })).filter(x => x.n >= 3).sort((a, b) => b.n - a.n).slice(0, 5);
+      const pick = cands[Math.floor(Math.random() * cands.length)];
+      return sendJson(res, 200, { userId: pick?.id || null });
     }
     const userMovesMatch = p.match(/^\/api\/chat\/user-moves\/([^/]+)$/);
     if (userMovesMatch && req.method === "GET") {

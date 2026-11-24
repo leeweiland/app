@@ -2023,7 +2023,9 @@ window.addEventListener('pageshow', () => {
           ['added automatically.', 'a coach adds them.']) +
         row('APP sheet type', 'Keeps the TYPE column of the APP sheet up to date (the map uses it).', toggle('appSheetTypeEnabled', s.appSheetTypeEnabled),
           sheetField('app', 'Sheet:', 'appSheetId', sh.app.id, [sh.app.tab]),
-          ['updated automatically.', 'set by hand.']))}
+          ['updated automatically.', 'set by hand.']) +
+        row('No media', 'Set by the <b>No media</b> box in the CRM's Enrolled popup (checking it asks the coach to confirm). For that student: their name shows as <b>first name + last initial</b> everywhere in the app, their <b>video feed is turned off</b> on their profile, their Levels row moves to the <b>NO MEDIA</b> tab (ONLINE NO MEDIA / GYM NO MEDIA), and they're left off the public Levels board. Unchecking it in the CRM undoes all of it. Someone not on the app yet gets it when they sign up.', info,
+          `<div class="um-desc" style="margin-top:6px">${(state.noMedia || []).length ? `Now (${state.noMedia.length}): ${state.noMedia.map(x => esc(x.name)).join(', ')}` : 'Nobody on the app is marked No media yet.'}${state.noMediaPending ? ` · ${state.noMediaPending} saved for sign-up` : ''}</div>`))}
 
       ${card(8, '8. Upgrading &amp; Downgrading',
         row('Make Online / Make Gym', 'Gives them that role\'s access. First time runs New Student Setup.', info) +

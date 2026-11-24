@@ -8,6 +8,7 @@
 <script src="/chat-app/pra-badges.js"></script>
 <script src="/chat-app/video-speed.js"></script>
 <script src="/chat-app/profile-panel.js"></script>
+<script src="/chat-app/crm-details.js"></script>
 <script src="/chat-app/call-bg-effects.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
@@ -1091,6 +1092,7 @@
     <div class="msg-more-menu" id="convoActionMenu">
       <button class="msg-more-menu-item" id="convoActionPinBtn">Pin</button>
       <button class="msg-more-menu-item" id="convoActionFavBtn">Star</button>
+      <button class="msg-more-menu-item" id="convoActionDetailsBtn" style="display:none">Details</button>
       <button class="msg-more-menu-item" id="convoActionHoldBtn" style="display:none">Put on hold</button>
       <button class="msg-more-menu-item" id="convoActionReportBtn">Report</button>
       <button class="msg-more-menu-item" id="convoActionBlockBtn" style="color:#ff5c5c">Block</button>
@@ -1123,6 +1125,7 @@
               <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
               <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
               <button class="icon-btn text-btn" id="staffNotesBtn" title="Coach Notes" style="display:none">Notes</button>
+              <button class="icon-btn text-btn" id="crmDetailsBtn" title="CRM contact details" style="display:none">Details</button>
               <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
             </div>
             <div class="thr-row thr-all">
@@ -2663,7 +2666,9 @@ function openConvoActionMenu(anchorEl, item) {
   document.getElementById('convoActionPinBtn').textContent = item.pinned ? 'Unpin' : 'Pin';
   document.getElementById('convoActionFavBtn').textContent = item.favorite ? 'Unstar' : 'Star';
   document.getElementById('convoActionReportBtn').style.display = targetUser ? '' : 'none';
-  document.getElementById('convoActionHoldBtn').style.display = (targetUser && isStaffMe() && ['online', 'gym'].includes(targetUser.role)) ? '' : 'none';
+  // Admins: Details (the CRM contact card, holds included) replaces Put on hold (Lee, 2026-11-24).
+  document.getElementById('convoActionDetailsBtn').style.display = (targetUser && isAdminMe()) ? '' : 'none';
+  document.getElementById('convoActionHoldBtn').style.display = (targetUser && isStaffMe() && !isAdminMe() && ['online', 'gym'].includes(targetUser.role)) ? '' : 'none';
   const blockBtn = document.getElementById('convoActionBlockBtn');
   blockBtn.style.display = targetUser ? '' : 'none';
   if (targetUser) blockBtn.textContent = blockedUserIds.has(targetUser.id) ? 'Unblock' : 'Block';
@@ -2689,9 +2694,17 @@ document.getElementById('convoActionFavBtn').onclick = () => {
 };
 // Put on hold (Lee, 2026-11-22): same as picking ON HOLD in the CRM.
 let holdTargetUser = null;
-document.getElementById('convoActionHoldBtn').onclick = () => {
+document.getElementById('convoActionDetailsBtn').onclick = () => {
   const item = convoActionItem; closeConvoActionMenu();
   const u = convoActionTargetUser(item);
+  if (u) window.PRADetails.open(u);
+};
+document.getElementById('convoActionHoldBtn').onclick = () => {
+  const item = convoActionItem; closeConvoActionMenu();
+  window.praOpenHold(convoActionTargetUser(item));
+};
+// Also opened from the Details panel's status select (ON HOLD).
+window.praOpenHold = (u) => {
   if (!u) return;
   holdTargetUser = u;
   const d = new Date(), pad = n => String(n).padStart(2, '0');
@@ -3322,6 +3335,7 @@ async function openConvo(id, { restoreScrollTop } = {}) {
   currentThreadStudent = protocolStudent;
   document.getElementById('intakeFormBtn').style.display = 'none'; // removed from the chat panel (Lee, 2026-11-24)
   document.getElementById('staffNotesBtn').style.display = (protocolStudent && isStaffMe()) ? '' : 'none';
+  document.getElementById('crmDetailsBtn').style.display = (protocolStudent && isAdminMe()) ? '' : 'none';
 
   // Only a coach/admin can PLACE a call -- a client can still receive one
   // (handleIncomingCallPoll doesn't check role), just not start it.
@@ -3552,6 +3566,7 @@ async function openStaffNotesModal() {
 }
 
 document.getElementById('staffNotesBtn').addEventListener('click', openStaffNotesModal);
+document.getElementById('crmDetailsBtn').addEventListener('click', () => { if (currentThreadStudent) window.PRADetails.open(currentThreadStudent); });
 
 document.getElementById('staffNotesSaveBtn').addEventListener('click', async () => {
   if (!currentThreadStudent) return;

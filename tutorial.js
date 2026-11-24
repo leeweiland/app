@@ -48,6 +48,9 @@
     back_to_chats: { label: 'Chat: back to chats button (phones)', page: 'chat', skipIfMissing: true, targets: ['#backBtn'] },
     chat_photo: { label: 'Chat: their group photo', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'] },
     profile_panel: { label: 'Chat: profile panel (after the photo)', page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom' },
+    // Opens another student's profile panel (one with a public moves feed) and
+    // scrolls down through their videos.
+    student_feed: { label: "Chat: another student's video feed", page: 'chat', studentFeed: true, skipIfMissing: true, wait: 6000, targets: ['.pp-backdrop.show .pra-feed', '.pp-backdrop.show .pp-moves'], closePanel: true, placement: 'top' },
     message_box: { label: 'Chat: message box in their group', page: 'chat', openGroup: 'own', skipIfMissing: true, targets: ['#textInput'] },
     nav_chat: nav('Top bar: Chat', top('Chat'), 'chat'),
     nav_protocol: nav('Top bar: Train', top('My Training Protocol'), 'protocol'),
@@ -119,7 +122,8 @@
     [
       { area: 'nav_chat', title: 'Back to Chat', text: 'Tap Chat to head back to your chats.' },
       { area: 'chat_photo', mustTap: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
-      { area: 'profile_panel', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
+      { area: 'profile_panel', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to see a teammate.' },
+      { area: 'student_feed', title: "A teammate's videos", text: "Tap anyone's photo to see their levels and video feed. Scroll through it and double-tap to heart." },
       { area: 'message_box', title: 'Message your coaches', text: 'Now send your coaches a message. Say hi and tell them your goals.' },
     ],
   ];
@@ -787,6 +791,21 @@
       const own = document.querySelector('.convo-item[data-own-group]');
       const row = own || (sub.openGroup === 'gym' ? rows.find(r => r.querySelector('.role-tag-gym')) : rows.find(r => !r.hasAttribute('data-self-row')) || rows[0]);
       if (row) row.click();
+    }
+    if (sub.studentFeed && !document.querySelector('.pp-backdrop.show .pp-moves')) {
+      fetch('/api/chat/moves/showcase').then(r => r.json()).then(d => {
+        if (!d.userId || !window.PRAProfile || !state.active) return;
+        window.PRAProfile.open(d.userId);
+        // once their feed is in, glide down through it
+        const t0 = Date.now();
+        (function glide() {
+          const box = document.querySelector('.pp-backdrop.show .pp-box'), feed = box && box.querySelector('.pra-feed');
+          if (!box || !state.active) return;
+          if (!feed || !feed.children.length) { if (Date.now() - t0 < 6000) setTimeout(glide, 200); return; }
+          box.scrollTo({ top: Math.max(0, feed.offsetTop - 60), behavior: 'smooth' });
+          setTimeout(() => { if (state.active && box.isConnected) box.scrollBy({ top: box.clientHeight * 0.8, behavior: 'smooth' }); }, 1500);
+        })();
+      }).catch(() => {});
     }
     // Wait (briefly) for the thing to point at to render. A part that can't
     // find its target is skipped instead of floating with no arrow.

@@ -767,7 +767,7 @@ window.PRABack = (function () {
       window.PRA_QS_PROMISE.then(qs => {
         if (!qs || !qs.enabled) return;
         window.PRA_QS = qs;
-        const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=3'; document.body.appendChild(ts);
+        const ts = document.createElement('script'); ts.id = 'pra-tutorial-js'; ts.src = '/chat-app/tutorial.js?v=4'; document.body.appendChild(ts);
       }).catch(() => {});
     }
     {
