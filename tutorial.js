@@ -826,12 +826,21 @@
       // Desktop / tablet / phone held sideways: centered in the open space
       // between the logo and the nav words -- dead center of the bar sat on
       // top of "Chat" when the bar was narrower than a computer screen.
-      // It's a real item in the bar's row (logo · Quick Start · nav), so it
-      // can never overlap; if the row runs out of room the header's fit step
-      // (PRAFitNav) shrinks the nav words.
-      b.classList.remove('in-bar', 'in-bar-right'); b.style.top = ''; b.style.visibility = '';
-      const nav = bar.querySelector('.cah-icons');
-      if (nav && b.nextSibling !== nav) { bar.insertBefore(b, nav); if (window.PRAFitNav) window.PRAFitNav(); }
+      // Dead center of the bar (Lee, 2026-11-24) whenever it fits clear of
+      // the logo and the nav words; on a narrower bar (sideways phone,
+      // tablet) it becomes an item in the row between them instead, so it
+      // can never overlap -- the header's fit step (PRAFitNav) then shrinks
+      // the nav words if the row runs out of room.
+      b.classList.remove('in-bar-right'); b.style.top = ''; b.style.visibility = '';
+      const nav = bar.querySelector('.cah-icons'), logo = bar.querySelector('.cah-label');
+      const br = bar.getBoundingClientRect(), mid = br.left + br.width / 2, half = b.offsetWidth / 2;
+      const fitsCenter = !nav || !logo || (mid - half >= logo.getBoundingClientRect().right + 12 && mid + half <= nav.getBoundingClientRect().left - 12);
+      if (fitsCenter) {
+        if (!b.classList.contains('in-bar')) { b.classList.add('in-bar'); if (b.nextSibling === nav) { bar.appendChild(b); if (window.PRAFitNav) window.PRAFitNav(); } }
+      } else {
+        b.classList.remove('in-bar');
+        if (nav && b.nextSibling !== nav) { bar.insertBefore(b, nav); if (window.PRAFitNav) window.PRAFitNav(); }
+      }
     } else {
       // Phone: top-right corner, on the same line as the logo.
       b.classList.add('in-bar-right'); b.classList.remove('in-bar');

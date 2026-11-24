@@ -227,6 +227,8 @@
   .um-product { border: 1px solid var(--pra-border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; background: rgba(255,255,255,0.015); }
   .um-access .um-name { font-weight: 700; color: #fff; }
 
+  #quickStartSection #qsSaveMsg:empty { display: none; }
+  #quickStartSection #qsSaveMsg { margin: -6px 0 10px; }
   #quickStartSection .qs-group { border: 1px solid var(--pra-border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; background: rgba(255,255,255,.02); }
   #quickStartSection .qs-h { font-weight: 800; font-size: .92rem; margin-bottom: 10px; color: #fff; }
   #quickStartSection .qs-sub { font-size: .76rem; color: var(--pra-dim); margin: 12px 0 6px; }
@@ -724,7 +726,7 @@
       <button class="pra-btn" id="qsSaveBtn" type="button" style="width:100%;margin-top:6px">Save Quick Start</button>
       <div class="save-msg" id="qsSaveMsg"></div>
 
-<details class="um-card qs-acc" data-k="progress" style="margin-top:22px">
+<details class="um-card qs-acc" data-k="progress">
         <summary><h3>Progress</h3><span class="um-count" id="qsSum-progress"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div id="qsPeople" class="pra-muted" style="font-size:.8rem">Loading…</div>
       </details>

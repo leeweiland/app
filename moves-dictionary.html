@@ -37,7 +37,7 @@
   <script src="/nav.js"></script>
   <script src="/chat-app/chat-header.js"></script>
   <div class="wrap">
-    <div class="pra-h1 pra-glow" style="margin-bottom:18px;font-family:var(--font-secondary)">Powerbatics Training Videos</div>
+    <div class="pra-h1 pra-glow" style="text-align:center;margin-bottom:18px;font-family:var(--font-secondary)">Powerbatics Training Videos</div>
     <div class="grid" id="grid"><div class="pra-muted">Loading…</div></div>
   </div>
 </div>
@@ -48,7 +48,7 @@ let videos = [];
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } };
 
-async function load() {
+async function load(attempt = 0) {
   const grid = document.getElementById('grid');
   try {
     const r = await fetch('/api/moves-dictionary/youtube');
@@ -56,7 +56,10 @@ async function load() {
     if (!r.ok) throw new Error(d.error || 'Failed');
     videos = d.videos || [];
   } catch (e) {
-    grid.innerHTML = '<div class="pra-muted">Could not load the videos right now. Try again in a minute.</div>';
+    // A blip (e.g. the server restarting for an update) shouldn't strand the
+    // page on an error -- keep retrying quietly, then say so if it persists.
+    if (attempt < 6) { setTimeout(() => load(attempt + 1), Math.min(8000, 1500 * (attempt + 1))); if (attempt === 0) grid.innerHTML = '<div class="pra-muted">Loading…</div>'; return; }
+    grid.innerHTML = '<div class="pra-muted" style="grid-column:1/-1;text-align:center">Could not load the videos right now. <a href="#" onclick="load();return false" style="color:var(--pra-blue)">Try again</a></div>';
     return;
   }
   grid.innerHTML = videos.map(v => `
