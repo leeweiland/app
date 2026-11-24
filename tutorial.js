@@ -831,24 +831,43 @@
       // tablet) it becomes an item in the row between them instead, so it
       // can never overlap -- the header's fit step (PRAFitNav) then shrinks
       // the nav words if the row runs out of room.
-      b.classList.remove('in-bar-right'); b.style.top = ''; b.style.visibility = '';
+      b.classList.remove('in-bar-right'); b.style.top = '';
       const nav = bar.querySelector('.cah-icons'), logo = bar.querySelector('.cah-label');
+      // Measure with the button lifted OUT of the row (absolute), so its own
+      // spot can't push the nav words around and flip the answer on the next
+      // check -- that flip was the jump from "between" to center.
+      const wasInRow = !b.classList.contains('in-bar');
+      b.classList.add('in-bar');
+      if (b.nextSibling === nav) bar.appendChild(b);
       const br = bar.getBoundingClientRect(), mid = br.left + br.width / 2, half = b.offsetWidth / 2;
       const fitsCenter = !nav || !logo || (mid - half >= logo.getBoundingClientRect().right + 12 && mid + half <= nav.getBoundingClientRect().left - 12);
-      if (fitsCenter) {
-        if (!b.classList.contains('in-bar')) { b.classList.add('in-bar'); if (b.nextSibling === nav) { bar.appendChild(b); if (window.PRAFitNav) window.PRAFitNav(); } }
-      } else {
+      if (!fitsCenter) {
         b.classList.remove('in-bar');
-        if (nav && b.nextSibling !== nav) { bar.insertBefore(b, nav); if (window.PRAFitNav) window.PRAFitNav(); }
+        if (nav) bar.insertBefore(b, nav);
       }
+      if (wasInRow === fitsCenter && window.PRAFitNav) window.PRAFitNav(); // row changed: refit the words
     } else {
       // Phone: top-right corner, on the same line as the logo.
       b.classList.add('in-bar-right'); b.classList.remove('in-bar');
       const logo = bar.querySelector('.cah-label');
       const br = bar.getBoundingClientRect(), lr = logo ? logo.getBoundingClientRect() : null;
-      if (lr && lr.height) { b.style.visibility = ''; b.style.top = (lr.top - br.top + lr.height / 2) + 'px'; }
-      else b.style.visibility = 'hidden'; // logo line not on screen right now
+      if (lr && lr.height) { b.style.top = (lr.top - br.top + lr.height / 2) + 'px'; }
+      else { b.style.visibility = 'hidden'; return; } // logo line not on screen right now
     }
+    // First appearance: stay invisible until the header has settled (fonts
+    // loaded, nav words fitted), then place once more and show it -- so it
+    // never shows up in a spot it's about to leave.
+    if (!b.dataset.settled) {
+      b.style.visibility = 'hidden';
+      if (!b.dataset.settling) {
+        b.dataset.settling = '1';
+        const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+        Promise.resolve(document.fonts && document.fonts.ready).then(frame).then(frame).then(() => {
+          b.dataset.settled = '1';
+          mountLauncher();
+        });
+      }
+    } else b.style.visibility = '';
     // The header re-lays itself out (opening/closing a chat, safe areas...):
     // keep following the logo line instead of measuring once.
     if (!launcherTimer) launcherTimer = setInterval(() => { if (document.querySelector('.ptu-launch')) mountLauncher(); else { clearInterval(launcherTimer); launcherTimer = null; } }, 400);
