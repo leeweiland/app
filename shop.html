@@ -16,6 +16,15 @@
   .frame-wrap { position: relative; }
   .fallback { display: none; position: absolute; left: 12px; right: 12px; bottom: 12px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 10px; background: rgba(13,13,17,.92); border: 1px solid var(--pra-border); }
   .fallback.show { display: flex; }
+  /* The website draws its normal header/menu/promo first and only then its
+     app mode hides them -- that flashed a different layout. The frame stays
+     hidden behind this cover until it has loaded and settled. */
+  iframe.pending { visibility: hidden; }
+  .frame-cover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--pra-black, #0b0b0f); color: var(--pra-dim); font-family: var(--font-secondary, sans-serif); font-size: .8rem; letter-spacing: .14em; text-transform: uppercase; transition: opacity .25s; }
+  .frame-cover.gone { opacity: 0; pointer-events: none; }
+  .frame-cover i { width: 7px; height: 7px; border-radius: 50%; background: var(--pra-blue, #009bff); animation: fcDot 1s infinite ease-in-out; }
+  .frame-cover i:nth-child(3) { animation-delay: .15s; } .frame-cover i:nth-child(4) { animation-delay: .3s; }
+  @keyframes fcDot { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
 </style>
 </head>
 <body>
@@ -24,7 +33,8 @@
   <script src="/chat-app/chat-header.js"></script>
   <div class="frame-wrap">
     <!-- ?app=1 = the website's app mode: no site logo, menu, promo bar or footer. -->
-    <iframe id="shopFrame" src="https://www.pacificrimathletics.com/shop?app=1" title="Pacific Rim Athletics Shop" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+    <iframe class="pending" id="shopFrame" src="https://www.pacificrimathletics.com/shop?app=1" title="Pacific Rim Athletics Shop" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+    <div class="frame-cover" id="frameCover"><span>Loading</span><i></i><i></i><i></i></div>
     <div class="fallback" id="fallback">
       <div class="pra-muted" style="font-size:.8rem">Still loading…</div>
       <a class="pra-btn" href="https://www.pacificrimathletics.com/shop" target="_blank" rel="noopener" style="text-decoration:none;padding:8px 14px;font-size:.75rem">Open the Shop ↗</a>
@@ -38,7 +48,11 @@
   // offer a small "open in browser" link on top — the page stays visible.
   const frame = document.querySelector('iframe');
   let loaded = false;
-  frame.addEventListener('load', () => { loaded = true; document.getElementById('fallback').classList.remove('show'); });
+  // Shown once loaded + a beat for the site's app mode to finish hiding its
+  // own header/menu (or after 10s no matter what, so a slow phone still sees it).
+  const reveal = () => { frame.classList.remove('pending'); document.getElementById('frameCover').classList.add('gone'); };
+  frame.addEventListener('load', () => { loaded = true; document.getElementById('fallback').classList.remove('show'); setTimeout(reveal, 900); });
+  setTimeout(reveal, 10000);
   setTimeout(() => { if (!loaded) document.getElementById('fallback').classList.add('show'); }, 15000);
 </script>
 </body>
