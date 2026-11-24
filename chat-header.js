@@ -855,6 +855,34 @@ window.PRABack = (function () {
     root.appendChild(bottomBarSpacer);
     root.appendChild(bottomBar);
 
+    // Word nav must stay one row and never cut a word -- but Android's own
+    // font-size setting (accessibility text zoom) enlarges text past what the
+    // CSS sizing planned for (Lee's phone wrapped "Travel" to a 2nd line).
+    // So measure on the device and shrink the words until each row fits.
+    function fitNavWords() {
+      const fit = (items, overflowing) => {
+        if (!items.length) return;
+        items.forEach(a => { a.style.fontSize = ''; });
+        let fs = parseFloat(getComputedStyle(items[0]).fontSize) || 13;
+        for (let i = 0; i < 25 && overflowing(); i++) {
+          fs *= 0.94;
+          items.forEach(a => { a.style.fontSize = fs + 'px'; });
+        }
+      };
+      const topItems = [...icons.querySelectorAll('a.cah-icon')];
+      fit(topItems, () => topItems.some(a => a.scrollWidth > a.clientWidth + 1)
+        || new Set(topItems.map(a => Math.round(a.getBoundingClientRect().top))).size > 1);
+      const botItems = [...bottomLeftGroup.querySelectorAll('a.cah-bottom-text')];
+      fit(botItems, () => bottomLeftGroup.scrollWidth > bottomLeftGroup.clientWidth + 1
+        || botItems.some(a => a.scrollWidth > a.clientWidth + 1)
+        || new Set(botItems.map(a => Math.round(a.getBoundingClientRect().top))).size > 1);
+      requestReflow();
+    }
+    requestAnimationFrame(fitNavWords);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNavWords);
+    let fitTimer = null;
+    window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitNavWords, 120); });
+
     // Black Friday pointer: a neon callout floating over the main chat panel
     // with an arrow down to the Shop icon. Shows when the app opens (main
     // chat page only) until it's closed with its X; gone after the sale.
