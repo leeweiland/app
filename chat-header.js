@@ -190,8 +190,8 @@ window.PRABack = (function () {
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active { color: #fff; }
-      #chat-app-bottom-bar .cah-bottom-text {
-        width: auto; padding: 0 6px;
+      #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
+        width: auto; padding: 0 8px;
         font-family: var(--font-primary, inherit); font-weight: 600; font-size: .78rem;
         color: #cfd6dc; white-space: nowrap;
       }
