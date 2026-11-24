@@ -200,7 +200,9 @@ window.PRABack = (function () {
          doubled up to outrank the bar/group rules further down. */
       @container pra-app (max-width: 640px) {
         #chat-app-header .cah-icons { gap: 6px; }
-        div#chat-app-bottom-bar { padding-left: 8px; padding-right: 8px; }
+        /* Words sat low on Android (nav bar below): 4px less on top, 4px more
+           underneath lifts them to the middle of the row. */
+        div#chat-app-bottom-bar { padding-left: 8px; padding-right: 8px; padding-top: 6px; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
         #chat-app-bottom-bar div.cah-bottom-group { gap: 2px; }
         #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text { padding: 0 5px; }
       }

@@ -33,46 +33,47 @@
   };
   // ── App areas a part can point at (Admin Panel > Quick Start dropdown) ──
   // Each part = one area + its wording + options. The area says which page it
-  // lives on and what it points at; 'nav' areas are the top/bottom bar icons
+  // lives on and what it points at; 'nav' areas are the top/bottom bar words
   // (any page), whose Next goes to that page.
   const nav = (label, sel, page) => ({ label, page: '*', targets: [sel], go: page, clickGo: true });
   const AREAS = {
     chat_group: { label: 'Chat: their private group', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'] },
     gym_calendar: { label: 'Chat: gym booking calendar', page: 'chat', openGroup: 'gym', targets: ['#scheduleBtn'] },
     // Demo of the icon labels: shows the label on their gym booking calendar
-    // (gym students) or their My Training Protocol icon (everyone else).
+    // (gym students) or the pin icon on their own chat row (everyone else) --
+    // the top/bottom bars are words now (2026-11-24), not icons.
     icon_tip: me.role === 'gym'
-      ? { label: 'Icon labels demo (gym calendar / protocol icon)', page: 'chat', openGroup: 'gym', tipDemo: true, targets: ['#scheduleBtn'] }
-      : { label: 'Icon labels demo (gym calendar / protocol icon)', page: 'chat', closeChat: true, tipDemo: true, targets: [top('My Training Protocol'), '#chat-app-header a.cah-icon[title]'] },
+      ? { label: 'Icon labels demo (gym calendar / chat pin icon)', page: 'chat', openGroup: 'gym', tipDemo: true, targets: ['#scheduleBtn'] }
+      : { label: 'Icon labels demo (gym calendar / chat pin icon)', page: 'chat', closeChat: true, tipDemo: true, targets: ['.convo-item[data-own-group] .convo-pin-btn', '.convo-item .convo-pin-btn'] },
     back_to_chats: { label: 'Chat: back to chats button (phones)', page: 'chat', skipIfMissing: true, targets: ['#backBtn'] },
     chat_photo: { label: 'Chat: their group photo', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group] .pra-avatar', '.convo-item[data-self-row] .pra-avatar', '.convo-item .pra-avatar'] },
     profile_panel: { label: 'Chat: profile panel (after the photo)', page: 'chat', targets: ['.pp-backdrop.show .pp-box', '.pp-backdrop.show'], wait: 4000, closePanel: true, placement: 'bottom' },
     message_box: { label: 'Chat: message box in their group', page: 'chat', openGroup: 'own', skipIfMissing: true, targets: ['#textInput'] },
-    nav_chat: nav('Top bar: Chat icon', top('Chat'), 'chat'),
-    nav_protocol: nav('Top bar: My Training Protocol icon', top('My Training Protocol'), 'protocol'),
-    nav_videos: nav('Top bar: Training Videos icon', top('Powerbatics Training Videos'), 'videos'),
-    nav_profile: nav('Top bar: My profile icon', top('My profile'), 'profile'),
+    nav_chat: nav('Top bar: Chat', top('Chat'), 'chat'),
+    nav_protocol: nav('Top bar: Train', top('My Training Protocol'), 'protocol'),
+    nav_videos: nav('Top bar: Videos', top('Powerbatics Training Videos'), 'videos'),
+    nav_profile: nav('Top bar: Profile', top('My profile'), 'profile'),
     protocol_training: { label: 'Protocol: Your Training tab', page: 'protocol', activate: true, targets: ['#pageViewBtn', '#ownPageBtn', '#programViewBtn', '#lowTicketBtn', '#flowViewBtn', '#viewModeToggle'] },
     protocol_flow: { label: 'Protocol: Your Flow tab', page: 'protocol', activate: true, skipIfMissing: true, targets: ['#flowViewBtn', '#ownFlowBtn'] },
     protocol_katas: { label: 'Protocol: Katas tab', page: 'protocol', activate: true, targets: ['#katasViewBtn'] },
     protocol_warmup: { label: 'Protocol: Warmup tab (gym)', page: 'protocol', activate: true, skipIfMissing: true, targets: ['#warmupViewBtn'] },
     videos_page: { label: 'Training Videos page', page: 'videos', targets: [] },
-    nav_physique: nav('Bottom bar: Body Mastery Builder icon', bottom('Powerbatics Body Mastery Builder'), 'physique'),
+    nav_physique: nav('Bottom bar: Physique', bottom('Powerbatics Body Mastery Builder'), 'physique'),
     physique_fuel: { label: 'Body Mastery: Fuel', page: 'physique', activate: true, targets: [hub('nutrition')] },
     physique_health: { label: 'Body Mastery: Health', page: 'physique', activate: true, targets: [hub('health')] },
     physique_physique: { label: 'Body Mastery: Physique', page: 'physique', activate: true, targets: [hub('physique')] },
     physique_moves: { label: 'Body Mastery: Moves', page: 'physique', activate: true, targets: [hub('moves')] },
     physique_reports: { label: 'Body Mastery: Reports', page: 'physique', activate: true, targets: [hub('reports')] },
     physique_profile: { label: 'Body Mastery: Profile', page: 'physique', activate: true, targets: [hub('profile')] },
-    nav_map: nav('Bottom bar: Strength Ninjas icon', bottom('Strength Ninjas'), 'map'),
+    nav_map: nav('Bottom bar: Map', bottom('Strength Ninjas'), 'map'),
     map_page: { label: 'Strength Ninjas map page', page: 'map', targets: [] },
-    nav_quiz: nav('Bottom bar: Training Personality icon', bottom('Training Personality Quiz'), 'quiz'),
+    nav_quiz: nav('Bottom bar: Personality', bottom('Training Personality Quiz'), 'quiz'),
     quiz_page: { label: 'Training Personality page', page: 'quiz', targets: [] },
-    nav_levels: nav('Bottom bar: Levels icon', bottom('Levels'), 'levels'),
+    nav_levels: nav('Bottom bar: Levels', bottom('Levels'), 'levels'),
     levels_page: { label: 'Levels page', page: 'levels', targets: [] },
-    nav_shop: nav('Bottom bar: Shop icon', bottom('Shop'), 'shop'),
+    nav_shop: nav('Bottom bar: Clothes', bottom('Shop'), 'shop'),
     shop_page: { label: 'Shop page', page: 'shop', targets: [] },
-    nav_retreats: nav('Bottom bar: Retreats icon', bottom('Retreats'), 'retreats'),
+    nav_retreats: nav('Bottom bar: Travel', bottom('Retreats'), 'retreats'),
     retreats_page: { label: 'Retreats page', page: 'retreats', targets: [] },
     profile_pic: { label: 'Profile page: profile pic', page: 'profile', gap: 40, targets: ['#profileCard .pp-avatar-wrap', '#profileCard .pp-avatar', '.avatar-wrap'] },
   };
@@ -94,15 +95,15 @@
   const DEFAULT_STEPS = [
     [{ area: 'chat_group', header: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' }],
     [
-      { area: 'icon_tip', header: 'The most important thing to know', title: 'Long press any icon', text: 'Long press any icon in the app (or hover over it on a computer) and it shows you what it means.' },
+      { area: 'icon_tip', header: 'The most important thing to know', title: 'Long press any icon', text: 'Long press any icon in the app, like this pin (or hover over it on a computer), and it shows you what it does.' },
       { area: 'gym_calendar', gymOnly: true, title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
       { area: 'back_to_chats', phoneOnly: true, mustTap: true, title: 'Back to your chats', text: 'Tap back to return to your chats.' },
-      { area: 'nav_protocol', title: 'Your Training Protocol', text: 'Your training plan lives here. Tap it or hit Next.' },
+      { area: 'nav_protocol', title: 'Train', text: 'Your training plan lives under Train. Tap it or hit Next.' },
       { area: 'protocol_training', title: 'Your Training', text: 'Your custom training protocol, day by day.', traineeText: 'Your Handstand Protocol, day by day.' },
       { area: 'protocol_katas', title: 'Katas', text: 'Flow routines to learn, film and level up.' },
     ],
     [
-      { area: 'nav_physique', title: 'Physique Builder', text: 'Fuel, health, physique and progress in one place.' },
+      { area: 'nav_physique', title: 'Physique', text: 'Fuel, health, physique and progress in one place.' },
       { area: 'physique_fuel', title: 'Fuel', text: 'Log your meals and hit your targets.' },
       { area: 'physique_health', title: 'Health', text: 'Connect your devices for steps, sleep and heart rate.' },
       { area: 'physique_physique', title: 'Physique', text: 'Progress photos and body scans.' },
@@ -110,14 +111,14 @@
       { area: 'physique_reports', title: 'Reports', text: 'Your progress, week by week.' },
       { area: 'physique_profile', title: 'Profile', text: 'Enter your details here for accuracy.' },
     ],
-    [{ area: 'nav_map', title: 'Strength Ninjas', text: 'The map of everyone training with us.' }, { area: 'map_page', title: 'Strength Ninjas map', text: 'See who is training near you and around the world.' }],
-    [{ area: 'nav_quiz', title: 'Training Personality', text: 'Find out how you train best.' }, { area: 'quiz_page', title: 'Training Personality', text: 'A quick quiz that shapes how we coach you.' }],
+    [{ area: 'nav_map', title: 'Map', text: 'The Strength Ninjas map of everyone training with us.' }, { area: 'map_page', title: 'Strength Ninjas map', text: 'See who is training near you and around the world.' }],
+    [{ area: 'nav_quiz', title: 'Personality', text: 'Find out how you train best.' }, { area: 'quiz_page', title: 'Training Personality', text: 'A quick quiz that shapes how we coach you.' }],
     [{ area: 'nav_levels', title: 'Levels', text: 'Your skill progress, every category.' }, { area: 'levels_page', title: 'Levels', text: 'Level up each skill from 1 to 10 and grow your Super Level.' }],
-    [{ area: 'nav_shop', title: 'Clothing', text: 'PRA gear. Students get 10% off.' }, { area: 'shop_page', title: 'Clothing', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' }],
-    [{ area: 'nav_retreats', title: 'Retreats', text: 'Train with us in person.' }, { area: 'retreats_page', title: 'Retreats', text: 'Coaching trips with the crew. Come train with us.' }],
-    [{ area: 'nav_profile', title: 'Your profile', text: 'Your account and photo.' }, { area: 'profile_pic', title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' }],
+    [{ area: 'nav_shop', title: 'Clothes', text: 'PRA gear. Students get 10% off.' }, { area: 'shop_page', title: 'Clothes', text: 'Students get 10% off clothing. Use code STUDENTS at checkout.' }],
+    [{ area: 'nav_retreats', title: 'Travel', text: 'Retreats: train with us in person.' }, { area: 'retreats_page', title: 'Travel', text: 'Coaching trips with the crew. Come train with us.' }],
+    [{ area: 'nav_profile', title: 'Profile', text: 'Your account and photo.' }, { area: 'profile_pic', title: 'Profile pic', text: 'Add a photo so your coaches and the crew know you.' }],
     [
-      { area: 'nav_chat', title: 'Back to chat', text: 'Head back to your chat.' },
+      { area: 'nav_chat', title: 'Back to Chat', text: 'Tap Chat to head back to your chats.' },
       { area: 'chat_photo', mustTap: true, title: 'Tap your photo', text: 'Tap your group photo to open your profile panel.' },
       { area: 'profile_panel', title: 'Your profile panel', text: 'Levels, badges and more. Hit Next to head back to chat.' },
       { area: 'message_box', title: 'Message your coaches', text: 'Now send your coaches a message. Say hi and tell them your goals.' },
