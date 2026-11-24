@@ -69,7 +69,7 @@
   .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
   /* Chat panel buttons are words now (2026-11-24): Video Call, Group,
      Channel, Media, Favorites, Search. */
-  .icon-btn.text-btn { width: auto; height: 30px; padding: 0 10px; border-color: #383842; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .74rem; color: #cfd6dc; white-space: nowrap; }
+  .icon-btn.text-btn { width: auto; height: 28px; padding: 0 10px; border-color: #383842; font-family: var(--font-primary, inherit); font-weight: 500; font-size: .72rem; color: #cfd6dc; white-space: nowrap; }
   .icon-btn.text-btn:hover { border-color: var(--pra-blue); }
   .icon-btn.text-btn.on { border-color: var(--pra-blue); }
   .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
@@ -81,10 +81,10 @@
   .thr-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; justify-content: safe flex-end; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
   .thr-row.thr-empty { display: none; }
   @container pra-app (max-width: 640px) {
-    #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; gap: 4px; }
-    .thr-row { gap: 4px; justify-content: safe flex-end; padding: 1px 0; }
+    #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; gap: 3px; }
+    .thr-row { gap: 3px; justify-content: safe flex-end; padding: 0; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
-    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 24px; border-radius: 7px; padding: 0 clamp(4px, 1.4cqi, 8px); font-size: clamp(9px, 2.7cqi, .7rem); }
+    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 21px; border-radius: 6px; padding: 0 clamp(3px, 1.2cqi, 7px); font-size: clamp(8px, 2.3cqi, .62rem); }
   }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
@@ -1808,6 +1808,10 @@ let favoritedFileIds = new Set();
 // coachQuotaBadgeHtml). Populated once at init, not per-thread-open.
 let coachMonthlyStats = { counts: {}, goal: 20 };
 let conversations = [];
+// False until the first /api/chat/conversations answer: the contacts directory
+// can arrive first, and painting the list from contacts alone flashed a
+// wrong-order list of people before the real one (Lee, 2026-11-24).
+let conversationsLoaded = false;
 let activeConvoId = null;
 let editingMessageId = null;
 // Files pasted (Ctrl+V) into the composer — staged here, not uploaded
@@ -2368,6 +2372,7 @@ async function loadConversations() {
   const r = await fetch('/api/chat/conversations');
   const d = await r.json();
   conversations = d.conversations;
+  conversationsLoaded = true;
   // Whatever's currently open is being read right now — don't let a poll
   // that lands mid-view flip it back to "unread" under the user.
   const active = conversations.find(c => c.id === activeConvoId);
@@ -3099,6 +3104,7 @@ function setupChatTypeFilter() {
   };
 }
 function renderConvoList() {
+  if (!conversationsLoaded) return; // still showing Loading… (see conversationsLoaded)
   setupChatTypeFilter();
   const wrap = document.getElementById('convoList');
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();

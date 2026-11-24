@@ -264,14 +264,14 @@ window.PRABack = (function () {
       /* Word buttons (no icons since 2026-11-24). */
       #chat-app-header .cah-icon {
         width: auto; padding: 0 12px;
-        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .82rem;
+        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .82rem;
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active { color: #fff; }
       /* Bottom words: same outlined boxes as the top row, a bit bigger. */
       #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
         width: auto; padding: 0 14px; border-color: #383842;
-        font-family: var(--font-primary, inherit); font-weight: 600; font-size: .86rem;
+        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .86rem;
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-bottom-bar div.cah-bottom-group { gap: 8px; }
@@ -284,23 +284,23 @@ window.PRABack = (function () {
            of cutting words off; a very narrow screen wraps as a last resort. */
         #chat-app-header .cah-icons { width: 100%; gap: 1.6cqi; flex-wrap: nowrap; }
         #chat-app-header .cah-icon {
-          flex: 1 1 0; min-width: 0; max-width: 88px; padding: 0 2px; height: 30px;
-          font-size: clamp(10px, 3.4cqi, 14px);
+          flex: 1 1 0; min-width: 0; max-width: 88px; padding: 0 2px; height: 27px;
+          font-size: clamp(9px, 2.9cqi, 12px);
         }
         /* The Android app draws behind the phone's own nav bar and reports its
            height as --safe-area-inset-bottom (Capacitor), not env() -- without
            it the bottom of this bar hid under the nav bar and the words looked
            low. Equal room above and below the words, plus that inset. */
         div#chat-app-bottom-bar {
-          padding: 8px 6px;
-          padding-bottom: calc(8px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+          padding: 5px 6px;
+          padding-bottom: calc(5px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
         }
         #chat-app-bottom-bar div.cah-bottom-group {
           width: 100%; gap: clamp(3px, 1cqi, 6px); justify-content: center; flex-wrap: wrap;
         }
         #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
-          flex: 0 1 auto; min-width: 0; height: 28px; padding: 0 clamp(3px, 1.4cqi, 7px); border-color: #383842;
-          font-size: clamp(9.5px, 3.2cqi, 13px);
+          flex: 0 1 auto; min-width: 0; height: 25px; padding: 0 clamp(3px, 1.4cqi, 7px); border-color: #383842;
+          font-size: clamp(8.5px, 2.7cqi, 11.5px);
         }
       }
       #chat-app-header .cah-icon svg {
