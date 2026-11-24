@@ -236,10 +236,23 @@
   #quickStartSection .qs-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   #quickStartSection .qs-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(0,155,255,.12); border: 1px solid rgba(0,155,255,.4); font-size: .78rem; }
   #quickStartSection .qs-chip button { background: none; border: none; color: var(--pra-dim); cursor: pointer; padding: 0; font-size: .9rem; }
-  #quickStartSection .qs-step { border-top: 1px solid var(--pra-border); padding: 10px 0; }
-  #quickStartSection .qs-step:first-child { border-top: none; padding-top: 0; }
-  #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; margin-bottom: 6px; }
+  /* Each step is its own accordion row inside "Steps & wording". */
+  #quickStartSection .qs-step { border-top: 1px solid var(--pra-border); }
+  #quickStartSection .qs-step:first-child { border-top: none; }
+  #quickStartSection .qs-step > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 2px; cursor: pointer; user-select: none; }
+  #quickStartSection .qs-step > summary::-webkit-details-marker { display: none; }
+  #quickStartSection .qs-step > summary:hover .qs-step-t { color: #fff; }
+  #quickStartSection .qs-step[open] > summary { padding-bottom: 8px; }
+  #quickStartSection .qs-step[open] { padding-bottom: 6px; }
+  #quickStartSection .qs-step-h { font-weight: 800; font-size: .82rem; white-space: nowrap; }
   #quickStartSection .qs-step-h span { color: #ffd23f; font-weight: 700; margin-left: 6px; }
+  #quickStartSection .qs-step-t { flex: 1; min-width: 0; font-size: .8rem; color: var(--pra-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #quickStartSection .qs-step-n { font-size: .68rem; color: var(--pra-dim); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  #quickStartSection .qs-chev { width: 16px; height: 16px; flex-shrink: 0; opacity: .7; transition: transform .15s; }
+  #quickStartSection .qs-step[open] > summary .qs-chev { transform: rotate(180deg); }
+  #quickStartSection .qs-acc > summary .um-count { text-transform: none; letter-spacing: 0; font-size: .74rem; }
+  #quickStartSection .qs-step-tools { display: flex; gap: 8px; margin: -4px 0 10px; font-size: .74rem; }
+  #quickStartSection .qs-step-tools a { color: #009bff; }
   #quickStartSection .qs-sub-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.4fr) 52px; grid-template-areas: "n area opts btns" ". title text text"; gap: 6px; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,.06); }
   #quickStartSection .qs-sub-row .n { grid-area: n; } #quickStartSection .qs-sub-row [data-f=area] { grid-area: area; } #quickStartSection .qs-sub-row [data-opts] { grid-area: opts; } #quickStartSection .qs-sub-row .qs-row-btns { grid-area: btns; } #quickStartSection .qs-sub-row [data-f=title] { grid-area: title; } #quickStartSection .qs-sub-row [data-f=text] { grid-area: text; }
   #quickStartSection .qs-sub-row select { padding: 6px 8px; font-size: .78rem; min-width: 0; }
@@ -657,10 +670,10 @@
 
     <div class="pra-panel section" id="quickStartSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:6px">Quick Start</div>
-      <div class="pra-muted" style="font-size:.78rem;margin-bottom:16px">The coin-collecting walkthrough of the app (10 steps, 100 coins). Changes save with the button at the bottom.</div>
+      <div class="pra-muted" style="font-size:.78rem;margin-bottom:16px">The coin-collecting walkthrough of the app (10 steps, 100 coins). Changes save with the button at the bottom. Tap a section to open it.</div>
 
-      <div class="qs-group">
-        <div class="qs-h">Who gets it</div>
+<details class="um-card qs-acc" data-k="who">
+        <summary><h3>Who gets it</h3><span class="um-count" id="qsSum-who"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="qs-row">
           <label class="qs-radio"><input type="radio" name="qsEnabledFor" value="off"/> Off</label>
           <label class="qs-radio"><input type="radio" name="qsEnabledFor" value="testers"/> Testers only</label>
@@ -677,44 +690,44 @@
         <div class="qs-sub">Testers (always get it, whatever the setting above)</div>
         <div class="qs-chips" id="qsTesterChips"></div>
         <div class="qs-row"><input class="pra-input" id="qsTesterSearch" list="qsUserList" placeholder="Add a tester — type a name…" style="max-width:320px"/><datalist id="qsUserList"></datalist></div>
-      </div>
+      </details>
 
-      <div class="qs-group">
-        <div class="qs-h">Starting</div>
+<details class="um-card qs-acc" data-k="start">
+        <summary><h3>Starting</h3><span class="um-count" id="qsSum-start"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsAutoStart"/> Opens by itself on Chat for anyone who hasn't finished it (closing it with the X stops that on their device)</label>
         <div class="qs-row qs-num" style="margin-top:8px">For their first <input class="pra-input" type="number" min="0" max="60" id="qsForceDays"/> day(s), it opens on <b>every</b> app open until they finish, even after the X</div>
         <div class="pra-muted" style="font-size:.74rem">Closing the app before finishing always restarts it from step 1 on the next open.</div>
         <label class="qs-chk" style="margin-top:8px"><input type="checkbox" class="pra-toggle" id="qsHidePromo"/> Hide the Black Friday pointer until they've finished Quick Start</label>
-      </div>
+      </details>
 
-      <div class="qs-group">
-        <div class="qs-h">Quick Start button</div>
-        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Shows once they've finished it, so they can run it again. Phone: right of "Chats" (right of the students count for staff). Desktop: centered in the top bar.</div>
+<details class="um-card qs-acc" data-k="button">
+        <summary><h3>Quick Start button</h3><span class="um-count" id="qsSum-button"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Shows once they've finished it, so they can run it again. Phone: top-right, on the logo line. Wider screens: between the logo and the nav words.</div>
         <div class="qs-row qs-num">Show for the first <input class="pra-input" type="number" min="0" max="60" id="qsFirstDays"/> days of using the app</div>
         <div class="qs-row qs-num">If someone hasn't opened the app for <input class="pra-input" type="number" min="0" max="60" id="qsAwayDays"/>+ days, show it again for <input class="pra-input" type="number" min="0" max="60" id="qsComebackDays"/> days</div>
         <label class="qs-chk"><input type="checkbox" class="pra-toggle" id="qsTestersAlways"/> Testers always see the button</label>
-      </div>
+      </details>
 
-      <div class="qs-group">
-        <div class="qs-h">Steps &amp; wording</div>
+<details class="um-card qs-acc" data-k="steps">
+        <summary><h3>Steps &amp; wording</h3><span class="um-count" id="qsSum-steps"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Each part: pick the area of the app it points at, then its title and text, then any options. Each step is worth 10 coins, paid when its last part is done. A part whose button isn't on screen (e.g. no open chat) skips itself. <a href="#" id="qsResetSteps" style="color:#009bff">Reset all steps to the default</a></div>
                 <div id="qsSteps">Loading…</div>
-      </div>
+      </details>
 
-      <div class="qs-group">
-        <div class="qs-h">After step 10: message in their chat</div>
+<details class="um-card qs-acc" data-k="finish">
+        <summary><h3>After step 10: message in their chat</h3><span class="um-count" id="qsSum-finish"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="pra-muted" style="font-size:.74rem;margin-bottom:8px">Posted in their own group the first time they finish (never again on replays). {first} = their first name. Leave it empty to send nothing.</div>
         <textarea class="pra-input" id="qsFinishText" rows="3" placeholder="e.g. Nice work {first}, you crushed the Quick Start! What's the #1 skill you want to unlock first?" style="width:100%;resize:vertical"></textarea>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><span style="font-size:.78rem">Sent as</span><select class="pra-select" id="qsFinishSender" style="max-width:260px;padding:6px 10px;font-size:.8rem"></select></div>
-      </div>
+      </details>
 
       <button class="pra-btn" id="qsSaveBtn" type="button" style="width:100%;margin-top:6px">Save Quick Start</button>
       <div class="save-msg" id="qsSaveMsg"></div>
 
-      <div class="qs-group" style="margin-top:22px">
-        <div class="qs-h">Progress</div>
+<details class="um-card qs-acc" data-k="progress" style="margin-top:22px">
+        <summary><h3>Progress</h3><span class="um-count" id="qsSum-progress"></span><svg class="um-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div id="qsPeople" class="pra-muted" style="font-size:.8rem">Loading…</div>
-      </div>
+      </details>
     </div>
     <div class="pra-panel section" id="archetypesSection" style="display:none">
       <div class="pra-h2" style="margin-bottom:6px">Training Personality Archetypes</div>
@@ -2279,7 +2292,40 @@ window.addEventListener('pageshow', () => {
     });
   }
   let DEF = null, draft = null;
+  const openSteps = new Set();
   const copy = (x) => JSON.parse(JSON.stringify(x));
+  // ── Accordions ──
+  // Sections start closed; the ones you open stay open next time (this device).
+  (function setupQsAccordions() {
+    let open = [];
+    try { open = JSON.parse(localStorage.getItem('pra-qs-open') || '[]'); } catch {}
+    document.querySelectorAll('#quickStartSection details.qs-acc').forEach(d => {
+      if (open.includes(d.dataset.k)) d.open = true;
+      d.addEventListener('toggle', () => {
+        const now = [...document.querySelectorAll('#quickStartSection details.qs-acc[open]')].map(x => x.dataset.k);
+        try { localStorage.setItem('pra-qs-open', JSON.stringify(now)); } catch {}
+      });
+    });
+    // Summaries follow edits as you make them.
+    document.getElementById('quickStartSection').addEventListener('input', () => updateQsSummaries());
+    document.getElementById('quickStartSection').addEventListener('change', () => updateQsSummaries());
+  })();
+  // The short line on each closed section, so the page reads at a glance.
+  function updateQsSummaries() {
+    if (!data) return;
+    const set = (k, txt) => { const el = $('qsSum-' + k); if (el) el.textContent = txt; };
+    const who = (document.querySelector('input[name="qsEnabledFor"]:checked') || {}).value;
+    const roles = [...document.querySelectorAll('#qsRoles input:checked')].map(x => x.parentElement.textContent.trim());
+    set('who', (who === 'off' ? 'Off' : who === 'testers' ? 'Testers only' : who === 'everyone' ? (roles.length ? roles.join(', ') : 'No roles picked') : '') + ` · ${testers.length} tester${testers.length === 1 ? '' : 's'}`);
+    const force = +$('qsForceDays').value || 0;
+    set('start', ($('qsAutoStart').checked ? 'Opens by itself' : 'Only from the button') + (force ? ` · every open for ${force} day${force === 1 ? '' : 's'}` : ''));
+    set('button', `First ${+$('qsFirstDays').value || 0} days` + ($('qsTestersAlways').checked ? ' · testers always' : ''));
+    if (draft) { const parts = draft.reduce((n, s) => n + s.length, 0); set('steps', `${draft.length} steps · ${parts} parts · ${draft.length * 10} coins`); }
+    const ft = $('qsFinishText').value.trim();
+    set('finish', ft ? (ft.length > 48 ? ft.slice(0, 48) + '…' : ft) : 'Nothing sent');
+    const people = data.people || [];
+    set('progress', `${people.filter(p => p.completedAt).length} of ${people.length} finished`);
+  }
   // Saved steps, else the defaults with any old title/text-only overrides.
   function startDraft() {
     if (Array.isArray(data.config.steps) && data.config.steps.length) return copy(data.config.steps);
@@ -2296,6 +2342,7 @@ window.addEventListener('pageshow', () => {
     const byId = new Map((data.users || []).map(u => [u.id, u]));
     $('qsTesterChips').innerHTML = testers.map(id => `<span class="qs-chip">${esc(byId.get(id)?.name || id)}<button type="button" data-id="${esc(id)}" title="Remove">&times;</button></span>`).join('') || '<span class="pra-muted" style="font-size:.76rem">No testers.</span>';
     $('qsTesterChips').querySelectorAll('button').forEach(b => b.onclick = () => { testers = testers.filter(x => x !== b.dataset.id); renderTesters(); });
+    updateQsSummaries();
   }
   function renderPeople() {
     const rows = (data.people || []);
@@ -2317,7 +2364,12 @@ window.addEventListener('pageshow', () => {
       Object.entries(DEF.AREAS).forEach(([k, a]) => { const g = a.label.includes(':') ? a.label.split(':')[0] : 'Pages'; const l = a.label.includes(':') ? a.label.split(':').slice(1).join(':').trim() : a.label; (groups[g] = groups[g] || []).push([k, l.charAt(0).toUpperCase() + l.slice(1)]); });
       return Object.entries(groups).map(([g, list]) => `<optgroup label="${esc(g)}">${list.map(([k, l]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('');
     };
-    $('qsSteps').innerHTML = draft.map((parts, si) => `<div class="qs-step" data-si="${si}"><div class="qs-step-h">Step ${si + 1}<span>+10</span></div>` +
+    // Steps are accordions too; which ones are open survives the re-render
+    // that every edit (add/move/remove a part) does.
+    const chev = '<svg class="qs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>';
+    const stepSummary = (parts) => parts.map(p => p.title || (DEF.AREAS[p.area] || {}).label || '').filter(Boolean).join(' · ');
+    $('qsSteps').innerHTML = `<div class="qs-step-tools"><a href="#" data-all="1">Open all</a><a href="#" data-all="0">Close all</a></div>` +
+      draft.map((parts, si) => `<details class="qs-step" data-si="${si}"${openSteps.has(si) ? ' open' : ''}><summary><div class="qs-step-h">Step ${si + 1}<span>+10</span></div><div class="qs-step-t">${esc(stepSummary(parts))}</div><div class="qs-step-n">${parts.length} part${parts.length === 1 ? '' : 's'}</div>${chev}</summary>` +
       parts.map((p, ui) => {
         const extras = DEF.OPTIONS.filter(o => o.text && p[o.key] !== undefined).map(o =>
           `<div class="qs-extra" data-si="${si}" data-ui="${ui}"><span></span><label>${esc(o.label)}</label><input class="pra-input" data-x="${o.key}" value="${esc(p[o.key] || '')}" placeholder="Type the ${esc(o.label.toLowerCase())}…"/></div>`).join('');
@@ -2327,7 +2379,15 @@ window.addEventListener('pageshow', () => {
           <input class="pra-input" data-f="text" value="${esc(p.text || '')}" placeholder="Text"/>
           <button type="button" class="qs-opt-btn${optSummary(p) ? ' on' : ''}" data-opts>${esc(optSummary(p) || 'Options…')}</button>
           <div class="qs-row-btns"><button type="button" data-up title="Move up">&uarr;</button><button type="button" data-del title="Remove this part">&times;</button></div></div>` + extras;
-      }).join('') + `<button type="button" class="qs-add" data-add="${si}">+ Add a part</button></div>`).join('');
+      }).join('') + `<button type="button" class="qs-add" data-add="${si}">+ Add a part</button></details>`).join('');
+    $('qsSteps').querySelectorAll('details.qs-step').forEach(d => d.addEventListener('toggle', () => {
+      if (d.open) openSteps.add(+d.dataset.si); else openSteps.delete(+d.dataset.si);
+    }));
+    $('qsSteps').querySelectorAll('[data-all]').forEach(a => a.onclick = (e) => {
+      e.preventDefault();
+      $('qsSteps').querySelectorAll('details.qs-step').forEach(d => { d.open = a.dataset.all === '1'; });
+    });
+    updateQsSummaries();
     const part = (el) => { const r = el.closest('[data-si][data-ui]'); return { si: +r.dataset.si, ui: +r.dataset.ui, p: draft[+r.dataset.si][+r.dataset.ui] }; };
     $('qsSteps').querySelectorAll('[data-f]').forEach(el => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => { part(el).p[el.dataset.f] = el.value; }));
     $('qsSteps').querySelectorAll('[data-x]').forEach(el => el.addEventListener('input', () => { part(el).p[el.dataset.x] = el.value; }));
@@ -2363,6 +2423,7 @@ window.addEventListener('pageshow', () => {
     $('qsFinishSender').innerHTML = '<option value="">First coach/admin in their group</option>' + staff.map(u => `<option value="${esc(u.id)}"${u.id === fm.senderId ? ' selected' : ''}>${esc(u.name)}</option>`).join('');
     draft = null;
     renderTesters(); renderPeople(); renderSteps();
+    updateQsSummaries();
   }
   $('qsTesterSearch').addEventListener('change', (e) => {
     const u = (data.users || []).find(x => x.name.toLowerCase() === e.target.value.trim().toLowerCase());
