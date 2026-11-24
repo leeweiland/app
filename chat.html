@@ -82,7 +82,7 @@
   .thr-row.thr-empty { display: none; }
   @container pra-app (max-width: 640px) {
     .thread-head-icons { align-items: stretch; width: 100%; }
-    .thr-row { gap: 4px; justify-content: safe center; }
+    .thr-row { gap: 4px; justify-content: safe flex-end; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
     .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
   }
@@ -909,6 +909,20 @@
     background: rgba(0,0,0,0.15);
   }
   .media-grid-play svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
+  /* Shared Media + My Favorites: a one-column feed (Lee, 2026-11-24) --
+     videos play right in it, with the chat's ⤢ expand button. Big panel:
+     most of the screen on a computer, ~50px in from every edge on a phone. */
+  .media-modal .modal-box { width: min(760px, 92vw); max-width: none; height: 88vh; height: 88dvh; max-height: none; display: flex; flex-direction: column; overflow: hidden; }
+  @media (max-width: 640px) {
+    .modal-backdrop.media-modal { padding: 50px; }
+    .media-modal .modal-box { width: 100%; height: 100%; padding: 16px; }
+  }
+  .media-feed { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; }
+  .media-feed .empty-hint { margin: auto; }
+  .media-feed-item { position: relative; flex-shrink: 0; border-radius: 10px; overflow: hidden; background: #000; border: 1px solid var(--pra-border); }
+  .media-feed-item video, .media-feed-item img { display: block; width: 100%; max-height: 62vh; max-height: 62dvh; object-fit: contain; background: #000; }
+  .media-feed-item img { cursor: zoom-in; }
+  .media-feed-cap { padding: 7px 10px; font-size: .74rem; color: var(--pra-dim); background: rgba(255,255,255,.03); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .push-banner { padding: 8px 20px; font-size: .78rem; color: var(--pra-blue); text-align: center; cursor: pointer; border-bottom: 1px solid var(--pra-border); }
 
@@ -1417,7 +1431,7 @@
   </div>
 
   <!-- Media gallery modal -->
-  <div class="modal-backdrop" id="mediaModal">
+  <div class="modal-backdrop media-modal" id="mediaModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px" id="mediaModalTitle">Shared Media</div>
       <div class="media-grid" id="mediaGrid"></div>
@@ -1614,7 +1628,7 @@
   </div>
 
   <!-- "My Favorites" list modal (coach/admin only) -->
-  <div class="modal-backdrop" id="favoritesModal">
+  <div class="modal-backdrop media-modal" id="favoritesModal">
     <div class="pra-panel modal-box">
       <div class="pra-h2" style="margin-bottom:14px">My Favorites</div>
       <div class="media-grid" id="favoritesGrid"></div>
@@ -4986,6 +5000,8 @@ function linkifyUrls(escapedText) {
   }
   wireGridLightbox('mediaGrid');
   wireGridLightbox('favoritesGrid');
+  // The Shared Media / Favorites feed (mediaFeedHtml) opens these too.
+  window.praOpenImage = openImage; window.praOpenVideo = openVideo;
 
   // Open on clicking any chat image/video (event-delegated — bubbles get
   // wholesale re-rendered on every poll, so a directly-bound listener
@@ -5020,6 +5036,7 @@ function linkifyUrls(escapedText) {
       const groupIds = cell.closest('.msg-grid').dataset.groupIds.split(',');
       const items = currentThreadMessages.filter(m => groupIds.includes(m.id));
       document.getElementById('mediaModalTitle').textContent = `${items.length} items`;
+      document.getElementById('mediaGrid').className = 'media-grid';
       document.getElementById('mediaGrid').innerHTML = items.map(m => mediaGridCellHtml(m.type, `/api/chat/media/${m.driveFileId}`)).join('');
       openModal('mediaModal');
       return;
@@ -7425,13 +7442,62 @@ function mediaGridCellHtml(type, src) {
     : `<div class="media-grid-item" data-type="image" data-src="${src}"><img src="${src}"/></div>`;
 }
 
+// ── Shared Media / My Favorites feed ──
+// One column, newest first. Videos play in place (one at a time); ⤢ opens the
+// same timestamped-notes reply panel a chat video's ⤢ does, or the plain
+// video viewer if that message isn't in the loaded thread. Photos open the
+// lightbox.
+function mediaFeedHtml(items) {
+  const fmt = (iso) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } };
+  return items.map(it => {
+    const cap = it.caption || (it.at ? fmt(it.at) : '');
+    const capHtml = cap ? `<div class="media-feed-cap">${escapeHtml(cap)}</div>` : '';
+    if (it.type === 'video') {
+      const poster = it.poster ? ` poster="${it.poster}" preload="none"` : ' preload="metadata"';
+      return `<div class="media-feed-item video-wrap" data-type="video" data-src="${it.src}" data-file="${escapeHtml(it.fileId || '')}" data-mid="${escapeHtml(it.mid || '')}"><video src="${it.src}${it.poster ? '' : '#t=0.5'}"${poster} controls playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${capHtml}</div>`;
+    }
+    return `<div class="media-feed-item" data-type="image" data-src="${it.src}"><img src="${it.src}" loading="lazy" alt=""/>${capHtml}</div>`;
+  }).join('');
+}
+function showMediaFeed(gridId, items, emptyHtml) {
+  const grid = document.getElementById(gridId);
+  grid.className = 'media-feed';
+  grid.innerHTML = mediaFeedHtml(items) || emptyHtml;
+  grid.scrollTop = 0;
+}
+(function wireMediaFeeds() {
+  const stopAll = (root) => root.querySelectorAll('.media-feed video').forEach(v => { try { v.pause(); } catch {} });
+  // One video at a time.
+  document.addEventListener('play', (e) => {
+    const feed = e.target.closest && e.target.closest('.media-feed');
+    if (feed) feed.querySelectorAll('video').forEach(v => { if (v !== e.target) v.pause(); });
+  }, true);
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.media-feed-item');
+    if (!item) return;
+    if (e.target.classList.contains('expand-video-btn')) {
+      item.querySelector('video')?.pause();
+      const m = currentThreadMessages.find(x => (item.dataset.mid && x.id === item.dataset.mid) || (item.dataset.file && x.driveFileId === item.dataset.file && x.type === 'video'));
+      const modal = item.closest('.modal-backdrop');
+      if (m) { if (modal) closeModal(modal.id); startVideoReply(m.id); }
+      else window.praOpenVideo(item.dataset.src);
+    } else if (e.target.tagName === 'IMG') window.praOpenImage(item.dataset.src);
+  });
+  // Closing either popup stops whatever was playing in it.
+  ['mediaModal', 'favoritesModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) new MutationObserver(() => { if (!el.classList.contains('show')) stopAll(el); }).observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
+
 async function openMediaGallery() {
   const r = await fetch('/api/chat/conversations/' + activeConvoId + '/media');
   const d = await r.json();
   document.getElementById('mediaModalTitle').textContent = 'Shared Media';
-  const grid = document.getElementById('mediaGrid');
-  grid.innerHTML = d.media.map(m => mediaGridCellHtml(m.type, `/api/chat/media/${m.driveFileId}`)).join('')
-    || '<div class="empty-hint">No media shared yet.</div>';
+  const items = (d.media || []).filter(m => m.driveFileId && (m.type === 'video' || m.type === 'image'))
+    .map(m => ({ type: m.type, src: `/api/chat/media/${m.driveFileId}`, fileId: m.driveFileId, mid: m.id, poster: m.posterFileId ? `/api/chat/media/${m.posterFileId}` : '', at: m.createdAt }))
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  showMediaFeed('mediaGrid', items, '<div class="empty-hint">No media shared yet.</div>');
   openModal('mediaModal');
 }
 
@@ -7511,6 +7577,7 @@ async function submitFavoriteName() {
 
 async function openFavoritesGallery() {
   const grid = document.getElementById('favoritesGrid');
+  grid.className = 'media-feed';
   grid.innerHTML = '<div class="empty-hint">Loading…</div>';
   openModal('favoritesModal');
   // Scoped to the currently open thread — opened from that thread's own
@@ -7524,8 +7591,10 @@ async function openFavoritesGallery() {
   // this user is a participant of), not the Drive copy the favorite record
   // points at. Same bytes either way; avoids opening up the media proxy to
   // a whole new authorization path just for a thumbnail.
-  grid.innerHTML = favorites.map(f => mediaGridCellHtml(f.type, `/api/chat/media/${f.originalFileId}`)).join('')
-    || '<div class="empty-hint">No favorites in this chat yet — tap the star on any photo or video here.</div>';
+  const items = favorites.filter(f => f.type === 'video' || f.type === 'image')
+    .map(f => ({ type: f.type, src: `/api/chat/media/${f.originalFileId}`, fileId: f.originalFileId, caption: f.name || '', at: f.createdAt }))
+    .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  showMediaFeed('favoritesGrid', items, '<div class="empty-hint">No favorites in this chat yet — tap the star on any photo or video here.</div>');
 }
 
 // ── Push notifications ──────────────────────────────────────────────────
@@ -8681,23 +8750,23 @@ function setupCallUI() {
   if (!box) return;
   const rows = [...box.querySelectorAll('.thr-row')];
   let busy = false;
-  const fitRow = (row) => {
-    const btns = [...row.querySelectorAll('.icon-btn')];
-    // A row with nothing to show for this person/chat (e.g. the staff row for
-    // a student) takes no space at all.
-    row.classList.toggle('thr-empty', !btns.some(b => b.style.display !== 'none'));
-    const words = btns.filter(b => b.classList.contains('text-btn'));
-    words.forEach(b => { b.style.fontSize = ''; });
-    let fs = words[0] ? parseFloat(getComputedStyle(words[0]).fontSize) || 12 : 0;
-    // Down to a still-readable 10px; past that the row scrolls sideways
-    // (faded ends, PRAHScroll) instead of shrinking the words any further.
-    for (let i = 0; i < 20 && words.length && fs > 10 && row.scrollWidth > row.clientWidth + 1; i++) {
-      fs = Math.max(10, fs * 0.94); words.forEach(b => { b.style.fontSize = fs + 'px'; });
-    }
-  };
+  // Every visible word button gets the same width (the widest one's), both
+  // rows right-aligned so the buttons line up in columns (Lee, 2026-11-24).
+  // Words shrink (down to 10px) only if a row would otherwise overflow.
   const fit = () => {
     if (busy) return; busy = true;
-    rows.forEach(fitRow);
+    rows.forEach(row => row.classList.toggle('thr-empty', ![...row.querySelectorAll('.icon-btn')].some(b => b.style.display !== 'none')));
+    const words = [...box.querySelectorAll('.icon-btn.text-btn')].filter(b => b.style.display !== 'none');
+    words.forEach(b => { b.style.fontSize = ''; b.style.width = ''; });
+    if (!box.offsetWidth) { requestAnimationFrame(() => { busy = false; }); return; } // hidden: measure once shown
+    let fs = words[0] ? parseFloat(getComputedStyle(words[0]).fontSize) || 12 : 0;
+    for (let i = 0; i < 25 && words.length; i++) {
+      words.forEach(b => { b.style.width = ''; b.style.fontSize = fs + 'px'; });
+      const w = Math.ceil(Math.max(...words.map(b => b.getBoundingClientRect().width)));
+      words.forEach(b => { b.style.width = w + 'px'; });
+      if (rows.every(r => r.scrollWidth <= r.clientWidth + 1) || fs <= 10) break;
+      fs = Math.max(10, fs * 0.94);
+    }
     requestAnimationFrame(() => { busy = false; });
   };
   rows.forEach(r => { if (window.PRAHScroll) window.PRAHScroll(r); });
