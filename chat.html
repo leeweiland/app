@@ -73,6 +73,8 @@
   .icon-btn.text-btn:hover { border-color: var(--pra-blue); }
   .icon-btn.text-btn.on { border-color: var(--pra-blue); }
   .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
+  /* Coaches/admins-only row: bright white, not bold. */
+  .thr-staff .icon-btn.text-btn { color: #fff; }
   #startCallBtn.call-live { color: #fff; }
   /* One row, always: on a phone the buttons share the width and the words
      shrink to fit (fitThreadButtons measures on the device, so a big phone
@@ -1810,7 +1812,7 @@ let conversations = [];
 // False until the first /api/chat/conversations answer: the contacts directory
 // can arrive first, and painting the list from contacts alone flashed a
 // wrong-order list of people before the real one (Lee, 2026-11-24).
-let conversationsLoaded = false;
+let conversationsLoaded = false, lastConversationsRaw = '';
 let activeConvoId = null;
 let editingMessageId = null;
 // Files pasted (Ctrl+V) into the composer — staged here, not uploaded
@@ -2369,7 +2371,17 @@ async function init() {
 
 async function loadConversations() {
   const r = await fetch('/api/chat/conversations');
-  const d = await r.json();
+  const raw = await r.text();
+  const d = JSON.parse(raw);
+  // Nothing changed since the last 3s poll: skip rebuilding the whole list
+  // (hundreds of rows) -- that constant re-render kept phones busy enough
+  // that taps lagged. The open thread / incoming call still get checked.
+  if (conversationsLoaded && raw === lastConversationsRaw) {
+    if (activeConvoId) refreshThread(false);
+    handleIncomingCallPoll(d.incomingCall);
+    return;
+  }
+  lastConversationsRaw = raw;
   conversations = d.conversations;
   conversationsLoaded = true;
   // Whatever's currently open is being read right now — don't let a poll

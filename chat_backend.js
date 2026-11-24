@@ -554,7 +554,13 @@ function publicUser(u) {
   // through the general user-info shape other logged-in users can see via
   // contacts/conversations. The users-map endpoint exposes a deliberately
   // narrower view (first name + coarse lat/lng only) separately below.
-  const { passwordHash, passwordSalt, ip, geo, ...rest } = u;
+  // readState / renewAck / pinned+favorite lists are that user's own
+  // bookkeeping (no page reads them off another user) -- and readState alone
+  // (a timestamp per conversation they're in) was 2.4MB of the 3MB
+  // /api/chat/conversations response every 3s poll repeated for every
+  // participant of every chat, which is what made Chat hang on phones
+  // (2026-11-24).
+  const { passwordHash, passwordSalt, ip, geo, readState, renewAck, pinnedConvoIds, favoriteConvoIds, ...rest } = u;
   return rest;
 }
 
