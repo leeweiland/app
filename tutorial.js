@@ -38,7 +38,7 @@
   const nav = (label, sel, page) => ({ label, page: '*', targets: [sel], go: page, clickGo: true });
   const AREAS = {
     chat_group: { label: 'Chat: their private group', page: 'chat', sidebar: true, targets: ['.convo-item[data-own-group]', '.convo-item'] },
-    gym_calendar: { label: 'Chat: gym booking calendar', page: 'chat', openGroup: 'gym', targets: ['#scheduleBtn'] },
+    gym_calendar: { label: 'Chat: Schedule button (gym booking)', page: 'chat', openGroup: 'gym', targets: ['#scheduleBtn'] },
     // Demo of the icon labels: shows the label on their gym booking calendar
     // (gym students) or the pin icon on their own chat row (everyone else) --
     // the top/bottom bars are words now (2026-11-24), not icons.
@@ -95,7 +95,7 @@
   const DEFAULT_STEPS = [
     [{ area: 'chat_group', header: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' }],
     [
-      { area: 'gym_calendar', gymOnly: true, title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
+      { area: 'gym_calendar', gymOnly: true, title: 'Book your gym sessions', text: 'Tap Schedule to book your gym sessions.' },
       { area: 'back_to_chats', phoneOnly: true, mustTap: true, title: 'Back to your chats', text: 'Tap back to return to your chats.' },
       { area: 'nav_protocol', title: 'Train', text: 'Your training plan lives under Train. Tap it or hit Next.' },
       { area: 'protocol_training', title: 'Your Training', text: 'Your custom training protocol, day by day.', traineeText: 'Your Handstand Protocol, day by day.' },

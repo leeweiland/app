@@ -77,9 +77,9 @@
   /* One row, always: on a phone the buttons share the width and the words
      shrink to fit (fitThreadButtons measures on the device, so a big phone
      font setting can't push them onto a 2nd line). */
-  .thread-head-icons { flex-wrap: nowrap; min-width: 0; max-width: 100%; }
+  .thread-head-icons { flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; justify-content: safe flex-end; padding: 2px 0; }
   @container pra-app (max-width: 640px) {
-    .thread-head-icons { gap: 4px; justify-content: center; width: 100%; }
+    .thread-head-icons { gap: 4px; justify-content: safe center; width: 100%; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
     .thread-head-icons .icon-btn.text-btn { flex: 0 1 auto; min-width: 0; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
   }
@@ -1101,9 +1101,9 @@
             <button class="icon-btn text-btn" id="startCallBtn" title="Video call">Video Call</button>
             <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
             <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
-            <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
-            <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-            <button class="icon-btn" id="staffNotesBtn" title="Coach Notes" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="12" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M7.5 8h6M7.5 12h4M7.5 16h2.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M15.3 16.3l4.4-4.4a1.2 1.2 0 0 1 1.7 1.7l-4.4 4.4-2.2.5.5-2.2Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
+            <button class="icon-btn text-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
+            <button class="icon-btn text-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none">Intake</button>
+            <button class="icon-btn text-btn" id="staffNotesBtn" title="Coach Notes" style="display:none">Notes</button>
             <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
             <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
             <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
@@ -3763,7 +3763,7 @@ document.getElementById('mabDeleteBtn').innerHTML = '<svg viewBox="0 0 24 24" fi
 document.getElementById('mabLevelTestBtn').innerHTML = svgLevelTest();
 document.getElementById('mabStarBtn').innerHTML = svgStar();
 document.getElementById('videoReplyStarBtn').innerHTML = svgStar();
-document.getElementById('scheduleBtn').innerHTML = svgCalendar();
+document.getElementById('scheduleBtn').textContent = 'Schedule'; // a word, like the rest of the row (2026-11-24)
 document.getElementById('scheduleBtn').addEventListener('click', () => {
   const convo = conversations.find(c => c.id === activeConvoId);
   if (canScheduleGym(convo)) openGymScheduleModal();
@@ -8676,11 +8676,14 @@ function setupCallUI() {
     const btns = [...row.querySelectorAll('.icon-btn.text-btn')];
     btns.forEach(b => { b.style.fontSize = ''; });
     let fs = btns[0] ? parseFloat(getComputedStyle(btns[0]).fontSize) || 12 : 0;
-    for (let i = 0; i < 20 && btns.length && row.scrollWidth > row.clientWidth + 1; i++) {
-      fs *= 0.94; btns.forEach(b => { b.style.fontSize = fs + 'px'; });
+    // Down to a still-readable 10px; past that the row scrolls sideways
+    // (faded ends, PRAHScroll) instead of shrinking the words any further.
+    for (let i = 0; i < 20 && btns.length && fs > 10 && row.scrollWidth > row.clientWidth + 1; i++) {
+      fs = Math.max(10, fs * 0.94); btns.forEach(b => { b.style.fontSize = fs + 'px'; });
     }
     requestAnimationFrame(() => { busy = false; });
   };
+  if (window.PRAHScroll) window.PRAHScroll(row);
   if (window.ResizeObserver) new ResizeObserver(() => fit()).observe(row);
   // Buttons shown/hidden for this chat -> refit. (Its own font-size writes land
   // while `busy` is still set, so they don't loop.)
