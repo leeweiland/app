@@ -65,6 +65,12 @@
   .icon-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--pra-border); background: transparent; color: var(--pra-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: color .15s, border-color .15s; }
   .icon-btn:hover { color: var(--pra-blue); border-color: var(--pra-blue); }
   .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
+  /* Chat panel buttons are words now (2026-11-24): Video Call, Group,
+     Channel, Media, Favorites, Search. */
+  .icon-btn.text-btn { width: auto; height: 30px; padding: 0 10px; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .74rem; color: #cfd6dc; white-space: nowrap; }
+  .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
+  #startCallBtn.call-live { color: #fff; }
+  .thread-head-icons { flex-wrap: wrap; row-gap: 6px; }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
   .convo-list { flex: 1; overflow-y: auto; }
@@ -1079,15 +1085,15 @@
             </div>
           </div>
           <div class="thread-head-icons" id="threadHeadIconsRow">
-            <button class="icon-btn" id="startCallBtn" title="Video call"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6.5" width="13" height="11" rx="2.4" stroke="#fff" stroke-width="1.6"/><path d="M15.5 10.3l5-2.9v9.2l-5-2.9" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
-            <button class="icon-btn" id="groupInfoBtn" title="Group info" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-            <button class="icon-btn" id="threadChannelBtn" title="Mark as channel" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 4L7 20" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M17 4l-2 16" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/><path d="M4 9h16" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M3.5 15h16" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn text-btn" id="startCallBtn" title="Video call">Video Call</button>
+            <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
+            <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
             <button class="icon-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
             <button class="icon-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="#fff" stroke-width="1.6"/><path d="M8.3 11l1.6 1.6L13.2 9" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16h7" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="staffNotesBtn" title="Coach Notes" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="3.5" width="12" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M7.5 8h6M7.5 12h4M7.5 16h2.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M15.3 16.3l4.4-4.4a1.2 1.2 0 0 1 1.7 1.7l-4.4 4.4-2.2.5.5-2.2Z" stroke="#009bff" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
-            <button class="icon-btn" id="mediaGalleryBtn" title="Media"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="5.5" width="14" height="12" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8" cy="10" r="1.6" fill="#009bff"/><path d="M5 16l3.5-3.8 2.6 2.6 2.4-2.8L17.5 16" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/><path d="M20.5 8v8.5a2 2 0 0 1-2 2H8" stroke="#009bff" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-            <button class="icon-btn" id="favoritesBtn" title="My Favorites" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.8l2.5 5.3 5.7.6-4.3 4 1.2 5.7L12 16.6l-5.1 2.8 1.2-5.7-4.3-4 5.7-.6L12 3.8Z" stroke="#fff" stroke-width="1.4" stroke-linejoin="round" fill="none"/><circle cx="17.5" cy="6.5" r="1.3" fill="#009bff"/></svg></button>
-            <button class="icon-btn" id="chatSearchToggleBtn" title="Search in this chat"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#fff" stroke-width="1.6"/><path d="M19.5 19.5 15 15" stroke="#009bff" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
+            <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
+            <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
           </div>
           <!-- Takes over this same row (instead of a separate always-there
                search bar underneath) — saves a full row of vertical space,

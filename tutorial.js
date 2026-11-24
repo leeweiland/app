@@ -95,7 +95,6 @@
   const DEFAULT_STEPS = [
     [{ area: 'chat_group', header: 'Play The Quick Start Game To MASTER The App', title: 'Your private chat group', text: 'Your direct line to your coaches. Ask anything, send videos, get feedback.' }],
     [
-      { area: 'icon_tip', header: 'The most important thing to know', title: 'Long press any icon', text: 'Long press any icon in the app, like this pin (or hover over it on a computer), and it shows you what it does.' },
       { area: 'gym_calendar', gymOnly: true, title: 'Book your gym sessions', text: 'Tap the calendar to schedule your gym sessions.' },
       { area: 'back_to_chats', phoneOnly: true, mustTap: true, title: 'Back to your chats', text: 'Tap back to return to your chats.' },
       { area: 'nav_protocol', title: 'Train', text: 'Your training plan lives under Train. Tap it or hit Next.' },
