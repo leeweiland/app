@@ -1629,6 +1629,21 @@ function findDuplicateUserReason(users, { email, phone, first, last }) {
   }
   return null;
 }
+// Migrated Rogue accounts (chat_history_students.json): the record matching
+// someone by email, then phone, then first+last name.
+function findRogueRecord({ email, phone, first, last }) {
+  const people = readJson(HISTORY_STUDENTS_FILE, { people: [] }).people || [];
+  const em = String(email || "").trim().toLowerCase(), ph = String(phone || "").replace(/\D/g, "").slice(-10);
+  return (em && people.find(p => p.email === em)) || (ph.length === 10 && people.find(p => p.phone === ph))
+    || (first && last && people.find(p => p.first && p.last && nameKey(p.first, p.last) === nameKey(first, last))) || null;
+}
+// Their migrated levels + where they came from ride along on the real account.
+function applyRogueRecord(user, rogue) {
+  if (!rogue) return;
+  user.migratedRogueId = rogue.id;
+  if (rogue.levels && Object.keys(rogue.levels).length) user.levelsHistory = rogue.levels;
+  if (!user.phone && rogue.phone) user.phone = rogue.phone;
+}
 let studentEligibilityCache = null; // { at, online: Set<nameKey>, gym: Set<nameKey> } — 10-minute cache, same idea as the levels cache
 // Whoever calls in first while the cache is cold (the boot-time pre-warm
 // below, plus any request that lands before it resolves -- several
@@ -4222,6 +4237,10 @@ function levelsPeopleForUser(u, people, crm = crmEnrolledSnapshot()) {
 // members with no Levels row yet get one (Foundation) in the background.
 function levelsEntriesForUser(u, people) {
   const who = levelsPeopleForUser(u, people);
+  const sheetEntries = () => who.flatMap(m => findLevelsEntries(people, m.first, m.last));
+  if (u.levelsHistory && who.length <= 1 && !sheetEntries().length) {
+    return [{ first: String(u.first || "").trim(), last: String(u.last || "").trim(), program: "", levels: u.levelsHistory, team: false, migrated: true }];
+  }
   if (who.length > 1) who.forEach(m => { if (!findLevelsEntries(people, m.first, m.last).length) ensureFamilyLevelsRow(m, u).catch(() => {}); });
   return who.flatMap(m => findLevelsEntries(people, m.first, m.last).map(e => ({ ...e, first: e.first.trim(), last: e.last.trim() })));
 }
@@ -4313,8 +4332,9 @@ function buildStudentsOverview(crm, crmError, sheet, levelsPeople = null) {
   const historyItems = (readJson(HISTORY_STUDENTS_FILE, { people: [] }).people || [])
     .filter(h => !((h.email && acctEmail.has(h.email)) || (h.phone && acctPhone.has(h.phone)) || (h.first && h.last && acctName.has(nameKey(h.first, h.last)))))
     .map(h => ({ name: `${h.first || ""} ${h.last || ""}`.trim(), email: h.email || "", phone: h.phone || "", appUserId: null, role: null, platforms: [],
-      crmContactId: h.crmContactId || null, programType: (h.programs || [])[0] || null, enrolled: h.crmStatus === "ENROLLED", history: true, sources: h.sources || [] }));
-  const allItems = [...everyAccount, ...historyItems].map(i => ({ ...i, levels: levelsMatch(i.name) }));
+      crmContactId: h.crmContactId || null, programType: (h.programs || [])[0] || null, enrolled: h.crmStatus === "ENROLLED", history: true, sources: h.sources || [],
+      role: "rogue", levels: Object.keys(h.levels || {}).length > 0 }));
+  const allItems = [...everyAccount, ...historyItems].map(i => ({ ...i, levels: i.levels || levelsMatch(i.name) }));
   const byName = (a) => a.sort((x, y) => x.name.localeCompare(y.name));
   // [key, name, source, items] -- the panel lines up the (source) column.
   // "On App" = the app is installed on their phone (iPhone/Android).
@@ -4329,7 +4349,10 @@ function buildStudentsOverview(crm, crmError, sheet, levelsPeople = null) {
     ["app_gym", "Gym Students on App", "", onPhone.filter(i => i.role === "gym")],
     ["trainees", "Trainees", "", appItems.filter(i => i.role === "trainee")],
     ["app_trainees", "Trainees on App", "", onPhone.filter(i => i.role === "trainee")],
-    ["app_users", "Rogues", "", onPhone.filter(i => i.role === "user")],
+    // "Ronin" = plain user accounts on the app; "Rogues" = past students migrated
+    // from the records (accounts with no login yet, never contacted).
+    ["app_users", "Ronin", "", onPhone.filter(i => i.role === "user")],
+    ["rogues", "Rogues", "", historyItems.map(i => ({ ...i, levels: i.levels || levelsMatch(i.name) }))],
     // App account made but the app was never installed on a phone.
     ["unaccepted", "Unaccepted Invites", "", appItems.filter(i => !i.platforms.length)],
     // Checks: enrolled but no app account; app students not ENROLLED in the CRM.
@@ -5188,6 +5211,7 @@ export async function handleChatRequest(req, res, url) {
       // being persisted anywhere before this).
       termsAcceptedAt: new Date().toISOString(),
     };
+    applyRogueRecord(user, findRogueRecord({ email: user.email, phone, first, last }));
     users.push(user);
     writeJson(USERS_FILE, users);
     syncDefaultGroups();
@@ -5207,7 +5231,21 @@ export async function handleChatRequest(req, res, url) {
     // Trimmed: phone keyboards/autofill often append a trailing space, which
     // silently matched no account (and the generic response below hides that).
     const emailNorm = String(email || "").trim().toLowerCase();
-    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
+    let user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
+    // A migrated Rogue (past student with no login yet) asking for a reset:
+    // their account is created right here (plain user, no password), then the
+    // reset link below lets them set one. Only ever on their own request.
+    if (!user && emailNorm) {
+      const rogue = findRogueRecord({ email: emailNorm });
+      if (rogue && rogue.first && rogue.last) {
+        const { salt, hash } = hashPassword(randomBytes(24).toString("hex")); // unguessable until they set their own
+        user = { id: randomUUID(), first: rogue.first, last: rogue.last, email: emailNorm, phone: rogue.phone || "", role: "user", createdAt: new Date().toISOString(), passwordSalt: salt, passwordHash: hash };
+        applyRogueRecord(user, rogue);
+        users.push(user);
+        writeJson(USERS_FILE, users);
+        console.log("[password reset] made account for migrated rogue", emailNorm.replace(/^(.).*(@.*)$/, "$1***$2"));
+      }
+    }
     if (!user) console.log("[password reset] no account for", emailNorm.replace(/^(.).*(@.*)$/, "$1***$2"));
     // Always return the same generic response whether or not the email exists,
     // so this endpoint can't be used to enumerate registered accounts.

@@ -8616,9 +8616,9 @@ function renderStudentsList(key) {
   const q = search.value.trim().toLowerCase();
   const items = q ? bucket.items.filter(i => `${i.name} ${i.email} ${i.phone}`.toLowerCase().includes(q)) : bucket.items;
   document.getElementById('studentsBody').innerHTML = items.length ? items.map((i, idx) => {
-    const roleName = { user: 'Rogue', admin2: 'admin' }[i.role] || i.role;
+    const roleName = { user: 'Ronin', rogue: 'Rogue', admin2: 'admin' }[i.role] || i.role;
     const tags = [
-      i.role ? `<span class="tag">App: ${escapeHtml(roleName)}</span>` : '<span class="tag">No app account</span>',
+      i.role === 'rogue' ? '<span class="tag">Rogue · no login yet</span>' : i.role ? `<span class="tag">App: ${escapeHtml(roleName)}</span>` : '<span class="tag">No app account</span>',
       ...i.platforms.map(p => `<span class="tag on">${p === 'ios' ? 'iPhone' : 'Android'}</span>`),
       i.enrolled ? `<span class="tag">CRM enrolled${i.programType ? ' · ' + escapeHtml(i.programType) : ''}</span>` : (i.history ? `<span class="tag">Past ${escapeHtml(i.programType || 'student')}</span>` : '<span class="tag">Not enrolled in CRM</span>'),
       i.levels ? '<span class="tag on">Levels</span>' : '',
