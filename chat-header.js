@@ -196,9 +196,13 @@ window.PRABack = (function () {
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-bottom-bar .cah-bottom-text:hover, #chat-app-bottom-bar .cah-bottom-text.active { color: #fff; }
+      /* Phone width: six words must fit one row in ~390px. Selectors are
+         doubled up to outrank the bar/group rules further down. */
       @container pra-app (max-width: 640px) {
         #chat-app-header .cah-icons { gap: 6px; }
-        #chat-app-bottom-bar .cah-bottom-group { gap: 4px; }
+        div#chat-app-bottom-bar { padding-left: 8px; padding-right: 8px; }
+        #chat-app-bottom-bar div.cah-bottom-group { gap: 2px; }
+        #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text { padding: 0 5px; }
       }
       #chat-app-header .cah-icon svg {
         width: 19px; height: 19px; overflow: visible;
