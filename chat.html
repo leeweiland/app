@@ -77,9 +77,12 @@
   /* One row, always: on a phone the buttons share the width and the words
      shrink to fit (fitThreadButtons measures on the device, so a big phone
      font setting can't push them onto a 2nd line). */
-  .thread-head-icons { flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; justify-content: safe flex-end; padding: 2px 0; }
+  .thread-head-icons { flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
+  .thr-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; justify-content: safe flex-end; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+  .thr-row.thr-empty { display: none; }
   @container pra-app (max-width: 640px) {
-    .thread-head-icons { gap: 4px; justify-content: safe center; width: 100%; }
+    .thread-head-icons { align-items: stretch; width: 100%; }
+    .thr-row { gap: 4px; justify-content: safe center; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
     .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; padding: 0 clamp(4px, 1.6cqi, 10px); font-size: clamp(9px, 2.9cqi, .74rem); }
   }
@@ -1098,15 +1101,21 @@
             </div>
           </div>
           <div class="thread-head-icons" id="threadHeadIconsRow">
-            <button class="icon-btn text-btn" id="startCallBtn" title="Video call">Video Call</button>
-            <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
-            <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
-            <button class="icon-btn text-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
-            <button class="icon-btn text-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none">Intake</button>
-            <button class="icon-btn text-btn" id="staffNotesBtn" title="Coach Notes" style="display:none">Notes</button>
-            <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
-            <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
-            <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
+            <!-- Two rows (Lee, 2026-11-24): coaches/admins-only on top, what students /
+                 users / trainees also see underneath. Each row fits itself. -->
+            <div class="thr-row thr-staff">
+              <button class="icon-btn text-btn" id="startCallBtn" title="Video call">Video Call</button>
+              <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
+              <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
+              <button class="icon-btn text-btn" id="staffNotesBtn" title="Coach Notes" style="display:none">Notes</button>
+              <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
+            </div>
+            <div class="thr-row thr-all">
+              <button class="icon-btn text-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
+              <button class="icon-btn text-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none">Intake</button>
+              <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
+              <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
+            </div>
           </div>
           <!-- Takes over this same row (instead of a separate always-there
                search bar underneath) — saves a full row of vertical space,
@@ -8668,27 +8677,35 @@ function setupCallUI() {
 // Search + staff icons) stay on ONE row: shrink the words until they fit.
 // Re-checked whenever buttons show/hide or the row changes width.
 (function fitThreadButtons() {
-  const row = document.getElementById('threadHeadIconsRow');
-  if (!row) return;
+  const box = document.getElementById('threadHeadIconsRow');
+  if (!box) return;
+  const rows = [...box.querySelectorAll('.thr-row')];
   let busy = false;
-  const fit = () => {
-    if (busy) return; busy = true;
-    const btns = [...row.querySelectorAll('.icon-btn.text-btn')];
-    btns.forEach(b => { b.style.fontSize = ''; });
-    let fs = btns[0] ? parseFloat(getComputedStyle(btns[0]).fontSize) || 12 : 0;
+  const fitRow = (row) => {
+    const btns = [...row.querySelectorAll('.icon-btn')];
+    // A row with nothing to show for this person/chat (e.g. the staff row for
+    // a student) takes no space at all.
+    row.classList.toggle('thr-empty', !btns.some(b => b.style.display !== 'none'));
+    const words = btns.filter(b => b.classList.contains('text-btn'));
+    words.forEach(b => { b.style.fontSize = ''; });
+    let fs = words[0] ? parseFloat(getComputedStyle(words[0]).fontSize) || 12 : 0;
     // Down to a still-readable 10px; past that the row scrolls sideways
     // (faded ends, PRAHScroll) instead of shrinking the words any further.
-    for (let i = 0; i < 20 && btns.length && fs > 10 && row.scrollWidth > row.clientWidth + 1; i++) {
-      fs = Math.max(10, fs * 0.94); btns.forEach(b => { b.style.fontSize = fs + 'px'; });
+    for (let i = 0; i < 20 && words.length && fs > 10 && row.scrollWidth > row.clientWidth + 1; i++) {
+      fs = Math.max(10, fs * 0.94); words.forEach(b => { b.style.fontSize = fs + 'px'; });
     }
+  };
+  const fit = () => {
+    if (busy) return; busy = true;
+    rows.forEach(fitRow);
     requestAnimationFrame(() => { busy = false; });
   };
-  if (window.PRAHScroll) window.PRAHScroll(row);
-  if (window.ResizeObserver) new ResizeObserver(() => fit()).observe(row);
-  // Buttons shown/hidden for this chat -> refit. (Its own font-size writes land
-  // while `busy` is still set, so they don't loop.)
+  rows.forEach(r => { if (window.PRAHScroll) window.PRAHScroll(r); });
+  if (window.ResizeObserver) new ResizeObserver(() => fit()).observe(box);
+  // Buttons shown/hidden for this chat -> refit. (Its own writes land while
+  // `busy` is still set, so they don't loop.)
   new MutationObserver(() => { if (!busy) fit(); })
-    .observe(row, { subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    .observe(box, { subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
   window.addEventListener('resize', fit);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   fit();
