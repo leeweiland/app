@@ -3289,7 +3289,7 @@ async function openConvo(id, { restoreScrollTop } = {}) {
   // Same target resolution as the protocol link above — the intake form
   // is client + staff visible, the notes button staff only.
   currentThreadStudent = protocolStudent;
-  document.getElementById('intakeFormBtn').style.display = (protocolStudent && (isStaffMe() || me.id === protocolStudent.id)) ? '' : 'none';
+  document.getElementById('intakeFormBtn').style.display = 'none'; // removed from the chat panel (Lee, 2026-11-24)
   document.getElementById('staffNotesBtn').style.display = (protocolStudent && isStaffMe()) ? '' : 'none';
 
   // Only a coach/admin can PLACE a call -- a client can still receive one
