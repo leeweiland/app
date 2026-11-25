@@ -75,6 +75,7 @@ window.PRAHScroll = (function () {
       el.style.setProperty('--fade-r', (max > 1 && el.scrollLeft < max - 1 ? FADE : 0) + 'px');
     };
     let userMoved = false, last = null;
+    el.praHScrollMoved = () => { userMoved = true; }; // own scroll buttons (chat panel chevrons)
     const center = (force) => {
       if (el.scrollWidth <= el.clientWidth + 1) { fades(); return; }
       const t = pick();

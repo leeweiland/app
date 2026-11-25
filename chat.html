@@ -8866,8 +8866,10 @@ function setupCallUI() {
   };
   if (row) {
     row.addEventListener('scroll', chevs, { passive: true });
-    chevL.onclick = () => row.scrollBy({ left: -Math.max(80, row.clientWidth * 0.7), behavior: 'smooth' });
-    chevR.onclick = () => row.scrollBy({ left: Math.max(80, row.clientWidth * 0.7), behavior: 'smooth' });
+    // Counts as scrolling by hand, so a refit doesn't snap it back to the start.
+    const step = (dir) => { if (row.praHScrollMoved) row.praHScrollMoved(); row.scrollBy({ left: dir * Math.max(80, row.clientWidth * 0.7), behavior: 'smooth' }); };
+    chevL.onclick = () => step(-1);
+    chevR.onclick = () => step(1);
   }
   let busy = false;
   // Every visible word button gets the same width (the widest one's), both
@@ -8892,7 +8894,7 @@ function setupCallUI() {
   // Buttons shown/hidden for this chat -> refit. (Its own writes land while
   // `busy` is still set, so they don't loop.)
   new MutationObserver(() => { if (!busy) fit(); })
-    .observe(box, { subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    .observe(row || box, { subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
   window.addEventListener('resize', fit);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   fit();
