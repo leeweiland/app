@@ -12,7 +12,7 @@ window.PRADetails = (function () {
   .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; }
   .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: inherit; }
   /* name + X always on the first line (X in the top-right corner); status next to the name when it fits, else underneath */
-  .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status x"; align-items: center; gap: 8px 10px; margin-bottom: 12px; }
+  .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status x"; align-items: center; gap: 8px 10px; margin: -16px -18px 12px; padding: 14px 18px 10px; position: sticky; top: -16px; z-index: 2; background: var(--pra-panel, #101014); border-bottom: 1px solid #26262d; }
   .pdt-name { grid-area: name; font-weight: 800; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pdt-head select { grid-area: status; width: auto; min-width: 120px; }
   .pdt-head .pdt-saved { grid-column: 1 / -1; grid-row: 3; min-width: 0; }
@@ -27,6 +27,8 @@ window.PRADetails = (function () {
   .pdt-sec-head { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--pra-dim, #9aa0aa); margin-bottom: 10px; }
   .pdt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   .pdt-grid .field { margin-bottom: 10px; min-width: 0; }
+  .pdt-box .pra-input { box-sizing: border-box; max-width: 100%; min-width: 0; }
+  .pdt-box *, .pdt-box *::before, .pdt-box *::after { box-sizing: border-box; }
   .pdt-grid .field.full { grid-column: 1 / -1; }
   .pdt-grid textarea { resize: vertical; min-height: 38px; }
   @media (max-width: 560px) { .pdt-grid { grid-template-columns: 1fr; } }
