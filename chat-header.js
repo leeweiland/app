@@ -221,7 +221,7 @@ window.PRABack = (function () {
         border-bottom: 1px solid #26262e;
       }
       #chat-app-header .cah-label { display: block; }
-      #chat-app-header .cah-logo { width: 150px; height: auto; display: block; }
+      #chat-app-header .cah-logo { width: 128px; height: auto; display: block; }
       #chat-app-header .cah-logo-fallback {
         font-family: var(--font-primary, sans-serif); font-weight: 700;
         font-size: 1.1rem; letter-spacing: .08em; color: #fff;
@@ -263,15 +263,16 @@ window.PRABack = (function () {
       }
       /* Word buttons (no icons since 2026-11-24). */
       #chat-app-header .cah-icon {
-        width: auto; padding: 0 12px;
-        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .82rem;
+        /* 15% smaller than the old 36px / .82rem (2026-11-25) for more room. */
+        width: auto; height: 31px; padding: 0 10px;
+        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .70rem;
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-header .cah-icon:hover, #chat-app-header .cah-icon.active { color: #fff; }
       /* Bottom words: same outlined boxes as the top row, a bit bigger. */
       #chat-app-bottom-bar .cah-bottom-item.cah-bottom-text {
-        width: auto; padding: 0 14px; border-color: #383842;
-        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .86rem;
+        width: auto; height: 31px; padding: 0 12px; border-color: #383842;
+        font-family: var(--font-primary, inherit); font-weight: 500; font-size: .73rem;
         color: #cfd6dc; white-space: nowrap;
       }
       #chat-app-bottom-bar div.cah-bottom-group { gap: 8px; }

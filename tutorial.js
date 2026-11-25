@@ -243,7 +243,7 @@
     text-shadow: 0 0 8px rgba(212,255,0,.67); flex-shrink: 0; animation: ptuLaunchPulse 1.6s ease-in-out infinite; }
   .ptu-launch:hover { animation-play-state: paused; box-shadow: 0 0 24px rgba(212,255,0,.9), inset 0 0 10px rgba(212,255,0,.3); }
   @keyframes ptuLaunchPulse { 0%, 100% { box-shadow: 0 0 8px rgba(212,255,0,.45), inset 0 0 6px rgba(212,255,0,.15); } 50% { box-shadow: 0 0 22px rgba(212,255,0,.95), inset 0 0 10px rgba(212,255,0,.35); } }
-  .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+  .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.85); z-index: 2; }
   .ptu-launch.in-bar-right { position: absolute; right: 12px; transform: translateY(-50%); z-index: 2; }
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
