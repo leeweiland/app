@@ -95,11 +95,16 @@
      chat runs the full height. Script: placeAppChrome(). */
   .pra-root.chat-side-chrome #chat-app-header-spacer,
   .pra-root.chat-side-chrome #chat-app-bottom-bar-spacer { display: none !important; }
-  .chat-side-chrome .sidebar > #chat-app-header { position: relative !important; inset: auto !important; flex-shrink: 0; flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px; }
+  .chat-side-chrome .sidebar > #chat-app-header { position: relative !important; inset: auto !important; flex-shrink: 0; flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 12px; }
+  .chat-side-chrome .sidebar > #chat-app-header .cah-logo { width: 109px; }
+  .chat-side-chrome .sidebar > #chat-app-header .cah-icon { height: 26px; }
   .chat-side-chrome .sidebar > #chat-app-header .cah-label { align-self: flex-start; }
   .chat-side-chrome .sidebar > #chat-app-header .cah-icons { width: 100%; gap: 6px; }
   .chat-side-chrome .sidebar > #chat-app-header .cah-icon { flex: 1 1 0; min-width: 0; padding: 0 4px; }
-  .chat-side-chrome .sidebar > #chat-app-header .ptu-launch.in-bar-right { transform: translateY(-50%) scale(.85); transform-origin: right center; }
+  .chat-side-chrome .sidebar > #chat-app-header .ptu-launch.in-bar-right { transform: translateY(-50%) scale(.72); transform-origin: right center; }
+  /* Chats title, students count, the 3 icons and the 3 filter buttons: 15%
+     smaller, less room above the title (Lee, 2026-11-25). */
+  .chat-side-chrome .sidebar-head { zoom: .85; padding: 8px 14px 12px; }
   .chat-side-chrome .sidebar > #chat-app-bottom-bar { position: relative !important; inset: auto !important; flex-shrink: 0; flex-wrap: wrap; padding: 8px 12px; }
   .chat-side-chrome .sidebar > #chat-app-bottom-bar .cah-bottom-group { flex: 1 1 auto; min-width: 0; gap: 6px; }
   .chat-side-chrome .sidebar > #chat-app-bottom-bar .cah-bottom-text { flex: 1 1 auto; padding: 0 4px; }
