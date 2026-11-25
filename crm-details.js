@@ -12,16 +12,31 @@ window.PRADetails = (function () {
   .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; font-family: var(--font-primary); }
   .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: var(--font-primary); }
   .pdt-box .pdt-sec-head, .pdt-box .pdt-kind, .pdt-box .pdt-now { font-family: var(--font-secondary, var(--font-primary)); }
-  /* name + X always on the first line (X in the top-right corner); status next to the name when it fits, else underneath */
-  .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status x"; align-items: center; gap: 8px 10px; margin: -16px -18px 12px; padding: 14px 18px 10px; position: sticky; top: -16px; z-index: 2; background: var(--pra-panel, #101014); border-bottom: 1px solid #26262d; }
+  /* name + X on the first line (X in the top-right corner), status right under the name */
+  .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name x" "status ."; align-items: center; gap: 8px 10px; margin: -16px -18px 12px; padding: 14px 18px 10px; position: sticky; top: -16px; z-index: 2; background: var(--pra-panel, #101014); border-bottom: 1px solid #26262d; }
   .pdt-name { grid-area: name; font-weight: 800; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pdt-head select { grid-area: status; width: auto; min-width: 120px; }
+  .pdt-status-row { grid-area: status; display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .pdt-head select { width: min(100%, 340px); min-width: 0; }
+  .pdt-enroll-btn { flex: 0 0 auto; font: inherit; font-size: .8rem; font-weight: 700; color: #fff; padding: 9px 12px; border-radius: 9px; border: 1.5px solid #22c55e; background: rgba(34,197,94,.14); box-shadow: 0 0 8px rgba(34,197,94,.45); cursor: pointer; white-space: nowrap; }
+  .pdt-enroll-btn:hover { background: rgba(34,197,94,.26); }
+  /* the CRM's Enrolled / Hold popups (loaded from the CRM) on top of this panel */
+  .enroll-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 700; padding: 16px; box-sizing: border-box; font-family: var(--font-primary); color: #fff; }
+  .enroll-modal-backdrop.show { display: flex; }
+  .enroll-modal-backdrop .modal-box { width: 100%; max-width: 480px; max-height: 90vh; max-height: 90dvh; overflow-y: auto; padding: 22px; box-sizing: border-box; }
+  .enroll-modal-backdrop *, .enroll-modal-backdrop *::before, .enroll-modal-backdrop *::after { box-sizing: border-box; }
+  .enroll-modal-backdrop .field { margin-bottom: 14px; }
+  .enroll-modal-backdrop .field-row { display: flex; gap: 10px; } .enroll-modal-backdrop .field-row .field { flex: 1; min-width: 0; }
+  .enroll-kind-toggle { display: flex; border: 1px solid #383842; border-radius: 8px; overflow: hidden; }
+  .enroll-kind-option { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 6px; font-size: .84rem; font-weight: 700; cursor: pointer; color: #9aa0aa; background: rgba(255,255,255,.03); border-right: 1px solid #383842; }
+  .enroll-kind-option:last-child { border-right: none; }
+  .enroll-kind-option input { position: absolute; opacity: 0; pointer-events: none; }
+  .enroll-kind-option.checked { background: #009bff; color: #fff; }
   .pdt-head .pdt-saved { grid-column: 1 / -1; grid-row: 3; min-width: 0; }
   .pdt-head .pdt-saved:empty { display: none; }
   .pdt-x { grid-area: x; justify-self: end; align-self: start; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); border: 1px solid #383842; border-radius: 50%; color: #fff; font-size: 1.35rem; cursor: pointer; padding: 0; line-height: 1; }
   .pdt-x:hover { border-color: #ff6b6b; color: #ff6b6b; }
   @media (max-width: 560px) {
-    .pdt-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name x" "status status"; }
+    .pdt-head { grid-template-areas: "name x" "status status"; }
     .pdt-head select { width: 100%; }
   }
   .pdt-sec { border: 1px solid #383842; border-radius: 12px; padding: 12px 12px 4px; margin-bottom: 12px; }
@@ -122,7 +137,7 @@ window.PRADetails = (function () {
       <div class="pdt-head">
         <div class="pdt-name">${esc(`${c.first || ""} ${c.last || ""}`.trim() || "Contact")}</div>
         <span class="pdt-saved" id="pdtSaved"></span>
-        <select class="pra-input" id="pdtStatus"><option value=""></option>${opts}</select>
+        <div class="pdt-status-row"><select class="pra-input" id="pdtStatus"><option value=""></option>${opts}</select>${/^(ENROLLED|ON HOLD)$/i.test(c.status || "") ? `<button type="button" class="pdt-enroll-btn" id="pdtEnrollBtn" title="Record a renewal, travel or new enrollment">Renewal / Travel</button>` : ""}</div>
         <button class="pdt-x" title="Close" data-close>&times;</button>
       </div>${secs}`;
     wire();
@@ -155,10 +170,38 @@ window.PRADetails = (function () {
     const sel = box.querySelector("#pdtStatus");
     sel.onchange = async () => {
       const v = sel.value, prev = state.contact.status || "";
-      if (/^ON HOLD$/i.test(v)) { sel.value = prev; const u = state.user; close(); window.praOpenHold && window.praOpenHold(u); return; }
-      if (/^ENROLLED$/i.test(v)) { sel.value = prev; const el = box.querySelector("#pdtSaved"); el.style.color = "#ffb44d"; el.textContent = "Record enrollments with the CRM's Enrolled popup (Open in CRM)"; return; }
+      // Enrolled / On Hold: the CRM's own popups (sale recording, end-date move).
+      if (/^(ON HOLD|ENROLLED)$/i.test(v)) { sel.value = prev; openCrmPopup(/^ON HOLD$/i.test(v) ? "hold" : "enroll"); return; }
       if (await save({ status: v })) { state.contact.status = v; render(); } else sel.value = prev;
     };
+    const eb = box.querySelector("#pdtEnrollBtn");
+    if (eb) eb.onclick = () => openCrmPopup("enroll");
+  }
+
+  // Loads the CRM's enroll-popup.js / hold-popup.js (fetched from the CRM, so
+  // they're always the CRM's current code) and points their API calls at the
+  // app's admin-only CRM proxy.
+  let popupsReady = null;
+  function loadCrmPopups() {
+    window.PRA_CRM_API_BASE = "/api/chat/crm-proxy";
+    if (!popupsReady) popupsReady = Promise.all([["enroll-popup", "EnrollPopup"], ["hold-popup", "HoldPopup"]].map(([file, g]) => new Promise((res, rej) => {
+      if (window[g]) return res();
+      const s = document.createElement("script");
+      s.src = `/api/chat/crm-script/${file}.js`;
+      s.onload = () => window[g] ? res() : rej(new Error("CRM popup did not load"));
+      s.onerror = () => rej(new Error("Could not load the CRM popup"));
+      document.head.appendChild(s);
+    }))).catch(e => { popupsReady = null; throw e; });
+    return popupsReady;
+  }
+  async function openCrmPopup(which) {
+    const el = box && box.querySelector("#pdtSaved");
+    try {
+      await loadCrmPopups();
+      const opts = { onCommitted: () => { if (state) load(true); } };
+      if (which === "hold") window.HoldPopup.open(state.contact.id, opts);
+      else window.EnrollPopup.open(state.contact.id, opts);
+    } catch (e) { if (el) { el.style.color = "#ff6b6b"; el.textContent = e.message; } }
   }
 
   async function load(initial) {

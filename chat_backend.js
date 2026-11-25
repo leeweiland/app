@@ -5636,6 +5636,40 @@ export async function handleChatRequest(req, res, url) {
   // the CRM each time and edited straight back into it, so both apps always
   // show the same record. Enrolled / On Hold keep their own popups (sale
   // recording / end-date move), so this panel never sets those directly.
+  // The CRM's own Enrolled / Hold popups, used as-is by the Details panel:
+  // their script files are fetched from the CRM (so they're always the same
+  // code), and their API calls come through this admin-only proxy, which
+  // passes the admin's name so the CRM records who did it.
+  const crmScript = p.match(/^\/api\/chat\/crm-script\/(enroll-popup|hold-popup)\.js$/);
+  if (crmScript && req.method === "GET") {
+    const me = getSessionUser(req);
+    if (!me || !isAdmin(me)) return sendJson(res, 403, { error: "Admins only" });
+    try {
+      const r = await fetch(`${CRM_BASE_URL}/${crmScript[1]}.js`);
+      if (!r.ok) throw new Error(String(r.status));
+      res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
+      return res.end(await r.text());
+    } catch (e) { return sendJson(res, 502, { error: `CRM script unavailable (${e.message})` }); }
+  }
+  if (p.startsWith("/api/chat/crm-proxy/")) {
+    const me = getSessionUser(req);
+    if (!me) return sendJson(res, 401, { error: "Not logged in" });
+    if (!isAdmin(me)) return sendJson(res, 403, { error: "Admins only" });
+    const target = p.slice("/api/chat/crm-proxy".length);
+    const m = req.method;
+    const ok = (m === "GET" && (target === "/api/calls-sheet/options" || /^\/api\/contacts\/[\w-]+$/.test(target)))
+      || (m === "PATCH" && /^\/api\/contacts\/[\w-]+$/.test(target))
+      || (m === "POST" && target === "/api/tasks");
+    if (!ok) return sendJson(res, 403, { error: "Not available from the app" });
+    try {
+      const body = m === "GET" ? undefined : JSON.stringify(await readJsonBody(req));
+      const r = await crmFetch(target, { method: m, body, headers: { "x-pra-app-actor": `${me.first || ""} ${me.last || ""}`.trim() } });
+      const text = await r.text();
+      if (m !== "GET") { crmEnrolledCache = null; crmHoldCache = null; }
+      res.writeHead(r.status, { "Content-Type": "application/json" });
+      return res.end(text);
+    } catch (e) { return sendJson(res, 502, { error: `CRM unreachable: ${e.message}` }); }
+  }
   if (p === "/api/chat/crm-details" && (req.method === "GET" || req.method === "PATCH")) {
     const me = getSessionUser(req);
     if (!me) return sendJson(res, 401, { error: "Not logged in" });
