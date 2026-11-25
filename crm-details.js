@@ -7,7 +7,9 @@
 // form (window.praOpenHold), Enrolled points to the CRM's Enrolled popup.
 window.PRADetails = (function () {
   const css = `
-  .modal-box.pdt-box { width: min(760px, 100%); max-width: 760px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; }
+  /* 95% of the visible screen on every side (inside the phone's status / nav bars) */
+  .modal-backdrop.pdt-backdrop { padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 2.5vh) calc(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) + 2.5vw) calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 2.5vh) calc(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)) + 2.5vw); }
+  .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; }
   .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: inherit; }
   .pdt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   .pdt-name { font-weight: 800; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -111,7 +113,6 @@ window.PRADetails = (function () {
         <div class="pdt-name">${esc(`${c.first || ""} ${c.last || ""}`.trim() || "Contact")}</div>
         <span class="pdt-saved" id="pdtSaved"></span>
         <select class="pra-input" id="pdtStatus"><option value=""></option>${opts}</select>
-        <a class="pra-btn pra-btn-ghost" href="${esc(state.crmUrl)}" target="_blank" rel="noopener" style="padding:6px 10px;font-size:.78rem">Open in CRM</a>
         <button class="pdt-x" title="Close" data-close>&times;</button>
       </div>${secs}`;
     wire();
@@ -177,7 +178,7 @@ window.PRADetails = (function () {
     close();
     state = { user, contact: {}, fields: [], statuses: [] };
     box = document.createElement("div");
-    box.className = "modal-backdrop show";
+    box.className = "modal-backdrop show pdt-backdrop";
     box.innerHTML = `<div class="pra-panel modal-box pdt-box"><div class="pdt-msg">Loading the CRM contact...</div></div>`;
     box.addEventListener("click", e => { if (e.target === box) close(); });
     document.body.appendChild(box);

@@ -8,7 +8,7 @@
 <script src="/chat-app/pra-badges.js"></script>
 <script src="/chat-app/video-speed.js"></script>
 <script src="/chat-app/profile-panel.js"></script>
-<script src="/chat-app/crm-details.js?v=2"></script>
+<script src="/chat-app/crm-details.js?v=3"></script>
 <script src="/chat-app/call-bg-effects.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap"/>
 <style>
@@ -271,6 +271,9 @@
   /* ...but never up under the phone's status bar / camera cutout. */
   #threadWrap.kb-open .thread-head.no-app-header { padding-top: max(8px, env(safe-area-inset-top)); }
   .thread-head-name { font-family: var(--font-secondary); font-weight: 400; font-size: .95rem; overflow-wrap: break-word; }
+  .thread-name-btn { font: inherit; color: #fff; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; margin-right: 6px; border: 1px solid #383842; border-radius: 9px; background: rgba(255,255,255,.04); cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+  .thread-name-btn:hover, .thread-name-btn:focus-visible { border-color: #009bff; background: rgba(0,155,255,.10); outline: none; }
+  .thread-name-btn .tnb-chev { font-size: 1.1em; line-height: 1; color: #9aa0aa; }
   .thread-group-members { font-family: var(--font-secondary); font-size: .74rem; color: var(--pra-dim); overflow-wrap: break-word; margin-top: 1px; }
   .group-member-link { cursor: pointer; text-decoration: underline; color: var(--pra-blue); }
   /* Coaches/admins in a group's member list stay gray — clickable same as
@@ -3288,7 +3291,12 @@ async function openConvo(id, { restoreScrollTop } = {}) {
   threadAvatarEl.innerHTML = avatarHtml(convoAvatarUser(convo));
   const threadOtherUser = convoAvatarUser(convo);
   threadAvatarEl.className = 'pra-avatar' + avatarRoleClass(convoAvatarUser(convo), convo.type === 'group');
-  document.getElementById('threadName').innerHTML = escapeHtml(convoDisplayName(convo)) + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser) + holdPillHtml(convo.hold) + renewPillHtml(convo.renewal);
+  // Admins: the name is a button that opens the student's Details (Lee, 2026-11-24).
+  const detailsStudent = isAdminMe() ? (convo.type === 'dm' ? threadOtherUser : convo.type === 'group' ? convo.participants.find(p => isClientRole(p.role)) : null) : null;
+  const threadNameHtml = detailsStudent
+    ? `<button type="button" class="thread-name-btn" title="Open details">${escapeHtml(convoDisplayName(convo))}<span class="tnb-chev" aria-hidden="true">&rsaquo;</span></button>`
+    : escapeHtml(convoDisplayName(convo));
+  document.getElementById('threadName').innerHTML = threadNameHtml + coachQuotaBadgeHtml(threadOtherUser) + roleBadgeHtml(threadOtherUser) + holdPillHtml(convo.hold) + renewPillHtml(convo.renewal);
   const groupMembersEl = document.getElementById('threadGroupMembers');
   if (convo.type === 'group') {
     groupMembersEl.innerHTML = convo.participants.map(p => {
@@ -3377,7 +3385,10 @@ function maybeOpenLevelsModal() {
   openLevelsModal(person);
 }
 document.getElementById('threadAvatar').addEventListener('click', maybeOpenLevelsModal);
-document.getElementById('threadName').addEventListener('click', maybeOpenLevelsModal);
+document.getElementById('threadName').addEventListener('click', (e) => {
+  if (e.target.closest('.thread-name-btn')) { if (currentThreadStudent) window.PRADetails.open(currentThreadStudent); return; }
+  maybeOpenLevelsModal();
+});
 document.getElementById('threadGroupMembers').addEventListener('click', (e) => {
   const link = e.target.closest('.group-member-link');
   if (!link) return;
@@ -8022,7 +8033,7 @@ async function startCall() {
   // (set via .innerHTML = name + roleBadgeHtml(...)) -- only the leading
   // text node is the name itself.
   const nameNode = document.getElementById('threadName').firstChild;
-  const displayName = (nameNode?.nodeType === Node.TEXT_NODE ? nameNode.textContent.trim() : '') || 'Calling…';
+  const displayName = (nameNode?.nodeType === Node.TEXT_NODE ? nameNode.textContent.trim() : nameNode?.classList?.contains('thread-name-btn') ? nameNode.firstChild.textContent.trim() : '') || 'Calling…';
   const r = await fetch(`/api/chat/conversations/${activeConvoId}/call/start`, { method: 'POST' });
   const d = await r.json();
   if (!r.ok) { await alertDialog(d.error || 'Could not start the call.'); return; }
