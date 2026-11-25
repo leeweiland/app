@@ -3272,7 +3272,7 @@ function previewText(m) {
 // (WhatsApp-style) while a thread is open specifically on mobile — the
 // conversation's own header already has a back button, so the app-level
 // chrome isn't needed there anyway. Desktop is untouched (plenty of room).
-// Wide chat page: the top bar and bottom words move into the chat-list
+// Wide, short chat page: the top bar and bottom words move into the chat-list
 // column (CSS: .chat-side-chrome) so the open chat gets the full height;
 // back to full-width bars at phone width (Lee, 2026-11-25).
 function placeAppChrome() {
@@ -3280,7 +3280,10 @@ function placeAppChrome() {
   const header = document.getElementById('chat-app-header'), bottom = document.getElementById('chat-app-bottom-bar');
   const hs = document.getElementById('chat-app-header-spacer'), bs = document.getElementById('chat-app-bottom-bar-spacer');
   if (!root || !sb || !header || !hs) return;
-  const side = root.getBoundingClientRect().width > 768;
+  // Only short-and-wide windows (landscape tablet, laptop): a tall window
+  // has the height to spare, so it keeps the full-width bars (Lee, 2026-11-25).
+  const rr = root.getBoundingClientRect();
+  const side = rr.width > 768 && rr.width >= rr.height * 1.3;
   if (side === (header.parentElement === sb) && side === root.classList.contains('chat-side-chrome')) return;
   root.classList.toggle('chat-side-chrome', side);
   if (side) { sb.prepend(header); if (bottom) sb.append(bottom); }
