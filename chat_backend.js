@@ -1361,9 +1361,8 @@ async function fetchAllLevels() {
   levelsCache = { at: Date.now(), people };
   return people;
 }
-// ── Level-up watcher → CRM "8 CERTIFICATE" flow (Lee, 2026-11-21) ──────────
-// Every 2 minutes (and right after a coach saves levels in the app) the
-// Levels sheet is read fresh and compared with the last snapshot. A level
+// ── Level-up trigger → CRM "8 CERTIFICATE" flow (Lee, 2026-11-21) ──────────
+// When a coach saves levels in the app (/api/chat/levels/update), a level
 // that went UP (a higher number, or Foundation newly marked done) becomes a
 // level-up event, sent to the CRM, whose flow waits 5 minutes, asks
 // /api/bridge/level-check whether the coach kept it (not a slip they put
@@ -1374,7 +1373,6 @@ const CERT_DIR = join(DATA_DIR, "certificates");
 const APP_PUBLIC_URL = process.env.APP_PUBLIC_URL || "https://app-production-3c6a1.up.railway.app";
 const levelNum = (v) => { const n = parseInt(String(v ?? "").trim(), 10); return Number.isFinite(n) ? n : null; };
 const foundationDone = (v) => /^(x|yes|done|complete|completed|✓)$/i.test(String(v ?? "").trim());
-const personKey = (p) => `${p.program}|${nameKey(p.first, p.last)}`;
 function readLevelEvents() {
   const d = readJson(LEVEL_EVENTS_FILE, null) || {};
   return { snapshot: d.snapshot || null, events: Array.isArray(d.events) ? d.events : [] };
@@ -1395,45 +1393,43 @@ function appUserForName(first, last) {
   const k = nameKey(first, last);
   return readJson(USERS_FILE, []).find(u => !u.archived && nameKey(u.first, u.last) === k) || null;
 }
-let levelWatchRunning = false;
-async function checkLevelUps() {
-  if (levelWatchRunning) return;
-  levelWatchRunning = true;
-  try {
-    const people = (await Promise.all(LEVELS_TABS.map(([t, prog]) => fetchLevelsTab(t, prog)))).flat();
-    if (people.length < 20) return; // a failed/empty read must never look like everyone changed
-    const d = readLevelEvents();
-    const next = {};
-    for (const p of people) next[personKey(p)] = { ...(p.levels || {}) };
-    if (!d.snapshot) { d.snapshot = next; writeJson(LEVEL_EVENTS_FILE, d); return; } // first run: baseline only
-    const fresh = [];
-    for (const p of people) {
-      const prev = d.snapshot[personKey(p)];
-      if (!prev) continue; // a brand-new row is someone being added, not leveling up
-      for (const cat of LEVELS_CATEGORIES) {
-        const a = prev[cat], b = (p.levels || {})[cat];
-        let up = false;
-        if (cat === "FOUNDATION") up = !foundationDone(a) && foundationDone(b);
-        else { const na = levelNum(a), nb = levelNum(b); up = nb !== null && nb > (na ?? 0) && nb > 0; }
-        if (!up) continue;
-        const u = appUserForName(p.first, p.last);
-        const ev = {
-          id: randomUUID(), first: p.first, last: p.last, program: p.program, category: cat,
-          from: a ?? "", to: cat === "FOUNDATION" ? String(b) : levelNum(b), label: levelLabel(cat, levelNum(b)),
-          userId: u?.id || null, email: u?.email || "", phone: u?.phone || "",
-          detectedAt: new Date().toISOString(), status: "detected",
-        };
-        d.events.push(ev); fresh.push(ev);
-        console.log(`[level-up] ${p.first} ${p.last} ${cat} ${a || "-"} -> ${b} (${p.program})`);
-      }
-    }
-    d.snapshot = next;
-    d.events = d.events.slice(-500);
-    writeJson(LEVEL_EVENTS_FILE, d);
-    for (const ev of fresh) await sendLevelUpToCrm(ev);
-  } catch (e) {
-    console.error("[level-up] watch", e.message);
-  } finally { levelWatchRunning = false; }
+// The trigger (Lee, 2026-11-24): a coach saving levels in the app IS the
+// event -- the row's old values vs what they just saved. No sheet polling:
+// the 2-minute watcher it replaces re-fired the same level-ups every tick
+// once students sat on two tabs (GYM + GYM NO MEDIA) and spammed their
+// groups, texts and email with 300+ certificates. A person + category +
+// level is sent at most once, ever (unless the CRM's check found it was put
+// back), so no bug can repeat a send.
+const levelUpKey = (first, last, cat, to) => `${nameKey(first, last)}|${cat}|${to}`;
+async function levelUpsFromSave({ first, last, program, before, after, by }) {
+  if (!before) return; // a brand-new row is someone being added, not leveling up
+  const d = readLevelEvents();
+  const sent = new Set(d.events.filter(e => e.still !== false).map(e => levelUpKey(e.first, e.last, e.category, e.to)));
+  const fresh = [];
+  for (const cat of LEVELS_CATEGORIES) {
+    const a = before[cat], b = after[cat];
+    let up = false;
+    if (cat === "FOUNDATION") up = !foundationDone(a) && foundationDone(b);
+    else { const na = levelNum(a), nb = levelNum(b); up = nb !== null && nb > (na ?? 0) && nb > 0; }
+    if (!up) continue;
+    const to = cat === "FOUNDATION" ? String(b) : levelNum(b);
+    const key = levelUpKey(first, last, cat, to);
+    if (sent.has(key)) { console.log(`[level-up] ${first} ${last} ${cat} ${to} already sent -- skipped`); continue; }
+    sent.add(key);
+    const u = appUserForName(first, last);
+    const ev = {
+      id: randomUUID(), first, last, program, category: cat,
+      from: a ?? "", to, label: levelLabel(cat, levelNum(b)),
+      userId: u?.id || null, email: u?.email || "", phone: u?.phone || "",
+      savedBy: by || null, detectedAt: new Date().toISOString(), status: "detected",
+    };
+    d.events.push(ev); fresh.push(ev);
+    console.log(`[level-up] ${first} ${last} ${cat} ${a || "-"} -> ${b} (${program}, saved in the app)`);
+  }
+  if (!fresh.length) return;
+  d.events = d.events.slice(-5000);
+  writeJson(LEVEL_EVENTS_FILE, d);
+  for (const ev of fresh) await sendLevelUpToCrm(ev);
 }
 async function sendLevelUpToCrm(ev) {
   try {
@@ -1518,8 +1514,6 @@ async function issueDiscountCard(ev, { code, percent, storeUrl, postToApp = true
   }
   return { url, posted, appUser: !!ev.userId };
 }
-setInterval(() => { checkLevelUps().catch(() => {}); }, 2 * 60 * 1000);
-setTimeout(() => { checkLevelUps().catch(() => {}); }, 20 * 1000);
 
 // ── Katas ────────────────────────────────────────────────────────────────
 // Kata videos live in Drive under "KATAS BY ELEMENT" (one subfolder per
@@ -2066,6 +2060,9 @@ async function updateLevelsRow({ first, last, program, levels, team, noMedia }) 
   const rowIndex = rows.findIndex((r, i) =>
     i > 0 && String(r[firstIdx] || "").trim().toLowerCase() === f && String(r[lastIdx] || "").trim().toLowerCase() === l
   );
+  // The row as it was before this save -- the level-up trigger compares it
+  // with what the coach just saved (null = a new row, which never fires).
+  const before = rowIndex > 0 ? Object.fromEntries(LEVELS_CATEGORIES.map((cat, ci) => [cat, catIdx[ci] >= 0 ? (rows[rowIndex][catIdx[ci]] || "") : ""])) : null;
   const colLetter = (idx) => String.fromCharCode(65 + idx);
   let writeRes, writeData;
   if (rowIndex > 0) {
@@ -2085,6 +2082,7 @@ async function updateLevelsRow({ first, last, program, levels, team, noMedia }) 
     throw new Error(`Could not save to the ${tabName} levels sheet: ` + (writeData.error?.message || writeRes.status));
   }
   levelsCache = null; // next read should reflect the write immediately
+  return { tabName, before };
 }
 
 // Creates a "<X> NO MEDIA" tab (same header as its regular tab) when it
@@ -7102,8 +7100,8 @@ export async function handleChatRequest(req, res, url) {
       if (!first || !last) return sendJson(res, 400, { error: "first and last name required" });
       if (!["Gym", "Online"].includes(program)) return sendJson(res, 400, { error: "program must be 'Gym' or 'Online'" });
       try {
-        await updateLevelsRow({ first, last, program, levels: levels || {}, team: !!team });
-        setTimeout(() => { checkLevelUps().catch(() => {}); }, 1500); // level-ups -> CRM certificate flow
+        const saved = await updateLevelsRow({ first, last, program, levels: levels || {}, team: !!team });
+        levelUpsFromSave({ first, last, program, before: saved?.before, after: levels || {}, by: user.id }).catch(e => console.error("[level-up] trigger", e.message)); // -> CRM certificate flow
         return sendJson(res, 200, { ok: true });
       } catch (e) {
         return sendJson(res, 500, { error: e.message });
