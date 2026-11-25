@@ -9,8 +9,9 @@ window.PRADetails = (function () {
   const css = `
   /* 95% of the visible screen on every side (inside the phone's status / nav bars) */
   .modal-backdrop.pdt-backdrop { padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 2.5vh) calc(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) + 2.5vw) calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 2.5vh) calc(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)) + 2.5vw); }
-  .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; }
-  .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: inherit; }
+  .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; font-family: var(--font-primary); }
+  .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: var(--font-primary); }
+  .pdt-box .pdt-sec-head, .pdt-box .pdt-kind, .pdt-box .pdt-now { font-family: var(--font-secondary, var(--font-primary)); }
   /* name + X always on the first line (X in the top-right corner); status next to the name when it fits, else underneath */
   .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status x"; align-items: center; gap: 8px 10px; margin: -16px -18px 12px; padding: 14px 18px 10px; position: sticky; top: -16px; z-index: 2; background: var(--pra-panel, #101014); border-bottom: 1px solid #26262d; }
   .pdt-name { grid-area: name; font-weight: 800; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
