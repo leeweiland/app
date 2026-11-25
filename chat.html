@@ -75,7 +75,7 @@
   .icon-btn.text-btn.on { border-color: var(--pra-blue); }
   .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
   /* Coaches/admins-only row: bright white, not bold. */
-  .thr-staff .icon-btn.text-btn { color: #fff; }
+  .icon-btn.text-btn.thr-staff-btn { color: #fff; }
   #startCallBtn.call-live { color: #fff; }
   /* One row, always: on a phone the buttons share the width and the words
      shrink to fit (fitThreadButtons measures on the device, so a big phone
@@ -83,10 +83,31 @@
   #threadHeadIconsRow.thread-head-icons { flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
   .thr-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; justify-content: safe flex-end; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
   .thr-row.thr-empty { display: none; }
+  .thr-scroll { display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
+  .thr-scroll .thr-row { flex: 0 1 auto; }
+  .thr-chev { display: none; flex: 0 0 auto; width: 20px; height: 28px; padding: 0 0 3px; border: 0; background: none; color: #cfd6dc; font-size: 22px; line-height: 1; cursor: pointer; }
+  .thr-chev:hover { color: var(--pra-blue); }
+  .thr-scroll.overflows .thr-chev { display: flex; align-items: center; justify-content: center; }
+  .thr-scroll .thr-chev.off { visibility: hidden; }
+
+  /* Wide chat page (Lee, 2026-11-25): the app's top bar (logo, Quick Start,
+     nav words) and bottom words sit in the chat-list column, so the open
+     chat runs the full height. Script: placeAppChrome(). */
+  .pra-root.chat-side-chrome #chat-app-header-spacer,
+  .pra-root.chat-side-chrome #chat-app-bottom-bar-spacer { display: none !important; }
+  .chat-side-chrome .sidebar > #chat-app-header { position: relative !important; inset: auto !important; flex-shrink: 0; flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px; }
+  .chat-side-chrome .sidebar > #chat-app-header .cah-label { align-self: flex-start; }
+  .chat-side-chrome .sidebar > #chat-app-header .cah-icons { width: 100%; gap: 6px; }
+  .chat-side-chrome .sidebar > #chat-app-header .cah-icon { flex: 1 1 0; min-width: 0; padding: 0 4px; }
+  .chat-side-chrome .sidebar > #chat-app-header .ptu-launch.in-bar-right { transform: translateY(-50%) scale(.85); transform-origin: right center; }
+  .chat-side-chrome .sidebar > #chat-app-bottom-bar { position: relative !important; inset: auto !important; flex-shrink: 0; flex-wrap: wrap; padding: 8px 12px; }
+  .chat-side-chrome .sidebar > #chat-app-bottom-bar .cah-bottom-group { flex: 1 1 auto; min-width: 0; gap: 6px; }
+  .chat-side-chrome .sidebar > #chat-app-bottom-bar .cah-bottom-text { flex: 1 1 auto; padding: 0 4px; }
   @container pra-app (max-width: 640px) {
     #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; gap: 3px; }
     .thr-row { gap: 3px; justify-content: safe flex-end; padding: 0; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
+    .thr-chev { height: 21px; width: 16px; font-size: 18px; }
     .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 21px; border-radius: 6px; padding: 0 clamp(3px, 1.2cqi, 7px); font-size: clamp(8px, 2.3cqi, .62rem); }
   }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
@@ -1122,21 +1143,28 @@
             </div>
           </div>
           <div class="thread-head-icons" id="threadHeadIconsRow">
-            <!-- Two rows (Lee, 2026-11-24): coaches/admins-only on top, what students /
-                 users / trainees also see underneath. Each row fits itself. -->
-            <div class="thr-row thr-staff">
-              <button class="icon-btn text-btn" id="startCallBtn" title="Video call">Video Call</button>
-              <button class="icon-btn text-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
+            <!-- One row that scrolls sideways (Lee, 2026-11-25): Video Call, Schedule,
+                 Group, Favorites, Media, Search -- nothing else. Channel is in the
+                 sidebar, Details is the name itself. -->
+            <div class="thr-scroll">
+              <button type="button" class="thr-chev thr-chev-l" aria-label="Scroll left">&lsaquo;</button>
+              <div class="thr-row">
+                <button class="icon-btn text-btn thr-staff-btn" id="startCallBtn" title="Video call">Video Call</button>
+                <button class="icon-btn text-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
+                <button class="icon-btn text-btn thr-staff-btn" id="groupInfoBtn" title="Group info" style="display:none">Group</button>
+                <button class="icon-btn text-btn thr-staff-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
+                <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
+                <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
+              </div>
+              <button type="button" class="thr-chev thr-chev-r" aria-label="Scroll right">&rsaquo;</button>
+            </div>
+            <!-- Off the panel (Lee, 2026-11-25); kept in the page because the
+                 script still wires them. -->
+            <div hidden>
               <button class="icon-btn text-btn" id="threadChannelBtn" title="Mark as channel" style="display:none">Channel</button>
               <button class="icon-btn text-btn" id="staffNotesBtn" title="Coach Notes" style="display:none">Notes</button>
               <button class="icon-btn text-btn" id="crmDetailsBtn" title="CRM contact details" style="display:none">Details</button>
-              <button class="icon-btn text-btn" id="favoritesBtn" title="My Favorites" style="display:none">Favorites</button>
-            </div>
-            <div class="thr-row thr-all">
-              <button class="icon-btn text-btn" id="scheduleBtn" title="Schedule appointment" style="display:none"></button>
               <button class="icon-btn text-btn" id="intakeFormBtn" title="Kickoff / Intake Form" style="display:none">Intake</button>
-              <button class="icon-btn text-btn" id="mediaGalleryBtn" title="Media">Media</button>
-              <button class="icon-btn text-btn" id="chatSearchToggleBtn" title="Search in this chat">Search</button>
             </div>
           </div>
           <!-- Takes over this same row (instead of a separate always-there
@@ -3244,7 +3272,32 @@ function previewText(m) {
 // (WhatsApp-style) while a thread is open specifically on mobile — the
 // conversation's own header already has a back button, so the app-level
 // chrome isn't needed there anyway. Desktop is untouched (plenty of room).
+// Wide chat page: the top bar and bottom words move into the chat-list
+// column (CSS: .chat-side-chrome) so the open chat gets the full height;
+// back to full-width bars at phone width (Lee, 2026-11-25).
+function placeAppChrome() {
+  const root = document.querySelector('.pra-root'), sb = document.querySelector('.chat-shell > .sidebar');
+  const header = document.getElementById('chat-app-header'), bottom = document.getElementById('chat-app-bottom-bar');
+  const hs = document.getElementById('chat-app-header-spacer'), bs = document.getElementById('chat-app-bottom-bar-spacer');
+  if (!root || !sb || !header || !hs) return;
+  const side = root.getBoundingClientRect().width > 768;
+  if (side === (header.parentElement === sb) && side === root.classList.contains('chat-side-chrome')) return;
+  root.classList.toggle('chat-side-chrome', side);
+  if (side) { sb.prepend(header); if (bottom) sb.append(bottom); }
+  else { hs.after(header); if (bottom && bs) bs.after(bottom); }
+  if (window.PRAFitNav) requestAnimationFrame(() => window.PRAFitNav());
+}
+(function () {
+  const root = document.querySelector('.pra-root');
+  if (!root) return;
+  // The header is injected after the user loads -- place it when it lands.
+  new MutationObserver(() => placeAppChrome()).observe(root, { childList: true });
+  if (window.ResizeObserver) new ResizeObserver(() => placeAppChrome()).observe(root);
+  placeAppChrome();
+})();
+
 function updateHeaderForThreadView() {
+  placeAppChrome();
   const header = document.getElementById('chat-app-header');
   const bottomBar = document.getElementById('chat-app-bottom-bar');
   const headerSpacer = document.getElementById('chat-app-header-spacer');
@@ -8796,6 +8849,26 @@ function setupCallUI() {
   const box = document.getElementById('threadHeadIconsRow');
   if (!box) return;
   const rows = [...box.querySelectorAll('.thr-row')];
+  const scroller = box.querySelector('.thr-scroll');
+  const row = rows[0];
+  const chevL = box.querySelector('.thr-chev-l'), chevR = box.querySelector('.thr-chev-r');
+  // Chevrons only when the row runs past the panel, each one hidden when
+  // there's nothing more that way.
+  const chevs = () => {
+    if (!scroller || !row) return;
+    const shown = scroller.classList.contains('overflows');
+    const room = row.clientWidth + (shown ? (chevL.offsetWidth + chevR.offsetWidth + 4) : 0);
+    const over = row.scrollWidth > room + 1;
+    if (over !== shown) scroller.classList.toggle('overflows', over);
+    const max = row.scrollWidth - row.clientWidth;
+    chevL.classList.toggle('off', !(row.scrollLeft > 1));
+    chevR.classList.toggle('off', !(row.scrollLeft < max - 1));
+  };
+  if (row) {
+    row.addEventListener('scroll', chevs, { passive: true });
+    chevL.onclick = () => row.scrollBy({ left: -Math.max(80, row.clientWidth * 0.7), behavior: 'smooth' });
+    chevR.onclick = () => row.scrollBy({ left: Math.max(80, row.clientWidth * 0.7), behavior: 'smooth' });
+  }
   let busy = false;
   // Every visible word button gets the same width (the widest one's), both
   // rows right-aligned so the buttons line up in columns (Lee, 2026-11-24).
@@ -8803,20 +8876,18 @@ function setupCallUI() {
   const fit = () => {
     if (busy) return; busy = true;
     rows.forEach(row => row.classList.toggle('thr-empty', ![...row.querySelectorAll('.icon-btn')].some(b => b.style.display !== 'none')));
-    const words = [...box.querySelectorAll('.icon-btn.text-btn')].filter(b => b.style.display !== 'none');
+    const words = [...(row || box).querySelectorAll('.icon-btn.text-btn')].filter(b => b.style.display !== 'none');
     words.forEach(b => { b.style.fontSize = ''; b.style.width = ''; });
     if (!box.offsetWidth) { requestAnimationFrame(() => { busy = false; }); return; } // hidden: measure once shown
-    let fs = words[0] ? parseFloat(getComputedStyle(words[0]).fontSize) || 12 : 0;
-    for (let i = 0; i < 25 && words.length; i++) {
-      words.forEach(b => { b.style.width = ''; b.style.fontSize = fs + 'px'; });
+    if (words.length) {
       const w = Math.ceil(Math.max(...words.map(b => b.getBoundingClientRect().width)));
       words.forEach(b => { b.style.width = w + 'px'; });
-      if (rows.every(r => r.scrollWidth <= r.clientWidth + 1) || fs <= 10) break;
-      fs = Math.max(10, fs * 0.94);
     }
-    requestAnimationFrame(() => { busy = false; });
+    chevs();
+    requestAnimationFrame(() => { chevs(); busy = false; });
   };
-  rows.forEach(r => { if (window.PRAHScroll) window.PRAHScroll(r); });
+  // Fades + mouse drag/wheel; starts at the left end (Video Call).
+  rows.forEach(r => { if (window.PRAHScroll) window.PRAHScroll(r, '#startCallBtn'); });
   if (window.ResizeObserver) new ResizeObserver(() => fit()).observe(box);
   // Buttons shown/hidden for this chat -> refit. (Its own writes land while
   // `busy` is still set, so they don't loop.)
