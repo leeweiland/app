@@ -11,11 +11,18 @@ window.PRADetails = (function () {
   .modal-backdrop.pdt-backdrop { padding: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 2.5vh) calc(var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) + 2.5vw) calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 2.5vh) calc(var(--safe-area-inset-left, env(safe-area-inset-left, 0px)) + 2.5vw); }
   .modal-box.pdt-box { width: 100%; max-width: none; height: 100%; max-height: none; overflow-y: auto; padding: 16px 18px 20px; box-sizing: border-box; color: #fff; margin: 0; }
   .pdt-box .pdt-name, .pdt-box .pdt-dates { color: #fff; font-family: inherit; }
-  .pdt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .pdt-name { font-weight: 800; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pdt-head select { width: auto; min-width: 120px; flex: 0 0 auto; }
-  .pdt-head a.pra-btn { flex: 0 0 auto; white-space: nowrap; }
-  .pdt-x { background: none; border: 0; color: var(--pra-dim, #9aa0aa); font-size: 1.3rem; cursor: pointer; padding: 0 4px; line-height: 1; }
+  /* name + X always on the first line (X in the top-right corner); status next to the name when it fits, else underneath */
+  .pdt-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name status x"; align-items: center; gap: 8px 10px; margin-bottom: 12px; }
+  .pdt-name { grid-area: name; font-weight: 800; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pdt-head select { grid-area: status; width: auto; min-width: 120px; }
+  .pdt-head .pdt-saved { grid-column: 1 / -1; grid-row: 3; min-width: 0; }
+  .pdt-head .pdt-saved:empty { display: none; }
+  .pdt-x { grid-area: x; justify-self: end; align-self: start; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); border: 1px solid #383842; border-radius: 50%; color: #fff; font-size: 1.35rem; cursor: pointer; padding: 0; line-height: 1; }
+  .pdt-x:hover { border-color: #ff6b6b; color: #ff6b6b; }
+  @media (max-width: 560px) {
+    .pdt-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name x" "status status"; }
+    .pdt-head select { width: 100%; }
+  }
   .pdt-sec { border: 1px solid #383842; border-radius: 12px; padding: 12px 12px 4px; margin-bottom: 12px; }
   .pdt-sec-head { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--pra-dim, #9aa0aa); margin-bottom: 10px; }
   .pdt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
