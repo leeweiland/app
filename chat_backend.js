@@ -3,7 +3,7 @@
 // Mounted from server.js: handleChatRequest(req, res, url) returns true if it
 // handled the request, false to let server.js's existing routing continue.
 
-import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, mkdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, createReadStream, createWriteStream, unlinkSync, mkdirSync, statSync, renameSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { tmpdir } from "os";
@@ -726,7 +726,92 @@ const getGoogleAccessToken = getDriveAccessToken;
 // progress-photo proxy) -- each route does its OWN authorization check
 // first (this fileId belongs to something the requester can see), then
 // hands off to this once that's settled.
+// ── Server-side media cache (Lee, 2026-11-26: "scrubbing is so slow") ──
+// Every seek used to be its own Range request to Google Drive (~0.5s each).
+// The first time a file is requested it's copied whole to local disk in the
+// background; after that every range (scrubbing, replays) is served from
+// disk in milliseconds. Container temp storage -- a restart just empties it.
+const MEDIA_CACHE_DIR = join(tmpdir(), "pra-media-cache");
+const MEDIA_CACHE_MAX_FILE = 300 * 1024 * 1024;
+const MEDIA_CACHE_MAX_TOTAL = 4 * 1024 * 1024 * 1024;
+const mediaCacheInflight = new Set();
+try { mkdirSync(MEDIA_CACHE_DIR, { recursive: true }); } catch {}
+const mediaCachePath = (id) => join(MEDIA_CACHE_DIR, String(id).replace(/[^\w-]/g, ""));
+function readMediaCacheMeta(id) {
+  try {
+    const meta = JSON.parse(readFileSync(mediaCachePath(id) + ".json", "utf8"));
+    if (meta && meta.size && existsSync(mediaCachePath(id))) return meta;
+  } catch {}
+  return null;
+}
+function pruneMediaCache() {
+  try {
+    const files = readdirSync(MEDIA_CACHE_DIR).filter(f => !f.endsWith(".json") && !f.endsWith(".part"))
+      .map(f => { const st = statSync(join(MEDIA_CACHE_DIR, f)); return { f, size: st.size, at: st.atimeMs || st.mtimeMs }; })
+      .sort((a, b) => a.at - b.at);
+    let total = files.reduce((n, x) => n + x.size, 0);
+    for (const x of files) {
+      if (total <= MEDIA_CACHE_MAX_TOTAL) break;
+      try { unlinkSync(join(MEDIA_CACHE_DIR, x.f)); unlinkSync(join(MEDIA_CACHE_DIR, x.f + ".json")); } catch {}
+      total -= x.size;
+    }
+  } catch {}
+}
+function warmMediaCache(fileId, accessToken) {
+  if (mediaCacheInflight.has(fileId) || readMediaCacheMeta(fileId)) return;
+  mediaCacheInflight.add(fileId);
+  const final = mediaCachePath(fileId), part = final + "." + process.pid + ".part";
+  let settled = false;
+  const done = (ok, meta) => {
+    if (settled) return;
+    settled = true;
+    mediaCacheInflight.delete(fileId);
+    if (ok) {
+      try { renameSync(part, final); writeFileSync(final + ".json", JSON.stringify(meta)); pruneMediaCache(); } catch { try { unlinkSync(part); } catch {} }
+    } else { try { unlinkSync(part); } catch {} }
+  };
+  const r = httpsRequest({ hostname: "www.googleapis.com", path: `/drive/v3/files/${fileId}?alt=media`, method: "GET", headers: { Authorization: `Bearer ${accessToken}` } }, (dr) => {
+    const len = Number(dr.headers["content-length"]) || 0;
+    if (dr.statusCode !== 200 || len > MEDIA_CACHE_MAX_FILE) { dr.resume(); done(false); return; }
+    const out = createWriteStream(part);
+    let n = 0;
+    dr.on("data", (c) => { n += c.length; if (n > MEDIA_CACHE_MAX_FILE) { dr.destroy(); out.destroy(); done(false); } });
+    dr.on("error", () => { out.destroy(); done(false); });
+    out.on("error", () => { dr.destroy(); done(false); });
+    out.on("finish", () => { if (n > MEDIA_CACHE_MAX_FILE || (len && n !== len)) { done(false); return; } done(true, { size: n, mime: dr.headers["content-type"] || "application/octet-stream" }); });
+    dr.pipe(out);
+  });
+  r.on("error", () => done(false));
+  r.setTimeout(10 * 60 * 1000, () => r.destroy());
+  r.end();
+}
+function serveCachedMedia(req, res, fileId, meta) {
+  const path = mediaCachePath(fileId), size = meta.size;
+  const base = { "Content-Type": meta.mime, "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=31536000, immutable" };
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || "");
+  let start = 0, end = size - 1, status = 200;
+  if (m) {
+    if (m[1] === "") { start = Math.max(0, size - Number(m[2] || 0)); }
+    else { start = Number(m[1]); if (m[2] !== "") end = Math.min(Number(m[2]), size - 1); }
+    if (!(start >= 0) || start >= size || end < start) { res.writeHead(416, { "Content-Range": `bytes */${size}` }); res.end(); return Promise.resolve(); }
+    status = 206;
+    base["Content-Range"] = `bytes ${start}-${end}/${size}`;
+  }
+  base["Content-Length"] = end - start + 1;
+  res.writeHead(status, base);
+  return new Promise((resolve) => {
+    const rs = createReadStream(path, { start, end });
+    rs.on("error", () => { try { res.destroy(); } catch {} resolve(); });
+    res.on("close", () => { rs.destroy(); resolve(); });
+    rs.on("end", resolve);
+    rs.pipe(res);
+  });
+}
+
 export async function streamDriveMedia(req, res, fileId, accessToken) {
+  const cached = readMediaCacheMeta(fileId);
+  if (cached) return serveCachedMedia(req, res, fileId, cached);
+  warmMediaCache(fileId, accessToken);
   await new Promise((resolve) => {
     // Every failure path below calls this instead of reject() -- settling
     // exactly once no matter which of several listeners fires first (a

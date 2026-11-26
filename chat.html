@@ -7615,48 +7615,14 @@ function vcSync(video) {
 function vcSeek(v, t) {
   v._seekTo = t;
   if (v.seeking) return;
-  try { if (typeof v.fastSeek === 'function' && v._local) v.fastSeek(t); else v.currentTime = t; } catch { v.currentTime = t; }
+  v.currentTime = t;
 }
 document.addEventListener('seeked', (e) => {
   const v = e.target;
   if (v.tagName !== 'VIDEO' || v._seekTo == null) return;
   if (Math.abs(v.currentTime - v._seekTo) > 0.04) v.currentTime = v._seekTo; else v._seekTo = null;
 }, true);
-// Downloads the whole clip once and plays it from the phone's memory, so
-// every later seek is instant. Started when scrubbing begins (and when the
-// coaching popup opens). Skipped for very large files.
-const VC_LOCAL_MAX = 120 * 1024 * 1024;
-let vcLocalLast = null;
-function vcWarm(v) {
-  if (!v || v._warm || v._local) return;
-  const src = v.currentSrc || v.src;
-  if (!src || src.startsWith('blob:')) return;
-  v._warm = true;
-  fetch(src.split('#')[0], { credentials: 'same-origin' }).then(async (r) => {
-    if (!r.ok) return null;
-    const len = Number(r.headers.get('content-length')) || 0;
-    if (len > VC_LOCAL_MAX) { try { r.body && r.body.cancel(); } catch {} return null; }
-    return r.blob();
-  }).then((blob) => {
-    if (!blob || !v.isConnected) return;
-    const url = URL.createObjectURL(blob);
-    const swap = () => {
-      if (!v.isConnected) { URL.revokeObjectURL(url); return; }
-      const t = v._seekTo != null ? v._seekTo : v.currentTime, playing = !v.paused && !v.ended;
-      v._local = true;
-      v._seekTo = null;
-      v.addEventListener('loadedmetadata', () => { v.currentTime = t; if (playing) v.play().catch(() => {}); }, { once: true });
-      v.src = url;
-      // Keep only the most recent downloaded clip in memory.
-      // (only once the old one's video is gone or playing something else).
-      if (vcLocalLast && vcLocalLast.url !== url && (!vcLocalLast.v.isConnected || vcLocalLast.v.src !== vcLocalLast.url)) { try { URL.revokeObjectURL(vcLocalLast.url); } catch {} }
-      vcLocalLast = { url, v };
-    };
-    // Don't swap under the finger mid-scrub; do it right after.
-    const vc = vcFor(v);
-    if (vc && vc.classList.contains('dragging')) v._pendingSwap = swap; else swap();
-  }).catch(() => { v._warm = false; });
-}
+function vcWarm() {} // (client-side clip download removed: swapping the source mid-play glitched)
 
 (function setupVideoControls() {
   ['timeupdate', 'play', 'pause', 'ended', 'loadedmetadata', 'seeked', 'emptied'].forEach(ev =>
@@ -7815,8 +7781,7 @@ function startVideoReply(mid) {
   player.preload = 'auto';
   player.src = `/api/chat/media/${m.driveFileId}`;
   player.load();
-  player._warm = false; player._local = false; player._seekTo = null;
-  setTimeout(() => vcWarm(player), 0);
+  player._seekTo = null;
   player.muted = false; // a muted fallback from a previous open doesn't stick
   const tryPlay = () => player.play().catch(() => { player.muted = true; return player.play().catch(() => {}); });
   tryPlay();
