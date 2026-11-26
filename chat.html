@@ -184,7 +184,8 @@
      right, tints toward the top, shades toward the bottom). */
   #videoReplyPenBtn { --pen: #ff3b3b; }
   #videoReplyPenBtn::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--pen); border: 1.5px solid #0b0b0f; }
-  .vr-stage.drawing #videoReplyPenBtn { border-color: var(--pen); color: var(--pen); box-shadow: 0 0 10px var(--pen); }
+  /* Drawing mode: the pen glows green (the dot still shows the ink color). */
+  .vr-stage.drawing #videoReplyPenBtn { border-color: #39ff14; color: #39ff14; box-shadow: 0 0 12px rgba(57,255,20,.9), 0 0 4px rgba(57,255,20,.9); }
   .vr-picker { display: none; position: absolute; z-index: 6; width: 236px; padding: 10px; border-radius: 12px; background: rgba(11,11,15,.94); border: 1px solid var(--pra-border); box-shadow: 0 10px 30px rgba(0,0,0,.6); }
   .vr-picker.show { display: block; }
   .vr-picker-pad { position: relative; width: 216px; height: 150px; border-radius: 8px; overflow: hidden; touch-action: none; cursor: crosshair; }
@@ -7412,6 +7413,9 @@ function openMsgActionBar(anchorEl, mid, positionEl, overModal) {
   document.getElementById('videoReplyModal').addEventListener('contextmenu', (e) => {
     if (!videoReplyTargetId) return;
     if (e.target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
+    // The pen (hold = colors), its palette, the drawing layer and the play
+    // bar have their own press-and-hold -- never the message menu.
+    if (e.target.closest('.vr-stage-btn, .vr-picker, #videoReplyDraw, .vc')) { e.preventDefault(); return; }
     e.preventDefault();
     const x = e.clientX, y = e.clientY;
     const point = { getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y, width: 0, height: 0 }) };
