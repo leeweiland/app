@@ -161,13 +161,16 @@
   .video-note-text { word-break: break-word; flex: 1; }
   .video-note-remove { flex-shrink: 0; background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .9rem; padding: 0 2px; line-height: 1; }
   .video-note-remove:hover { color: #ff5c5c; }
-  #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 22vh; overflow-y: auto; flex-shrink: 0; }
+  #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 18dvh; overflow-y: auto; flex-shrink: 1; min-height: 0; }
   /* Video reply popup (Lee, 2026-11-26): 95% of the screen both ways, no
      title, small buttons, "+ Timestamp" under the note box, and a pen on
      the video for drawing coaching marks on a paused frame. */
-  #videoReplyModal.modal-backdrop { padding: 0; }
-  .modal-box.video-reply-box { width: 95vw; max-width: 95vw; height: 95vh; height: 95dvh; max-height: 95vh; max-height: 95dvh; display: flex; flex-direction: column; overflow: hidden; padding: 12px; gap: 8px; }
-  .vr-stage { position: relative; flex: 1 1 auto; min-height: 140px; background: #000; border-radius: 10px; overflow: hidden; }
+  /* 95% of the VISIBLE screen: the phone's status bar, nav/gesture bar
+     (safe-area insets) and an open keyboard are kept clear, so Cancel/Send
+     never hang off the bottom. The box fills the backdrop's padded area. */
+  #videoReplyModal.modal-backdrop { padding: max(2.5vh, env(safe-area-inset-top)) max(2.5vw, env(safe-area-inset-right)) max(2.5vh, env(safe-area-inset-bottom)) max(2.5vw, env(safe-area-inset-left)); padding-top: max(2.5dvh, env(safe-area-inset-top)); padding-bottom: max(2.5dvh, env(safe-area-inset-bottom)); }
+  .modal-box.video-reply-box { width: 100%; max-width: 100%; height: 100%; max-height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 12px; gap: 8px; }
+  .vr-stage { position: relative; flex: 1 1 auto; min-height: 90px; background: #000; border-radius: 10px; overflow: hidden; }
   .vr-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
   #videoReplyDraw { position: absolute; display: none; z-index: 2; touch-action: none; cursor: crosshair; }
   .vr-stage.drawing #videoReplyDraw { display: block; }
@@ -1505,7 +1508,7 @@
            marks on the frame; tap it again to send that frame + marks as a
            picture. See setupVideoMarkup(). -->
       <div class="vr-stage" id="videoReplyStage">
-        <video id="videoReplyPlayer" controls playsinline></video>
+        <video id="videoReplyPlayer" controls playsinline preload="auto"></video>
         <canvas id="videoReplyDraw"></canvas>
         <div class="vr-draw-hint">Draw, then tap the pen to send</div>
         <button type="button" class="vr-stage-btn" id="videoReplyPenCancel" title="Discard marks">✕</button>
@@ -7411,7 +7414,15 @@ function startVideoReply(mid) {
   stopVideoMarkup();
   const player = document.getElementById('videoReplyPlayer');
   player.pause();
+  // Poster = the clip's own preview frame (when the server made one), so
+  // something shows right away; then it plays as soon as it opens.
+  player.poster = m.posterFileId ? `/api/chat/media/${m.posterFileId}` : '';
+  player.preload = 'auto';
   player.src = `/api/chat/media/${m.driveFileId}`;
+  player.load();
+  player.muted = false; // a muted fallback from a previous open doesn't stick
+  const tryPlay = () => player.play().catch(() => { player.muted = true; return player.play().catch(() => {}); });
+  tryPlay();
   renderVideoReplyNotes();
   document.getElementById('videoReplyNoteInput').value = '';
   document.getElementById('videoReplyStatus').textContent = '';
@@ -7582,6 +7593,22 @@ async function sendVideoMarkup() {
     status.textContent = 'Could not send the marked-up frame — tap the pen to try again.';
   }
 }
+// The popup tracks the visible area (keyboard up = shorter), so the note box
+// and Cancel/Send stay on screen while typing.
+(function fitVideoReplyToViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const modal = document.getElementById('videoReplyModal');
+  const fit = () => {
+    if (!modal.classList.contains('show')) { modal.style.top = ''; modal.style.height = ''; modal.style.bottom = ''; return; }
+    modal.style.top = vv.offsetTop + 'px';
+    modal.style.bottom = 'auto';
+    modal.style.height = vv.height + 'px';
+  };
+  vv.addEventListener('resize', fit);
+  vv.addEventListener('scroll', fit);
+  new MutationObserver(fit).observe(modal, { attributes: true, attributeFilter: ['class'] });
+})();
 (function setupVideoMarkup() {
   const c = document.getElementById('videoReplyDraw');
   const pen = document.getElementById('videoReplyPenBtn');
