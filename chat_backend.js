@@ -450,6 +450,7 @@ export function getConfig() {
   if (cfg.traineeWelcomeByProduct.hc21 === undefined) cfg.traineeWelcomeByProduct.hc21 = cfg.traineeWelcomeText;
   if (cfg.traineeWelcomeByProduct.bsp21 === undefined) cfg.traineeWelcomeByProduct.bsp21 = "Hey {{firstName}}, welcome to the Bodyweight Strength Protocol! This is your private chat with me and Alexis. Start with Day 1, and send us a video any time you want feedback.";
   if (cfg.traineeRefundMakeUser === undefined) cfg.traineeRefundMakeUser = true;
+  if (cfg.traineeCrosscheckEnabled === undefined) cfg.traineeCrosscheckEnabled = true;
   if (!cfg.productPrograms || typeof cfg.productPrograms !== "object") cfg.productPrograms = {};
   if (!cfg.welcomeMessageText) cfg.welcomeMessageText = DEFAULT_WELCOME_MESSAGE;
   if (cfg.callSummaryEnabled === undefined) cfg.callSummaryEnabled = true;
@@ -1732,6 +1733,45 @@ function findDuplicateUserReason(users, { email, phone, first, last }) {
   }
   if (first && last && users.some(u => nameKey(u.first, u.last) === nameKey(first, last))) {
     return `An account for ${first} ${last} already exists`;
+  }
+  return null;
+}
+// ── Trainee crosscheck (account merge) ──────────────────────────────────
+// A program purchase creates the app account up front (CRM bridge), the
+// opposite of a coaching enrollment. When the buyer then signs up in the app
+// -- often with a different email -- the sign-up CLAIMS that purchase account
+// instead of making a second one: their new email + password go on it, the
+// purchase email stays as a login alias (u.purchaseEmails) so CRM refunds and
+// later purchases still find them. Only an account nobody has logged into yet
+// can be claimed. Switch: User Management > Trainees (traineeCrosscheckEnabled).
+const normEmail = (e) => String(e || "").trim().toLowerCase();
+const phone10 = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+function userHasEmail(u, email) {
+  const em = normEmail(email);
+  return !!em && (normEmail(u.email) === em || (u.purchaseEmails || []).some(x => normEmail(x) === em));
+}
+function findUserByAnyEmail(users, email) {
+  const em = normEmail(email);
+  if (!em) return null;
+  return users.find(u => normEmail(u.email) === em) || users.find(u => userHasEmail(u, em)) || null;
+}
+function everLoggedIn(u) {
+  if (u.lastLoginAt || u.claimedAt) return true;
+  return Object.values(readJson(SESSIONS_FILE, {})).some(s => s.userId === u.id);
+}
+// The purchase account a sign-up should take over: email, then phone, then a
+// first+last name only one purchase account has. Returns { user, by } or null.
+function findClaimableTrainee(users, { email, phone, first, last }) {
+  if (getConfig().traineeCrosscheckEnabled === false) return null;
+  const pool = users.filter(u => u.createdVia === "crm-bridge" && !u.archived && !u.claimedAt && !everLoggedIn(u));
+  const em = normEmail(email), ph = phone10(phone);
+  const byEmail = em && pool.find(u => userHasEmail(u, em));
+  if (byEmail) return { user: byEmail, by: "email" };
+  const byPhone = ph.length === 10 ? pool.filter(u => phone10(u.phone) === ph) : [];
+  if (byPhone.length === 1) return { user: byPhone[0], by: "phone" };
+  if (first && last) {
+    const byName = pool.filter(u => nameKey(u.first, u.last) === nameKey(first, last));
+    if (byName.length === 1) return { user: byName[0], by: "name" };
   }
   return null;
 }
@@ -5246,7 +5286,8 @@ export async function handleChatRequest(req, res, url) {
     if (req.method !== "POST") return sendJson(res, 405, { error: "POST" });
     const body = await readJsonBody(req);
     const email = String(body.email || "").trim().toLowerCase();
-    const u = readJson(USERS_FILE, []).find(x => (body.userId && x.id === String(body.userId)) || (email && String(x.email || "").trim().toLowerCase() === email));
+    const allUsers = readJson(USERS_FILE, []);
+    const u = (body.userId && allUsers.find(x => x.id === String(body.userId))) || findUserByAnyEmail(allUsers, email);
     if (!u) return sendJson(res, 404, { error: "No app account" });
     const sku = productOf(body.product);
     if (!sku) return sendJson(res, 400, { error: "Unknown product" });
@@ -5256,7 +5297,8 @@ export async function handleChatRequest(req, res, url) {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
     const users = readJson(USERS_FILE, []);
-    const findByEmail = (email) => users.find(u => String(u.email || "").trim().toLowerCase() === email);
+    // Login email or a purchase email kept from a sign-up merge.
+    const findByEmail = (email) => findUserByAnyEmail(users, email);
     if (req.method === "GET") {
       const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
       if (!email) return sendJson(res, 400, { error: "email is required" });
@@ -5287,6 +5329,22 @@ export async function handleChatRequest(req, res, url) {
       const bumps = normalizeBumps(body.bumps, sku);
       let u = findByEmail(email);
       let created = false;
+      // Trainee crosscheck, other direction: they signed up in the app before
+      // buying, with a different email -- match that account by phone, then by
+      // a first+last name only one account has (staff never), and keep the
+      // purchase email on it.
+      if (!u && getConfig().traineeCrosscheckEnabled !== false) {
+        const pool = users.filter(x => !x.archived && !isStaff(x));
+        const ph = phone10(body.phone), f = String(body.first || "").trim(), l = String(body.last || "").trim();
+        const byPhone = ph.length === 10 ? pool.filter(x => phone10(x.phone) === ph) : [];
+        const byName = f && l ? pool.filter(x => nameKey(x.first, x.last) === nameKey(f, l)) : [];
+        const hit = byPhone.length === 1 ? byPhone[0] : byName.length === 1 ? byName[0] : null;
+        if (hit) {
+          hit.purchaseEmails = Array.from(new Set([...(hit.purchaseEmails || []), email]));
+          u = hit;
+          console.log(`[trainee crosscheck] purchase matched existing account ${hit.id} by ${byPhone.length === 1 ? "phone" : "name"}`);
+        }
+      }
       if (!u) {
         // A checkout without a name still gets an account (named after the email).
         const first = String(body.first || "").trim() || email.split("@")[0], last = String(body.last || "").trim();
@@ -5381,8 +5439,41 @@ export async function handleChatRequest(req, res, url) {
     }
 
     const users = readJson(USERS_FILE, []);
+    // Bought a program first: this sign-up takes over that purchase account.
+    const claim = findClaimableTrainee(users, { email, phone, first, last });
+    if (claim) {
+      const others = users.filter(u => u.id !== claim.user.id);
+      const dup = findDuplicateUserReason(others, { email, phone, first, last });
+      if (dup) return sendJson(res, 409, { error: dup });
+      const u = claim.user;
+      const newEmail = normEmail(email);
+      if (normEmail(u.email) !== newEmail) u.purchaseEmails = Array.from(new Set([...(u.purchaseEmails || []), normEmail(u.email)]));
+      const { salt, hash } = hashPassword(password);
+      const ip = getClientIp(req);
+      const geo = await geolocateIp(ip);
+      Object.assign(u, {
+        first, last, email: newEmail, phone: phone || u.phone || "",
+        passwordSalt: salt, passwordHash: hash,
+        profilePictureFileId: profilePictureFileId || u.profilePictureFileId || null,
+        ip, geo, termsAcceptedAt: new Date().toISOString(),
+        claimedAt: new Date().toISOString(), claimedBy: claim.by, lastLoginAt: new Date().toISOString(),
+      });
+      writeJson(USERS_FILE, users);
+      syncDefaultGroups(); // renames their group if the name changed
+      const token = createSession(u.id);
+      setSessionCookie(res, token);
+      console.log(`[trainee crosscheck] sign-up merged into purchase account ${u.id} (matched by ${claim.by})`);
+      const locationStr = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+      upsertAppSheetRow({ first, last, email: u.email, phone: u.phone, ip, location: locationStr }).catch(e => console.error("[APP sheet sync]", e.message));
+      return sendJson(res, 200, { ok: true, merged: true, user: publicUser(u) });
+    }
     const dupReason = findDuplicateUserReason(users, { email, phone, first, last });
-    if (dupReason) return sendJson(res, 409, { error: dupReason });
+    if (dupReason) {
+      // Their purchase account is already in use: point them at logging in.
+      const owner = users.find(u => u.createdVia === "crm-bridge" && !u.archived && (userHasEmail(u, email) || (first && last && nameKey(u.first, u.last) === nameKey(first, last))));
+      if (owner) return sendJson(res, 409, { error: "You already have an account from your program purchase. Sign in with the email you bought with, or tap Forgot password." });
+      return sendJson(res, 409, { error: dupReason });
+    }
     const { salt, hash } = hashPassword(password);
     const ip = getClientIp(req);
     const geo = await geolocateIp(ip); // best-effort — null on failure/local IP, never blocks signup
@@ -5425,7 +5516,7 @@ export async function handleChatRequest(req, res, url) {
     // Trimmed: phone keyboards/autofill often append a trailing space, which
     // silently matched no account (and the generic response below hides that).
     const emailNorm = String(email || "").trim().toLowerCase();
-    let user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
+    let user = findUserByAnyEmail(users, emailNorm);
     // A migrated Rogue (past student with no login yet) asking for a reset:
     // their account is created right here (plain user, no password), then the
     // reset link below lets them set one. Only ever on their own request.
@@ -5487,11 +5578,14 @@ export async function handleChatRequest(req, res, url) {
     const { email, password } = await readJsonBody(req);
     const users = readJson(USERS_FILE, []);
     const emailNorm = String(email || "").trim().toLowerCase(); // same trailing-space trim as forgot-password
-    const user = users.find(u => u.email.trim().toLowerCase() === emailNorm);
+    // A merged program buyer can also use the email they bought with.
+    const user = findUserByAnyEmail(users, emailNorm);
     if (!user || !verifyPassword(password || "", user.passwordSalt, user.passwordHash)) {
       return sendJson(res, 401, { error: "Invalid email or password" });
     }
     if (user.archived) return sendJson(res, 403, { error: "This account has been archived." });
+    user.lastLoginAt = new Date().toISOString();
+    writeJson(USERS_FILE, users);
     const token = createSession(user.id);
     setSessionCookie(res, token);
     if (user.role === "user") { const upgradedRole = await upgradeOnArrival(user.id); if (upgradedRole) user.role = upgradedRole; }
@@ -6385,7 +6479,7 @@ export async function handleChatRequest(req, res, url) {
       const BOOL_KEYS = ["signupEnabled", "forgotPasswordEnabled", "studentCrosscheckEnabled", "studentCrosscheckCrm", "studentGroupEnabled", "autoBuildProtocolEnabled",
         "levelsRowOnNewStudent", "appSheetTypeEnabled", "staffAlertsEnabled", "defaultProtocolEnabled", "welcomeMessageEnabled", "movesPublicDefault",
         "renewalMessageEnabled", "renewalPillsStaff", "holdPillsStaff", "renewalStudentNotice", "crmFinishedSync", "crmBlacklistArchive",
-        "traineeWelcomeEnabled", "traineeRefundMakeUser"];
+        "traineeWelcomeEnabled", "traineeRefundMakeUser", "traineeCrosscheckEnabled"];
       const NUM_KEYS = { loginSessionDays: [1, 365, 30], resetLinkMinutes: [5, 1440, 60], minPasswordLength: [4, 64, 8], renewalMessageDaysBefore: [1, 90, 14] };
       const STR_KEYS = ["welcomeMessageText", "renewalMessageText", "renewalMessageSenderId", "renewalStudentText", "traineeWelcomeText",
         "appSheetId", "appSheetTab", "levelsSheetId", "crosscheckOnlineTab", "crosscheckGymTab", "crosscheckBlacklistTab"];

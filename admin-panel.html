@@ -225,6 +225,14 @@
   .um-access td:first-child { text-align: left; }
   .um-access .um-desc { font-weight: 400; color: var(--pra-dim); }
   .um-product { border: 1px solid var(--pra-border); border-radius: 10px; padding: 10px 12px; margin-top: 8px; background: rgba(255,255,255,0.015); }
+  .um-product > summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .um-product > summary::-webkit-details-marker { display: none; }
+  .um-product > summary .um-name { flex: 1; }
+  .um-product .um-chev { width: 16px; height: 16px; flex-shrink: 0; transition: transform .15s; opacity: .7; }
+  .um-product[open] .um-chev { transform: rotate(180deg); }
+  .um-product[open] > summary { margin-bottom: 6px; }
+  .um-product:hover { border-color: rgba(0,155,255,0.45); }
+  #umBody a, #umBody a:visited { color: #009bff; }
   .um-access .um-name { font-weight: 700; color: #fff; }
 
   #quickStartSection #qsSaveMsg:empty { display: none; }
@@ -1999,6 +2007,8 @@ window.addEventListener('pageshow', () => {
         <p class="um-what">Bought a program on its own (CRM Products tab). They get the program and a group with Lee and Alexis. Build programs in the <a href="/chat-app/programs-editor.html" target="_blank" rel="noopener">Programs Editor</a>.</p>
         ${row('Welcome messages', 'Posted from Lee into a new Trainee group. Each product has its own below. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled), '',
           ['posted automatically.', 'nothing is posted.'])}
+        ${row('Trainee crosscheck (account merge)', 'A purchase makes their app account right away (the opposite of a coaching enrollment, where they sign up first). If they then sign up in the app, even with a different email, the sign-up <b>takes over their purchase account</b>: new email + password, same program and group. Matched by email, then phone, then first + last name. Only an account nobody has logged into yet. The email they bought with still works to log in, and CRM refunds and later purchases still find them. The other way too: someone already in the app who buys with a different email is matched by phone or name and gets the program on their existing account.', toggle('traineeCrosscheckEnabled', s.traineeCrosscheckEnabled !== false), '',
+          ['sign-up and purchase accounts merge into one.', 'a sign-up that matches a purchase account is refused as a duplicate; a purchase with a new email makes a separate account.'])}
         <div class="um-row" style="display:block"><div class="um-name">Products</div><div id="umProducts">Loading products…</div></div>
         ${row('Refunds', 'Right-click a person in Users &amp; Roles &rarr; Refund (full PayPal refund through the CRM). CRM or PayPal refunds do the same.', info)}
         ${row('Make them a User on refund', 'Students and staff just lose the program.', toggle('traineeRefundMakeUser', s.traineeRefundMakeUser), '',
@@ -2140,6 +2150,7 @@ window.addEventListener('pageshow', () => {
         const ok = await save({ [key]: el.checked });
         if (!ok) { el.checked = !el.checked; alert('Could not save -- try again.'); return; }
         updateCounts();
+        if (key === 'traineeCrosscheckEnabled') loadProducts(); // each product shows the crosscheck state
         // Keep hidden copies elsewhere in the panel in step (their own saves send them too).
         const twin = document.getElementById(key);
         if (twin && twin !== el && twin.type === 'checkbox') twin.checked = el.checked;
@@ -2225,6 +2236,8 @@ window.addEventListener('pageshow', () => {
     const el = document.getElementById('umProducts');
     if (!el) return;
     const d = await fetch('/api/admin/products').then(r => r.json()).catch(() => null);
+    // Product accordions stay open across a reload of this list.
+    const openProds = new Set([...el.querySelectorAll('details.um-product[open]')].map(x => x.dataset.prod));
     if (!d) { el.innerHTML = '<div class="um-desc" style="color:#ff8a8a">Could not load products.</div>'; return; }
     const names = d.statusNames || {};
     const flowList = (flows, label) => (flows || []).length
@@ -2233,14 +2246,15 @@ window.addEventListener('pageshow', () => {
       d.products.map(pr => {
         const opts = ['<option value="">No program</option>'].concat(d.programs.map(t => `<option value="${esc(t.id)}" ${t.id === pr.programId ? 'selected' : ''}>${esc(t.name)} (${t.days} days${t.addOns.length ? ', ' + t.addOns.length + ' add-ons' : ''})</option>`)).join('');
         const addOns = (pr.bumps || []).map(b => `${esc(b.name)}${b.price != null ? ' $' + esc(b.price) : ''}`).join(', ');
-        return `<div class="um-product">
-          <div class="um-name">${esc(pr.name)}${pr.price != null ? ` <span class="um-desc">$${esc(pr.price)}</span>` : ''}${pr.stats ? ` <span class="um-desc">&middot; ${pr.stats.paid} sold, ${pr.stats.refunded} refunded</span>` : ''}</div>
+        return `<details class="um-product" data-prod="${esc(pr.sku)}"${openProds.has(pr.sku) ? ' open' : ''}>
+          <summary><div class="um-name">${esc(pr.name)}${pr.price != null ? ` <span class="um-desc">$${esc(pr.price)}</span>` : ''}${pr.stats ? ` <span class="um-desc">&middot; ${pr.stats.paid} sold, ${pr.stats.refunded} refunded</span>` : ''}</div>${CHEV}</summary>
           ${addOns ? `<div class="um-desc">Add-ons: ${addOns}</div>` : ''}
+          <div class="um-desc" style="margin-top:4px"><b style="color:#cfd6dd">On purchase:</b> app account made right away as a Trainee, program added, group with Lee and Alexis. <b style="color:#cfd6dd">Crosscheck:</b> ${state.settings.traineeCrosscheckEnabled !== false ? '<span style="color:#22c55e">on</span>: if they sign up in the app later (any email) it merges into this account' : '<span style="color:#ffb84d">off</span>: a later sign-up is refused as a duplicate'}.</div>
           <div class="um-sub">Gives the program <select class="pra-select" data-product="${esc(pr.sku)}">${opts}</select> ${pr.programId ? `<a href="/chat-app/programs-editor.html?id=${esc(pr.programId)}" target="_blank" rel="noopener" style="color:#009bff">Edit program</a>` : ''} ${savedMsg('umProdMsg-' + pr.sku)}</div>
           ${flowList(pr.flows?.purchased, 'CRM on purchase')}
           ${flowList(pr.flows?.refunded, 'CRM on refund')}
           <div class="um-sub" style="display:block;margin-top:8px"><div class="um-name" style="font-size:.8rem">Welcome message</div><textarea class="pra-input" data-welcome="${esc(pr.sku)}" data-linktool rows="3" style="width:100%;max-width:none">${esc((state.settings.traineeWelcomeByProduct || {})[pr.sku] ?? '')}</textarea><button class="pra-btn um-save" type="button" data-welcome-save="${esc(pr.sku)}">Save message</button>${savedMsg('umWelcomeMsg-' + pr.sku)}</div>
-        </div>`;
+        </details>`;
       }).join('');
     el.querySelectorAll('[data-welcome-save]').forEach(btn => {
       btn.onclick = async () => {

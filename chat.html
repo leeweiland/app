@@ -3497,10 +3497,13 @@ function placeAppChrome() {
   const header = document.getElementById('chat-app-header'), bottom = document.getElementById('chat-app-bottom-bar');
   const hs = document.getElementById('chat-app-header-spacer'), bs = document.getElementById('chat-app-bottom-bar-spacer');
   if (!root || !sb || !header || !hs) return;
-  // Only short-and-wide windows (landscape tablet, laptop): a tall window
-  // has the height to spare, so it keeps the full-width bars (Lee, 2026-11-25).
+  // Only short-and-wide TOUCH windows (landscape tablet): a tall window has
+  // the height to spare, and a desktop/laptop browser keeps the full-width
+  // top bar at any size (Lee, 2026-11-26 -- full-screen desktop had picked
+  // up the sidebar bars).
   const rr = root.getBoundingClientRect();
-  const side = rr.width > 768 && rr.width >= rr.height * 1.3;
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const side = touch && rr.width > 768 && rr.width >= rr.height * 1.3;
   if (side === (header.parentElement === sb) && side === root.classList.contains('chat-side-chrome')) return;
   root.classList.toggle('chat-side-chrome', side);
   if (side) { sb.prepend(header); if (bottom) sb.append(bottom); }
