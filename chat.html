@@ -200,7 +200,11 @@
   .vr-shot-time { color: #fff; font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
   .vr-actions .pra-btn { flex: 1; }
   #videoReplyNotesList .video-note-row { padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
-  .video-note-reply .video-note-player { width: 100%; border-radius: 10px; display: block; margin-top: 2px; }
+  /* Sized from the video itself (same limits as a normal video message),
+     not "100% of a bubble that's only as wide as the notes" -- that shrank
+     it to the text width once the native controls were gone. */
+  .video-note-reply .video-note-player { width: auto; min-width: 160px; border-radius: 10px; display: block; margin-top: 2px; }
+  .video-note-reply img.video-note-player { width: 100%; }
   /* Same 0x0-collapse issue as .bubble.media img[data-src] above -- only
      relevant here when this is the image (not video) variant. */
   img.video-note-player[data-src] { height: 180px; background: rgba(255,255,255,0.04); }
@@ -4983,7 +4987,7 @@ function renderBubble(m, convo) {
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
         ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
-        : `<div class="video-wrap vbox vbox-full"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
+        : `<div class="video-wrap vbox"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
     // No timestamp badge on an image note, or on a note sent without one
     // (plain "good job"-style reply, added straight to Send with no time
     // attached) — "time" only means anything for video, and omitting it
