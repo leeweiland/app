@@ -7597,13 +7597,67 @@ function vcFor(video) { return video && video.parentElement ? video.parentElemen
 function vcSync(video) {
   const vc = vcFor(video);
   if (!vc) return;
-  const pct = video.duration ? Math.min(100, Math.max(0, video.currentTime / video.duration * 100)) : 0;
-  vc.querySelector('.vc-fill').style.width = pct + '%';
-  vc.querySelector('.vc-knob').style.left = pct + '%';
+  // While dragging, the knob follows the finger only -- the video's own
+  // progress events during the seek used to yank it back (the glitching).
+  if (!vc.classList.contains('dragging')) {
+    const pct = video.duration ? Math.min(100, Math.max(0, video.currentTime / video.duration * 100)) : 0;
+    vc.querySelector('.vc-fill').style.width = pct + '%';
+    vc.querySelector('.vc-knob').style.left = pct + '%';
+  }
   const play = vc.querySelector('.vc-play');
   play.classList.toggle('playing', !video.paused && !video.ended);
   play.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
 }
+// Scrub seeking: one seek at a time, always to the newest spot. Firing a
+// new seek every pointer move cancelled the previous one before its frame
+// arrived (each is a round-trip through our server to Drive), so nothing
+// showed until you stopped.
+function vcSeek(v, t) {
+  v._seekTo = t;
+  if (v.seeking) return;
+  try { if (typeof v.fastSeek === 'function' && v._local) v.fastSeek(t); else v.currentTime = t; } catch { v.currentTime = t; }
+}
+document.addEventListener('seeked', (e) => {
+  const v = e.target;
+  if (v.tagName !== 'VIDEO' || v._seekTo == null) return;
+  if (Math.abs(v.currentTime - v._seekTo) > 0.04) v.currentTime = v._seekTo; else v._seekTo = null;
+}, true);
+// Downloads the whole clip once and plays it from the phone's memory, so
+// every later seek is instant. Started when scrubbing begins (and when the
+// coaching popup opens). Skipped for very large files.
+const VC_LOCAL_MAX = 120 * 1024 * 1024;
+let vcLocalLast = null;
+function vcWarm(v) {
+  if (!v || v._warm || v._local) return;
+  const src = v.currentSrc || v.src;
+  if (!src || src.startsWith('blob:')) return;
+  v._warm = true;
+  fetch(src.split('#')[0], { credentials: 'same-origin' }).then(async (r) => {
+    if (!r.ok) return null;
+    const len = Number(r.headers.get('content-length')) || 0;
+    if (len > VC_LOCAL_MAX) { try { r.body && r.body.cancel(); } catch {} return null; }
+    return r.blob();
+  }).then((blob) => {
+    if (!blob || !v.isConnected) return;
+    const url = URL.createObjectURL(blob);
+    const swap = () => {
+      if (!v.isConnected) { URL.revokeObjectURL(url); return; }
+      const t = v._seekTo != null ? v._seekTo : v.currentTime, playing = !v.paused && !v.ended;
+      v._local = true;
+      v._seekTo = null;
+      v.addEventListener('loadedmetadata', () => { v.currentTime = t; if (playing) v.play().catch(() => {}); }, { once: true });
+      v.src = url;
+      // Keep only the most recent downloaded clip in memory.
+      // (only once the old one's video is gone or playing something else).
+      if (vcLocalLast && vcLocalLast.url !== url && (!vcLocalLast.v.isConnected || vcLocalLast.v.src !== vcLocalLast.url)) { try { URL.revokeObjectURL(vcLocalLast.url); } catch {} }
+      vcLocalLast = { url, v };
+    };
+    // Don't swap under the finger mid-scrub; do it right after.
+    const vc = vcFor(v);
+    if (vc && vc.classList.contains('dragging')) v._pendingSwap = swap; else swap();
+  }).catch(() => { v._warm = false; });
+}
+
 (function setupVideoControls() {
   ['timeupdate', 'play', 'pause', 'ended', 'loadedmetadata', 'seeked', 'emptied'].forEach(ev =>
     document.addEventListener(ev, (e) => { if (e.target.tagName === 'VIDEO') vcSync(e.target); }, true));
@@ -7670,7 +7724,7 @@ function vcSync(video) {
   const seekTo = (clientX) => {
     const r = drag.track.getBoundingClientRect();
     const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    if (drag.video.duration) { drag.video.currentTime = f * drag.video.duration; }
+    if (drag.video.duration) vcSeek(drag.video, f * drag.video.duration);
     showAt(drag.vc, drag.video, f);
   };
   // Slide-to-scrub on the video picture: once a finger/mouse moves sideways
@@ -7686,8 +7740,9 @@ function vcSync(video) {
     if (!slide || e.pointerId !== slide.id) return;
     const dx = e.clientX - slide.x0, dy = e.clientY - slide.y0;
     if (!slide.on) {
-      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) return;
+      if (Math.abs(dx) < 6 || Math.abs(dx) < Math.abs(dy)) return;
       slide.on = true;
+      vcWarm(slide.video);
       try { slide.video.setPointerCapture(e.pointerId); } catch {}
       if (slide.wasPlaying) slide.video.pause();
       vcShow(slide.video);
@@ -7698,7 +7753,7 @@ function vcSync(video) {
     if (!dur) return;
     const w = v.getBoundingClientRect().width || 1;
     const t = Math.min(dur, Math.max(0, slide.t0 + dx / w * dur));
-    v.currentTime = t;
+    vcSeek(v, t);
     showAt(slide.vc, v, t / dur);
   }, true);
   const endSlide = (e) => {
@@ -7708,6 +7763,7 @@ function vcSync(video) {
     swallowClick = true;
     setTimeout(() => { swallowClick = false; }, 400);
     sl.vc.classList.remove('dragging');
+    if (sl.video._pendingSwap) { const f = sl.video._pendingSwap; sl.video._pendingSwap = null; f(); }
     if (sl.wasPlaying) sl.video.play().catch(() => {});
     vcShow(sl.video);
   };
@@ -7720,13 +7776,14 @@ function vcSync(video) {
     if (!video) return;
     e.preventDefault(); e.stopPropagation();
     drag = { track, vc, video, id: e.pointerId };
+    vcWarm(video);
     vcShow(video); // reappears if it had faded out
     vc.classList.add('dragging');
     try { track.setPointerCapture(e.pointerId); } catch {}
     seekTo(e.clientX);
   }, true);
   document.addEventListener('pointermove', (e) => { if (drag && e.pointerId === drag.id) { e.preventDefault(); seekTo(e.clientX); } }, true);
-  const end = (e) => { if (drag && e.pointerId === drag.id) { drag.vc.classList.remove('dragging'); const v = drag.video; drag = null; vcShow(v); } };
+  const end = (e) => { if (drag && e.pointerId === drag.id) { drag.vc.classList.remove('dragging'); const v = drag.video; drag = null; vcShow(v); if (v._pendingSwap) { const f = v._pendingSwap; v._pendingSwap = null; f(); } } };
   document.addEventListener('pointerup', end, true);
   document.addEventListener('pointercancel', end, true);
   // A drag that started on the timeline shouldn't also count as a long-press
@@ -7758,6 +7815,8 @@ function startVideoReply(mid) {
   player.preload = 'auto';
   player.src = `/api/chat/media/${m.driveFileId}`;
   player.load();
+  player._warm = false; player._local = false; player._seekTo = null;
+  setTimeout(() => vcWarm(player), 0);
   player.muted = false; // a muted fallback from a previous open doesn't stick
   const tryPlay = () => player.play().catch(() => { player.muted = true; return player.play().catch(() => {}); });
   tryPlay();
