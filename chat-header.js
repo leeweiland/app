@@ -992,7 +992,7 @@ window.PRABack = (function () {
       }
       const shop = [...bottomBar.querySelectorAll('a.cah-bottom-item')].find(x => x.title === 'Shop');
       if (!shop) return;
-      const NEON = 'rgb(212, 255, 0)';
+      const NEON = '#ff2bd6';
       const st = document.createElement('style');
       st.textContent = `
         #pra-bf-pointer { position: fixed; z-index: 9000; display: flex; flex-direction: column; align-items: center; pointer-events: none; font-family: var(--font-primary, 'Century Gothic', sans-serif); }

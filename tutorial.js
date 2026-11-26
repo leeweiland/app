@@ -203,7 +203,7 @@
     animation: ptuPulse 1.2s ease-in-out infinite; transition: top .25s, left .25s, width .25s, height .25s; }
   @keyframes ptuPulse { 50% { box-shadow: 0 0 0 9px rgba(0,155,255,.06), 0 0 28px rgba(0,155,255,.95); } }
   .ptu-arrow { position: fixed; z-index: 9601; width: 26px; height: 48px; pointer-events: none; transition: top .25s, left .25s; }
-  .ptu-arrow svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgb(212,255,0)) drop-shadow(0 0 2px rgb(212,255,0)); }
+  .ptu-arrow svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgb(255,43,214)) drop-shadow(0 0 2px rgb(255,43,214)); }
   .ptu-arrow.up svg { animation: ptuBounceUp .8s ease-in-out infinite; }
   .ptu-arrow.down svg { transform: rotate(180deg); animation: ptuBounceDown .8s ease-in-out infinite; }
   @keyframes ptuBounceUp { 50% { transform: translateY(-9px); } }
@@ -238,11 +238,11 @@
   .ptu-final .stage .ptu-fig { left: 50%; top: 50%; width: 170px; height: 170px; margin: -85px 0 0 -85px; animation: ptuStage .75s ease-out both; }
   @keyframes ptuStage { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
   .ptu-final .r { display: flex; gap: 10px; justify-content: center; }
-  .ptu-launch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; border: 2px solid rgb(212,255,0);
-    background: #0b0b0f; color: rgb(212,255,0); font-weight: 800; font-size: .74rem; letter-spacing: .03em; cursor: pointer; font-family: var(--font-primary, sans-serif); white-space: nowrap;
-    text-shadow: 0 0 8px rgba(212,255,0,.67); flex-shrink: 0; animation: ptuLaunchPulse 1.6s ease-in-out infinite; }
-  .ptu-launch:hover { animation-play-state: paused; box-shadow: 0 0 24px rgba(212,255,0,.9), inset 0 0 10px rgba(212,255,0,.3); }
-  @keyframes ptuLaunchPulse { 0%, 100% { box-shadow: 0 0 8px rgba(212,255,0,.45), inset 0 0 6px rgba(212,255,0,.15); } 50% { box-shadow: 0 0 22px rgba(212,255,0,.95), inset 0 0 10px rgba(212,255,0,.35); } }
+  .ptu-launch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 15px; border: 2px solid rgb(255,43,214);
+    background: #0b0b0f; color: rgb(255,43,214); font-weight: 800; font-size: .74rem; letter-spacing: .03em; cursor: pointer; font-family: var(--font-primary, sans-serif); white-space: nowrap;
+    text-shadow: 0 0 8px rgba(255,43,214,.67); flex-shrink: 0; animation: ptuLaunchPulse 1.6s ease-in-out infinite; }
+  .ptu-launch:hover { animation-play-state: paused; box-shadow: 0 0 24px rgba(255,43,214,.9), inset 0 0 10px rgba(255,43,214,.3); }
+  @keyframes ptuLaunchPulse { 0%, 100% { box-shadow: 0 0 8px rgba(255,43,214,.45), inset 0 0 6px rgba(255,43,214,.15); } 50% { box-shadow: 0 0 22px rgba(255,43,214,.95), inset 0 0 10px rgba(255,43,214,.35); } }
   .ptu-launch.in-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.85); z-index: 2; }
   .ptu-launch.in-bar-right { position: absolute; right: 12px; transform: translateY(-50%); z-index: 2; }
   `;
@@ -459,7 +459,7 @@
   // ── Panel / pointer UI ────────────────────────────────────────────────
   let lastBelow = true;
   let panel = null, ring = null, arrow = null, halo = null, posTimer = null, tipTimer = null, currentTarget = null, currentSub = null, busy = false;
-  const ARROW_SVG = '<svg viewBox="0 0 26 48"><path d="M13 1 L24 15 L2 15 Z" fill="rgb(212,255,0)"/><rect x="11" y="14" width="4" height="33" rx="2" fill="rgb(212,255,0)"/></svg>';
+  const ARROW_SVG = '<svg viewBox="0 0 26 48"><path d="M13 1 L24 15 L2 15 Z" fill="rgb(255,43,214)"/><rect x="11" y="14" width="4" height="33" rx="2" fill="rgb(255,43,214)"/></svg>';
   function teardown() {
     clearInterval(posTimer); posTimer = null;
     clearInterval(tipTimer); tipTimer = null; if (window.PRAIconTip) window.PRAIconTip.hide();

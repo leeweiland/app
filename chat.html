@@ -37,7 +37,7 @@
   .bf-renew-banner { display: flex; align-items: center; justify-content: center; gap: .45em; width: 100%; border: 0; border-radius: 0; cursor: pointer; }
   .bf-renew-banner:hover { filter: brightness(1.06); }
   .bf-renew-banner .bf-enter { width: 1.35em; height: 1.35em; flex-shrink: 0; }
-  .bf-renew-banner { flex-shrink: 0; background: rgb(212,255,0); color: #000; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: 13px; letter-spacing: .03em; line-height: 1.2; text-align: center; padding: 6px 8px; white-space: nowrap; overflow: hidden; }
+  .bf-renew-banner { flex-shrink: 0; background: rgb(255,43,214); color: #000; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: 13px; letter-spacing: .03em; line-height: 1.2; text-align: center; padding: 6px 8px; white-space: nowrap; overflow: hidden; }
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
   .sidebar-resizer:hover::after, .sidebar-resizer.dragging::after { left: 0; width: 5px; background: var(--pra-blue); }
@@ -70,7 +70,8 @@
   .icon-btn.on { border-color: var(--pra-blue); background: rgba(0,155,255,0.12); }
   /* Chat panel buttons are words now (2026-11-24): Video Call, Group,
      Channel, Media, Favorites, Search. */
-  .icon-btn.text-btn { width: auto; height: 28px; padding: 0 10px; border-color: #383842; font-family: var(--font-primary, inherit); font-weight: 500; font-size: .72rem; color: #cfd6dc; white-space: nowrap; }
+  /* 10% bigger (Lee, 2026-11-26): was 28px tall, 10px sides, .72rem. */
+  .icon-btn.text-btn { width: auto; height: 31px; padding: 0 11px; border-color: #383842; font-family: var(--font-primary, inherit); font-weight: 500; font-size: .79rem; color: #cfd6dc; white-space: nowrap; }
   .icon-btn.text-btn:hover { border-color: var(--pra-blue); }
   .icon-btn.text-btn.on { border-color: var(--pra-blue); }
   .icon-btn.text-btn:hover, .icon-btn.text-btn.on { color: #fff; }
@@ -85,7 +86,7 @@
   .thr-row.thr-empty { display: none; }
   .thr-scroll { display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
   .thr-scroll .thr-row { flex: 0 1 auto; }
-  .thr-chev { display: none; flex: 0 0 auto; width: 20px; height: 28px; padding: 0 0 3px; border: 0; background: none; color: #cfd6dc; font-size: 22px; line-height: 1; cursor: pointer; }
+  .thr-chev { display: none; flex: 0 0 auto; width: 20px; height: 31px; padding: 0 0 3px; border: 0; background: none; color: #cfd6dc; font-size: 22px; line-height: 1; cursor: pointer; }
   .thr-chev:hover { color: var(--pra-blue); }
   .thr-scroll.overflows .thr-chev { display: flex; align-items: center; justify-content: center; }
   .thr-scroll .thr-chev.off { visibility: hidden; }
@@ -112,8 +113,8 @@
     #threadHeadIconsRow.thread-head-icons { align-items: stretch; width: 100%; gap: 3px; }
     .thr-row { gap: 3px; justify-content: safe flex-end; padding: 0; }
     .thread-head-icons .icon-btn { flex-shrink: 0; }
-    .thr-chev { height: 21px; width: 16px; font-size: 18px; }
-    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 21px; border-radius: 6px; padding: 0 clamp(3px, 1.2cqi, 7px); font-size: clamp(8px, 2.3cqi, .62rem); }
+    .thr-chev { height: 23px; width: 16px; font-size: 18px; }
+    .thread-head-icons .icon-btn.text-btn { flex: 0 0 auto; height: 23px; border-radius: 6px; padding: 0 clamp(3px, 1.32cqi, 7.7px); font-size: clamp(8.8px, 2.53cqi, .68rem); }
   }
   .icon-btn svg { width: 19px; height: 19px; overflow: visible; filter: drop-shadow(0 0 3px rgba(255,255,255,.7)); transition: filter .15s; }
   .icon-btn:hover svg { filter: drop-shadow(0 0 5px rgba(0,155,255,.9)) drop-shadow(0 0 3px rgba(255,255,255,.9)); }
@@ -579,6 +580,29 @@
   .emoji-grid span { font-size: 1.3rem; cursor: pointer; text-align: center; padding: 4px; border-radius: 6px; }
   .emoji-grid span:hover { background: rgba(255,255,255,0.06); }
   .gif-search { width: 100%; margin-bottom: 8px; }
+  /* ── Emoji + GIF keyboard (Lee, 2026-11-26, like WhatsApp) ── One fixed-
+     size panel with Emoji / GIF tabs at the bottom. Desktop: a wide popup
+     above the composer. Phone (.composer.mk-dock): it slides up in place
+     of the phone keyboard, under the message box, and the smiley button
+     turns into a keyboard button that brings the keyboard back. Fixed
+     height, so typing a GIF search never collapses it. */
+  .mk-tabs { display: none; }
+  #emojiPanel.mk, #gifPanel.mk { width: min(540px, calc(100% - 32px)); height: 430px; max-height: 62vh; padding: 10px 10px 0; }
+  #emojiPanel.mk.show, #gifPanel.mk.show { display: flex; flex-direction: column; overflow: hidden; }
+  #emojiPanel.mk .emoji-tabs { flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; justify-content: space-between; }
+  #emojiPanel.mk .emoji-grid { flex: 1 1 auto; min-height: 0; max-height: none; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); align-content: start; }
+  #emojiPanel.mk .emoji-grid span { font-size: 1.6rem; padding: 5px 0; }
+  #gifPanel.mk .gif-search { flex-shrink: 0; }
+  #gifPanel.mk .gif-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; grid-template-columns: repeat(3, 1fr); align-content: start; transition: opacity .15s; }
+  #gifPanel.mk .gif-grid img { height: 112px; object-fit: cover; background: #15151a; }
+  .picker-panel.mk .mk-tabs { display: flex; flex-shrink: 0; align-self: center; margin: 8px 0 10px; border: 1px solid var(--pra-border); border-radius: 18px; overflow: hidden; }
+  .mk-tab { width: 66px; height: 32px; border: 0; background: transparent; color: #cfd6dc; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .78rem; letter-spacing: .04em; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .mk-tab + .mk-tab { border-left: 1px solid var(--pra-border); }
+  .mk-tab svg { width: 20px; height: 20px; }
+  .mk-tab.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .composer.mk-dock { flex-wrap: wrap; row-gap: 8px; padding-bottom: 0; }
+  .composer.mk-dock > #emojiPanel.mk.show, .composer.mk-dock > #gifPanel.mk.show { position: static !important; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 290px); max-height: 55vh; border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
+  .composer.mk-dock > .picker-panel.mk .mk-tabs { margin-bottom: 8px; }
   .gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; }
   /* Three-zone layout: search stays put at the top, the reply list is the
@@ -1250,10 +1274,12 @@
           <div class="pra-panel picker-panel" id="emojiPanel">
             <div class="emoji-tabs" id="emojiTabs"></div>
             <div class="emoji-grid" id="emojiGrid"></div>
+            <div class="mk-tabs"><button type="button" class="mk-tab" data-mk="emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 14.2c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor"/></svg></button><button type="button" class="mk-tab" data-mk="gif" title="GIFs">GIF</button></div>
           </div>
           <div class="pra-panel picker-panel" id="gifPanel">
             <input class="pra-input gif-search" id="gifSearchInput" placeholder="Search GIFs…"/>
             <div class="gif-grid" id="gifGrid"></div>
+            <div class="mk-tabs"><button type="button" class="mk-tab" data-mk="emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 14.2c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor"/></svg></button><button type="button" class="mk-tab" data-mk="gif" title="GIFs">GIF</button></div>
           </div>
           <div class="pra-panel picker-panel" id="templatesPanel">
             <input class="pra-input template-search" id="templateSearchInput" placeholder="Search templates…"/>
@@ -2070,6 +2096,8 @@ function toggleEmojiPanel(anchorEl, reactMid, preferAbove) {
     reactingMessageId = null;
     return;
   }
+  if (mkWhich) closeMediaKb(false); // the composer's emoji/GIF keyboard gives way to the reaction picker
+  panel.classList.remove('mk');
   reactingMessageId = targetMid;
   gifPanel.classList.remove('show');
   positionPickerNear(panel, anchorEl, preferAbove);
@@ -5370,7 +5398,7 @@ function setupComposer() {
   (function collapseHeaderWhileTyping() {
     const wrap = document.getElementById('threadWrap');
     const isPhone = () => (document.querySelector('.pra-root')?.getBoundingClientRect().width || innerWidth) <= 768;
-    const open = () => wrap.classList.remove('kb-open');
+    const open = () => { if (!document.querySelector('.composer.mk-dock')) wrap.classList.remove('kb-open'); };
     // Keyboard opening keeps your place in the thread: measured BEFORE the
     // keyboard/header animation, then held for ~1s while things resize. At
     // (or within a bubble of) the bottom -> stays pinned to the bottom so the
@@ -5398,13 +5426,22 @@ function setupComposer() {
       };
       anchorRaf = requestAnimationFrame(step);
     };
-    textInput.addEventListener('focus', () => { if (isPhone()) { if (!wrap.classList.contains('kb-open')) holdThreadPosition(); wrap.classList.add('kb-open'); } });
+    textInput.addEventListener('focus', () => {
+      // Tapping the message box while the emoji/GIF keyboard is up swaps
+      // back to the phone keyboard (WhatsApp does the same).
+      if (mkWhich) closeMediaKb(false);
+      if (isPhone()) { if (!wrap.classList.contains('kb-open')) holdThreadPosition(); wrap.classList.add('kb-open'); }
+    });
+    // The emoji/GIF keyboard opens at the phone keyboard's own height.
+    if (window.visualViewport) visualViewport.addEventListener('resize', () => {
+      if (document.activeElement === textInput) mkRememberKeyboard(window.innerHeight - visualViewport.height);
+    });
     textInput.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== textInput) open(); }, 150));
     const kb = window.Capacitor?.Plugins?.Keyboard;
     if (kb?.addListener) {
       kb.addListener('keyboardWillHide', open);
       // Tapping the box again after the keyboard was dismissed doesn't re-fire focus.
-      kb.addListener('keyboardWillShow', () => { if (document.activeElement === textInput && isPhone()) { holdThreadPosition(); wrap.classList.add('kb-open'); } });
+      kb.addListener('keyboardWillShow', (info) => { mkRememberKeyboard(info && info.keyboardHeight); if (document.activeElement === textInput && isPhone()) { holdThreadPosition(); wrap.classList.add('kb-open'); } });
     }
   })();
   // On a narrow phone the box between the icons can be too short for even the
@@ -5447,21 +5484,45 @@ function setupComposer() {
       clearActionSelection(); // drops the row highlight the "+" left in place
       sendReaction(mid, emoji);
     } else {
-      textInput.value += emoji;
-      textInput.focus();
+      // At the cursor; on a phone with the emoji keyboard up the message box
+      // stays unfocused so the phone keyboard doesn't pop over it.
+      const s0 = textInput.selectionStart ?? textInput.value.length, e0 = textInput.selectionEnd ?? textInput.value.length;
+      textInput.setRangeText(emoji, s0, e0, 'end');
+      textInput.dispatchEvent(new Event('input', { bubbles: true }));
+      if (!document.querySelector('.composer.mk-dock')) textInput.focus();
     }
   });
 
-  emojiBtn.onclick = () => toggleEmojiPanel(emojiBtn, null);
-  gifBtn.onclick = () => { gifPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); templatesPanel.classList.remove('show'); if (gifPanel.classList.contains('show')) loadGifs(''); };
-  templatesBtn.onclick = () => { templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
+  // Smiley button: opens the emoji keyboard; while it's up on a phone it
+  // shows a keyboard icon that brings the phone keyboard back.
+  emojiBtn.onclick = () => {
+    if (mkWhich && document.querySelector('.composer.mk-dock')) { closeMediaKb(true); return; }
+    if (mkWhich === 'emoji') { closeMediaKb(false); return; }
+    openMediaKb('emoji');
+  };
+  gifBtn.onclick = () => {
+    if (mkWhich === 'gif') { closeMediaKb(!!document.querySelector('.composer.mk-dock')); return; }
+    openMediaKb('gif');
+  };
+  document.querySelectorAll('.mk-tab').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation(); // the outside-click closer below would see the other panel's tab as "outside"
+    if (b.dataset.mk !== mkWhich) openMediaKb(b.dataset.mk);
+  }));
+  templatesBtn.onclick = () => { if (mkWhich) closeMediaKb(false); templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
   document.addEventListener('click', (e) => {
+    // Docked on a phone, taps inside the composer (Send, attach) keep it up.
+    if (mkWhich && document.querySelector('.composer.mk-dock')) {
+      if (!e.target.closest('.composer') && !e.target.closest('.mab-emoji-plus')) closeMediaKb(false);
+    } else if (mkWhich) {
+      const p = mkWhich === 'gif' ? gifPanel : emojiPanel;
+      if (!p.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('#gifBtn')) closeMediaKb(false);
+    }
     if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.mab-emoji-plus')) {
-      emojiPanel.classList.remove('show');
+      if (!emojiPanel.classList.contains('mk')) emojiPanel.classList.remove('show');
       if (reactingMessageId) clearActionSelection(); // dismissed via outside-click, not a pick
       reactingMessageId = null;
     }
-    if (!gifPanel.contains(e.target) && !e.target.closest('#gifBtn')) gifPanel.classList.remove('show');
+    if (!gifPanel.contains(e.target) && !e.target.closest('#gifBtn') && !gifPanel.classList.contains('mk')) gifPanel.classList.remove('show');
     if (!templatesPanel.contains(e.target) && !e.target.closest('#templatesBtn')) templatesPanel.classList.remove('show');
   });
 
@@ -6460,14 +6521,84 @@ async function runPublishSave() {
   }
 }
 
+let gifLoadSeq = 0;
 async function loadGifs(q) {
   const grid = document.getElementById('gifGrid');
-  grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Loading…</div>';
-  const r = await fetch('/api/chat/gifs?q=' + encodeURIComponent(q));
-  const d = await r.json();
+  const seq = ++gifLoadSeq;
+  // The GIFs already showing stay put (dimmed) until the new ones arrive --
+  // swapping in a one-line "Loading…" made the box collapse on every letter.
+  if (grid.querySelector('img')) grid.style.opacity = '.55';
+  else grid.innerHTML = '<div class="pra-muted" style="grid-column:1/-1">Loading…</div>';
+  const d = await fetch('/api/chat/gifs?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => ({ gifs: [] }));
+  if (seq !== gifLoadSeq) return; // a newer search already went out
+  grid.style.opacity = '';
   if (d.needsConfig) { grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Ask an admin to add a Giphy API key in Admin Settings.</div>'; return; }
-  grid.innerHTML = d.gifs.map(g => `<img src="${g.preview}" data-full="${g.full}"/>`).join('') || '<div class="pra-muted" style="grid-column:1/3">No results</div>';
+  grid.innerHTML = (d.gifs || []).map(g => `<img src="${g.preview}" data-full="${g.full}" loading="lazy"/>`).join('') || '<div class="pra-muted" style="grid-column:1/-1">No results</div>';
+  grid.scrollTop = 0;
   grid.querySelectorAll('img').forEach(img => img.onclick = () => sendGif(img.dataset.full));
+}
+
+// ── Emoji + GIF keyboard (see the .mk CSS) ──
+let mkWhich = null; // 'emoji' | 'gif' | null -- which composer panel is up
+const MK_KEYBOARD_SVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6" width="19" height="12.5" rx="2.2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 9.6h.01M9.4 9.6h.01M12.6 9.6h.01M15.8 9.6h.01M18 9.6h.01M6.2 12.4h.01M9.4 12.4h.01M12.6 12.4h.01M15.8 12.4h.01M18 12.4h.01" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><path d="M8.2 15.4h7.6" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>';
+function mkIsPhone() { return (document.querySelector('.pra-root')?.getBoundingClientRect().width || innerWidth) <= 768; }
+function mkRememberKeyboard(h) {
+  h = Number(h) || 0;
+  if (h > 150 && h < 700) { try { localStorage.setItem('pra-kb-h', String(Math.round(h))); } catch {} }
+}
+function mkHeight() {
+  let h = 0;
+  try { h = Number(localStorage.getItem('pra-kb-h')) || 0; } catch {}
+  return Math.max(250, Math.min(h || 300, Math.round(innerHeight * 0.5)));
+}
+function openMediaKb(which) {
+  const composer = document.querySelector('.composer');
+  const emojiPanel = document.getElementById('emojiPanel');
+  const gifPanel = document.getElementById('gifPanel');
+  const textInput = document.getElementById('textInput');
+  const th = document.getElementById('threadBody');
+  const fromBottom = th ? th.scrollHeight - th.scrollTop - th.clientHeight : 0;
+  reactingMessageId = null;
+  document.getElementById('templatesPanel')?.classList.remove('show');
+  const panel = which === 'gif' ? gifPanel : emojiPanel;
+  const other = which === 'gif' ? emojiPanel : gifPanel;
+  other.classList.remove('show', 'mk');
+  // The reaction picker leaves fixed-position inline styles on #emojiPanel.
+  ['position', 'top', 'left', 'bottom', 'right', 'maxHeight', 'visibility'].forEach(k => { panel.style[k] = ''; });
+  panel.classList.add('mk', 'show');
+  mkWhich = which;
+  const dock = mkIsPhone();
+  composer.classList.toggle('mk-dock', dock);
+  if (dock) {
+    composer.style.setProperty('--mk-h', mkHeight() + 'px');
+    document.getElementById('threadWrap')?.classList.add('kb-open');
+    if (document.activeElement === textInput || document.activeElement === document.getElementById('gifSearchInput')) document.activeElement.blur();
+    // Keep the newest messages in view as the thread gets shorter.
+    if (th && fromBottom < 60) requestAnimationFrame(() => { th.scrollTop = th.scrollHeight; });
+  }
+  document.querySelectorAll('.mk-tab').forEach(b => b.classList.toggle('active', b.dataset.mk === which));
+  mkSyncEmojiBtn();
+  if (which === 'gif') loadGifs(document.getElementById('gifSearchInput').value || '');
+}
+function closeMediaKb(focusText) {
+  const composer = document.querySelector('.composer');
+  const textInput = document.getElementById('textInput');
+  ['emojiPanel', 'gifPanel'].forEach(id => { const p = document.getElementById(id); if (p.classList.contains('mk')) p.classList.remove('show', 'mk'); });
+  const wasDocked = composer.classList.contains('mk-dock');
+  composer.classList.remove('mk-dock');
+  mkWhich = null;
+  mkSyncEmojiBtn();
+  if (focusText) textInput.focus();
+  else if (wasDocked && document.activeElement !== textInput) document.getElementById('threadWrap')?.classList.remove('kb-open');
+}
+function mkSyncEmojiBtn() {
+  const b = document.getElementById('emojiBtn');
+  if (!b) return;
+  const kb = !!mkWhich && !!document.querySelector('.composer.mk-dock');
+  if (b.dataset.kb === String(kb)) return;
+  b.dataset.kb = String(kb);
+  b.innerHTML = kb ? MK_KEYBOARD_SVG : '😊';
+  b.title = kb ? 'Keyboard' : 'Emoji';
 }
 
 function renderPastePreview() {
@@ -6594,11 +6725,13 @@ async function sendText() {
 
 // Picking a GIF only attaches it (preview above the composer); Send sends it.
 function sendGif(url) {
+  const phone = !!document.querySelector('.composer.mk-dock');
+  closeMediaKb(false);
   document.getElementById('gifPanel').classList.remove('show');
   if (!activeConvoId) return;
   pendingGifUrl = url;
   renderPastePreview();
-  document.getElementById('textInput').focus();
+  if (!phone) document.getElementById('textInput').focus();
 }
 
 async function loadTemplates(q) {
