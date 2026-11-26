@@ -180,6 +180,19 @@
   .vr-stage.drawing #videoReplyPenBtn { border-color: #ff3030; color: #ff3030; box-shadow: 0 0 10px rgba(255,48,48,.85); }
   #videoReplyPenCancel { right: 50px; display: none; font-size: 14px; }
   .vr-stage.drawing #videoReplyPenCancel { display: flex; }
+  /* Pen color: long-press the pen for a full-spectrum palette (hue left to
+     right, tints toward the top, shades toward the bottom). */
+  #videoReplyPenBtn { --pen: #ff3b3b; }
+  #videoReplyPenBtn::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--pen); border: 1.5px solid #0b0b0f; }
+  .vr-stage.drawing #videoReplyPenBtn { border-color: var(--pen); color: var(--pen); box-shadow: 0 0 10px var(--pen); }
+  .vr-picker { display: none; position: absolute; z-index: 6; width: 236px; padding: 10px; border-radius: 12px; background: rgba(11,11,15,.94); border: 1px solid var(--pra-border); box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+  .vr-picker.show { display: block; }
+  .vr-picker-pad { position: relative; width: 216px; height: 150px; border-radius: 8px; overflow: hidden; touch-action: none; cursor: crosshair; }
+  .vr-picker-pad canvas { display: block; width: 216px; height: 150px; }
+  .vr-picker-ring { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 0 6px rgba(255,255,255,.7); pointer-events: none; }
+  .vr-picker-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .vr-picker-swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; flex-shrink: 0; box-shadow: 0 0 8px var(--pen, #ff3b3b); }
+  .vr-picker-row .pra-btn { margin-left: auto; font-size: .74rem; padding: 6px 14px; }
   .vr-draw-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; display: none; background: rgba(0,0,0,.6); color: #fff; font-size: .72rem; padding: 4px 10px; border-radius: 12px; white-space: nowrap; pointer-events: none; }
   .vr-stage.drawing .vr-draw-hint { display: block; }
   .vr-stage.sending .vr-stage-btn { opacity: .5; pointer-events: none; }
@@ -1585,8 +1598,12 @@
         <div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div>
         <canvas id="videoReplyDraw"></canvas>
         <div class="vr-draw-hint">Draw, then tap the pen to send</div>
+        <div class="vr-picker" id="vrPicker">
+          <div class="vr-picker-pad" id="vrPickerPad"><canvas id="vrPickerCanvas" width="432" height="300"></canvas><div class="vr-picker-ring" id="vrPickerRing"></div></div>
+          <div class="vr-picker-row"><span class="vr-picker-swatch" id="vrPickerSwatch"></span><span class="pra-muted" style="font-size:.72rem">Pen color</span><button type="button" class="pra-btn" id="vrPickerDone">Done</button></div>
+        </div>
         <button type="button" class="vr-stage-btn" id="videoReplyPenCancel" title="Discard marks">✕</button>
-        <button type="button" class="vr-stage-btn" id="videoReplyPenBtn" title="Draw on this frame"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8 4 20z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.8 6.8l3.4 3.4" stroke="currentColor" stroke-width="1.7"/></svg></button>
+        <button type="button" class="vr-stage-btn" id="videoReplyPenBtn" title="Draw on this frame (hold for colors)"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8 4 20z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.8 6.8l3.4 3.4" stroke="currentColor" stroke-width="1.7"/></svg></button>
       </div>
       <div id="videoReplyNotesList"></div>
       <div style="display:flex;flex-direction:column;flex-shrink:0">
@@ -7782,14 +7799,16 @@ function vrFrameRect() {
   const w = vw * k, h = vh * k;
   return { left: (cw - w) / 2, top: (ch - h) / 2, width: w, height: h };
 }
+let vrPenColor = (() => { try { return localStorage.getItem('pra-pen-color') || '#ff3b3b'; } catch { return '#ff3b3b'; } })();
 function vrPaint(ctx, w, h, scale) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#ff3b3b';
   ctx.lineWidth = 2.5 * scale;
-  ctx.shadowColor = 'rgba(255,40,40,0.95)';
   ctx.shadowBlur = 9 * scale;
   for (const st of vrStrokes) {
     if (!st.length) continue;
+    // Each stroke keeps the color it was drawn with.
+    ctx.strokeStyle = st.color || vrPenColor;
+    ctx.shadowColor = st.color || vrPenColor;
     ctx.beginPath();
     ctx.moveTo(st[0][0] * w, st[0][1] * h);
     if (st.length === 1) ctx.lineTo(st[0][0] * w + 0.1, st[0][1] * h);
@@ -7900,10 +7919,70 @@ document.getElementById('videoReplyShots').addEventListener('click', (e) => {
   const c = document.getElementById('videoReplyDraw');
   const pen = document.getElementById('videoReplyPenBtn');
   const stage = document.getElementById('videoReplyStage');
-  pen.onclick = () => { if (stage.classList.contains('drawing')) sendVideoMarkup(); else startVideoMarkup(); };
+  let penHold = 0, penHeld = false;
+  pen.addEventListener('pointerdown', () => {
+    penHeld = false;
+    clearTimeout(penHold);
+    penHold = setTimeout(() => { penHeld = true; openPenPicker(); }, 450);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => pen.addEventListener(ev, () => clearTimeout(penHold)));
+  pen.addEventListener('contextmenu', (e) => e.preventDefault());
+  pen.onclick = () => {
+    if (penHeld) { penHeld = false; return; }
+    if (stage.classList.contains('drawing')) sendVideoMarkup(); else startVideoMarkup();
+  };
+  // ── Palette: hue across, white tint toward the top, black shade toward
+  // the bottom. Tap or drag anywhere on it.
+  const picker = document.getElementById('vrPicker');
+  const pad = document.getElementById('vrPickerPad');
+  const pcv = document.getElementById('vrPickerCanvas');
+  const ring = document.getElementById('vrPickerRing');
+  const pctx = pcv.getContext('2d', { willReadFrequently: true });
+  (function drawPalette() {
+    const W = pcv.width, H = pcv.height;
+    const hue = pctx.createLinearGradient(0, 0, W, 0);
+    ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#ff0000'].forEach((c, i, a) => hue.addColorStop(i / (a.length - 1), c));
+    pctx.fillStyle = hue; pctx.fillRect(0, 0, W, H);
+    const tint = pctx.createLinearGradient(0, 0, 0, H);
+    tint.addColorStop(0, 'rgba(255,255,255,1)'); tint.addColorStop(0.08, 'rgba(255,255,255,.92)');
+    tint.addColorStop(0.5, 'rgba(255,255,255,0)'); tint.addColorStop(0.5, 'rgba(0,0,0,0)');
+    tint.addColorStop(0.95, 'rgba(0,0,0,.95)'); tint.addColorStop(1, 'rgba(0,0,0,1)');
+    pctx.fillStyle = tint; pctx.fillRect(0, 0, W, H);
+  })();
+  const setPen = (hex) => {
+    vrPenColor = hex;
+    try { localStorage.setItem('pra-pen-color', hex); } catch {}
+    pen.style.setProperty('--pen', hex);
+    picker.style.setProperty('--pen', hex);
+    document.getElementById('vrPickerSwatch').style.background = hex;
+  };
+  setPen(vrPenColor);
+  const pickAt = (clientX, clientY) => {
+    const r = pad.getBoundingClientRect();
+    const x = Math.min(r.width - 1, Math.max(0, clientX - r.left)), y = Math.min(r.height - 1, Math.max(0, clientY - r.top));
+    ring.style.left = x + 'px'; ring.style.top = y + 'px';
+    const d = pctx.getImageData(Math.round(x / r.width * pcv.width), Math.round(y / r.height * pcv.height), 1, 1).data;
+    setPen('#' + [d[0], d[1], d[2]].map(n => n.toString(16).padStart(2, '0')).join(''));
+  };
+  let picking = false;
+  pad.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); picking = true; try { pad.setPointerCapture(e.pointerId); } catch {} pickAt(e.clientX, e.clientY); });
+  pad.addEventListener('pointermove', (e) => { if (picking) { e.preventDefault(); pickAt(e.clientX, e.clientY); } });
+  ['pointerup', 'pointercancel'].forEach(ev => pad.addEventListener(ev, () => { picking = false; }));
+  function openPenPicker() {
+    // Sits under the pen, inside the video area.
+    const sr = stage.getBoundingClientRect(), br = pen.getBoundingClientRect();
+    picker.style.top = Math.max(6, br.bottom - sr.top + 8) + 'px';
+    picker.style.left = Math.max(6, Math.min(sr.width - 242, br.right - sr.left - 236)) + 'px';
+    picker.classList.add('show');
+    if (!ring.style.left) { ring.style.left = '0px'; ring.style.top = '75px'; }
+  }
+  const closePicker = () => picker.classList.remove('show');
+  document.getElementById('vrPickerDone').onclick = (e) => { e.stopPropagation(); closePicker(); };
+  picker.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('pointerdown', (e) => { if (picker.classList.contains('show') && !picker.contains(e.target) && !pen.contains(e.target)) closePicker(); }, true);
   document.getElementById('videoReplyPenCancel').onclick = stopVideoMarkup;
   const pt = (e) => { const b = c.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
-  c.addEventListener('pointerdown', (e) => { e.preventDefault(); c.setPointerCapture(e.pointerId); vrDrawing = [pt(e)]; vrStrokes.push(vrDrawing); vrLayoutCanvas(); });
+  c.addEventListener('pointerdown', (e) => { e.preventDefault(); c.setPointerCapture(e.pointerId); vrDrawing = [pt(e)]; vrDrawing.color = vrPenColor; vrStrokes.push(vrDrawing); vrLayoutCanvas(); });
   c.addEventListener('pointermove', (e) => { if (!vrDrawing) return; e.preventDefault(); vrDrawing.push(pt(e)); vrLayoutCanvas(); });
   const end = () => { vrDrawing = null; };
   c.addEventListener('pointerup', end);
