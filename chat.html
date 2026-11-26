@@ -1108,12 +1108,13 @@
   .vc { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 8px; pointer-events: none; transition: opacity .3s; line-height: normal; }
   .vc > * { pointer-events: auto; }
   /* Fades out 2s after playback starts; back on pause or mouse move. */
+  /* Invisible but still grabbable: a finger on the hidden bar brings it
+     back and starts dragging, without pausing the video. */
   .vc.vc-hidden { opacity: 0; }
-  .vc.vc-hidden > * { pointer-events: none; }
   .vc-play { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
   .vc-play::before { content: ''; margin-left: 2px; border-left: 9px solid #fff; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
   .vc-play.playing::before { margin: 0; width: 9px; height: 11px; box-sizing: border-box; border: 0; border-left: 3px solid #fff; border-right: 3px solid #fff; }
-  .vc-track { position: relative; flex: 1; height: 24px; cursor: pointer; touch-action: none; }
+  .vc-track { position: relative; flex: 1; height: 30px; cursor: pointer; touch-action: none; }
   .vc-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: rgba(255,255,255,.35); box-shadow: 0 0 3px rgba(0,0,0,.5); }
   .vc-fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; width: 0; border-radius: 2px; background: #009bff; }
   /* Small, plain white with a soft white glow -- quieter than the play button. */
@@ -7592,7 +7593,7 @@ function vcSync(video) {
       if (!video.paused && !vc.classList.contains('dragging')) vc.classList.add('vc-hidden');
     }, 2000));
   };
-  ['play', 'pause', 'ended', 'seeked'].forEach(ev =>
+  ['play', 'pause', 'ended'].forEach(ev =>
     document.addEventListener(ev, (e) => { if (e.target.tagName === 'VIDEO') vcShow(e.target); }, true));
   document.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
@@ -7642,6 +7643,7 @@ function vcSync(video) {
     if (!video) return;
     e.preventDefault(); e.stopPropagation();
     drag = { track, vc, video, id: e.pointerId };
+    vcShow(video); // reappears if it had faded out
     vc.classList.add('dragging');
     try { track.setPointerCapture(e.pointerId); } catch {}
     seekTo(e.clientX);
