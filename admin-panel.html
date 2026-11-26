@@ -188,7 +188,7 @@
   .um-card > summary h3 { margin: 0 !important; flex: 1; }
   .um-card .um-count { font-size: .68rem; color: var(--pra-dim); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
   .um-card .um-chev { width: 18px; height: 18px; flex-shrink: 0; transition: transform .15s; opacity: .7; }
-  .um-card[open] .um-chev { transform: rotate(180deg); }
+  .um-card[open] > summary .um-chev { transform: rotate(180deg); }
   .um-card[open] > summary { margin-bottom: 8px; }
   .um-card:hover { border-color: rgba(0,155,255,0.45); }
   .um-card h3 { margin: 0 0 6px; font-family: var(--font-secondary); font-size: .86rem; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
@@ -2007,7 +2007,7 @@ window.addEventListener('pageshow', () => {
         <p class="um-what">Bought a program on its own (CRM Products tab). They get the program and a group with Lee and Alexis. Build programs in the <a href="/chat-app/programs-editor.html" target="_blank" rel="noopener">Programs Editor</a>.</p>
         ${row('Welcome messages', 'Posted from Lee into a new Trainee group. Each product has its own below. Use {{firstName}} and {{lastName}}.', toggle('traineeWelcomeEnabled', s.traineeWelcomeEnabled), '',
           ['posted automatically.', 'nothing is posted.'])}
-        ${row('Trainee crosscheck (account merge)', 'A purchase makes their app account right away (the opposite of a coaching enrollment, where they sign up first). If they then sign up in the app, even with a different email, the sign-up <b>takes over their purchase account</b>: new email + password, same program and group. Matched by email, then phone, then first + last name. Only an account nobody has logged into yet. The email they bought with still works to log in, and CRM refunds and later purchases still find them. The other way too: someone already in the app who buys with a different email is matched by phone or name and gets the program on their existing account.', toggle('traineeCrosscheckEnabled', s.traineeCrosscheckEnabled !== false), '',
+        ${row('Trainee crosscheck (account merge)', 'A purchase makes their app account right away. If they later sign up in the app with any email, the sign-up <b>takes over that account</b>: new email + password, same program and group. Matched by email, phone, then name, and only if nobody has logged in yet. The email they bought with still logs in. Already in the app and buying with a new email? Matched the same way.', toggle('traineeCrosscheckEnabled', s.traineeCrosscheckEnabled !== false), '',
           ['sign-up and purchase accounts merge into one.', 'a sign-up that matches a purchase account is refused as a duplicate; a purchase with a new email makes a separate account.'])}
         <div class="um-row" style="display:block"><div class="um-name">Products</div><div id="umProducts">Loading products…</div></div>
         ${row('Refunds', 'Right-click a person in Users &amp; Roles &rarr; Refund (full PayPal refund through the CRM). CRM or PayPal refunds do the same.', info)}
