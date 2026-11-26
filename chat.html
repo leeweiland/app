@@ -37,7 +37,7 @@
   .bf-renew-banner { display: flex; align-items: center; justify-content: center; gap: .45em; width: 100%; border: 0; border-radius: 0; cursor: pointer; }
   .bf-renew-banner:hover { filter: brightness(1.06); }
   .bf-renew-banner .bf-enter { width: 1.35em; height: 1.35em; flex-shrink: 0; }
-  .bf-renew-banner { flex-shrink: 0; background: rgb(255,43,214); color: #000; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: 13px; letter-spacing: .03em; line-height: 1.2; text-align: center; padding: 6px 8px; white-space: nowrap; overflow: hidden; }
+  .bf-renew-banner { flex-shrink: 0; background: rgb(255,43,214); color: #fff; font-family: var(--font-primary, 'Century Gothic', sans-serif); font-weight: 800; font-size: 13px; letter-spacing: .03em; line-height: 1.2; text-align: center; padding: 6px 8px; white-space: nowrap; overflow: hidden; }
   .sidebar-resizer { width: 5px; flex-shrink: 0; cursor: col-resize; background: transparent; position: relative; }
   .sidebar-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 1px; background: var(--pra-border); }
   .sidebar-resizer:hover::after, .sidebar-resizer.dragging::after { left: 0; width: 5px; background: var(--pra-blue); }
@@ -603,29 +603,63 @@
   .emoji-grid span { font-size: 1.3rem; cursor: pointer; text-align: center; padding: 4px; border-radius: 6px; }
   .emoji-grid span:hover { background: rgba(255,255,255,0.06); }
   .gif-search { width: 100%; margin-bottom: 8px; }
-  /* ── Emoji + GIF keyboard (Lee, 2026-11-26, like WhatsApp) ── One fixed-
-     size panel with Emoji / GIF tabs at the bottom. Desktop: a wide popup
-     above the composer. Phone (.composer.mk-dock): it slides up in place
-     of the phone keyboard, under the message box, and the smiley button
-     turns into a keyboard button that brings the keyboard back. Fixed
-     height, so typing a GIF search never collapses it. */
-  .mk-tabs { display: none; }
-  #emojiPanel.mk, #gifPanel.mk { width: min(540px, calc(100% - 32px)); height: 430px; max-height: 62vh; padding: 10px 10px 0; }
-  #emojiPanel.mk.show, #gifPanel.mk.show { display: flex; flex-direction: column; overflow: hidden; }
-  #emojiPanel.mk .emoji-tabs { flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; justify-content: space-between; }
-  #emojiPanel.mk .emoji-grid { flex: 1 1 auto; min-height: 0; max-height: none; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); align-content: start; }
-  #emojiPanel.mk .emoji-grid span { font-size: 1.6rem; padding: 5px 0; }
-  #gifPanel.mk .gif-search { flex-shrink: 0; }
-  #gifPanel.mk .gif-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; grid-template-columns: repeat(3, 1fr); align-content: start; transition: opacity .15s; }
-  #gifPanel.mk .gif-grid img { height: 112px; object-fit: cover; background: #15151a; }
-  .picker-panel.mk .mk-tabs { display: flex; flex-shrink: 0; align-self: center; margin: 8px 0 10px; border: 1px solid var(--pra-border); border-radius: 18px; overflow: hidden; }
-  .mk-tab { width: 66px; height: 32px; border: 0; background: transparent; color: #cfd6dc; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .78rem; letter-spacing: .04em; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  /* ── Composer keyboard (Lee, 2026-11-26, like WhatsApp) ── One sticker
+     button opens one panel: Emoji / GIF / Videos / Saved / Attach tabs
+     along the bottom (Videos + Saved are staff only). Desktop: a large
+     popup above the composer. Phone (.composer.mk-dock): it slides up in
+     place of the phone keyboard under the message box, and the sticker
+     button turns into a keyboard button that brings the keyboard back.
+     Fixed size, so a search never collapses it. */
+  .mk-panel { display: none; position: absolute; bottom: calc(100% + 8px); left: 16px; z-index: 20; width: min(580px, calc(100% - 32px)); height: 470px; max-height: 66vh; padding: 10px 10px 0; flex-direction: column; overflow: hidden; }
+  .mk-panel.show { display: flex; }
+  .mk-sec { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+  .mk-panel[data-tab="emoji"] .mk-sec[data-sec="emoji"], .mk-panel[data-tab="gif"] .mk-sec[data-sec="gif"], .mk-panel[data-tab="video"] .mk-sec[data-sec="video"], .mk-panel[data-tab="saved"] .mk-sec[data-sec="saved"], .mk-panel[data-tab="attach"] .mk-sec[data-sec="attach"] { display: flex; }
+  .mk-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; transition: opacity .15s; }
+  .mk-search { flex-shrink: 0; width: 100%; margin-bottom: 8px; }
+  .mk-label { grid-column: 1 / -1; font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--pra-dim); margin: 4px 2px 0; }
+  .mk-empty { grid-column: 1 / -1; color: var(--pra-dim); font-size: .8rem; padding: 18px 4px; text-align: center; }
+  #mkPanel .emoji-tabs { flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; justify-content: space-between; scrollbar-width: none; }
+  #mkPanel .emoji-tabs::-webkit-scrollbar { display: none; }
+  #mkPanel .emoji-tab svg { width: 18px; height: 18px; display: block; }
+  #mkPanel .emoji-grid { max-height: none; overflow: visible; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); align-content: start; }
+  #mkPanel .emoji-grid span { font-size: 1.6rem; padding: 5px 0; }
+  #mkPanel .gif-grid { grid-template-columns: repeat(3, 1fr); align-content: start; }
+  #mkPanel .gif-grid img { height: 112px; object-fit: cover; background: #15151a; }
+  .mk-video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; align-content: start; }
+  .mk-video { cursor: pointer; border-radius: 9px; overflow: hidden; background: #15151a; border: 1px solid var(--pra-border); transition: border-color .15s; }
+  .mk-video:hover { border-color: var(--pra-blue); }
+  .mk-video-thumb { position: relative; aspect-ratio: 16 / 9; background: #000 center / 34px no-repeat; }
+  .mk-video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mk-video-badge { position: absolute; top: 5px; left: 5px; font-size: .58rem; font-weight: 800; letter-spacing: .05em; padding: 2px 6px; border-radius: 5px; background: rgba(0,0,0,.72); color: #fff; }
+  .mk-video-badge.drive { background: rgba(0,155,255,.85); }
+  .mk-video-dur { position: absolute; bottom: 5px; right: 5px; font-size: .62rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: rgba(0,0,0,.75); color: #fff; }
+  .mk-video-title { font-size: .74rem; line-height: 1.25; margin: 6px 7px 7px; max-height: 2.5em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #mkPanel #templateList { flex: 1 1 auto; }
+  .template-new-btn { flex-shrink: 0; margin-top: 6px; font-size: .74rem; padding: 6px 12px; align-self: flex-start; }
+  #mkPanel .template-add-form { margin-top: 6px; }
+  .mk-attach { display: flex; gap: 14px; justify-content: center; align-items: center; flex: 1; flex-wrap: wrap; }
+  .mk-attach-btn { width: 128px; height: 112px; border-radius: 14px; border: 1px solid var(--pra-border); background: rgba(255,255,255,.04); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .78rem; cursor: pointer; transition: border-color .15s; }
+  .mk-attach-btn:hover { border-color: var(--pra-blue); }
+  .mk-attach-btn svg { width: 30px; height: 30px; }
+  .mk-tabs { display: flex; flex-shrink: 0; align-self: center; margin: 8px 0 10px; border: 1px solid var(--pra-border); border-radius: 18px; overflow: hidden; }
+  .mk-tab { width: 58px; height: 32px; border: 0; background: transparent; color: #cfd6dc; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .76rem; letter-spacing: .04em; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
   .mk-tab + .mk-tab { border-left: 1px solid var(--pra-border); }
-  .mk-tab svg { width: 20px; height: 20px; }
+  .mk-tab svg { width: 19px; height: 19px; }
   .mk-tab.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .mk-panel:not(.staff) .mk-staff { display: none; }
+  .mk-panel:not(.staff) .mk-staff + .mk-tab, .mk-panel:not(.staff) .mk-tab[data-mk="attach"] { border-left: 1px solid var(--pra-border); }
   .composer.mk-dock { flex-wrap: wrap; row-gap: 8px; padding-bottom: 0; }
-  .composer.mk-dock > #emojiPanel.mk.show, .composer.mk-dock > #gifPanel.mk.show { position: static !important; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 290px); max-height: 55vh; border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
-  .composer.mk-dock > .picker-panel.mk .mk-tabs { margin-bottom: 8px; }
+  .composer.mk-dock > #mkPanel.show { position: static; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 300px); max-height: 55vh; border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
+  .composer.mk-dock > #mkPanel .mk-tabs { margin-bottom: 8px; }
+  /* A picked video waits in the staging strip like a GIF does. */
+  .paste-preview-item.pp-video { width: 112px; }
+  .pp-play { position: absolute; left: 6px; bottom: 6px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .pp-play svg { width: 10px; height: 10px; }
+  /* YouTube link in a message -> thumbnail card under the text. */
+  .yt-card { position: relative; display: block; margin-top: 8px; width: 260px; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+  .yt-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .yt-card-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 52px; height: 36px; border-radius: 10px; background: rgba(255,0,0,.9); display: flex; align-items: center; justify-content: center; }
+  .yt-card-play svg { width: 16px; height: 16px; }
   .gif-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .gif-grid img { width: 100%; border-radius: 8px; cursor: pointer; display: block; }
   /* Three-zone layout: search stays put at the top, the reply list is the
@@ -1232,7 +1266,7 @@
           </div>
         </div>
         <div id="searchResults" style="display:none;padding:8px 20px;font-size:.8rem;border-bottom:1px solid var(--pra-border)"></div>
-        <button type="button" class="bf-renew-banner" id="bfRenewBanner" title="Message your coach">Insane Black Friday Early Renewal Savings - Ask Your Coach<svg class="bf-enter" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 5v7.5a2 2 0 0 1-2 2H6" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 10.5 5.5 14.5l4 4" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="bf-renew-banner" id="bfRenewBanner" title="Message your coach">Insane Black Friday Early Renewal Savings - Ask Your Coach<svg class="bf-enter" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 5v7.5a2 2 0 0 1-2 2H6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 10.5 5.5 14.5l4 4" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <script>(function(){var b=document.getElementById('bfRenewBanner');if(Date.now()>Date.parse('2026-12-01T10:00:00Z')){b.remove();return;}function fit(){if(!b.clientWidth)return;var f=13;b.style.fontSize=f+'px';while(b.scrollWidth>b.clientWidth&&f>7){f-=.5;b.style.fontSize=f+'px';}}try{new ResizeObserver(fit).observe(b);}catch(e){window.addEventListener('resize',fit);}b.onclick=function(){try{var own=(typeof conversations!=='undefined'&&typeof me!=='undefined'&&me&&!isStaffMe())?conversations.find(function(c){return c.autoGroupType==='student'&&c.autoGroupUserId===me.id;}):null;if(own&&own.id!==activeConvoId)openConvo(own.id);setTimeout(function(){var t=document.getElementById('textInput');if(t)t.focus();},150);}catch(e){}};if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);})();</script>
         <div class="thread-body-wrap">
           <div class="thread-body" id="threadBody"></div>
@@ -1279,16 +1313,13 @@
           <div class="paste-preview" id="pastePreview" style="display:none"></div>
           <div class="mention-dropdown" id="mentionDropdown"></div>
           <div class="composer-pill">
-            <button class="icon-btn composer-icon" id="emojiBtn">😊</button>
-            <button class="icon-btn composer-icon" id="gifBtn">GIF</button>
-            <button class="icon-btn composer-icon" id="templatesBtn" title="Saved message templates" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="#fff" stroke-width="1.6"/><path d="M9 3.5V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v.5" stroke="#fff" stroke-width="1.6"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn composer-icon" id="mkBtn" title="Emoji, GIFs, videos and more"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 12.6V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h5.6L20 12.6z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M12.6 20v-3.4a4 4 0 0 1 4-4H20" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="9" cy="9.6" r="1.05" fill="#009bff"/><circle cx="14" cy="9.6" r="1.05" fill="#009bff"/><path d="M8.2 13.1c.9 1.1 2.1 1.6 3.4 1.5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
             <textarea id="textInput" class="composer-textarea" placeholder="Type a message…" rows="1"></textarea>
             <!-- Matches the SVG line-art + glow convention used by every other
                  icon button in the app (.icon-btn svg, chat-header.js's
                  ICON_SVG) instead of the previous raw 📎/📷 emoji, which
                  rendered in the OS's own emoji art and didn't match the
                  templatesBtn icon sitting right next to them. -->
-            <button class="icon-btn composer-icon" id="attachBtn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg></button>
             <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           </div>
@@ -1297,16 +1328,24 @@
           <div class="pra-panel picker-panel" id="emojiPanel">
             <div class="emoji-tabs" id="emojiTabs"></div>
             <div class="emoji-grid" id="emojiGrid"></div>
-            <div class="mk-tabs"><button type="button" class="mk-tab" data-mk="emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 14.2c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor"/></svg></button><button type="button" class="mk-tab" data-mk="gif" title="GIFs">GIF</button></div>
           </div>
-          <div class="pra-panel picker-panel" id="gifPanel">
-            <input class="pra-input gif-search" id="gifSearchInput" placeholder="Search GIFs…"/>
-            <div class="gif-grid" id="gifGrid"></div>
-            <div class="mk-tabs"><button type="button" class="mk-tab" data-mk="emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 14.2c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor"/></svg></button><button type="button" class="mk-tab" data-mk="gif" title="GIFs">GIF</button></div>
-          </div>
-          <div class="pra-panel picker-panel" id="templatesPanel">
-            <input class="pra-input template-search" id="templateSearchInput" placeholder="Search templates…"/>
-            <div id="templateList"></div>
+          <div class="pra-panel mk-panel" id="mkPanel" data-tab="emoji">
+            <div class="mk-sec" data-sec="emoji">
+              <div class="emoji-tabs" id="mkEmojiTabs"></div>
+              <div class="mk-scroll"><div class="emoji-grid" id="mkEmojiGrid"></div></div>
+            </div>
+            <div class="mk-sec" data-sec="gif">
+              <input class="pra-input mk-search" id="gifSearchInput" placeholder="Search GIFs"/>
+              <div class="mk-scroll gif-grid" id="gifGrid"></div>
+            </div>
+            <div class="mk-sec" data-sec="video">
+              <input class="pra-input mk-search" id="mkVideoSearch" placeholder="Search our YouTube + Drive videos"/>
+              <div class="mk-scroll"><div class="mk-video-grid" id="mkVideoList"></div></div>
+            </div>
+            <div class="mk-sec" data-sec="saved">
+              <input class="pra-input mk-search" id="templateSearchInput" placeholder="Search saved messages"/>
+              <div class="mk-scroll" id="templateList"></div>
+              <button class="pra-btn pra-btn-ghost template-new-btn" id="templateNewBtn" type="button" style="display:none">+ New saved message</button>
             <div class="template-add-form" id="templateAddForm" style="display:none">
               <input class="pra-input" id="templateAddTitle" placeholder="Template title"/>
               <div class="template-text-row">
@@ -1317,6 +1356,20 @@
                 </div>
               </div>
               <button class="pra-btn" id="templateAddBtn" style="width:100%">Save Template</button>
+            </div>
+            </div>
+            <div class="mk-sec" data-sec="attach">
+              <div class="mk-attach">
+                <button type="button" class="mk-attach-btn" id="mkAttachFiles"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2.5" stroke="#fff" stroke-width="1.6"/><circle cx="9" cy="9.5" r="1.8" stroke="#009bff" stroke-width="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4" stroke="#009bff" stroke-width="1.6" stroke-linejoin="round"/></svg><span>Photos &amp; videos</span></button>
+                <button type="button" class="mk-attach-btn" id="mkAttachCamera"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg><span>Camera</span></button>
+              </div>
+            </div>
+            <div class="mk-tabs">
+              <button type="button" class="mk-tab" data-mk="emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M8 14.2c1 1.5 2.4 2.2 4 2.2s3-.7 4-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor"/></svg></button>
+              <button type="button" class="mk-tab" data-mk="gif" title="GIFs">GIF</button>
+              <button type="button" class="mk-tab mk-staff" data-mk="video" title="Videos"><svg viewBox="0 0 24 24" fill="none"><rect x="2.5" y="5" width="19" height="14" rx="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M10 9.2v5.6l4.8-2.8L10 9.2z" fill="currentColor"/></svg></button>
+              <button type="button" class="mk-tab mk-staff" data-mk="saved" title="Saved messages"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+              <button type="button" class="mk-tab" data-mk="attach" title="Attach a photo or video"><svg viewBox="0 0 24 24" fill="none"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.19 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             </div>
           </div>
         </div>
@@ -2116,7 +2169,6 @@ function positionMessagePopupNear(panel, anchorEl, bottomReserve = 0) {
 // just repositioning it in place.
 function toggleEmojiPanel(anchorEl, reactMid, preferAbove) {
   const panel = document.getElementById('emojiPanel');
-  const gifPanel = document.getElementById('gifPanel');
   const targetMid = reactMid || null;
   if (panel.classList.contains('show') && reactingMessageId === targetMid) {
     panel.classList.remove('show');
@@ -2126,7 +2178,6 @@ function toggleEmojiPanel(anchorEl, reactMid, preferAbove) {
   if (mkWhich) closeMediaKb(false); // the composer's emoji/GIF keyboard gives way to the reaction picker
   panel.classList.remove('mk');
   reactingMessageId = targetMid;
-  gifPanel.classList.remove('show');
   positionPickerNear(panel, anchorEl, preferAbove);
   panel.classList.add('show');
 }
@@ -2380,8 +2431,8 @@ async function init() {
     document.getElementById('bulkSelectBtn').style.display = '';
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
-    document.getElementById('templatesBtn').style.display = '';
-    document.getElementById('templateAddForm').style.display = isAdminMe() ? '' : 'none';
+    document.getElementById('mkPanel').classList.add('staff');
+    document.getElementById('templateNewBtn').style.display = isAdminMe() ? '' : 'none';
     await loadFavorites();
     loadCoachMonthlyStats(); // fire-and-forget -- badges just render blank until it resolves
     setupStudentsPanel();
@@ -4887,7 +4938,9 @@ function renderBubble(m, convo) {
   if (m.type === 'text') {
     const edited = m.editedAt ? '<span class="msg-edited">· edited</span>' : '';
     const emojiOnlyCls = isEmojiOnlyText(m.text) ? ' emoji-only' : '';
-    const bodyHtml = emojiOnlyCls ? escapeHtml(m.text) : linkifyUrls(linkifyMentions(escapeHtml(m.text), convo));
+    const ytId = (String(m.text || '').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|live\/))([\w-]{11})/) || [])[1];
+    const ytCard = ytId ? `<a class="yt-card" href="https://youtu.be/${ytId}" target="_blank" rel="noopener noreferrer"><img src="https://i.ytimg.com/vi/${ytId}/mqdefault.jpg" loading="lazy" alt=""/><span class="yt-card-play"><svg viewBox="0 0 10 10"><path d="M2.5 1.2v7.6L9 5z" fill="#fff"/></svg></span></a>` : '';
+    const bodyHtml = (emojiOnlyCls ? escapeHtml(m.text) : linkifyUrls(linkifyMentions(escapeHtml(m.text), convo))) + ytCard;
     content = `<div class="bubble${emojiOnlyCls}" data-text="${escapeHtml(m.text)}">${senderLabel}${forwardedLabel}${replyQuote}${bodyHtml}${edited}</div>`;
     return `<div class="bubble-row ${mine ? 'mine' : ''}" data-mid="${m.id}">
       <div>
@@ -5408,15 +5461,10 @@ function convertEmoticonAtCaret(el) {
 function setupComposer() {
   const textInput = document.getElementById('textInput');
   const sendBtn = document.getElementById('sendBtn');
-  const emojiBtn = document.getElementById('emojiBtn');
-  const gifBtn = document.getElementById('gifBtn');
-  const templatesBtn = document.getElementById('templatesBtn');
-  const attachBtn = document.getElementById('attachBtn');
+  const mkBtn = document.getElementById('mkBtn');
   const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
   const fileInput = document.getElementById('fileInput');
   const emojiPanel = document.getElementById('emojiPanel');
-  const gifPanel = document.getElementById('gifPanel');
-  const templatesPanel = document.getElementById('templatesPanel');
   // Phones: slide the thread header closed while the keyboard is up (see the
   // .kb-open CSS) and back open when it goes away. Focus is the trigger; the
   // native keyboard-hide event also reopens it when the keyboard is dismissed
@@ -5456,7 +5504,7 @@ function setupComposer() {
     textInput.addEventListener('focus', () => {
       // Tapping the message box while the emoji/GIF keyboard is up swaps
       // back to the phone keyboard (WhatsApp does the same).
-      if (mkWhich) closeMediaKb(false);
+      if (mkWhich && document.querySelector('.composer.mk-dock')) closeMediaKb(false);
       if (isPhone()) { if (!wrap.classList.contains('kb-open')) holdThreadPosition(); wrap.classList.add('kb-open'); }
     });
     // The emoji/GIF keyboard opens at the phone keyboard's own height.
@@ -5520,37 +5568,42 @@ function setupComposer() {
     }
   });
 
-  // Smiley button: opens the emoji keyboard; while it's up on a phone it
-  // shows a keyboard icon that brings the phone keyboard back.
-  emojiBtn.onclick = () => {
+  // Sticker button: opens the keyboard panel on the last-used tab; while it's
+  // up on a phone it shows a keyboard icon that brings the phone keyboard back.
+  mkBtn.onclick = () => {
     if (mkWhich && document.querySelector('.composer.mk-dock')) { closeMediaKb(true); return; }
-    if (mkWhich === 'emoji') { closeMediaKb(false); return; }
-    openMediaKb('emoji');
+    if (mkWhich) { closeMediaKb(false); return; }
+    openMediaKb(mkLastTab);
   };
-  gifBtn.onclick = () => {
-    if (mkWhich === 'gif') { closeMediaKb(!!document.querySelector('.composer.mk-dock')); return; }
-    openMediaKb('gif');
-  };
-  document.querySelectorAll('.mk-tab').forEach(b => b.addEventListener('click', (e) => {
-    e.stopPropagation(); // the outside-click closer below would see the other panel's tab as "outside"
+  document.querySelectorAll('#mkPanel .mk-tab').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (b.dataset.mk !== mkWhich) openMediaKb(b.dataset.mk);
   }));
-  templatesBtn.onclick = () => { if (mkWhich) closeMediaKb(false); templatesPanel.classList.toggle('show'); emojiPanel.classList.remove('show'); gifPanel.classList.remove('show'); if (templatesPanel.classList.contains('show')) loadTemplates(''); };
+  setupMkEmoji(textInput);
+  document.getElementById('mkAttachFiles').onclick = () => { closeMediaKb(false); fileInput.click(); };
+  document.getElementById('mkAttachCamera').onclick = () => { closeMediaKb(false); cameraGymMode = false; openCameraCapture(); };
+  document.getElementById('templateNewBtn').onclick = () => {
+    const f = document.getElementById('templateAddForm');
+    f.style.display = f.style.display === 'none' ? '' : 'none';
+  };
   document.addEventListener('click', (e) => {
-    // Docked on a phone, taps inside the composer (Send, attach) keep it up.
-    if (mkWhich && document.querySelector('.composer.mk-dock')) {
-      if (!e.target.closest('.composer') && !e.target.closest('.mab-emoji-plus')) closeMediaKb(false);
-    } else if (mkWhich) {
-      const p = mkWhich === 'gif' ? gifPanel : emojiPanel;
-      if (!p.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('#gifBtn')) closeMediaKb(false);
+    // Re-rendered rows (a list refresh) are no longer in the page: not "outside".
+    if (mkWhich && e.target.isConnected) {
+      const docked = !!document.querySelector('.composer.mk-dock');
+      const inside = document.getElementById('mkPanel').contains(e.target) || e.target.closest('#mkBtn')
+        || (docked && e.target.closest('.composer')) || e.target.closest('.modal-backdrop');
+      if (!inside) closeMediaKb(false);
     }
-    if (!emojiPanel.contains(e.target) && !e.target.closest('#emojiBtn') && !e.target.closest('.mab-emoji-plus')) {
-      if (!emojiPanel.classList.contains('mk')) emojiPanel.classList.remove('show');
+    if (!emojiPanel.contains(e.target) && !e.target.closest('.mab-emoji-plus')) {
+      emojiPanel.classList.remove('show');
       if (reactingMessageId) clearActionSelection(); // dismissed via outside-click, not a pick
       reactingMessageId = null;
     }
-    if (!gifPanel.contains(e.target) && !e.target.closest('#gifBtn') && !gifPanel.classList.contains('mk')) gifPanel.classList.remove('show');
-    if (!templatesPanel.contains(e.target) && !e.target.closest('#templatesBtn')) templatesPanel.classList.remove('show');
+  });
+  let mkVideoTimer;
+  document.getElementById('mkVideoSearch').addEventListener('input', (e) => {
+    clearTimeout(mkVideoTimer);
+    mkVideoTimer = setTimeout(() => loadMkVideos(e.target.value.trim()), 350);
   });
 
   let gifSearchTimer;
@@ -5588,7 +5641,6 @@ function setupComposer() {
     if (!shortcodeMenu.contains(e.target) && e.target !== shortcodeBtn) shortcodeMenu.classList.remove('show');
   });
 
-  attachBtn.onclick = () => fileInput.click();
   // Stages into the same preview-strip pendingPasteFiles already uses for
   // clipboard pastes, rather than uploading the instant a file's picked —
   // people could tap the wrong photo/video and not notice until it's
@@ -5677,6 +5729,7 @@ function setupComposer() {
     const removeBtn = e.target.closest('.paste-preview-remove');
     if (!removeBtn) return;
     if (removeBtn.dataset.gif) pendingGifUrl = null;
+    else if (removeBtn.dataset.video) pendingVideo = null;
     else pendingPasteFiles.splice(Number(removeBtn.dataset.index), 1);
     renderPastePreview();
   });
@@ -6560,14 +6613,26 @@ async function loadGifs(q) {
   if (seq !== gifLoadSeq) return; // a newer search already went out
   grid.style.opacity = '';
   if (d.needsConfig) { grid.innerHTML = '<div class="pra-muted" style="grid-column:1/3">Ask an admin to add a Giphy API key in Admin Settings.</div>'; return; }
-  grid.innerHTML = (d.gifs || []).map(g => `<img src="${g.preview}" data-full="${g.full}" loading="lazy"/>`).join('') || '<div class="pra-muted" style="grid-column:1/-1">No results</div>';
+  const img = g => `<img src="${escapeHtml(g.preview)}" data-full="${escapeHtml(g.full)}" loading="lazy"/>`;
+  const sent = q ? [] : (d.sent || []);
+  const sentSet = new Set(sent.map(g => g.full));
+  const fresh = (d.gifs || []).filter(g => !sentSet.has(g.full));
+  grid.innerHTML = sent.length
+    ? `<div class="mk-label">Sent before</div>${sent.map(img).join('')}<div class="mk-label">Trending</div>${fresh.map(img).join('')}`
+    : (fresh.map(img).join('') || '<div class="mk-empty">No GIFs found</div>');
   grid.scrollTop = 0;
   grid.querySelectorAll('img').forEach(img => img.onclick = () => sendGif(img.dataset.full));
 }
 
-// ── Emoji + GIF keyboard (see the .mk CSS) ──
-let mkWhich = null; // 'emoji' | 'gif' | null -- which composer panel is up
+// ── Composer keyboard (see the .mk-panel CSS) ──
+let mkWhich = null;        // open tab: 'emoji' | 'gif' | 'video' | 'saved' | 'attach' | null
+let mkLastTab = 'emoji';
+let pendingVideo = null;   // a video picked in the Videos tab, waiting for Send
+let mkVideoQuery = null;   // what the Videos list currently shows
+let mkGifQuery = null;
 const MK_KEYBOARD_SVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2.5" y="6" width="19" height="12.5" rx="2.2" stroke="#fff" stroke-width="1.6"/><path d="M6.2 9.6h.01M9.4 9.6h.01M12.6 9.6h.01M15.8 9.6h.01M18 9.6h.01M6.2 12.4h.01M9.4 12.4h.01M12.6 12.4h.01M15.8 12.4h.01M18 12.4h.01" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><path d="M8.2 15.4h7.6" stroke="#009bff" stroke-width="1.7" stroke-linecap="round"/></svg>';
+const MK_STICKER_SVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 12.6V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h5.6L20 12.6z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><path d="M12.6 20v-3.4a4 4 0 0 1 4-4H20" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="9" cy="9.6" r="1.05" fill="#009bff"/><circle cx="14" cy="9.6" r="1.05" fill="#009bff"/><path d="M8.2 13.1c.9 1.1 2.1 1.6 3.4 1.5" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const MK_CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 function mkIsPhone() { return (document.querySelector('.pra-root')?.getBoundingClientRect().width || innerWidth) <= 768; }
 function mkRememberKeyboard(h) {
   h = Number(h) || 0;
@@ -6578,66 +6643,141 @@ function mkHeight() {
   try { h = Number(localStorage.getItem('pra-kb-h')) || 0; } catch {}
   return Math.max(250, Math.min(h || 300, Math.round(innerHeight * 0.5)));
 }
-function openMediaKb(which) {
+function openMediaKb(tab) {
   const composer = document.querySelector('.composer');
-  const emojiPanel = document.getElementById('emojiPanel');
-  const gifPanel = document.getElementById('gifPanel');
+  const panel = document.getElementById('mkPanel');
   const textInput = document.getElementById('textInput');
+  if (!panel.classList.contains('staff') && (tab === 'video' || tab === 'saved')) tab = 'emoji';
   const th = document.getElementById('threadBody');
   const fromBottom = th ? th.scrollHeight - th.scrollTop - th.clientHeight : 0;
   reactingMessageId = null;
-  document.getElementById('templatesPanel')?.classList.remove('show');
-  const panel = which === 'gif' ? gifPanel : emojiPanel;
-  const other = which === 'gif' ? emojiPanel : gifPanel;
-  other.classList.remove('show', 'mk');
-  // The reaction picker leaves fixed-position inline styles on #emojiPanel.
-  ['position', 'top', 'left', 'bottom', 'right', 'maxHeight', 'visibility'].forEach(k => { panel.style[k] = ''; });
-  panel.classList.add('mk', 'show');
-  mkWhich = which;
+  document.getElementById('emojiPanel').classList.remove('show');
+  panel.dataset.tab = tab;
+  panel.classList.add('show');
+  mkWhich = tab;
+  if (tab !== 'attach') mkLastTab = tab;
   const dock = mkIsPhone();
   composer.classList.toggle('mk-dock', dock);
   if (dock) {
     composer.style.setProperty('--mk-h', mkHeight() + 'px');
     document.getElementById('threadWrap')?.classList.add('kb-open');
-    if (document.activeElement === textInput || document.activeElement === document.getElementById('gifSearchInput')) document.activeElement.blur();
-    // Keep the newest messages in view as the thread gets shorter.
+    const a = document.activeElement;
+    if (a && (a === textInput || panel.contains(a))) a.blur();
     if (th && fromBottom < 60) requestAnimationFrame(() => { th.scrollTop = th.scrollHeight; });
   }
-  document.querySelectorAll('.mk-tab').forEach(b => b.classList.toggle('active', b.dataset.mk === which));
-  mkSyncEmojiBtn();
-  if (which === 'gif') loadGifs(document.getElementById('gifSearchInput').value || '');
+  panel.querySelectorAll('.mk-tab').forEach(b => b.classList.toggle('active', b.dataset.mk === tab));
+  mkSyncBtn();
+  if (tab === 'emoji') renderMkEmoji();
+  if (tab === 'gif') loadGifs(document.getElementById('gifSearchInput').value.trim());
+  if (tab === 'video') { const q = document.getElementById('mkVideoSearch').value.trim(); if (mkVideoQuery !== q) loadMkVideos(q); }
+  if (tab === 'saved') loadTemplates(document.getElementById('templateSearchInput').value || '');
 }
 function closeMediaKb(focusText) {
   const composer = document.querySelector('.composer');
   const textInput = document.getElementById('textInput');
-  ['emojiPanel', 'gifPanel'].forEach(id => { const p = document.getElementById(id); if (p.classList.contains('mk')) p.classList.remove('show', 'mk'); });
+  document.getElementById('mkPanel').classList.remove('show');
   const wasDocked = composer.classList.contains('mk-dock');
   composer.classList.remove('mk-dock');
   mkWhich = null;
-  mkSyncEmojiBtn();
+  mkSyncBtn();
   if (focusText) textInput.focus();
   else if (wasDocked && document.activeElement !== textInput) document.getElementById('threadWrap')?.classList.remove('kb-open');
 }
-function mkSyncEmojiBtn() {
-  const b = document.getElementById('emojiBtn');
+function mkSyncBtn() {
+  const b = document.getElementById('mkBtn');
   if (!b) return;
   const kb = !!mkWhich && !!document.querySelector('.composer.mk-dock');
   if (b.dataset.kb === String(kb)) return;
   b.dataset.kb = String(kb);
-  b.innerHTML = kb ? MK_KEYBOARD_SVG : '😊';
-  b.title = kb ? 'Keyboard' : 'Emoji';
+  b.innerHTML = kb ? MK_KEYBOARD_SVG : MK_STICKER_SVG;
+  b.title = kb ? 'Keyboard' : 'Emoji, GIFs, videos and more';
+}
+
+// Emoji tab: "Recent" (this device) first, then the usual categories.
+let mkEmojiCat = null;
+function mkRecentEmojis() { try { return JSON.parse(localStorage.getItem('pra-emoji-recent') || '[]'); } catch { return []; } }
+function renderMkEmoji() {
+  const recents = mkRecentEmojis();
+  const cats = (recents.length ? [['Recent', MK_CLOCK_SVG, recents]] : [])
+    .concat(Object.entries(EMOJI_CATEGORIES).map(([n, list]) => [n, list[0], list]));
+  if (!mkEmojiCat || !cats.some(c => c[0] === mkEmojiCat)) mkEmojiCat = cats[0][0];
+  document.getElementById('mkEmojiTabs').innerHTML = cats.map(([n, icon]) =>
+    `<span class="emoji-tab${n === mkEmojiCat ? ' active' : ''}" data-cat="${escapeHtml(n)}" title="${escapeHtml(n)}">${icon}</span>`).join('');
+  document.getElementById('mkEmojiGrid').innerHTML = cats.find(c => c[0] === mkEmojiCat)[2].map(e => `<span>${e}</span>`).join('');
+}
+function setupMkEmoji(textInput) {
+  document.getElementById('mkEmojiTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.emoji-tab');
+    if (!tab) return;
+    e.stopPropagation();
+    mkEmojiCat = tab.dataset.cat;
+    renderMkEmoji();
+    document.querySelector('#mkPanel .mk-sec[data-sec="emoji"] .mk-scroll').scrollTop = 0;
+  });
+  document.getElementById('mkEmojiGrid').addEventListener('click', (e) => {
+    if (e.target.tagName !== 'SPAN') return;
+    const emoji = e.target.textContent;
+    // At the cursor; on a phone the message box stays unfocused so the
+    // phone keyboard doesn't pop up over the emoji keyboard.
+    const s0 = textInput.selectionStart ?? textInput.value.length, e0 = textInput.selectionEnd ?? textInput.value.length;
+    textInput.setRangeText(emoji, s0, e0, 'end');
+    textInput.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!document.querySelector('.composer.mk-dock')) textInput.focus();
+    try { localStorage.setItem('pra-emoji-recent', JSON.stringify([emoji, ...mkRecentEmojis().filter(x => x !== emoji)].slice(0, 32))); } catch {}
+  });
+}
+
+// Videos tab (staff): newest long-form YouTube from all 3 channels, or a
+// search across YouTube titles + our Drive videos. Picking one stages it
+// above the composer; Send sends it.
+let mkVideoItems = [], mkVideoSeq = 0;
+function mkDur(sec) { if (!sec) return ''; const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s2 = sec % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s2).padStart(2, '0'); }
+async function loadMkVideos(q) {
+  const list = document.getElementById('mkVideoList');
+  const scroll = list.parentElement;
+  const seq = ++mkVideoSeq;
+  mkVideoQuery = q;
+  if (list.querySelector('.mk-video')) scroll.style.opacity = '.55';
+  else list.innerHTML = '<div class="mk-empty">Loading…</div>';
+  const d = await fetch('/api/chat/content?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => ({}));
+  if (seq !== mkVideoSeq) return;
+  scroll.style.opacity = '';
+  const yt = d.youtube || [], drive = d.drive || [];
+  mkVideoItems = [...yt, ...drive];
+  const card = (v, i) => `<div class="mk-video" data-i="${i}" title="${escapeHtml(v.title)}">
+      <div class="mk-video-thumb">${v.thumb ? `<img src="${escapeHtml(v.thumb)}" loading="lazy" referrerpolicy="no-referrer" alt="" onerror="this.remove()"/>` : ''}<span class="mk-video-badge ${v.source}">${v.source === 'drive' ? 'DRIVE' : escapeHtml(v.brand)}</span>${v.durationSec ? `<span class="mk-video-dur">${mkDur(v.durationSec)}</span>` : ''}</div>
+      <div class="mk-video-title">${escapeHtml(v.title)}</div>
+    </div>`;
+  let html = '';
+  if (!q) html = `<div class="mk-label">Newest on YouTube</div>` + yt.map(card).join('');
+  else {
+    if (yt.length) html += `<div class="mk-label">YouTube</div>` + yt.map(card).join('');
+    if (drive.length) html += `<div class="mk-label">Google Drive</div>` + drive.map((v, i) => card(v, yt.length + i)).join('');
+  }
+  list.innerHTML = html || `<div class="mk-empty">${q ? 'No videos match' : 'No videos yet'}</div>`;
+  scroll.scrollTop = 0;
+  list.querySelectorAll('.mk-video').forEach(el => el.onclick = () => {
+    const v = mkVideoItems[Number(el.dataset.i)];
+    if (!v || !activeConvoId) return;
+    pendingVideo = v;
+    const phone = !!document.querySelector('.composer.mk-dock');
+    closeMediaKb(false);
+    renderPastePreview();
+    if (!phone) document.getElementById('textInput').focus();
+  });
 }
 
 function renderPastePreview() {
   const el = document.getElementById('pastePreview');
-  if (!pendingPasteFiles.length && !pendingGifUrl) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!pendingPasteFiles.length && !pendingGifUrl && !pendingVideo) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
   el.innerHTML = pendingPasteFiles.map((f, i) => {
     const url = URL.createObjectURL(f);
     const isVideo = f.type.startsWith('video/');
     const media = isVideo ? `<video src="${url}" muted></video>` : `<img src="${url}"/>`;
     return `<div class="paste-preview-item">${media}<button class="paste-preview-remove" data-index="${i}" title="Remove">✕</button></div>`;
-  }).join('') + (pendingGifUrl ? `<div class="paste-preview-item"><img src="${escapeHtml(pendingGifUrl)}"/><button class="paste-preview-remove" data-gif="1" title="Remove">✕</button></div>` : '');
+  }).join('') + (pendingGifUrl ? `<div class="paste-preview-item"><img src="${escapeHtml(pendingGifUrl)}"/><button class="paste-preview-remove" data-gif="1" title="Remove">✕</button></div>` : '')
+    + (pendingVideo ? `<div class="paste-preview-item pp-video" title="${escapeHtml(pendingVideo.title)}">${pendingVideo.thumb ? `<img src="${escapeHtml(pendingVideo.thumb)}" referrerpolicy="no-referrer"/>` : ''}<span class="pp-play"><svg viewBox="0 0 10 10"><path d="M2.5 1.5v7l6-3.5z" fill="#fff"/></svg></span><button class="paste-preview-remove" data-video="1" title="Remove">✕</button></div>` : '');
 }
 
 // ── @mention autocomplete ─────────────────────────────────────────────────
@@ -6718,7 +6858,7 @@ async function sendText() {
   closeMentionDropdown();
   const input = document.getElementById('textInput');
   const text = applyComposerLinks(input.value.trim());
-  if (!activeConvoId || (!text && !pendingPasteFiles.length && !pendingGifUrl)) return;
+  if (!activeConvoId || (!text && !pendingPasteFiles.length && !pendingGifUrl && !pendingVideo)) return;
   input.value = '';
   input.style.height = 'auto';
   // Files first, then the caption as its own message — the multipart
@@ -6740,7 +6880,25 @@ async function sendText() {
     });
     refreshThread(true);
   }
-  if (text) {
+  // A picked video: Drive -> a normal video message (same Drive file);
+  // YouTube -> its title + link, with whatever was typed above it.
+  let outText = text;
+  if (pendingVideo) {
+    const v = pendingVideo;
+    pendingVideo = null;
+    renderPastePreview();
+    if (v.source === 'drive') {
+      await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ driveFileId: v.fileId, mediaType: 'video', text: v.title })
+      });
+      refreshThread(true);
+    } else {
+      outText = (text ? text + '\n\n' : '') + v.title + '\n' + v.url;
+    }
+  }
+  const text2 = outText;
+  if (text2) {
+    const text = text2;
     const replyToId = replyingToId;
     cancelReply();
     await fetch('/api/chat/conversations/' + activeConvoId + '/messages', {
@@ -6754,7 +6912,6 @@ async function sendText() {
 function sendGif(url) {
   const phone = !!document.querySelector('.composer.mk-dock');
   closeMediaKb(false);
-  document.getElementById('gifPanel').classList.remove('show');
   if (!activeConvoId) return;
   pendingGifUrl = url;
   renderPastePreview();
@@ -6763,11 +6920,11 @@ function sendGif(url) {
 
 async function loadTemplates(q) {
   const list = document.getElementById('templateList');
-  list.innerHTML = '<div class="pra-muted">Loading…</div>';
+  if (!list.querySelector('.template-item')) list.innerHTML = '<div class="mk-empty">Loading…</div>';
   const r = await fetch('/api/chat/message-templates?q=' + encodeURIComponent(q));
   const d = await r.json();
   const templates = d.templates || [];
-  if (!templates.length) { list.innerHTML = '<div class="pra-muted">No templates found.</div>'; return; }
+  if (!templates.length) { list.innerHTML = '<div class="mk-empty">No saved messages found</div>'; return; }
   const isAdmin = isAdminMe();
   list.innerHTML = templates.map(t => `
     <div class="template-item" data-id="${t.id}">
@@ -6795,7 +6952,7 @@ async function loadTemplates(q) {
 // a starting point to review/edit (fill in a NAME, an XX/XX date, etc.),
 // not something that should go out untouched the moment it's clicked.
 function useTemplate(text) {
-  document.getElementById('templatesPanel').classList.remove('show');
+  closeMediaKb(false);
   const textInput = document.getElementById('textInput');
   // {first_name} resolves against whoever the open thread is with — falls
   // back to leaving the literal token in place for a group chat/no student

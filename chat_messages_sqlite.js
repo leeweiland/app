@@ -331,6 +331,15 @@ export function searchConversationText(conversationId, query) {
   return searchStmt.all({ conversationId, q: `%${query.toLowerCase()}%` }).map(rowToMessage);
 }
 
+// GIFs staff/students already sent, most-sent first -- the composer's GIF
+// tab shows these before any search (Lee, 2026-11-26).
+const topGifsStmt = db.prepare(
+  "SELECT text, COUNT(*) AS n, MAX(createdAt) AS lastAt FROM messages WHERE type = 'gif' AND text IS NOT NULL AND text != '' GROUP BY text ORDER BY n DESC, lastAt DESC LIMIT :limit"
+);
+export function getTopGifUrls(limit = 24) {
+  return topGifsStmt.all({ limit }).map(r => r.text);
+}
+
 const mediaStmt = db.prepare(
   "SELECT * FROM messages WHERE conversationId = :conversationId AND type IN ('image', 'video') AND driveFileId IS NOT NULL ORDER BY seq ASC"
 );

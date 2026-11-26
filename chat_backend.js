@@ -25,6 +25,7 @@ import ffmpegPath from "ffmpeg-static";
 import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
+import { searchYouTube, matchesQuery } from "./content_library.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { renderCertificate, renderDiscountCard, levelLabel } from "./certificate.js";
@@ -677,6 +678,27 @@ export function sendJson(res, status, obj) {
 // before the actual Drive fetch even started, which is exactly what showed
 // up as a video that looks like it's perpetually loading/re-buffering.
 let driveTokenCache = null; // { token, expiresAt }
+// Composer Videos tab: Drive video search. Chat uploads and other
+// per-student folders are left out -- this is for sending OUR content.
+async function searchDriveVideos(q) {
+  const cfg = getConfig();
+  const skip = new Set([cfg.chatImagesFolderId, cfg.chatVideosFolderId, cfg.callRecordingsFolderId, cfg.profilePhotosFolderId, cfg.intakeFormsFolderId, cfg.clientNotesFolderId].filter(Boolean));
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 4);
+  const nameQ = words.map(w => `name contains '${w.replace(/\\/g, "").replace(/'/g, "\\'")}'`).join(" and ");
+  const query = `mimeType contains 'video/' and trashed = false` + (nameQ ? ` and ${nameQ}` : "");
+  const token = await getDriveAccessToken();
+  const u = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&pageSize=80&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true&orderBy=modifiedTime desc&fields=files(id,name,modifiedTime,parents,thumbnailLink,videoMediaMetadata(durationMillis))`;
+  const r = await fetch(u, { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(15000) });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error?.message || `Drive ${r.status}`);
+  const seen = new Set();
+  return (d.files || [])
+    .filter(f => !(f.parents || []).some(pid => skip.has(pid)))
+    .filter(f => { const k = f.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return matchesQuery(f.name, q); })
+    .slice(0, 40)
+    .map(f => ({ source: "drive", fileId: f.id, title: f.name.replace(/\.[a-z0-9]{2,4}$/i, ""), thumb: f.thumbnailLink || "", durationSec: f.videoMediaMetadata?.durationMillis ? Math.round(Number(f.videoMediaMetadata.durationMillis) / 1000) : null, modifiedTime: f.modifiedTime }));
+}
+
 export async function getDriveAccessToken() {
   if (driveTokenCache && driveTokenCache.expiresAt > Date.now()) return driveTokenCache.token;
   const r = await fetch("https://oauth2.googleapis.com/token", {
@@ -7870,10 +7892,28 @@ export async function handleChatRequest(req, res, url) {
           preview: g.images?.fixed_width?.url || g.images?.original?.url,
           full: g.images?.original?.url,
         })).filter(g => g.preview && g.full);
-        return sendJson(res, 200, { gifs });
+        // No search yet: GIFs already sent in chats come first.
+        let sent = [];
+        if (!q) { try { sent = MessagesDB.getTopGifUrls(24).map(u => ({ preview: u.replace(/\/giphy\.gif(\?.*)?$/, "/200w.gif"), full: u })); } catch {} }
+        return sendJson(res, 200, { gifs, sent });
       } catch (e) {
         return sendJson(res, 200, { gifs: [], error: e.message });
       }
+    }
+
+    // ─── Content to send (composer's Videos tab, staff only) ──────────────
+    // Long-form YouTube from all 3 brands + videos in the PRA Drive (minus
+    // chat uploads, call recordings and other per-student folders). Empty
+    // query = newest YouTube videos. Drive files sent from here go out as a
+    // normal video message (same driveFileId, streamed by /api/chat/media).
+    if (p === "/api/chat/content" && req.method === "GET") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      const q = (url.searchParams.get("q") || "").trim();
+      const [youtube, drive] = await Promise.all([
+        searchYouTube(q, q ? 60 : 40).catch(e => { console.error("[content yt]", e.message); return []; }),
+        q ? searchDriveVideos(q).catch(e => { console.error("[content drive]", e.message); return []; }) : Promise.resolve([]),
+      ]);
+      return sendJson(res, 200, { youtube, drive });
     }
 
     // ─── Saved message templates (admin-authored, coach-sendable) ─────────
