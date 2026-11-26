@@ -1118,6 +1118,12 @@
   .vc-fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; width: 0; border-radius: 2px; background: #009bff; }
   /* Small, plain white with a soft white glow -- quieter than the play button. */
   .vc-knob { position: absolute; top: 50%; left: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px 1px rgba(255,255,255,.75); }
+  /* Bar only (Lee, 2026-11-26): no round button -- tapping the video plays/
+     pauses and flashes a small glowing play/pause in the middle. */
+  .vc-play { display: none !important; }
+  .vc-flash { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 4; filter: drop-shadow(0 0 6px rgba(255,255,255,.85)); animation: vcFlash .65s ease-out forwards; }
+  .vc-flash svg { width: 20px; height: 20px; display: block; }
+  @keyframes vcFlash { 0% { opacity: 0; transform: scale(.7); } 20% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18); } }
   .vc.dragging .vc-knob { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
   .lightbox-frame .vc { left: 12px; right: 12px; bottom: 12px; }
   .expand-video-btn {
@@ -7606,8 +7612,21 @@ function vcSync(video) {
       return;
     }
     const v = e.target.tagName === 'VIDEO' ? e.target : null;
-    if (v && vcFor(v)) { e.stopPropagation(); toggleTapVideo(v, othersFor(v)); }
+    if (v && vcFor(v)) { e.stopPropagation(); const willPlay = v.paused; toggleTapVideo(v, othersFor(v)); vcFlash(v, willPlay); }
   }, true);
+  // Quick glowing play/pause in the middle of the video on each tap.
+  function vcFlash(video, playing) {
+    const host = video.parentElement;
+    if (!host) return;
+    host.querySelectorAll(':scope > .vc-flash').forEach(el => el.remove());
+    const el = document.createElement('div');
+    el.className = 'vc-flash';
+    el.innerHTML = playing
+      ? '<svg viewBox="0 0 20 20"><path d="M6 3.5v13l11-6.5z" fill="#fff"/></svg>'
+      : '<svg viewBox="0 0 20 20"><rect x="4.5" y="3.5" width="4" height="13" rx="1" fill="#fff"/><rect x="11.5" y="3.5" width="4" height="13" rx="1" fill="#fff"/></svg>';
+    host.appendChild(el);
+    setTimeout(() => el.remove(), 700);
+  }
   let drag = null;
   const seekTo = (clientX) => {
     const r = drag.track.getBoundingClientRect();
