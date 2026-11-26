@@ -28,9 +28,10 @@
   }
   function startMeter(getCanvas) {
     try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC || !getCanvas) return;
-      audioCtx = new AC();
+      if (!audioCtx || !getCanvas) return;
+      // Phones create audio "suspended" unless started from the tap itself;
+      // a suspended context reads pure silence (the flat dotted line).
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
       audioCtx.createMediaStreamSource(stream).connect(analyser);
@@ -44,7 +45,8 @@
         analyser.getByteTimeDomainData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i++) { const x = (data[i] - 128) / 128; sum += x * x; }
-        levels.push(Math.min(1, Math.sqrt(sum / data.length) * 5));
+        // sqrt makes normal speech (rms ~0.02-0.1) show clearly tall bars.
+        levels.push(Math.min(1, Math.sqrt(Math.sqrt(sum / data.length)) * 1.9));
         if (levels.length > 300) levels.shift();
         const cv = getCanvas();
         if (cv) paint(cv);
@@ -67,7 +69,10 @@
   async function start(onTick, getCanvas) {
     if (rec) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error('Voice notes need microphone access, which this browser does not support.');
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    // Created right here, still inside the tap, so the phone lets it run.
+    try { const AC = window.AudioContext || window.webkitAudioContext; if (AC && getCanvas) { audioCtx = new AC(); audioCtx.resume().catch(() => {}); } } catch { audioCtx = null; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch (e) { cleanup(); throw e; }
     mime = pickMime();
     rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
     chunks = [];
