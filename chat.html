@@ -183,6 +183,9 @@
   .vr-draw-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; display: none; background: rgba(0,0,0,.6); color: #fff; font-size: .72rem; padding: 4px 10px; border-radius: 12px; white-space: nowrap; pointer-events: none; }
   .vr-stage.drawing .vr-draw-hint { display: block; }
   .vr-stage.sending .vr-stage-btn { opacity: .5; pointer-events: none; }
+  #videoReplyPlayer { cursor: pointer; }
+  .vr-seek { position: absolute; left: 12px; right: 12px; bottom: 8px; z-index: 2; width: auto; height: 18px; margin: 0; accent-color: #009bff; cursor: pointer; opacity: .85; }
+  .vr-stage.drawing .vr-seek { display: none; }
   .video-reply-box .pra-label { margin-bottom: 4px; }
   .video-reply-box .pra-btn { font-size: .74rem; padding: 6px 12px; }
   .vr-ts-btn { align-self: flex-start; margin-top: 6px; }
@@ -678,10 +681,13 @@
   .vn-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b3b; flex-shrink: 0; animation: vnPulse 1s ease-in-out infinite; }
   @keyframes vnPulse { 50% { opacity: .25; } }
   .vn-time { font-weight: 700; font-variant-numeric: tabular-nums; }
-  .vn-label { color: var(--pra-dim); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vn-label { display: none; color: var(--pra-dim); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vn-wave { flex: 1; min-width: 40px; height: 26px; display: block; }
+  .composer.vn-busy .vn-wave { display: none; }
+  .composer.vn-busy .vn-label { display: inline; }
   .composer.vn-busy .vn-dot { animation: none; background: var(--pra-blue); }
   .composer.vn-busy .vn-trash { opacity: .4; pointer-events: none; }
-  .composer.mk-dock > #mkPanel.show { position: static; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 300px); max-height: 55vh; border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
+  .composer.mk-dock > #mkPanel.show { position: static; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 300px); border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
   .composer.mk-dock > #mkPanel .mk-tabs { margin-bottom: 8px; }
   /* A picked video waits in the staging strip like a GIF does. */
   .paste-preview-item.pp-video { width: 112px; }
@@ -1355,7 +1361,7 @@
                  templatesBtn icon sitting right next to them. -->
             <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg></button>
             <button class="icon-btn composer-icon" id="voiceNoteBtn" title="Voice note -- sends as text" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="3" width="6" height="11" rx="3" stroke="#fff" stroke-width="1.6"/><path d="M6 11a6 6 0 0 0 12 0" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/><path d="M12 17v3.5M9 20.5h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-            <div class="vn-bar" id="vnBar"><button type="button" class="vn-trash" id="vnTrashBtn" title="Delete"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><span class="vn-dot"></span><span class="vn-time" id="vnTime">0:00</span><span class="vn-label" id="vnLabel">Recording…</span></div>
+            <div class="vn-bar" id="vnBar"><button type="button" class="vn-trash" id="vnTrashBtn" title="Delete"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><span class="vn-dot"></span><span class="vn-time" id="vnTime">0:00</span><canvas class="vn-wave" id="vnWave"></canvas><span class="vn-label" id="vnLabel">Recording…</span></div>
             <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           </div>
           <button class="composer-send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.4 20.4l17.45-8.4a.6.6 0 0 0 0-1.08L3.4 2.52a.6.6 0 0 0-.85.66l2.17 7.02a.6.6 0 0 0 .49.42l8.9 1.3-8.9 1.3a.6.6 0 0 0-.49.42l-2.17 7.1a.6.6 0 0 0 .85.66z" fill="#fff"/></svg></button>
@@ -1545,7 +1551,8 @@
            marks on the frame; tap it again to send that frame + marks as a
            picture. See setupVideoMarkup(). -->
       <div class="vr-stage" id="videoReplyStage">
-        <video id="videoReplyPlayer" controls playsinline preload="auto"></video>
+        <video id="videoReplyPlayer" playsinline preload="auto"></video>
+        <input type="range" class="vr-seek" id="videoReplySeek" min="0" max="1000" value="0" step="1" aria-label="Seek"/>
         <canvas id="videoReplyDraw"></canvas>
         <div class="vr-draw-hint">Draw, then tap the pen to send</div>
         <button type="button" class="vr-stage-btn" id="videoReplyPenCancel" title="Discard marks">✕</button>
@@ -1921,7 +1928,7 @@
     <div class="lightbox-stage" id="lightboxStage">
       <div class="lightbox-frame">
         <img id="lightboxImg" draggable="false"/>
-        <video id="lightboxVideo" controls autoplay style="display:none"></video>
+        <video id="lightboxVideo" autoplay playsinline style="display:none" onclick="toggleTapVideo(this)"></video>
         <button class="icon-btn lightbox-close" id="lightboxClose">✕</button>
       </div>
     </div>
@@ -4956,7 +4963,7 @@ function renderBubble(m, convo) {
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
         ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
-        : `<video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" controls preload="metadata" playsinline></video>`;
+        : `<div class="video-wrap"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button></div>`;
     // No timestamp badge on an image note, or on a note sent without one
     // (plain "good job"-style reply, added straight to Send with no time
     // attached) — "time" only means anything for video, and omitting it
@@ -4995,7 +5002,7 @@ function renderBubble(m, convo) {
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video' && !m.driveFileId) content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}${videoProcessingHtml(m)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} controls preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
@@ -5268,13 +5275,23 @@ function linkifyUrls(escapedText) {
     // fight with clicking to go full-frame. A video's "full-frame" is the
     // timestamped-notes reply panel, not the plain lightbox (see
     // startVideoReply) -- every video click in the thread goes there now.
+    // No native controls on chat videos (Lee, 2026-11-26): tap = play/pause.
+    if (e.target.tagName === 'VIDEO') { toggleTapVideo(e.target, '#threadBody video'); return; }
     if (e.target.tagName === 'IMG') openImage(e.target.src || e.target.dataset.src);
     else if (e.target.classList.contains('expand-video-btn')) {
       // Stop the inline player before switching to the reply panel's own
       // player -- otherwise the bubble's video keeps playing (and making
       // sound) behind the modal.
-      e.target.previousElementSibling?.pause();
-      const mid = e.target.closest('.bubble-row')?.dataset.mid;
+      const btn = e.target;
+      btn.parentElement.querySelector('video')?.pause();
+      // A timestamped reply expands the video it replied to; if that one
+      // isn't loaded in the thread, the plain full-screen player.
+      if (btn.dataset.src) {
+        if (btn.dataset.orig && currentThreadMessages.some(x => x.id === btn.dataset.orig)) startVideoReply(btn.dataset.orig);
+        else openVideo(btn.dataset.src);
+        return;
+      }
+      const mid = btn.closest('.bubble-row')?.dataset.mid;
       if (mid) startVideoReply(mid);
     }
   });
@@ -6696,8 +6713,16 @@ function mkRememberKeyboard(h) {
 function mkHeight() {
   let h = 0;
   try { h = Number(localStorage.getItem('pra-kb-h')) || 0; } catch {}
-  return Math.max(250, Math.min(h || 300, Math.round(innerHeight * 0.5)));
+  const vh = window.visualViewport ? visualViewport.height : innerHeight;
+  // Keyboard up (searching) -> as much as fits; keyboard down -> full size.
+  return Math.max(150, Math.min(h || 300, Math.round(vh * 0.5)));
 }
+function mkRefit() {
+  const c = document.querySelector('.composer.mk-dock');
+  if (c) c.style.setProperty('--mk-h', mkHeight() + 'px');
+}
+window.addEventListener('resize', mkRefit);
+if (window.visualViewport) visualViewport.addEventListener('resize', mkRefit);
 function openMediaKb(tab) {
   const composer = document.querySelector('.composer');
   const panel = document.getElementById('mkPanel');
@@ -6919,7 +6944,7 @@ async function startVoiceNote() {
   document.getElementById('vnTime').textContent = '0:00';
   composer.classList.add('vn-rec');
   try {
-    await PRAVoiceNote.start(sec => { document.getElementById('vnTime').textContent = PRAVoiceNote.fmt(sec); });
+    await PRAVoiceNote.start(sec => { document.getElementById('vnTime').textContent = PRAVoiceNote.fmt(sec); }, () => document.getElementById('vnWave'));
   } catch (e) {
     composer.classList.remove('vn-rec');
     alertDialog(e && e.name === 'NotAllowedError' ? 'Allow microphone access to record voice notes.' : ((e && e.message) || 'Could not start recording.'));
@@ -7498,6 +7523,15 @@ function cancelReply() {
 // as ONE message. The video itself is never re-uploaded — the modal and
 // the eventual sent bubble both just stream the SAME driveFileId again,
 // exactly like the original bubble already does.
+// Tap-to-play for videos without native controls: plays (pausing any other
+// video in the same scope) or pauses.
+function toggleTapVideo(v, others) {
+  if (v.paused) {
+    if (others) document.querySelectorAll(others).forEach(o => { if (o !== v) o.pause(); });
+    v.play().catch(() => {});
+  } else v.pause();
+}
+
 function formatVideoTime(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -7570,6 +7604,15 @@ function addVideoReplyNote() {
 
 document.getElementById('videoReplyPlayer').addEventListener('timeupdate', function () {
   document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(this.currentTime);
+  const seek = document.getElementById('videoReplySeek');
+  if (this.duration && !seek.matches(':active')) seek.value = String(Math.round(this.currentTime / this.duration * 1000));
+});
+document.getElementById('videoReplyPlayer').addEventListener('click', function () {
+  if (!document.getElementById('videoReplyStage').classList.contains('drawing')) toggleTapVideo(this);
+});
+document.getElementById('videoReplySeek').addEventListener('input', function () {
+  const v = document.getElementById('videoReplyPlayer');
+  if (v.duration) { v.currentTime = Number(this.value) / 1000 * v.duration; document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(v.currentTime); }
 });
 document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
 document.getElementById('videoReplyStarBtn').onclick = () => {
@@ -7654,7 +7697,6 @@ function startVideoMarkup() {
   const v = document.getElementById('videoReplyPlayer');
   if (!v.videoWidth) { document.getElementById('videoReplyStatus').textContent = 'Let the video load first.'; return; }
   v.pause();
-  v.controls = false; // the controls bar would sit on top of the drawing
   vrStrokes = [];
   document.getElementById('videoReplyStage').classList.add('drawing');
   vrLayoutCanvas();
@@ -7663,7 +7705,7 @@ function stopVideoMarkup() {
   vrStrokes = []; vrDrawing = null;
   const stage = document.getElementById('videoReplyStage');
   stage.classList.remove('drawing', 'sending');
-  document.getElementById('videoReplyPlayer').controls = true;
+
 }
 // Second pen tap: the frame + marks becomes a picture ADDED to this reply
 // (listed under Cancel/Send), like a timestamp note; Send sends them all.

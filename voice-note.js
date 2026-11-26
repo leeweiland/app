@@ -3,16 +3,68 @@
 // Same file in chat-app and crm-app. Exposes window.PRAVoiceNote.
 (function () {
   let rec = null, stream = null, chunks = [], startedAt = 0, timer = 0, mime = '';
+  let audioCtx = null, raf = 0, levels = [];
+  // Simple scrolling waveform: one bar per ~70ms of mic level, newest on the
+  // right, drawn into whatever canvas getCanvas() returns (re-asked every
+  // frame, so a re-rendered page still gets it).
+  function paint(cv) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const bw = 3, gap = 2, n = Math.floor(w / (bw + gap));
+    const vals = levels.slice(-n);
+    g.fillStyle = '#009bff';
+    vals.forEach((lv, i) => {
+      const bh = Math.max(2, Math.min(h, lv * h));
+      const x = w - (vals.length - i) * (bw + gap);
+      g.beginPath();
+      if (g.roundRect) g.roundRect(x, (h - bh) / 2, bw, bh, 1.5); else g.rect(x, (h - bh) / 2, bw, bh);
+      g.fill();
+    });
+  }
+  function startMeter(getCanvas) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || !getCanvas) return;
+      audioCtx = new AC();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+      let last = 0;
+      levels = [];
+      const tick = (t) => {
+        raf = requestAnimationFrame(tick);
+        if (t - last < 70) return;
+        last = t;
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) { const x = (data[i] - 128) / 128; sum += x * x; }
+        levels.push(Math.min(1, Math.sqrt(sum / data.length) * 5));
+        if (levels.length > 300) levels.shift();
+        const cv = getCanvas();
+        if (cv) paint(cv);
+      };
+      raf = requestAnimationFrame(tick);
+    } catch {}
+  }
   const pickMime = () => {
     const opts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
     return (window.MediaRecorder && opts.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t))) || '';
   };
   function cleanup() {
     clearInterval(timer); timer = 0;
+    cancelAnimationFrame(raf); raf = 0;
+    if (audioCtx) { try { audioCtx.close(); } catch {} audioCtx = null; }
+    levels = [];
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null; rec = null; chunks = [];
   }
-  async function start(onTick) {
+  async function start(onTick, getCanvas) {
     if (rec) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error('Voice notes need microphone access, which this browser does not support.');
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -23,6 +75,7 @@
     rec.start(250);
     startedAt = Date.now();
     if (onTick) { onTick(0); timer = setInterval(() => onTick(Math.floor((Date.now() - startedAt) / 1000)), 250); }
+    startMeter(getCanvas);
   }
   function stop() {
     return new Promise((resolve) => {
