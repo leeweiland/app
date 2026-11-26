@@ -26,33 +26,69 @@
       g.fill();
     });
   }
-  function startMeter(getCanvas) {
+  // Two level sources, so the bars move on every phone:
+  //  1. Web Audio analyser on the mic (smooth, real loudness). Some Android
+  //     WebViews hand it pure silence even while the recording is fine, so
+  //  2. if it reads dead flat for ~1.2s, switch to how many bytes the
+  //     recorder captured in each 100ms slice -- Opus packs silence into
+  //     almost nothing and speech into much more, so it tracks talking.
+  let meterMode = 'analyser', analyserAlive = false, sizeMin = Infinity, sizeMax = 0, paintCanvas = null;
+  function pushLevel(lv) {
+    levels.push(Math.max(0, Math.min(1, lv)));
+    if (levels.length > 300) levels.shift();
+  }
+  let chunkN = 0;
+  function onChunkSize(size) {
+    if (++chunkN <= 2) return; // the first slices carry the file header
+    sizeMin = Math.min(sizeMin, size);
+    sizeMax = Math.max(sizeMax, size, sizeMin + 60);
+    if (meterMode !== 'bytes') return;
+    const lv = Math.sqrt((size - sizeMin) / (sizeMax - sizeMin));
+    pushLevel(0.08 + lv * 0.92);
+  }
+  async function startMeter(getCanvas) {
+    paintCanvas = getCanvas;
+    meterMode = 'analyser'; analyserAlive = false; sizeMin = Infinity; sizeMax = 0; chunkN = 0; levels = [];
+    let analyser = null, data = null;
     try {
-      if (!audioCtx || !getCanvas) return;
-      // Phones create audio "suspended" unless started from the tap itself;
-      // a suspended context reads pure silence (the flat dotted line).
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
-      const data = new Uint8Array(analyser.fftSize);
-      let last = 0;
-      levels = [];
-      const tick = (t) => {
-        raf = requestAnimationFrame(tick);
-        if (t - last < 70) return;
-        last = t;
-        analyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) { const x = (data[i] - 128) / 128; sum += x * x; }
-        // sqrt makes normal speech (rms ~0.02-0.1) show clearly tall bars.
-        levels.push(Math.min(1, Math.sqrt(Math.sqrt(sum / data.length)) * 1.9));
-        if (levels.length > 300) levels.shift();
-        const cv = getCanvas();
-        if (cv) paint(cv);
-      };
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC && getCanvas && stream) {
+        // Match the mic's own sample rate -- a mismatch reads silence on
+        // some Android devices. The context made during the tap stays as
+        // the "unlock"; if its rate differs, a matching one replaces it.
+        const rate = stream.getAudioTracks()[0]?.getSettings?.().sampleRate;
+        if (!audioCtx || (rate && audioCtx.sampleRate !== rate)) {
+          try { const ctx2 = rate ? new AC({ sampleRate: rate }) : new AC(); if (audioCtx) audioCtx.close().catch(() => {}); audioCtx = ctx2; } catch {}
+        }
+        if (audioCtx && audioCtx.state !== 'running') await audioCtx.resume().catch(() => {});
+        if (audioCtx) {
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          audioCtx.createMediaStreamSource(stream).connect(analyser);
+          data = new Float32Array(analyser.fftSize);
+        }
+      }
+    } catch { analyser = null; }
+    if (!analyser) meterMode = 'bytes';
+    const began = performance.now();
+    let last = 0;
+    const tick = (t) => {
       raf = requestAnimationFrame(tick);
-    } catch {}
+      if (t - last < 70) return;
+      last = t;
+      if (meterMode === 'analyser') {
+        analyser.getFloatTimeDomainData(data);
+        let sum = 0, peak = 0;
+        for (let i = 0; i < data.length; i++) { const x = data[i]; sum += x * x; const a = Math.abs(x); if (a > peak) peak = a; }
+        if (peak > 0.0005) analyserAlive = true;
+        if (!analyserAlive && t - began > 1200) { meterMode = 'bytes'; return; }
+        // sqrt-of-sqrt makes normal speech (rms ~0.02-0.1) clearly tall.
+        pushLevel(Math.sqrt(Math.sqrt(sum / data.length)) * 1.9);
+      }
+      const cv = paintCanvas && paintCanvas();
+      if (cv) paint(cv);
+    };
+    raf = requestAnimationFrame(tick);
   }
   const pickMime = () => {
     const opts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
@@ -76,8 +112,8 @@
     mime = pickMime();
     rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
     chunks = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    rec.start(250);
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) { chunks.push(e.data); onChunkSize(e.data.size); } };
+    rec.start(100);
     startedAt = Date.now();
     if (onTick) { onTick(0); timer = setInterval(() => onTick(Math.floor((Date.now() - startedAt) / 1000)), 250); }
     startMeter(getCanvas);
