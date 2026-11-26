@@ -86,6 +86,8 @@ db.exec(`
 // video message's server-generated first-frame thumbnail (see
 // chat_backend.js's video-message upload handler) -- NULL for every
 // message sent before this existed, same as any other optional column here.
+// Voice notes: the recorded waveform (JSON array of 0..1 bars).
+if (!db.prepare("PRAGMA table_info(messages)").all().some(c => c.name === "waveform")) db.exec("ALTER TABLE messages ADD COLUMN waveform TEXT");
 const hasPosterColumn = db.prepare("PRAGMA table_info(messages)").all().some(c => c.name === "posterFileId");
 if (!hasPosterColumn) db.exec("ALTER TABLE messages ADD COLUMN posterFileId TEXT");
 db.exec("CREATE INDEX IF NOT EXISTS idx_messages_posterfileid ON messages(posterFileId)");
@@ -163,6 +165,7 @@ function toRow(m) {
     isGym: m.isGym === undefined ? null : (m.isGym ? 1 : 0),
     clientIds: m.clientIds ? JSON.stringify(m.clientIds) : null,
     callId: m.callId ?? null, callOutcome: m.callOutcome ?? null, durationSeconds: m.durationSeconds ?? null,
+    waveform: m.waveform ? JSON.stringify(m.waveform) : null,
   };
 }
 // Inverse of toRow -- a column that was never set on the original message
@@ -191,11 +194,12 @@ function rowToMessage(row) {
     isGym: row.isGym === null ? undefined : !!row.isGym,
     clientIds: row.clientIds ? JSON.parse(row.clientIds) : undefined,
     callId: row.callId ?? undefined, callOutcome: row.callOutcome ?? undefined, durationSeconds: row.durationSeconds ?? undefined,
+    waveform: row.waveform ? JSON.parse(row.waveform) : undefined,
   };
   return m;
 }
 
-const JSON_COLUMNS = new Set(["videoNotes", "reactions", "deliveredTo", "googleEventIds", "googleEventLinks", "clientIds"]);
+const JSON_COLUMNS = new Set(["videoNotes", "reactions", "deliveredTo", "googleEventIds", "googleEventLinks", "clientIds", "waveform"]);
 const BOOL_COLUMNS = new Set(["forwarded", "isGym"]);
 
 const INSERT_COLUMNS = [
@@ -204,6 +208,7 @@ const INSERT_COLUMNS = [
   "feedGroupId", "forwarded", "replyToId", "videoNotes", "reactions", "deliveredTo", "editedAt",
   "googleEventId", "googleEventLink", "googleEventIds", "googleEventLinks",
   "startISO", "durationMinutes", "timezone", "isGym", "clientIds", "callId", "callOutcome", "durationSeconds",
+  "waveform",
 ];
 const insertStmt = db.prepare(`
   INSERT INTO messages (${INSERT_COLUMNS.join(", ")})

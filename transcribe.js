@@ -10,9 +10,25 @@ export async function transcribeRequestAudio(req, maxBytes = 24 * 1024 * 1024) {
     if (n > maxBytes) throw new Error("That voice note is too long -- keep it under about 10 minutes");
     chunks.push(c);
   }
-  const buf = Buffer.concat(chunks);
-  if (!buf.length) throw new Error("No audio was received");
-  const ct = String(req.headers["content-type"] || "audio/webm").split(";")[0].trim();
+  return transcribeAudioBuffer(Buffer.concat(chunks), req.headers["content-type"]);
+}
+
+// Same, from audio already in memory.
+export async function readRequestAudio(req, maxBytes = 24 * 1024 * 1024) {
+  const chunks = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > maxBytes) throw new Error("That voice note is too long -- keep it under about 10 minutes");
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks);
+}
+
+export async function transcribeAudioBuffer(buf, contentType) {
+  if (!process.env.OPENAI_API_KEY) throw new Error("Transcription isn't set up (no OpenAI key)");
+  if (!buf || !buf.length) throw new Error("No audio was received");
+  const ct = String(contentType || "audio/webm").split(";")[0].trim();
   const ext = /mp4|m4a|aac/.test(ct) ? "m4a" : /ogg/.test(ct) ? "ogg" : /wav/.test(ct) ? "wav" : /mpeg|mp3/.test(ct) ? "mp3" : "webm";
   let lastErr = "Could not transcribe";
   for (const model of ["gpt-4o-transcribe", "whisper-1"]) {

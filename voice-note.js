@@ -122,7 +122,9 @@
     return new Promise((resolve) => {
       if (!rec) { resolve(null); return; }
       const r = rec, type = r.mimeType || mime || 'audio/webm';
-      r.onstop = () => { const blob = new Blob(chunks, { type }); cleanup(); resolve(blob.size ? blob : null); };
+      // The recorded mic levels ride along as the voice note's waveform.
+      const lv = levels.slice(), secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      r.onstop = () => { const blob = new Blob(chunks, { type }); cleanup(); if (blob.size) { blob.levels = lv; blob.duration = secs; } resolve(blob.size ? blob : null); };
       try { r.stop(); } catch { cleanup(); resolve(null); }
     });
   }
@@ -138,5 +140,17 @@
     return String(d.text || '').trim();
   }
   const fmt = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-  window.PRAVoiceNote = { start, stop, cancel, transcribe, fmt, isRecording: () => !!rec };
+  // Recorded levels -> n bars (0..1), loudest bar = 1.
+  function peaks(lv, n = 48) {
+    lv = (lv || []).filter(x => Number.isFinite(x));
+    if (!lv.length) return Array.from({ length: n }, () => 0.3);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor(i * lv.length / n), b = Math.max(a + 1, Math.floor((i + 1) * lv.length / n));
+      out.push(Math.max(...lv.slice(a, b)));
+    }
+    const mx = Math.max(...out) || 1;
+    return out.map(x => Math.round(Math.max(0.08, x / mx) * 100) / 100);
+  }
+  window.PRAVoiceNote = { start, stop, cancel, transcribe, fmt, peaks, isRecording: () => !!rec };
 })();

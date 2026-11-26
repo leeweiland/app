@@ -701,6 +701,7 @@
   .vn-label { display: none; color: var(--pra-dim); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .vn-wave { flex: 1; min-width: 40px; height: 26px; display: block; }
   .composer.vn-busy .vn-wave { display: none; }
+  .bubble.voice { min-width: 230px; }
   .composer.vn-busy .vn-label { display: inline; }
   .composer.vn-busy .vn-dot { animation: none; background: var(--pra-blue); }
   .composer.vn-busy .vn-trash { opacity: .4; pointer-events: none; }
@@ -1223,6 +1224,7 @@
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
   <script src="/chat-app/voice-note.js"></script>
+<script src="/chat-app/voice-player.js"></script>
 <script src="/chat-app/chat-header.js"></script>
   <script src="https://unpkg.com/@daily-co/daily-js@0.92.2/dist/daily.js"></script>
 
@@ -3459,6 +3461,7 @@ async function startConvo(otherUserId) {
 function previewText(m) {
   if (!m) return 'No messages yet';
   if (m.type === 'text') return String(m.text || '').replace(MD_LINK_RE, '$1');
+  if (m.type === 'voice') return 'Voice note: ' + (m.text || '');
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'appointment') {
     const start = new Date(m.startISO);
@@ -4958,6 +4961,7 @@ function replySnippet(m) {
   if (!m) return 'Original message';
   if (m.videoNotes?.length) return `${m.videoNotes.length} timestamped video note${m.videoNotes.length > 1 ? 's' : ''}`;
   if (m.type === 'text') return escapeHtml(m.text);
+  if (m.type === 'voice') return 'Voice note';
   if (m.type === 'gif') return 'GIF';
   if (m.type === 'image') return 'Photo';
   if (m.type === 'video') return 'Video';
@@ -5053,7 +5057,8 @@ function renderBubble(m, convo) {
       </div>
     </div>`;
   }
-  if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
+  if (m.type === 'voice') content = `<div class="bubble voice" data-text="${escapeHtml(m.text || '')}">${senderLabel}${forwardedLabel}${replyQuote}${window.PRAVoicePlayer ? PRAVoicePlayer.html({ src: `/api/chat/media/${m.driveFileId}`, peaks: m.waveform, duration: m.durationSeconds, transcript: m.text && m.text !== 'Voice note' ? m.text : '', label: 'Transcript' }) : `<audio controls src="/api/chat/media/${m.driveFileId}"></audio>`}</div>`;
+  else if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video' && !m.driveFileId) content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}${videoProcessingHtml(m)}</div>`;
   else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<div class="vbox"><video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div></div>`;
@@ -7019,12 +7024,14 @@ async function sendVoiceNote() {
   try {
     const blob = await PRAVoiceNote.stop();
     if (!blob) throw new Error('Nothing was recorded.');
-    const text = await PRAVoiceNote.transcribe(blob, '/api/chat/transcribe');
-    if (!text) throw new Error('No words were heard in that voice note.');
+    document.getElementById('vnLabel').textContent = 'Sending…';
+    // The recording itself + its waveform; the server transcribes it and
+    // posts ONE voice message (audio player + transcript).
+    const meta = encodeURIComponent(JSON.stringify({ duration: blob.duration || 0, peaks: PRAVoiceNote.peaks(blob.levels, 48) }));
     const r = await fetch('/api/chat/conversations/' + convoId + '/messages', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+      method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm', 'X-Voice-Meta': meta }, body: blob
     });
-    if (!r.ok) throw new Error('Could not send — try again.');
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Could not send — try again.'); }
     if (activeConvoId === convoId) refreshThread(true);
   } catch (e) {
     alertDialog((e && e.message) || 'Could not send the voice note.');
@@ -7230,7 +7237,7 @@ document.getElementById('msgMoreReportBtn').onclick = async () => {
 // Long-press -> "..." -> Copy: the message's text (or a GIF's link).
 function msgCopyText(m) {
   if (!m) return '';
-  if (m.type === 'text' || m.type === 'gif') return m.text || '';
+  if (m.type === 'text' || m.type === 'gif' || m.type === 'voice') return m.text || '';
   return '';
 }
 // Synchronous copy first (works inside the tap in Chrome and iOS WebViews),

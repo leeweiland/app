@@ -26,7 +26,7 @@ import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
 import { searchYouTube, matchesQuery } from "./content_library.js";
-import { transcribeRequestAudio } from "./transcribe.js";
+import { transcribeRequestAudio, readRequestAudio, transcribeAudioBuffer } from "./transcribe.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { renderCertificate, renderDiscountCard, levelLabel } from "./certificate.js";
@@ -8966,6 +8966,43 @@ export async function handleChatRequest(req, res, url) {
               badgesCache = null;
             }
           });
+        } else if (ct.startsWith("audio/")) {
+          // Voice note (coaches/admins, Lee 2026-11-26): the recording, its
+          // transcript and its waveform as ONE message. Converted to AAC
+          // (.m4a) so every phone plays it (Android records webm/opus).
+          if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+          let meta = {};
+          try { meta = JSON.parse(decodeURIComponent(String(req.headers["x-voice-meta"] || "")) || "{}"); } catch {}
+          const raw = await readRequestAudio(req);
+          if (!raw.length) return sendJson(res, 400, { error: "No audio was received" });
+          const inMime = ct.split(";")[0].trim();
+          let transcript = "";
+          try { transcript = await transcribeAudioBuffer(raw, inMime); } catch (e) { console.error("[voice note transcribe]", e.message); }
+          let outBuf = raw, outMime = inMime, outExt = /mp4|m4a|aac/.test(inMime) ? ".m4a" : /ogg/.test(inMime) ? ".ogg" : ".webm";
+          if (!/mp4|m4a|aac/.test(inMime)) {
+            const tin = join(tmpdir(), `voice-${randomUUID()}${outExt}`), tout = join(tmpdir(), `voice-${randomUUID()}.m4a`);
+            try {
+              writeFileSync(tin, raw);
+              await new Promise((ok, bad) => execFile(FFMPEG_EXE, ["-y", "-i", tin, "-vn", "-ac", "1", "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart", tout], { timeout: 120000 }, (err) => err ? bad(err) : ok()));
+              outBuf = readFileSync(tout); outMime = "audio/mp4"; outExt = ".m4a";
+            } catch (e) { console.error("[voice note convert]", e.message); }
+            finally { try { unlinkSync(tin); } catch {} try { unlinkSync(tout); } catch {} }
+          }
+          const cfg = getConfig();
+          const accessToken = await getDriveAccessToken();
+          const up = await uploadStreamToDrive(Readable.from(outBuf), {
+            name: `${user.first} ${user.last} VOICE NOTE${outExt}`.toUpperCase(), mimeType: outMime,
+            folderId: cfg.chatVideosFolderId || cfg.chatImagesFolderId, accessToken,
+          });
+          const peaks = Array.isArray(meta.peaks) ? meta.peaks.slice(0, 64).map(x => Math.round(Math.max(0, Math.min(1, Number(x) || 0)) * 100) / 100) : undefined;
+          const msg = {
+            id: randomUUID(), conversationId: convoId, senderId: user.id, type: "voice",
+            text: transcript || "Voice note", driveFileId: up.id, mimeType: outMime, name: "voice-note" + outExt,
+            durationSeconds: Math.round(Number(meta.duration) || 0) || undefined, waveform: peaks,
+            createdAt: new Date().toISOString(),
+          };
+          MessagesDB.insertMessage(msg);
+          created.push(msg);
         } else if (req.headers["content-type"]?.includes("application/json") === false) {
           return sendJson(res, 400, { error: "text or gifUrl required" });
         } else {
@@ -9033,6 +9070,7 @@ export async function handleChatRequest(req, res, url) {
           const senderName = `${user.first} ${user.last}`;
           const first = created[0];
           const preview = first.type === "text" ? first.text
+            : first.type === "voice" ? `Voice note: ${first.text || ""}`.slice(0, 180)
             : first.type === "gif" ? "sent a GIF"
             : created.length > 1 ? `sent ${created.length} ${first.type}s` : `sent a ${first.type}`;
           notifyParticipants(convoId, user.id, { title: senderName, body: preview, conversationId: convoId }).catch(() => {});
