@@ -1112,8 +1112,9 @@
   .vc-track { position: relative; flex: 1; height: 24px; cursor: pointer; touch-action: none; }
   .vc-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: rgba(255,255,255,.35); box-shadow: 0 0 3px rgba(0,0,0,.5); }
   .vc-fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; width: 0; border-radius: 2px; background: #009bff; }
-  .vc-knob { position: absolute; top: 50%; left: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #009bff, 0 1px 4px rgba(0,0,0,.6); }
-  .vc.dragging .vc-knob { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  /* Small, plain white with a soft white glow -- quieter than the play button. */
+  .vc-knob { position: absolute; top: 50%; left: 0; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px 1px rgba(255,255,255,.75); }
+  .vc.dragging .vc-knob { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
   .lightbox-frame .vc { left: 12px; right: 12px; bottom: 12px; }
   .expand-video-btn {
     position: absolute; top: 9px; right: 9px; z-index: 3; width: 28px; height: 28px; border-radius: 50%;
