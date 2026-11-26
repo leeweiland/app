@@ -161,7 +161,30 @@
   .video-note-text { word-break: break-word; flex: 1; }
   .video-note-remove { flex-shrink: 0; background: none; border: none; color: var(--pra-dim); cursor: pointer; font-size: .9rem; padding: 0 2px; line-height: 1; }
   .video-note-remove:hover { color: #ff5c5c; }
-  #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+  #videoReplyNotesList { display: flex; flex-direction: column; gap: 6px; max-height: 22vh; overflow-y: auto; flex-shrink: 0; }
+  /* Video reply popup (Lee, 2026-11-26): 95% of the screen both ways, no
+     title, small buttons, "+ Timestamp" under the note box, and a pen on
+     the video for drawing coaching marks on a paused frame. */
+  #videoReplyModal.modal-backdrop { padding: 0; }
+  .modal-box.video-reply-box { width: 95vw; max-width: 95vw; height: 95vh; height: 95dvh; max-height: 95vh; max-height: 95dvh; display: flex; flex-direction: column; overflow: hidden; padding: 12px; gap: 8px; }
+  .vr-stage { position: relative; flex: 1 1 auto; min-height: 140px; background: #000; border-radius: 10px; overflow: hidden; }
+  .vr-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  #videoReplyDraw { position: absolute; display: none; z-index: 2; touch-action: none; cursor: crosshair; }
+  .vr-stage.drawing #videoReplyDraw { display: block; }
+  .vr-stage-btn { position: absolute; top: 8px; z-index: 3; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,.4); background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .vr-stage-btn svg { width: 18px; height: 18px; }
+  #videoReplyPenBtn { right: 8px; }
+  .vr-stage.drawing #videoReplyPenBtn { border-color: #ff3030; color: #ff3030; box-shadow: 0 0 10px rgba(255,48,48,.85); }
+  #videoReplyPenCancel { right: 50px; display: none; font-size: 14px; }
+  .vr-stage.drawing #videoReplyPenCancel { display: flex; }
+  .vr-draw-hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; display: none; background: rgba(0,0,0,.6); color: #fff; font-size: .72rem; padding: 4px 10px; border-radius: 12px; white-space: nowrap; pointer-events: none; }
+  .vr-stage.drawing .vr-draw-hint { display: block; }
+  .vr-stage.sending .vr-stage-btn { opacity: .5; pointer-events: none; }
+  .video-reply-box .pra-label { margin-bottom: 4px; }
+  .video-reply-box .pra-btn { font-size: .74rem; padding: 6px 12px; }
+  .vr-ts-btn { align-self: flex-start; margin-top: 6px; }
+  .vr-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .vr-actions .pra-btn { flex: 1; }
   #videoReplyNotesList .video-note-row { padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
   .video-note-reply .video-note-player { width: 100%; border-radius: 10px; display: block; margin-top: 2px; }
   /* Same 0x0-collapse issue as .bubble.media img[data-src] above -- only
@@ -1418,30 +1441,34 @@
        clickable to jump the bubble's own player there — see
        renderBubble's m.videoNotes branch. -->
   <div class="modal-backdrop" id="videoReplyModal">
-    <div class="pra-panel modal-box modal-box-wide" style="text-align:left">
-      <div class="pra-h2" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-        Reply with Timestamped Notes
-        <button class="mab-action" id="videoReplyStarBtn" title="Star" style="display:none"></button>
-      </div>
+    <div class="pra-panel modal-box video-reply-box" style="text-align:left">
       <!-- max-height (not just width:100%) matters specifically for a
            vertical/portrait clip — uncapped, a 9:16 video scaled to this
            modal's ~580px width renders 1000px+ tall, pushing the note
            input and Send button far below the fold and forcing a scroll
            just to review-and-comment on one clip. object-fit:contain keeps
            the whole frame visible at whatever size actually fits. -->
-      <video id="videoReplyPlayer" controls playsinline style="max-width:100%;max-height:45vh;width:auto;height:auto;border-radius:10px;background:#000;display:block;margin:0 auto;object-fit:contain"></video>
-      <div id="videoReplyNotesList" style="margin:12px 0"></div>
-      <div style="display:flex;gap:8px;align-items:flex-end">
-        <div style="flex:1">
-          <label class="pra-label">Note at <span id="videoReplyCurrentTime" style="color:var(--pra-blue);font-weight:700">0:00</span></label>
-          <textarea class="pra-input" id="videoReplyNoteInput" rows="2" placeholder="Type a note, then Add Timestamp (or press Enter)" style="width:100%;resize:vertical"></textarea>
-        </div>
-        <button class="pra-btn" id="videoReplyAddBtn" style="white-space:nowrap">+ Add Timestamp</button>
+      <!-- Pen (top right): pauses the video and lets you draw red coaching
+           marks on the frame; tap it again to send that frame + marks as a
+           picture. See setupVideoMarkup(). -->
+      <div class="vr-stage" id="videoReplyStage">
+        <video id="videoReplyPlayer" controls playsinline></video>
+        <canvas id="videoReplyDraw"></canvas>
+        <div class="vr-draw-hint">Draw, then tap the pen to send</div>
+        <button type="button" class="vr-stage-btn" id="videoReplyPenCancel" title="Discard marks">✕</button>
+        <button type="button" class="vr-stage-btn" id="videoReplyPenBtn" title="Draw on this frame"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8 4 20z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.8 6.8l3.4 3.4" stroke="currentColor" stroke-width="1.7"/></svg></button>
       </div>
-      <div class="pra-muted" id="videoReplyStatus" style="font-size:.76rem;margin-top:8px;min-height:1em"></div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="pra-btn pra-btn-ghost" id="videoReplyCancelBtn" style="flex:1">Cancel</button>
-        <button class="pra-btn" id="videoReplySendBtn" style="flex:1" disabled>Send</button>
+      <div id="videoReplyNotesList"></div>
+      <div style="display:flex;flex-direction:column;flex-shrink:0">
+        <label class="pra-label">Note at <span id="videoReplyCurrentTime" style="color:var(--pra-blue);font-weight:700">0:00</span></label>
+        <textarea class="pra-input" id="videoReplyNoteInput" rows="2" placeholder="Type a note, then + Timestamp (or press Enter)" style="width:100%;resize:vertical"></textarea>
+        <button class="pra-btn vr-ts-btn" id="videoReplyAddBtn" style="white-space:nowrap">+ Timestamp</button>
+      </div>
+      <div class="pra-muted" id="videoReplyStatus" style="font-size:.74rem;min-height:1em;flex-shrink:0"></div>
+      <div class="vr-actions">
+        <button class="mab-action" id="videoReplyStarBtn" title="Star" style="display:none;flex:0 0 auto"></button>
+        <button class="pra-btn pra-btn-ghost" id="videoReplyCancelBtn">Cancel</button>
+        <button class="pra-btn" id="videoReplySendBtn" disabled>Send</button>
       </div>
     </div>
   </div>
@@ -7224,6 +7251,7 @@ function startVideoReply(mid) {
   if (!m || m.type !== 'video') return;
   videoReplyTargetId = mid;
   videoReplyNotes = [];
+  stopVideoMarkup();
   const player = document.getElementById('videoReplyPlayer');
   player.pause();
   player.src = `/api/chat/media/${m.driveFileId}`;
@@ -7277,6 +7305,7 @@ document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
 document.getElementById('videoReplyStarBtn').onclick = () => {
   const m = currentThreadMessages.find(x => x.id === videoReplyTargetId);
   if (!m) return;
+  stopVideoMarkup();
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
   openPublishModal(m.driveFileId, m.driveFileName);
@@ -7303,9 +7332,124 @@ document.getElementById('videoReplyNotesList').addEventListener('click', (e) => 
   }
 });
 document.getElementById('videoReplyCancelBtn').onclick = () => {
+  stopVideoMarkup();
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
 };
+
+// ── Coaching marks on a video frame (Lee, 2026-11-26) ──
+// Pen -> the video pauses and a canvas sits exactly over the visible frame;
+// drag to draw thin glowing red lines. Pen again -> that frame at full video
+// resolution + the marks becomes a JPEG and sends as a picture in this chat.
+// ✕ throws the marks away. Strokes are stored 0..1 relative to the frame so
+// they land in the same spot on the full-size picture.
+let vrStrokes = [];
+let vrDrawing = null; // the stroke being drawn right now
+function vrFrameRect() {
+  const v = document.getElementById('videoReplyPlayer');
+  const cw = v.clientWidth, ch = v.clientHeight, vw = v.videoWidth, vh = v.videoHeight;
+  if (!cw || !ch || !vw || !vh) return null;
+  const k = Math.min(cw / vw, ch / vh);
+  const w = vw * k, h = vh * k;
+  return { left: (cw - w) / 2, top: (ch - h) / 2, width: w, height: h };
+}
+function vrPaint(ctx, w, h, scale) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#ff3b3b';
+  ctx.lineWidth = 2.5 * scale;
+  ctx.shadowColor = 'rgba(255,40,40,0.95)';
+  ctx.shadowBlur = 9 * scale;
+  for (const st of vrStrokes) {
+    if (!st.length) continue;
+    ctx.beginPath();
+    ctx.moveTo(st[0][0] * w, st[0][1] * h);
+    if (st.length === 1) ctx.lineTo(st[0][0] * w + 0.1, st[0][1] * h);
+    for (let i = 1; i < st.length; i++) ctx.lineTo(st[i][0] * w, st[i][1] * h);
+    ctx.stroke();
+  }
+}
+function vrLayoutCanvas() {
+  const c = document.getElementById('videoReplyDraw');
+  const r = vrFrameRect();
+  if (!r) return;
+  const dpr = window.devicePixelRatio || 1;
+  Object.assign(c.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, r.width, r.height);
+  vrPaint(ctx, r.width, r.height, 1);
+}
+function startVideoMarkup() {
+  const v = document.getElementById('videoReplyPlayer');
+  if (!v.videoWidth) { document.getElementById('videoReplyStatus').textContent = 'Let the video load first.'; return; }
+  v.pause();
+  v.controls = false; // the controls bar would sit on top of the drawing
+  vrStrokes = [];
+  document.getElementById('videoReplyStage').classList.add('drawing');
+  vrLayoutCanvas();
+}
+function stopVideoMarkup() {
+  vrStrokes = []; vrDrawing = null;
+  const stage = document.getElementById('videoReplyStage');
+  stage.classList.remove('drawing', 'sending');
+  document.getElementById('videoReplyPlayer').controls = true;
+}
+async function sendVideoMarkup() {
+  const v = document.getElementById('videoReplyPlayer');
+  const status = document.getElementById('videoReplyStatus');
+  const r = vrFrameRect();
+  if (!vrStrokes.length || !r) { stopVideoMarkup(); return; }
+  // Full video resolution, capped so a 4K clip doesn't make a huge picture.
+  const k = Math.min(1, 1920 / Math.max(v.videoWidth, v.videoHeight));
+  const w = Math.round(v.videoWidth * k), h = Math.round(v.videoHeight * k);
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(v, 0, 0, w, h);
+  vrPaint(ctx, w, h, w / r.width);
+  const convoId = activeConvoId;
+  document.getElementById('videoReplyStage').classList.add('sending');
+  status.textContent = 'Sending marked-up frame…';
+  try {
+    const blob = await new Promise((res, rej) => out.toBlob(b => b ? res(b) : rej(new Error('Could not capture the frame')), 'image/jpeg', 0.9));
+    const fd = new FormData();
+    fd.append('files', blob, `markup-${formatVideoTime(v.currentTime).replace(':', 'm')}s.jpg`);
+    await uploadFormDataWithProgress('/api/chat/conversations/' + convoId + '/messages', fd, (pct) => { status.textContent = `Sending marked-up frame… ${pct}%`; });
+    status.textContent = `Marked-up frame at ${formatVideoTime(v.currentTime)} sent.`;
+    stopVideoMarkup();
+    if (activeConvoId === convoId) refreshThread(true);
+  } catch (e) {
+    console.error('[sendVideoMarkup]', e);
+    document.getElementById('videoReplyStage').classList.remove('sending');
+    status.textContent = 'Could not send the marked-up frame — tap the pen to try again.';
+  }
+}
+(function setupVideoMarkup() {
+  const c = document.getElementById('videoReplyDraw');
+  const pen = document.getElementById('videoReplyPenBtn');
+  const stage = document.getElementById('videoReplyStage');
+  pen.onclick = () => { if (stage.classList.contains('drawing')) sendVideoMarkup(); else startVideoMarkup(); };
+  document.getElementById('videoReplyPenCancel').onclick = stopVideoMarkup;
+  const pt = (e) => { const b = c.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
+  c.addEventListener('pointerdown', (e) => { e.preventDefault(); c.setPointerCapture(e.pointerId); vrDrawing = [pt(e)]; vrStrokes.push(vrDrawing); vrLayoutCanvas(); });
+  c.addEventListener('pointermove', (e) => { if (!vrDrawing) return; e.preventDefault(); vrDrawing.push(pt(e)); vrLayoutCanvas(); });
+  const end = () => { vrDrawing = null; };
+  c.addEventListener('pointerup', end);
+  c.addEventListener('pointercancel', end);
+  // Pen + ✕ sit on the video picture's own top-right corner, not the black
+  // bars around a portrait clip.
+  const placeButtons = () => {
+    const r = vrFrameRect();
+    const cancel = document.getElementById('videoReplyPenCancel');
+    const right = r ? Math.max(0, stage.clientWidth - (r.left + r.width)) + 8 : 8;
+    const top = r ? r.top + 8 : 8;
+    pen.style.right = right + 'px'; pen.style.top = top + 'px';
+    cancel.style.right = (right + 42) + 'px'; cancel.style.top = top + 'px';
+  };
+  document.getElementById('videoReplyPlayer').addEventListener('loadedmetadata', placeButtons);
+  new ResizeObserver(() => { placeButtons(); if (stage.classList.contains('drawing')) vrLayoutCanvas(); }).observe(stage);
+})();
 document.getElementById('videoReplySendBtn').onclick = async () => {
   const input = document.getElementById('videoReplyNoteInput');
   const pending = input.value.trim();
@@ -7330,6 +7474,7 @@ document.getElementById('videoReplySendBtn').onclick = async () => {
   });
   if (!r.ok) { status.textContent = 'Could not send — try again.'; btn.disabled = false; return; }
   input.value = '';
+  stopVideoMarkup();
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
   refreshThread(true);
