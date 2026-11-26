@@ -446,7 +446,7 @@
   .msg-grid-item { position: relative; cursor: pointer; }
   .msg-grid-item img, .msg-grid-item video { width: 100%; height: 128px; object-fit: cover; display: block; background: rgba(255,255,255,0.04); }
   .msg-grid-play { position: absolute; left: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
-  .msg-grid-play svg { width: 11px; height: 11px; margin-left: 2px; }
+  .msg-grid-play svg { width: 9px; height: 11px; margin-left: 2px; }
   .msg-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; white-space: nowrap; }
@@ -1056,7 +1056,7 @@
   .media-grid-item { position: relative; border-radius: 8px; overflow: hidden; cursor: pointer; }
   .media-grid-item img, .media-grid-item video { width: 100%; height: 90px; object-fit: cover; display: block; }
   .media-grid-play { position: absolute; left: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
-  .media-grid-play svg { width: 11px; height: 11px; margin-left: 2px; }
+  .media-grid-play svg { width: 9px; height: 11px; margin-left: 2px; }
   /* Shared Media + My Favorites: a one-column feed (Lee, 2026-11-24) --
      videos play right in it, with the chat's ⤢ expand button. Big panel:
      most of the screen on a computer, ~50px in from every edge on a phone. */
@@ -8260,7 +8260,9 @@ function videoProcessingHtml(m, small) {
   return `<div class="vid-processing${small ? ' small' : ''}">${thumb}<div class="vid-spinner"></div>${small ? '' : '<div class="vid-processing-label">Processing video…</div>'}</div>`;
 }
 function svgGridPlay() {
-  return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.55)" stroke="#fff" stroke-width="1.2"/><path d="M10 8.5l6 3.5-6 3.5V8.5Z" fill="#fff"/></svg>`;
+  // Just the triangle -- the round button around it is the .msg-grid-play /
+  // .media-grid-play element itself (same look as the video player's).
+  return `<svg viewBox="0 0 10 12" xmlns="http://www.w3.org/2000/svg"><path d="M0 0l10 6-10 6z" fill="#fff"/></svg>`;
 }
 function mediaGridCellHtml(type, src) {
   return type === 'video'
