@@ -26,6 +26,7 @@ import { sendApnsPush, apnsConfigured } from "./apns.js";
 import { logActivity } from "./activity_log_backend.js";
 import * as MessagesDB from "./chat_messages_sqlite.js";
 import { searchYouTube, matchesQuery } from "./content_library.js";
+import { transcribeRequestAudio } from "./transcribe.js";
 import { buildFromCustomPage } from "./protocol_import.js";
 import { analyzeTextWithOpenAI } from "./openai_vision_backend.js";
 import { renderCertificate, renderDiscountCard, levelLabel } from "./certificate.js";
@@ -7914,6 +7915,13 @@ export async function handleChatRequest(req, res, url) {
         q ? searchDriveVideos(q).catch(e => { console.error("[content drive]", e.message); return []; }) : Promise.resolve([]),
       ]);
       return sendJson(res, 200, { youtube, drive });
+    }
+
+    // ─── Voice note -> text (composer mic, staff only) ────────────────────
+    if (p === "/api/chat/transcribe" && req.method === "POST") {
+      if (!isStaff(user)) return sendJson(res, 403, { error: "Coaches and admins only" });
+      try { return sendJson(res, 200, { text: await transcribeRequestAudio(req) }); }
+      catch (e) { console.error("[transcribe]", e.message); return sendJson(res, 500, { error: e.message }); }
     }
 
     // ─── Saved message templates (admin-authored, coach-sendable) ─────────

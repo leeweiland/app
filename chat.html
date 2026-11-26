@@ -661,6 +661,26 @@
   .mk-panel:not(.staff) .mk-staff { display: none; }
   .mk-panel:not(.staff) .mk-staff + .mk-tab, .mk-panel:not(.staff) .mk-tab[data-mk="attach"] { border-left: 1px solid var(--pra-border); }
   .composer.mk-dock { flex-wrap: wrap; row-gap: 8px; padding-bottom: 0; }
+  /* Camera button -> Photo / Video / Upload pill (Lee, 2026-11-26). */
+  .cam-menu { display: none; position: absolute; right: 54px; bottom: calc(100% + 8px); z-index: 21; background: var(--pra-panel-2); border: 1px solid var(--pra-border); border-radius: 22px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .cam-menu.show { display: flex; }
+  .cam-menu button { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border: 0; background: transparent; color: #fff; font-family: var(--font-primary, inherit); font-weight: 700; font-size: .8rem; cursor: pointer; }
+  .cam-menu button + button { border-left: 1px solid var(--pra-border); }
+  .cam-menu button:hover { background: rgba(255,255,255,.08); }
+  .cam-menu svg { width: 18px; height: 18px; color: #009bff; }
+  /* Voice note (coaches/admins): records right away; trash = delete,
+     Send = transcribe + send as a text message. */
+  .vn-bar { display: none; flex: 1; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px; min-width: 0; }
+  .composer.vn-rec .composer-pill > :not(.vn-bar) { display: none !important; }
+  .composer.vn-rec .vn-bar { display: flex; }
+  .vn-trash { width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255,92,92,.12); color: #ff5c5c; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; padding: 0; }
+  .vn-trash svg { width: 19px; height: 19px; }
+  .vn-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff3b3b; flex-shrink: 0; animation: vnPulse 1s ease-in-out infinite; }
+  @keyframes vnPulse { 50% { opacity: .25; } }
+  .vn-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .vn-label { color: var(--pra-dim); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .composer.vn-busy .vn-dot { animation: none; background: var(--pra-blue); }
+  .composer.vn-busy .vn-trash { opacity: .4; pointer-events: none; }
   .composer.mk-dock > #mkPanel.show { position: static; order: 99; flex: 0 0 calc(100% + 24px); margin: 0 -12px; width: auto; height: var(--mk-h, 300px); max-height: 55vh; border-radius: 0; border-width: 1px 0 0; box-shadow: none; padding-bottom: env(safe-area-inset-bottom); }
   .composer.mk-dock > #mkPanel .mk-tabs { margin-bottom: 8px; }
   /* A picked video waits in the staging strip like a GIF does. */
@@ -1147,7 +1167,8 @@
 <div class="pra-root">
   <div class="pra-bg"></div>
   <script src="/nav.js"></script>
-  <script src="/chat-app/chat-header.js"></script>
+  <script src="/chat-app/voice-note.js"></script>
+<script src="/chat-app/chat-header.js"></script>
   <script src="https://unpkg.com/@daily-co/daily-js@0.92.2/dist/daily.js"></script>
 
   <div id="pushBanner" class="push-banner" style="display:none">🔔 Turn on notifications for new messages</div>
@@ -1333,6 +1354,8 @@
                  rendered in the OS's own emoji art and didn't match the
                  templatesBtn icon sitting right next to them. -->
             <button class="icon-btn composer-icon" id="cameraCaptureBtn" title="Camera" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="#009bff" stroke-width="1.6"/></svg></button>
+            <button class="icon-btn composer-icon" id="voiceNoteBtn" title="Voice note -- sends as text" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="3" width="6" height="11" rx="3" stroke="#fff" stroke-width="1.6"/><path d="M6 11a6 6 0 0 0 12 0" stroke="#009bff" stroke-width="1.6" stroke-linecap="round"/><path d="M12 17v3.5M9 20.5h6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+            <div class="vn-bar" id="vnBar"><button type="button" class="vn-trash" id="vnTrashBtn" title="Delete"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><span class="vn-dot"></span><span class="vn-time" id="vnTime">0:00</span><span class="vn-label" id="vnLabel">Recording…</span></div>
             <input type="file" id="fileInput" accept="image/*,video/*" multiple/>
           </div>
           <button class="composer-send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.4 20.4l17.45-8.4a.6.6 0 0 0 0-1.08L3.4 2.52a.6.6 0 0 0-.85.66l2.17 7.02a.6.6 0 0 0 .49.42l8.9 1.3-8.9 1.3a.6.6 0 0 0-.49.42l-2.17 7.1a.6.6 0 0 0 .85.66z" fill="#fff"/></svg></button>
@@ -1340,6 +1363,11 @@
           <div class="pra-panel picker-panel" id="emojiPanel">
             <div class="emoji-tabs" id="emojiTabs"></div>
             <div class="emoji-grid" id="emojiGrid"></div>
+          </div>
+          <div class="cam-menu" id="cameraMenu">
+            <button type="button" data-cam="photo"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.2-1.8a1 1 0 0 1 .8-.4h4a1 1 0 0 1 .8.4L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.4" stroke="currentColor" stroke-width="1.6"/></svg>Photo</button>
+            <button type="button" data-cam="video"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="6.5" width="12.5" height="11" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M15.5 10.5 21 7.5v9l-5.5-3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Video</button>
+            <button type="button" data-cam="upload"><svg viewBox="0 0 24 24" fill="none"><path d="M12 15V4.5M7.5 9 12 4.5 16.5 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 14.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Upload</button>
           </div>
           <div class="pra-panel mk-panel" id="mkPanel" data-tab="emoji">
             <div class="mk-sec" data-sec="emoji">
@@ -2445,6 +2473,7 @@ async function init() {
     document.getElementById('newGroupBtn').style.display = '';
     document.getElementById('favoritesBtn').style.display = '';
     document.getElementById('mkPanel').classList.add('staff');
+    document.getElementById('voiceNoteBtn').style.display = '';
     document.getElementById('templateNewBtn').style.display = isAdminMe() ? '' : 'none';
     await loadFavorites();
     loadCoachMonthlyStats(); // fire-and-forget -- badges just render blank until it resolves
@@ -5560,7 +5589,20 @@ function setupComposer() {
   // there's no reason to hide the entry point in the meantime.
   const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
   if (isTouchDevice) cameraCaptureBtn.style.display = '';
-  cameraCaptureBtn.onclick = () => { cameraGymMode = false; openCameraCapture(); };
+  // Camera -> Photo / Video / Upload pill.
+  const cameraMenu = document.getElementById('cameraMenu');
+  cameraCaptureBtn.onclick = (e) => { e.stopPropagation(); if (mkWhich) closeMediaKb(false); cameraMenu.classList.toggle('show'); };
+  cameraMenu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cam]');
+    if (!b) return;
+    cameraMenu.classList.remove('show');
+    if (b.dataset.cam === 'upload') { fileInput.click(); return; }
+    cameraGymMode = false;
+    openCameraCapture(b.dataset.cam);
+  });
+  document.addEventListener('click', (e) => { if (!cameraMenu.contains(e.target) && !e.target.closest('#cameraCaptureBtn')) cameraMenu.classList.remove('show'); });
+  document.getElementById('voiceNoteBtn').onclick = (e) => { e.stopPropagation(); startVoiceNote(); };
+  document.getElementById('vnTrashBtn').onclick = (e) => { e.stopPropagation(); cancelVoiceNote(); };
 
   // Same panel serves both composing and reacting — reactingMessageId (set
   // by openMsgActionBar's emoji-row handlers) decides which one a pick means.
@@ -5963,7 +6005,7 @@ function setupCameraCapture() {
   });
 }
 
-async function openCameraCapture() {
+async function openCameraCapture(startMode) {
   document.getElementById('cameraCaptureModal').classList.add('show');
   document.querySelector('.camera-mode-toggle').style.display = cameraGymMode ? 'none' : '';
   cameraGymLabel = '';
@@ -5979,8 +6021,8 @@ async function openCameraCapture() {
     setCameraShootMode('video');
     document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Label & send your training clip.';
   } else {
-    cameraShootMode = 'photo';
-    setCameraShootMode('photo');
+    cameraShootMode = startMode === 'video' ? 'video' : 'photo';
+    setCameraShootMode(cameraShootMode);
     document.getElementById('cameraSendStepLabel').textContent = 'Step 3: Send your training clip to your Coach.';
   }
   document.getElementById('cameraTrimStepLabel').textContent = 'Step 2: Trim Your Training Clip 👇';
@@ -6867,7 +6909,56 @@ function selectMention(idx) {
   closeMentionDropdown();
 }
 
+// ── Voice note (staff) ──
+let vnBusy = false;
+async function startVoiceNote() {
+  if (!activeConvoId || vnBusy || !window.PRAVoiceNote || PRAVoiceNote.isRecording()) return;
+  if (mkWhich) closeMediaKb(false);
+  const composer = document.querySelector('.composer');
+  document.getElementById('vnLabel').textContent = 'Recording…';
+  document.getElementById('vnTime').textContent = '0:00';
+  composer.classList.add('vn-rec');
+  try {
+    await PRAVoiceNote.start(sec => { document.getElementById('vnTime').textContent = PRAVoiceNote.fmt(sec); });
+  } catch (e) {
+    composer.classList.remove('vn-rec');
+    alertDialog(e && e.name === 'NotAllowedError' ? 'Allow microphone access to record voice notes.' : ((e && e.message) || 'Could not start recording.'));
+  }
+}
+function cancelVoiceNote() {
+  if (vnBusy) return;
+  PRAVoiceNote.cancel();
+  document.querySelector('.composer').classList.remove('vn-rec', 'vn-busy');
+}
+async function sendVoiceNote() {
+  if (vnBusy) return;
+  vnBusy = true;
+  const composer = document.querySelector('.composer');
+  const convoId = activeConvoId;
+  composer.classList.add('vn-busy');
+  document.getElementById('vnLabel').textContent = 'Converting to text…';
+  try {
+    const blob = await PRAVoiceNote.stop();
+    if (!blob) throw new Error('Nothing was recorded.');
+    const text = await PRAVoiceNote.transcribe(blob, '/api/chat/transcribe');
+    if (!text) throw new Error('No words were heard in that voice note.');
+    const r = await fetch('/api/chat/conversations/' + convoId + '/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+    });
+    if (!r.ok) throw new Error('Could not send — try again.');
+    if (activeConvoId === convoId) refreshThread(true);
+  } catch (e) {
+    alertDialog((e && e.message) || 'Could not send the voice note.');
+  } finally {
+    vnBusy = false;
+    composer.classList.remove('vn-rec', 'vn-busy');
+  }
+}
+
 async function sendText() {
+  // While a voice note is recording, Send = transcribe + send it.
+  if (vnBusy) return;
+  if (window.PRAVoiceNote && PRAVoiceNote.isRecording()) { sendVoiceNote(); return; }
   closeMentionDropdown();
   const input = document.getElementById('textInput');
   const text = applyComposerLinks(input.value.trim());
