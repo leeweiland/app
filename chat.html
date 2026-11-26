@@ -1093,12 +1093,19 @@
     color: #fff; background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.5); box-shadow: 0 2px 8px rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
   .lightbox-close:hover { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .video-wrap { position: relative; }
+  /* Hugs the video picture, so the expand button and play bar sit on the
+     video itself, not on the (wider) bubble around it. */
+  .vbox { position: relative; display: inline-block; vertical-align: top; line-height: 0; max-width: 100%; }
+  .vbox.vbox-full { display: block; }
   /* App video control (Lee, 2026-11-26) on every video: small round
      play/pause bottom-left + a timeline -- tap anywhere on it to jump, or
      drag the knob. Tapping the video itself also plays/pauses. Driven by
      the document-level listeners in setupVideoControls(). */
-  .vc { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .vc { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 8px; pointer-events: none; transition: opacity .3s; line-height: normal; }
   .vc > * { pointer-events: auto; }
+  /* Fades out 2s after playback starts; back on pause or mouse move. */
+  .vc.vc-hidden { opacity: 0; }
+  .vc.vc-hidden > * { pointer-events: none; }
   .vc-play { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
   .vc-play::before { content: ''; margin-left: 2px; border-left: 9px solid #fff; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
   .vc-play.playing::before { margin: 0; width: 9px; height: 11px; box-sizing: border-box; border: 0; border-left: 3px solid #fff; border-right: 3px solid #fff; }
@@ -4975,7 +4982,7 @@ function renderBubble(m, convo) {
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
         ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
-        : `<div class="video-wrap"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
+        : `<div class="video-wrap vbox vbox-full"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
     // No timestamp badge on an image note, or on a note sent without one
     // (plain "good job"-style reply, added straight to Send with no time
     // attached) — "time" only means anything for video, and omitting it
@@ -5014,7 +5021,7 @@ function renderBubble(m, convo) {
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video' && !m.driveFileId) content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}${videoProcessingHtml(m)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<div class="vbox"><video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
@@ -7562,6 +7569,26 @@ function vcSync(video) {
 (function setupVideoControls() {
   ['timeupdate', 'play', 'pause', 'ended', 'loadedmetadata', 'seeked', 'emptied'].forEach(ev =>
     document.addEventListener(ev, (e) => { if (e.target.tagName === 'VIDEO') vcSync(e.target); }, true));
+  // The bar hides 2s after playback starts (or after the last scrub / mouse
+  // move) and comes back whenever the video is paused.
+  const hideTimers = new WeakMap();
+  const vcShow = (video) => {
+    const vc = vcFor(video);
+    if (!vc) return;
+    vc.classList.remove('vc-hidden');
+    clearTimeout(hideTimers.get(vc));
+    if (!video.paused && !video.ended) hideTimers.set(vc, setTimeout(() => {
+      if (!video.paused && !vc.classList.contains('dragging')) vc.classList.add('vc-hidden');
+    }, 2000));
+  };
+  ['play', 'pause', 'ended', 'seeked'].forEach(ev =>
+    document.addEventListener(ev, (e) => { if (e.target.tagName === 'VIDEO') vcShow(e.target); }, true));
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const box = e.target.closest('.vbox, .vr-stage, .lightbox-frame, .media-feed-item');
+    const v = box && box.querySelector('video');
+    if (v && vcFor(v)?.classList.contains('vc-hidden')) vcShow(v);
+  }, true);
   const videoOf = (vc) => vc.parentElement.querySelector(':scope > video');
   const othersFor = (v) => v.closest('#threadBody') ? '#threadBody video' : null;
   // Capture phase: these taps are handled here and never reach the thread's
@@ -7596,7 +7623,7 @@ function vcSync(video) {
     seekTo(e.clientX);
   }, true);
   document.addEventListener('pointermove', (e) => { if (drag && e.pointerId === drag.id) { e.preventDefault(); seekTo(e.clientX); } }, true);
-  const end = (e) => { if (drag && e.pointerId === drag.id) { drag.vc.classList.remove('dragging'); drag = null; } };
+  const end = (e) => { if (drag && e.pointerId === drag.id) { drag.vc.classList.remove('dragging'); const v = drag.video; drag = null; vcShow(v); } };
   document.addEventListener('pointerup', end, true);
   document.addEventListener('pointercancel', end, true);
   // A drag that started on the timeline shouldn't also count as a long-press
