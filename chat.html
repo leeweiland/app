@@ -187,6 +187,15 @@
   .video-reply-box .pra-btn { font-size: .74rem; padding: 6px 12px; }
   .vr-ts-btn { align-self: flex-start; margin-top: 6px; }
   .vr-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  /* Drawings added to this reply (Lee, 2026-11-26): listed under Cancel/
+     Send like the timestamp notes; tall enough to see the first one whole,
+     scroll for the rest. Sent with the reply on Send. */
+  .vr-shots { display: none; flex-shrink: 0; height: 150px; overflow-y: auto; border-top: 1px solid var(--pra-border); padding-top: 8px; }
+  .vr-shots.has { display: flex; flex-direction: column; gap: 8px; }
+  .vr-shot { display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; }
+  .vr-shot img { height: 136px; max-width: 60%; object-fit: contain; border-radius: 8px; background: #000; display: block; cursor: zoom-in; }
+  .vr-shot-meta { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; padding-top: 4px; }
+  .vr-shot-time { color: #fff; font-weight: 700; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
   .vr-actions .pra-btn { flex: 1; }
   #videoReplyNotesList .video-note-row { padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; }
   .video-note-reply .video-note-player { width: 100%; border-radius: 10px; display: block; margin-top: 2px; }
@@ -1526,6 +1535,7 @@
         <button class="pra-btn pra-btn-ghost" id="videoReplyCancelBtn">Cancel</button>
         <button class="pra-btn" id="videoReplySendBtn" disabled>Send</button>
       </div>
+      <div class="vr-shots" id="videoReplyShots"></div>
     </div>
   </div>
 
@@ -7412,6 +7422,7 @@ function startVideoReply(mid) {
   videoReplyTargetId = mid;
   videoReplyNotes = [];
   stopVideoMarkup();
+  clearVrShots();
   const player = document.getElementById('videoReplyPlayer');
   player.pause();
   // Poster = the clip's own preview frame (when the server made one), so
@@ -7485,7 +7496,7 @@ document.getElementById('videoReplyNoteInput').addEventListener('keydown', (e) =
 // the leftover text just goes out as a plain, untimed note. Add Timestamp
 // stays available for whoever actually wants notes pinned to a moment.
 document.getElementById('videoReplyNoteInput').addEventListener('input', (e) => {
-  document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length && !e.target.value.trim();
+  vrSyncSendBtn();
 });
 document.getElementById('videoReplyNotesList').addEventListener('click', (e) => {
   const player = document.getElementById('videoReplyPlayer');
@@ -7495,12 +7506,12 @@ document.getElementById('videoReplyNotesList').addEventListener('click', (e) => 
   if (rmBtn) {
     videoReplyNotes.splice(Number(rmBtn.dataset.idx), 1);
     renderVideoReplyNotes();
-    const pending = document.getElementById('videoReplyNoteInput').value.trim();
-    document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length && !pending;
+    vrSyncSendBtn();
   }
 });
 document.getElementById('videoReplyCancelBtn').onclick = () => {
   stopVideoMarkup();
+  clearVrShots();
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
 };
@@ -7563,6 +7574,26 @@ function stopVideoMarkup() {
   stage.classList.remove('drawing', 'sending');
   document.getElementById('videoReplyPlayer').controls = true;
 }
+// Second pen tap: the frame + marks becomes a picture ADDED to this reply
+// (listed under Cancel/Send), like a timestamp note; Send sends them all.
+let vrShots = []; // { blob, url, time }
+function vrSyncSendBtn() {
+  const pending = document.getElementById('videoReplyNoteInput').value.trim();
+  document.getElementById('videoReplySendBtn').disabled = !videoReplyNotes.length && !pending && !vrShots.length;
+}
+function renderVrShots() {
+  const wrap = document.getElementById('videoReplyShots');
+  wrap.classList.toggle('has', vrShots.length > 0);
+  wrap.innerHTML = vrShots.map((sh, i) => `<div class="vr-shot">
+      <img src="${sh.url}" data-i="${i}" alt="Drawing at ${formatVideoTime(sh.time)}"/>
+      <div class="vr-shot-meta"><span class="vr-shot-time" data-i="${i}">${formatVideoTime(sh.time)}</span><span class="pra-muted">Drawing ${i + 1} of ${vrShots.length}</span><button class="video-note-remove" data-rm="${i}" title="Remove" style="align-self:flex-start">✕</button></div>
+    </div>`).join('');
+}
+function clearVrShots() {
+  vrShots.forEach(sh => URL.revokeObjectURL(sh.url));
+  vrShots = [];
+  renderVrShots();
+}
 async function sendVideoMarkup() {
   const v = document.getElementById('videoReplyPlayer');
   const status = document.getElementById('videoReplyStatus');
@@ -7576,23 +7607,30 @@ async function sendVideoMarkup() {
   const ctx = out.getContext('2d');
   ctx.drawImage(v, 0, 0, w, h);
   vrPaint(ctx, w, h, w / r.width);
-  const convoId = activeConvoId;
-  document.getElementById('videoReplyStage').classList.add('sending');
-  status.textContent = 'Sending marked-up frame…';
   try {
     const blob = await new Promise((res, rej) => out.toBlob(b => b ? res(b) : rej(new Error('Could not capture the frame')), 'image/jpeg', 0.9));
-    const fd = new FormData();
-    fd.append('files', blob, `markup-${formatVideoTime(v.currentTime).replace(':', 'm')}s.jpg`);
-    await uploadFormDataWithProgress('/api/chat/conversations/' + convoId + '/messages', fd, (pct) => { status.textContent = `Sending marked-up frame… ${pct}%`; });
-    status.textContent = `Marked-up frame at ${formatVideoTime(v.currentTime)} sent.`;
+    vrShots.push({ blob, url: URL.createObjectURL(blob), time: v.currentTime || 0 });
+    vrShots.sort((a, b) => a.time - b.time);
+    renderVrShots();
     stopVideoMarkup();
-    if (activeConvoId === convoId) refreshThread(true);
+    vrSyncSendBtn();
+    status.textContent = `Drawing at ${formatVideoTime(v.currentTime)} added — Send sends it with your reply.`;
   } catch (e) {
     console.error('[sendVideoMarkup]', e);
-    document.getElementById('videoReplyStage').classList.remove('sending');
-    status.textContent = 'Could not send the marked-up frame — tap the pen to try again.';
+    status.textContent = 'Could not capture that frame — tap the pen to try again.';
   }
 }
+document.getElementById('videoReplyShots').addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-rm]');
+  if (rm) {
+    const sh = vrShots.splice(Number(rm.dataset.rm), 1)[0];
+    if (sh) URL.revokeObjectURL(sh.url);
+    renderVrShots(); vrSyncSendBtn();
+    return;
+  }
+  const t = e.target.closest('.vr-shot-time, .vr-shot img');
+  if (t) { const player = document.getElementById('videoReplyPlayer'); player.pause(); player.currentTime = vrShots[Number(t.dataset.i)]?.time || 0; }
+});
 // The popup tracks the visible area (keyboard up = shorter), so the note box
 // and Cancel/Send stay on screen while typing.
 (function fitVideoReplyToViewport() {
@@ -7642,11 +7680,22 @@ document.getElementById('videoReplySendBtn').onclick = async () => {
   // that's what makes a bare "good job" sendable without ever touching
   // Add Timestamp.
   const notes = pending ? [...videoReplyNotes, { time: null, text: pending }] : videoReplyNotes;
-  if (!notes.length || !videoReplyTargetId) return;
+  if ((!notes.length && !vrShots.length) || !videoReplyTargetId) return;
   const status = document.getElementById('videoReplyStatus');
   const btn = document.getElementById('videoReplySendBtn');
   btn.disabled = true;
   status.textContent = 'Sending…';
+  const convoId = activeConvoId;
+  if (!notes.length) {
+    // Drawings only.
+    try { await sendVrShots(convoId, status); } catch { status.textContent = 'Could not send the drawings — try again.'; btn.disabled = false; return; }
+    input.value = '';
+    stopVideoMarkup();
+    document.getElementById('videoReplyPlayer').pause();
+    closeModal('videoReplyModal');
+    refreshThread(true);
+    return;
+  }
   // Synthesized fallback text — keeps push notifications, the sidebar
   // preview, search, and a normal reply-to-this-message all working with
   // zero special-casing; renderBubble still renders the rich version
@@ -7658,11 +7707,25 @@ document.getElementById('videoReplySendBtn').onclick = async () => {
   });
   if (!r.ok) { status.textContent = 'Could not send — try again.'; btn.disabled = false; return; }
   input.value = '';
+  videoReplyNotes = [];
+  renderVideoReplyNotes();
+  if (vrShots.length) {
+    try { await sendVrShots(convoId, status); }
+    catch { status.textContent = 'Your notes went out, but the drawings didn\'t — tap Send to try them again.'; btn.disabled = false; refreshThread(true); return; }
+  }
   stopVideoMarkup();
   document.getElementById('videoReplyPlayer').pause();
   closeModal('videoReplyModal');
   refreshThread(true);
 };
+
+// All drawings in one upload -> one picture message (a grid when several).
+async function sendVrShots(convoId, status) {
+  const fd = new FormData();
+  vrShots.forEach(sh => fd.append('files', sh.blob, `markup-${formatVideoTime(sh.time).replace(':', 'm')}s.jpg`));
+  await uploadFormDataWithProgress('/api/chat/conversations/' + convoId + '/messages', fd, (pct) => { status.textContent = `Sending drawings… ${pct}%`; });
+  clearVrShots();
+}
 
 let forwardMessageId = null;
 let forwardConvoItems = [];
