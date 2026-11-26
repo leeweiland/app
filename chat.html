@@ -184,8 +184,7 @@
   .vr-stage.drawing .vr-draw-hint { display: block; }
   .vr-stage.sending .vr-stage-btn { opacity: .5; pointer-events: none; }
   #videoReplyPlayer { cursor: pointer; }
-  .vr-seek { position: absolute; left: 12px; right: 12px; bottom: 8px; z-index: 2; width: auto; height: 18px; margin: 0; accent-color: #009bff; cursor: pointer; opacity: .85; }
-  .vr-stage.drawing .vr-seek { display: none; }
+  .vr-stage.drawing .vc { display: none; }
   .video-reply-box .pra-label { margin-bottom: 4px; }
   .video-reply-box .pra-btn { font-size: .74rem; padding: 6px 12px; }
   .vr-ts-btn { align-self: flex-start; margin-top: 6px; }
@@ -446,8 +445,8 @@
   .msg-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; width: 259px; border-radius: 10px; overflow: hidden; }
   .msg-grid-item { position: relative; cursor: pointer; }
   .msg-grid-item img, .msg-grid-item video { width: 100%; height: 128px; object-fit: cover; display: block; background: rgba(255,255,255,0.04); }
-  .msg-grid-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.15); }
-  .msg-grid-play svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
+  .msg-grid-play { position: absolute; left: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .msg-grid-play svg { width: 11px; height: 11px; margin-left: 2px; }
   .msg-grid-more { position: absolute; inset: 0; background: rgba(0,0,0,0.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
   .bubble-sender { font-family: var(--font-secondary); font-size: .68rem; color: var(--pra-blue); margin-bottom: 3px; }
   .bubble-time { font-family: var(--font-secondary); font-size: .62rem; color: var(--pra-dim); margin-top: 3px; white-space: nowrap; }
@@ -1056,11 +1055,8 @@
      actually start playback. A tap-to-open overlay works at any size. */
   .media-grid-item { position: relative; border-radius: 8px; overflow: hidden; cursor: pointer; }
   .media-grid-item img, .media-grid-item video { width: 100%; height: 90px; object-fit: cover; display: block; }
-  .media-grid-play {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.15);
-  }
-  .media-grid-play svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7)); }
+  .media-grid-play { position: absolute; left: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .media-grid-play svg { width: 11px; height: 11px; margin-left: 2px; }
   /* Shared Media + My Favorites: a one-column feed (Lee, 2026-11-24) --
      videos play right in it, with the chat's ⤢ expand button. Big panel:
      most of the screen on a computer, ~50px in from every edge on a phone. */
@@ -1097,6 +1093,21 @@
     color: #fff; background: rgba(0,0,0,0.55); border: 1.5px solid rgba(255,255,255,0.5); box-shadow: 0 2px 8px rgba(0,0,0,0.5); backdrop-filter: blur(2px); }
   .lightbox-close:hover { background: var(--pra-blue); border-color: var(--pra-blue); color: #fff; }
   .video-wrap { position: relative; }
+  /* App video control (Lee, 2026-11-26) on every video: small round
+     play/pause bottom-left + a timeline -- tap anywhere on it to jump, or
+     drag the knob. Tapping the video itself also plays/pauses. Driven by
+     the document-level listeners in setupVideoControls(). */
+  .vc { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+  .vc > * { pointer-events: auto; }
+  .vc-play { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.6); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+  .vc-play::before { content: ''; margin-left: 2px; border-left: 9px solid #fff; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+  .vc-play.playing::before { margin: 0; width: 9px; height: 11px; box-sizing: border-box; border: 0; border-left: 3px solid #fff; border-right: 3px solid #fff; }
+  .vc-track { position: relative; flex: 1; height: 24px; cursor: pointer; touch-action: none; }
+  .vc-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px; background: rgba(255,255,255,.35); box-shadow: 0 0 3px rgba(0,0,0,.5); }
+  .vc-fill { position: absolute; left: 0; top: 50%; height: 4px; margin-top: -2px; width: 0; border-radius: 2px; background: #009bff; }
+  .vc-knob { position: absolute; top: 50%; left: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px #009bff, 0 1px 4px rgba(0,0,0,.6); }
+  .vc.dragging .vc-knob { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  .lightbox-frame .vc { left: 12px; right: 12px; bottom: 12px; }
   .expand-video-btn {
     position: absolute; top: 9px; right: 9px; z-index: 3; width: 28px; height: 28px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; font-size: 14px;
@@ -1552,7 +1563,7 @@
            picture. See setupVideoMarkup(). -->
       <div class="vr-stage" id="videoReplyStage">
         <video id="videoReplyPlayer" playsinline preload="auto"></video>
-        <input type="range" class="vr-seek" id="videoReplySeek" min="0" max="1000" value="0" step="1" aria-label="Seek"/>
+        <div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div>
         <canvas id="videoReplyDraw"></canvas>
         <div class="vr-draw-hint">Draw, then tap the pen to send</div>
         <button type="button" class="vr-stage-btn" id="videoReplyPenCancel" title="Discard marks">✕</button>
@@ -1928,7 +1939,8 @@
     <div class="lightbox-stage" id="lightboxStage">
       <div class="lightbox-frame">
         <img id="lightboxImg" draggable="false"/>
-        <video id="lightboxVideo" autoplay playsinline style="display:none" onclick="toggleTapVideo(this)"></video>
+        <video id="lightboxVideo" autoplay playsinline style="display:none"></video>
+        <div class="vc" id="lightboxVc" style="display:none"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div>
         <button class="icon-btn lightbox-close" id="lightboxClose">✕</button>
       </div>
     </div>
@@ -4963,7 +4975,7 @@ function renderBubble(m, convo) {
       ? `<div class="pra-muted" style="font-size:.78rem;padding:6px 0">Original video no longer available.</div>`
       : mediaIsImage
         ? `<img class="video-note-player" data-src="/api/chat/media/${mediaFileId}"/>`
-        : `<div class="video-wrap"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button></div>`;
+        : `<div class="video-wrap"><video class="video-note-player" data-src="/api/chat/media/${mediaFileId}#t=0.5" preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand" data-orig="${original && original.type === 'video' ? original.id : ''}" data-src="/api/chat/media/${mediaFileId}">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
     // No timestamp badge on an image note, or on a note sent without one
     // (plain "good job"-style reply, added straight to Send with no time
     // attached) — "time" only means anything for video, and omitting it
@@ -5002,7 +5014,7 @@ function renderBubble(m, convo) {
   if (m.type === 'gif') content = `<div class="bubble gif">${senderLabel}${forwardedLabel}${replyQuote}<img src="${m.text}"/></div>`;
   else if (m.type === 'image') content = `<div class="bubble media">${senderLabel}${forwardedLabel}${replyQuote}<img data-src="/api/chat/media/${m.driveFileId}"/></div>`;
   else if (m.type === 'video' && !m.driveFileId) content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}${videoProcessingHtml(m)}</div>`;
-  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button></div>`;
+  else if (m.type === 'video') content = `<div class="bubble media video-wrap">${senderLabel}${forwardedLabel}${replyQuote}<video data-src="/api/chat/media/${m.driveFileId}#t=0.5"${m.posterFileId ? ` poster="/api/chat/media/${m.posterFileId}"` : ''} preload="metadata" playsinline></video><button class="expand-video-btn" title="Expand">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div></div>`;
   else if (m.type === 'appointment') content = renderApptBubble(m, senderLabel, sender);
   else if (m.type === 'call') content = renderCallBubble(m, senderLabel);
   else content = '';
@@ -5227,6 +5239,7 @@ function linkifyUrls(escapedText) {
 
   function openImage(src) {
     video.pause(); video.src = ''; video.style.display = 'none';
+    document.getElementById('lightboxVc').style.display = 'none';
     img.style.display = 'block';
     img.src = src;
     resetTransform();
@@ -5236,6 +5249,7 @@ function linkifyUrls(escapedText) {
   function openVideo(src) {
     img.style.display = 'none';
     video.style.display = 'block';
+    document.getElementById('lightboxVc').style.display = '';
     video.src = src;
     backdrop.classList.add('show');
     PRABack.push('lightbox', () => close(true));
@@ -5275,8 +5289,6 @@ function linkifyUrls(escapedText) {
     // fight with clicking to go full-frame. A video's "full-frame" is the
     // timestamped-notes reply panel, not the plain lightbox (see
     // startVideoReply) -- every video click in the thread goes there now.
-    // No native controls on chat videos (Lee, 2026-11-26): tap = play/pause.
-    if (e.target.tagName === 'VIDEO') { toggleTapVideo(e.target, '#threadBody video'); return; }
     if (e.target.tagName === 'IMG') openImage(e.target.src || e.target.dataset.src);
     else if (e.target.classList.contains('expand-video-btn')) {
       // Stop the inline player before switching to the reply panel's own
@@ -7532,6 +7544,66 @@ function toggleTapVideo(v, others) {
   } else v.pause();
 }
 
+// ── App video control (.vc): play circle + timeline on every video ──
+// Document-level listeners, so bubbles re-rendered on every poll need no
+// wiring. Media events don't bubble, but capture-phase listeners on the
+// document still see them.
+function vcFor(video) { return video && video.parentElement ? video.parentElement.querySelector(':scope > .vc') : null; }
+function vcSync(video) {
+  const vc = vcFor(video);
+  if (!vc) return;
+  const pct = video.duration ? Math.min(100, Math.max(0, video.currentTime / video.duration * 100)) : 0;
+  vc.querySelector('.vc-fill').style.width = pct + '%';
+  vc.querySelector('.vc-knob').style.left = pct + '%';
+  const play = vc.querySelector('.vc-play');
+  play.classList.toggle('playing', !video.paused && !video.ended);
+  play.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+}
+(function setupVideoControls() {
+  ['timeupdate', 'play', 'pause', 'ended', 'loadedmetadata', 'seeked', 'emptied'].forEach(ev =>
+    document.addEventListener(ev, (e) => { if (e.target.tagName === 'VIDEO') vcSync(e.target); }, true));
+  const videoOf = (vc) => vc.parentElement.querySelector(':scope > video');
+  const othersFor = (v) => v.closest('#threadBody') ? '#threadBody video' : null;
+  // Capture phase: these taps are handled here and never reach the thread's
+  // own click handlers (action bar, reply panel, etc.).
+  document.addEventListener('click', (e) => {
+    const vc = e.target.closest('.vc');
+    if (vc) {
+      e.stopPropagation();
+      if (e.target.closest('.vc-play')) { const v = videoOf(vc); if (v) toggleTapVideo(v, othersFor(v)); }
+      return;
+    }
+    const v = e.target.tagName === 'VIDEO' ? e.target : null;
+    if (v && vcFor(v)) { e.stopPropagation(); toggleTapVideo(v, othersFor(v)); }
+  }, true);
+  let drag = null;
+  const seekTo = (clientX) => {
+    const r = drag.track.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    if (drag.video.duration) { drag.video.currentTime = f * drag.video.duration; }
+    drag.vc.querySelector('.vc-fill').style.width = f * 100 + '%';
+    drag.vc.querySelector('.vc-knob').style.left = f * 100 + '%';
+  };
+  document.addEventListener('pointerdown', (e) => {
+    const track = e.target.closest('.vc-track');
+    if (!track) return;
+    const vc = track.closest('.vc'), video = videoOf(vc);
+    if (!video) return;
+    e.preventDefault(); e.stopPropagation();
+    drag = { track, vc, video, id: e.pointerId };
+    vc.classList.add('dragging');
+    try { track.setPointerCapture(e.pointerId); } catch {}
+    seekTo(e.clientX);
+  }, true);
+  document.addEventListener('pointermove', (e) => { if (drag && e.pointerId === drag.id) { e.preventDefault(); seekTo(e.clientX); } }, true);
+  const end = (e) => { if (drag && e.pointerId === drag.id) { drag.vc.classList.remove('dragging'); drag = null; } };
+  document.addEventListener('pointerup', end, true);
+  document.addEventListener('pointercancel', end, true);
+  // A drag that started on the timeline shouldn't also count as a long-press
+  // or a click on the bubble underneath.
+  document.addEventListener('contextmenu', (e) => { if (e.target.closest('.vc')) e.preventDefault(); }, true);
+})();
+
 function formatVideoTime(sec) {
   sec = Math.max(0, Math.floor(sec || 0));
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -7604,15 +7676,6 @@ function addVideoReplyNote() {
 
 document.getElementById('videoReplyPlayer').addEventListener('timeupdate', function () {
   document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(this.currentTime);
-  const seek = document.getElementById('videoReplySeek');
-  if (this.duration && !seek.matches(':active')) seek.value = String(Math.round(this.currentTime / this.duration * 1000));
-});
-document.getElementById('videoReplyPlayer').addEventListener('click', function () {
-  if (!document.getElementById('videoReplyStage').classList.contains('drawing')) toggleTapVideo(this);
-});
-document.getElementById('videoReplySeek').addEventListener('input', function () {
-  const v = document.getElementById('videoReplyPlayer');
-  if (v.duration) { v.currentTime = Number(this.value) / 1000 * v.duration; document.getElementById('videoReplyCurrentTime').textContent = formatVideoTime(v.currentTime); }
 });
 document.getElementById('videoReplyAddBtn').onclick = addVideoReplyNote;
 document.getElementById('videoReplyStarBtn').onclick = () => {
@@ -8217,7 +8280,7 @@ function mediaFeedHtml(items) {
     const capHtml = cap ? `<div class="media-feed-cap">${escapeHtml(cap)}</div>` : '';
     if (it.type === 'video') {
       const poster = it.poster ? ` poster="${it.poster}" preload="none"` : ' preload="metadata"';
-      return `<div class="media-feed-item video-wrap" data-type="video" data-src="${it.src}" data-file="${escapeHtml(it.fileId || '')}" data-mid="${escapeHtml(it.mid || '')}"><video src="${it.src}${it.poster ? '' : '#t=0.5'}"${poster} controls playsinline></video><button class="expand-video-btn" title="Expand">⤢</button>${capHtml}</div>`;
+      return `<div class="media-feed-item video-wrap" data-type="video" data-src="${it.src}" data-file="${escapeHtml(it.fileId || '')}" data-mid="${escapeHtml(it.mid || '')}"><video src="${it.src}${it.poster ? '' : '#t=0.5'}"${poster} playsinline></video><button class="expand-video-btn" title="Expand">⤢</button><div class="vc"><button type="button" class="vc-play" aria-label="Play"></button><div class="vc-track"><div class="vc-fill"></div><div class="vc-knob"></div></div></div>${capHtml}</div>`;
     }
     return `<div class="media-feed-item" data-type="image" data-src="${it.src}"><img src="${it.src}" loading="lazy" alt=""/>${capHtml}</div>`;
   }).join('');
