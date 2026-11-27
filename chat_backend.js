@@ -5280,6 +5280,17 @@ export async function handleChatRequest(req, res, url) {
     console.log(`[bridge no-media] ${first} ${last} -> ${noMedia ? "on" : "off"} | app users ${hits.length} | ${levels}`);
     return sendJson(res, 200, { ok: true, appUsers: hits.length, action: `${hits.length ? "app account updated" : "saved for sign-up"}; ${levels}` });
   }
+  // The app's protocol is the master copy (Lee, 2026-11-26): the CRM's no-login
+  // members page mirrors it. GET /api/bridge/protocol-template?sku=hc21|bsp21.
+  if (p === "/api/bridge/protocol-template" && req.method === "GET") {
+    if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
+    if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
+    const sku = String(url.searchParams.get("sku") || "hc21");
+    if (!PRODUCTS[sku]) return sendJson(res, 400, { error: "Unknown product" });
+    const t = findProductTemplate(readJson(PROTOCOL_TEMPLATES_FILE, []), sku);
+    if (!t || !Array.isArray(t.steps)) return sendJson(res, 404, { error: "No template" });
+    return sendJson(res, 200, t);
+  }
   if (p === "/api/bridge/trainee/revoke") {
     if (!process.env.PRA_APP_BRIDGE_KEY) return sendJson(res, 503, { error: "Bridge not configured" });
     if (!bridgeKeyOk(req)) return sendJson(res, 401, { error: "Bad key" });
