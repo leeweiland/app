@@ -54,8 +54,6 @@
   .sidebar-search { padding: 12px 16px; border-bottom: 1px solid var(--pra-border); }
   .sidebar-search input { font-size: .85rem; padding: 8px 12px; }
   .sidebar-search-row { display: flex; gap: 8px; align-items: center; }
-  /* Magnifier next to multi-select shows / hides the search + chat-type row. */
-  .sidebar-search-row.collapsed { display: none; }
   .chat-type-btn { flex: 0 0 166px; width: 166px; justify-content: space-between; display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 8px; font-weight: 400 !important; border-radius: 10px; border: 1px solid var(--pra-border); background: rgba(255,255,255,0.04); color: var(--pra-dim); font: inherit; font-size: .74rem; cursor: pointer; white-space: nowrap; }
   .chat-type-btn span { overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
   .chat-type-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
@@ -1242,7 +1240,6 @@
             </button>
           </div>
           <div class="sidebar-actions">
-            <button class="icon-btn" id="sidebarSearchToggle" type="button" title="Show / hide search and chat types"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="#fff" stroke-width="1.6"/><path d="M19.5 19.5 15 15" stroke="#009bff" stroke-width="1.8" stroke-linecap="round"/></svg></button>
             <button class="icon-btn" id="bulkSelectBtn" title="Select chats/groups to message at once" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="3.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M5.5 7.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="12.5" y="12.5" width="8" height="8" rx="1.5" stroke="#fff" stroke-width="1.6"/><path d="M14.5 16.5l1.5 1.5 2.5-3" stroke="#009bff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="icon-btn" id="newGroupBtn" title="New group" style="display:none"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="8" r="3" stroke="#fff" stroke-width="1.6"/><circle cx="16.5" cy="9.5" r="2.4" stroke="#009bff" stroke-width="1.5"/><path d="M3.5 19c.9-3.3 3-5 5.5-5s4.6 1.7 5.5 5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 14.3c2 .2 3.6 1.7 4.3 4.4" stroke="#009bff" stroke-width="1.5" stroke-linecap="round"/></svg></button>
           </div>
@@ -9855,33 +9852,6 @@ function setupCallUI() {
   window.addEventListener('resize', fit);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   fit();
-})();
-
-// Magnifier next to multi-select: shows / hides the search box + chat-type
-// row. Hidden by default to give the chat list the room; the choice is
-// remembered on this device. Glows blue while open, or while a search or a
-// chat-type filter is still applied with the row hidden.
-(function sidebarSearchToggle() {
-  const btn = document.getElementById('sidebarSearchToggle');
-  const row = document.getElementById('sidebarSearchRow');
-  if (!btn || !row) return;
-  const KEY = 'praChatSearchOpen';
-  let open = false;
-  try { open = localStorage.getItem(KEY) === '1'; } catch {}
-  const filtering = () => !!(document.getElementById('chatSearchInput').value.trim() || document.getElementById('chatTypeFilter').value);
-  const apply = () => {
-    row.classList.toggle('collapsed', !open);
-    btn.classList.toggle('on', open || filtering());
-  };
-  btn.addEventListener('click', () => {
-    open = !open;
-    try { localStorage.setItem(KEY, open ? '1' : '0'); } catch {}
-    apply();
-    if (open) document.getElementById('chatSearchInput').focus();
-  });
-  document.getElementById('chatSearchInput').addEventListener('input', apply);
-  document.getElementById('chatTypeFilter').addEventListener('change', apply);
-  apply();
 })();
 
 init();
